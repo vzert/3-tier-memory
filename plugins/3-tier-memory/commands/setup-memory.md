@@ -14,7 +14,7 @@ PROJECT_DIR = $CLAUDE_PROJECT_DIR (current project root)
 MEMORY_DIR = PROJECT_DIR/memory/
 ```
 
-Check if `MEMORY_DIR/MEMORY.md` already exists. If yes, tell the user "Memory system already initialized at MEMORY_DIR" and stop.
+Check if `MEMORY_DIR/MEMORY.md` already exists. If yes, tell the user: "Memory system already exists. Use `/3-tier-memory:migrate` to install the plugin's local commands (/checkpoint, /status, /audit) without touching your data." and stop.
 
 ## Step 2: Create directory structure
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0] - 2026-04-03
+### Added
+- `/3-tier-memory:migrate` command — for projects that already have memory/ from the playbook. Installs local commands, verifies bridge, creates missing indexes, runs audit. Does NOT overwrite existing data.
+
+### Changed
+- `setup-memory` now detects existing memory and redirects to `migrate` instead of stopping
+
 ## [1.5.0] - 2026-04-03
 ### Added
 - SessionEnd hook — reminds to /checkpoint if no checkpoint was saved this session

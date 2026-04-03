@@ -30,15 +30,19 @@ Then:
 
 ### Step 2: Initialize memory in your project (once per project)
 
+**New project** (no existing memory):
 ```
 /3-tier-memory:setup-memory
 ```
 
-This is the only time you use the long namespaced command. It creates:
-- The full `memory/` directory structure with all indexes
-- A starter learnings file and monthly action items archive
-- The auto-memory bridge (so Claude loads your memory automatically)
-- A **local `/checkpoint` command** in `.claude/commands/` so you never need the long name again
+**Existing project** (already has `memory/` from the playbook):
+```
+/3-tier-memory:migrate
+```
+
+`setup-memory` creates everything from scratch. `migrate` installs the plugin's local commands (/checkpoint, /status, /audit) without touching your existing data.
+
+Both are the only time you use long namespaced commands. After that:
 
 ### Step 3: Day-to-day usage
 
