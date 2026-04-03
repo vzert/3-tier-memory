@@ -23,6 +23,18 @@
           }
         ]
       }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/bin/pre-compact.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }
