@@ -14,7 +14,7 @@ If memory/ exists in $CLAUDE_PROJECT_DIR → MEMORY_DIR = $CLAUDE_PROJECT_DIR/me
 Else → MEMORY_DIR = auto-memory directory (Model A)
 ```
 
-Read `MEMORY_DIR/MEMORY.md` to confirm the memory system is initialized. If not found, tell the user to run `/3-tier-memory:setup-memory` (or `/setup-memory` if installed locally) first and stop.
+Read `MEMORY_DIR/MEMORY.md` to confirm the memory system is initialized. If not found, tell the user to run setup-memory first and stop.
 
 ## Step 1: Determine session slug
 
@@ -22,9 +22,9 @@ If `$ARGUMENTS` is provided, use it as the slug. Otherwise, generate a slug from
 
 Set: `DATE = YYYY-MM-DD` (today), `SLUG = <determined slug>`, `SESSION_FILE = MEMORY_DIR/sessions/DATE-SLUG.md`
 
-## Step 2: Create/update session log
+## Step 2: Session — DUAL WRITE (always)
 
-Write `SESSION_FILE` with this exact structure:
+**A) Tier 3** — Write `SESSION_FILE`:
 
 ```markdown
 ---
@@ -51,7 +51,7 @@ status: completed | completed-with-pendientes
 <or "Ninguno" if no pendientes>
 
 ## Commits
-<will be filled in Step 5>
+<will be filled in Step 6>
 
 ## Related
 - [[_session-index]]
@@ -59,51 +59,65 @@ status: completed | completed-with-pendientes
 - [[_learnings]]
 ```
 
+**B) Tier 2** — Add or update row in `_session-index.md`:
+```
+| DATE | [[sessions/DATE-SLUG|SLUG]] | STATUS_EMOJI | <1-line summary> | <commit hash — filled in Step 6> |
+```
+
 Set status to `completed-with-pendientes` if Step 3 finds any pendientes, otherwise `completed`.
 
-## Step 3: Extract pendientes
+## Step 3: Pendientes — DUAL WRITE (always)
 
 Scan the ENTIRE current conversation for ALL of these categories:
 
 1. **Verification items**: "confirmar que X funciona", "verificar", "monitorear"
-2. **Deferred work**: "después hay que...", "en próxima sesión", "TODO", "FIXME"
+2. **Deferred work**: "despues hay que...", "en proxima sesion", "TODO", "FIXME"
 3. **Conditional checks**: "si no mejora...", "si vuelve a pasar..."
 4. **Incomplete plan steps**: steps from any active plan not yet executed
-5. **User deferrals**: "luego lo veo", "mañana checo", "eso después"
+5. **User deferrals**: "luego lo veo", "manana checo", "eso despues"
 6. **Unfixed bugs**: bugs discovered but not fixed this session
 7. **Tests not run**: tests mentioned but not executed
 8. **Documentation gaps**: docs that need updating after code changes
 
 For EACH pendiente found:
 
-**A)** Add to `MEMORY_DIR/_pendientes.md` under the correct priority section:
+**A) Tier 2** — Add to `_pendientes.md` under the correct priority section:
 ```
 - [ ] <description> — _origen: [[sessions/DATE-SLUG]]_
 ```
 
-**B)** Add a row to `MEMORY_DIR/pendientes/YYYY-MM.md`:
+**B) Tier 3** — Add row to `pendientes/YYYY-MM.md`:
 ```
 | N | <description> | alta/media/baja | DATE | [[sessions/DATE-SLUG]] | | |
 ```
 
-Also check: were any EXISTING pendientes in `_pendientes.md` resolved this session? If so:
+Also check: were any EXISTING pendientes resolved this session? If so:
 - Remove or mark `[x]` in `_pendientes.md`
-- Fill `Resuelto` date and `Sesion resolucion` in the monthly archive
+- Fill Resuelto date and Sesion resolucion in `pendientes/YYYY-MM.md`
 
-## Step 4: Update all indexes
+## Step 4: Learnings — DUAL WRITE (always)
 
-**A) `_session-index.md`** — Add or update row:
-```
-| DATE | [[sessions/DATE-SLUG\|SLUG]] | STATUS_EMOJI | <1-line summary> | <commit hash — filled in Step 5> |
-```
+Review the session for new patterns, gotchas, rules, or mistakes discovered.
 
-**B) `_plans-index.md`** — If any plan was started, progressed, or completed this session, update its row. Status emojis: draft, active, testing, completed, abandoned.
+**A) Tier 3** — For each learning, add to the relevant `learnings/<topic>.md` file. If no topic file fits, create a new one with frontmatter.
 
-**C) `_research-index.md`** — If any research was started or concluded, update the relevant table.
+**B) Tier 2** — Update `_learnings.md`:
+- If a new topic file was created, add a row to the Topic Files table
+- If a critical rule was added, add it to the Quick Reference section
 
-**D) `_learnings.md`** — If any new learnings were added to topic files, ensure they appear in the Quick Reference section if critical.
+If no learnings were generated this session, skip this step.
 
-## Step 5: Git commit
+## Step 5: Plans & Research — DUAL WRITE (only if applicable)
+
+**Plans** — If any plan was started, progressed, or completed this session:
+- **Tier 2**: Update row in `_plans-index.md` (status, session link)
+- **Tier 3**: Create or update `plans/plan-<slug>.md` if substantial (>20 lines)
+
+**Research** — If any research was started or concluded this session:
+- **Tier 2**: Update row in `_research-index.md`
+- **Tier 3**: Create or update `research/<slug>.md` if substantial
+
+## Step 6: Git commit
 
 Run:
 ```bash
@@ -127,13 +141,15 @@ git add memory/
 git commit --amend --no-edit
 ```
 
-## Step 6: Report
+## Step 7: Report
 
 Tell the user:
 ```
 Checkpoint saved:
 - Session: sessions/DATE-SLUG.md
 - Pendientes: N extracted, M resolved
+- Learnings: N added to <topic files>
+- Plans/Research: <updated or "no changes">
 - Indexes updated: <list which ones>
 - Commit: <hash> — checkpoint: <summary>
 ```

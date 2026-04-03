@@ -101,16 +101,18 @@ Create `PROJECT_DIR/.claude/commands/checkpoint.md` so the user can type just `/
 
 ```markdown
 ---
-description: Save memory checkpoint — session log, pendientes, indexes, git commit
+description: Save memory checkpoint — session log, pendientes, learnings, indexes, git commit
 ---
 
 # Memory Checkpoint
 
-Save the current session state to the 3-tier memory system. Execute ALL steps below in order.
+Save the current session state to the 3-tier memory system. Execute ALL steps in order.
+
+CORE RULE: Dual-write ALWAYS for sessions, pendientes, and learnings (Tier 2 index + Tier 3 file). Plans and research only if applicable.
 
 ## Step 0: Locate memory directory
 
-If `memory/` exists in the project root, use it. Otherwise check auto-memory.
+If `memory/` exists in the project root, use it (Model B). Otherwise check auto-memory (Model A).
 Read `memory/MEMORY.md` to confirm the system is initialized.
 
 ## Step 1: Session slug
@@ -120,11 +122,13 @@ Otherwise generate one from the session's main work (lowercase, hyphens, max 40 
 
 Set: DATE = today (YYYY-MM-DD), SESSION_FILE = memory/sessions/DATE-SLUG.md
 
-## Step 2: Create session log
+## Step 2: Session — DUAL WRITE (always)
 
-Write SESSION_FILE with: frontmatter (type: session, date, status), Contexto, Cambios realizados, Bugs fixed, Learnings generados, Pendientes, Commits (filled in Step 5), Related (wikilinks to _session-index, _pendientes, _learnings).
+**Tier 3**: Write SESSION_FILE with frontmatter (type: session, date, status), sections: Contexto, Cambios realizados, Bugs fixed, Learnings generados, Pendientes, Commits (filled in Step 6), Related (wikilinks to _session-index, _pendientes, _learnings).
 
-## Step 3: Extract pendientes
+**Tier 2**: Add/update row in memory/_session-index.md with date, session link, status emoji, summary, commit hash (filled in Step 6).
+
+## Step 3: Pendientes — DUAL WRITE (always)
 
 Scan the ENTIRE conversation for:
 1. Verification items ("confirmar", "verificar", "monitorear")
@@ -137,19 +141,31 @@ Scan the ENTIRE conversation for:
 8. Documentation gaps
 
 For EACH pendiente:
-A) Add to memory/_pendientes.md under correct priority with _origen: wikilink
-B) Add row to memory/pendientes/YYYY-MM.md
+**Tier 2**: Add to memory/_pendientes.md under correct priority with `_origen: [[sessions/DATE-SLUG]]`
+**Tier 3**: Add row to memory/pendientes/YYYY-MM.md
 
-Also check if existing pendientes were RESOLVED this session — mark done in both files.
+Also check if existing pendientes were RESOLVED this session — mark done in BOTH files.
 
-## Step 4: Update indexes
+## Step 4: Learnings — DUAL WRITE (always)
 
-A) _session-index.md — add/update row
-B) _plans-index.md — if any plan progressed
-C) _research-index.md — if any research started/concluded
-D) _learnings.md — if new learnings added
+Review session for new patterns, gotchas, rules, or mistakes discovered.
 
-## Step 5: Git commit
+**Tier 3**: Add each learning to the relevant memory/learnings/<topic>.md. Create new topic file if needed.
+**Tier 2**: Update memory/_learnings.md — add topic row if new file, add critical rules to Quick Reference.
+
+If no learnings this session, skip.
+
+## Step 5: Plans & Research — DUAL WRITE (only if applicable)
+
+**Plans** — if any plan started, progressed, or completed:
+- Tier 2: update row in memory/_plans-index.md
+- Tier 3: create/update memory/plans/plan-<slug>.md if substantial
+
+**Research** — if any research started or concluded:
+- Tier 2: update row in memory/_research-index.md
+- Tier 3: create/update memory/research/<slug>.md if substantial
+
+## Step 6: Git commit
 
 ```
 git add memory/
@@ -162,9 +178,9 @@ git add memory/
 git commit --amend --no-edit
 ```
 
-## Step 6: Report
+## Step 7: Report
 
-Tell the user: session file path, N pendientes extracted, M resolved, which indexes updated, commit hash.
+Tell the user: session path, N pendientes extracted, M resolved, N learnings added, plans/research updated or not, indexes updated, commit hash.
 ```
 
 Also create the directory if needed: `mkdir -p PROJECT_DIR/.claude/commands`

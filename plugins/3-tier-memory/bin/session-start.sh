@@ -1,6 +1,6 @@
 #!/bin/bash
 # 3-tier-memory plugin: SessionStart hook
-# Injects open pendientes and protocol reminder at session start
+# Injects open pendientes AND learnings at session start
 
 # Detect memory directory (Model B first, then Model A fallback)
 if [ -f "$CLAUDE_PROJECT_DIR/memory/_pendientes.md" ]; then
@@ -17,7 +17,7 @@ fi
 # Exit silently if no memory system found
 [ -z "$MEMORY_DIR" ] && exit 0
 
-# Extract open pendientes
+# Inject open pendientes
 PENDIENTES=$(grep -E '^\- \[ \]' "$MEMORY_DIR/_pendientes.md" 2>/dev/null)
 
 if [ -n "$PENDIENTES" ]; then
@@ -26,6 +26,16 @@ if [ -n "$PENDIENTES" ]; then
   echo ""
 fi
 
-echo "PROTOCOLO: Registrar planes en _plans-index.md, sessions en _session-index.md, y pendientes en _pendientes.md DURANTE ejecucion. No batching."
-echo "Usar /3-tier-memory:checkpoint para guardar progreso (actualiza memoria + git commit)."
-echo "ANTES de cambios importantes: leer memory/_learnings.md y consultar el topic file relevante."
+# Inject learnings quick reference
+if [ -f "$MEMORY_DIR/_learnings.md" ]; then
+  # Extract the Quick Reference section
+  LEARNINGS=$(sed -n '/## Quick Reference/,/## Related/p' "$MEMORY_DIR/_learnings.md" 2>/dev/null | head -20 | grep -v '^## ')
+  if [ -n "$LEARNINGS" ]; then
+    echo "LEARNINGS — REGLAS CRITICAS:"
+    echo "$LEARNINGS"
+    echo ""
+  fi
+fi
+
+echo "PROTOCOLO: Dual-write siempre (indice + archivo detalle) para sessions, pendientes y learnings. Plans y research solo si aplica."
+echo "Usar /checkpoint para guardar progreso."
