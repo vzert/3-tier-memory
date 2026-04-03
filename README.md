@@ -122,6 +122,27 @@ your-project/
     └── research/              # Tier 3: research files
 ```
 
+## Troubleshooting
+
+### "Plugin not found" or install fails with validation error
+
+If `/plugin install` fails or shows an old cached version, remove the marketplace and re-add it fresh:
+
+```
+/plugin marketplace remove 3-tier-memory-marketplace
+/plugin marketplace add vzert/3-tier-memory
+/plugin install 3-tier-memory@3-tier-memory-marketplace
+/reload-plugins
+```
+
+### /checkpoint not recognized after setup
+
+Make sure `/3-tier-memory:setup-memory` ran successfully — it creates `.claude/commands/checkpoint.md` in your project. If the file exists but the command isn't recognized, run `/reload-plugins`.
+
+### Hooks not firing
+
+The plugin's hooks (pendientes + learnings injection at session start) activate after install + reload. If they don't fire, check `/doctor` for plugin errors.
+
 ## Playbook
 
 See [playbook-3tier-memory-V2.md](./playbook-3tier-memory-V2.md) for the complete 5-phase implementation guide with templates, migration strategies, and audit checklists.

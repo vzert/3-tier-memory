@@ -1,11 +1,11 @@
 {
   "name": "3-tier-memory",
-  "description": "Structured 3-tier memory system for Claude Code. Install the plugin, run /3-tier-memory:setup-memory once per project, then use /checkpoint to save progress.",
-  "version": "1.0.1",
+  "description": "Structured 3-tier memory system for Claude Code. Run /3-tier-memory:setup-memory once per project, then use /checkpoint to save progress.",
+  "version": "1.1.0",
   "author": {
     "name": "Will"
   },
   "repository": "https://github.com/vzert/3-tier-memory",
   "license": "MIT",
-  "tags": ["memory", "persistence", "sessions", "productivity"]
+  "keywords": ["memory", "persistence", "sessions", "productivity"]
 }
