@@ -101,6 +101,24 @@ claude --plugin-dir ./3-tier-memory/plugins/3-tier-memory
 
 This loads the plugin for that session only. Good for testing changes before pushing.
 
+## Update
+
+```
+/plugin update 3-tier-memory@3-tier-memory-marketplace
+/reload-plugins
+```
+
+That's it. On the next session start:
+- **Hooks** (session start injection, file registration check, pre-compact reminder) update immediately
+- **`/checkpoint`** auto-syncs — the plugin compares your local version against the latest and copies if needed. You'll see "ACTUALIZADO" if it was updated.
+- **`memory/` structure** is untouched — your data is yours
+
+> **If update doesn't pull the latest version**, force refresh the marketplace:
+> ```bash
+> cd ~/.claude/plugins/marketplaces/3-tier-memory-marketplace && git pull
+> ```
+> Then `/reload-plugins` inside Claude Code.
+
 ## Uninstall
 
 ### Remove the plugin
