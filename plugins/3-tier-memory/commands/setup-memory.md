@@ -97,7 +97,9 @@ Use /checkpoint to save progress. It will update session log, extract pendientes
 
 ## Step 6: Install local /checkpoint command
 
-Create `PROJECT_DIR/.claude/commands/checkpoint.md` so the user can type just `/checkpoint` (no plugin namespace):
+Create `PROJECT_DIR/.claude/commands/checkpoint.md` so the user can type just `/checkpoint` (no plugin namespace).
+
+Note: this file will be auto-updated by the plugin's SessionStart hook whenever a new plugin version ships an updated template. The user doesn't need to re-run setup to get checkpoint improvements.
 
 ```markdown
 ---

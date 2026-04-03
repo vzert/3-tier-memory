@@ -37,5 +37,17 @@ if [ -f "$MEMORY_DIR/_learnings.md" ]; then
   fi
 fi
 
+# Auto-update local /checkpoint if plugin has a newer version
+LOCAL_CMD="$CLAUDE_PROJECT_DIR/.claude/commands/checkpoint.md"
+PLUGIN_CMD="${CLAUDE_PLUGIN_ROOT}/templates/checkpoint.md"
+
+if [ -f "$LOCAL_CMD" ] && [ -f "$PLUGIN_CMD" ]; then
+  if ! diff -q "$LOCAL_CMD" "$PLUGIN_CMD" >/dev/null 2>&1; then
+    cp "$PLUGIN_CMD" "$LOCAL_CMD"
+    echo "ACTUALIZADO: /checkpoint se actualizo a la version mas reciente del plugin."
+    echo ""
+  fi
+fi
+
 echo "PROTOCOLO: Dual-write siempre (indice + archivo detalle) para sessions, pendientes y learnings. Plans y research solo si aplica."
 echo "Usar /checkpoint para guardar progreso."
