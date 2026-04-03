@@ -4,18 +4,52 @@ Structured persistent memory across sessions. Never lose context, learnings, or 
 
 ## Quick start
 
+There are 3 steps. The first two you only do once. After that you just use `/checkpoint`.
+
+### Step 1: Install the plugin
+
+Run these 3 commands **inside Claude Code** (not in a regular terminal):
+
 ```
-1. Install plugin     →  /plugin marketplace add vzert/3-tier-memory
-                         /plugin install 3-tier-memory@3-tier-memory-marketplace
-                         /reload-plugins
-
-2. Setup (once)       →  /3-tier-memory:setup-memory
-
-3. Day-to-day         →  /checkpoint
-                         /checkpoint fix-auth-bug
+/plugin marketplace add vzert/3-tier-memory
 ```
 
-After setup, you only need `/checkpoint`. The setup command installs it locally in your project — no plugin namespace required.
+Wait for it to finish, then:
+
+```
+/plugin install 3-tier-memory@3-tier-memory-marketplace
+```
+
+Then:
+
+```
+/reload-plugins
+```
+
+> **Troubleshooting**: If `/plugin install` says "not found", make sure the `/plugin marketplace add` finished successfully first. You may need to restart Claude Code after adding the marketplace.
+
+### Step 2: Initialize memory in your project (once per project)
+
+```
+/3-tier-memory:setup-memory
+```
+
+This is the only time you use the long namespaced command. It creates:
+- The full `memory/` directory structure with all indexes
+- A starter learnings file and monthly pendientes archive
+- The auto-memory bridge (so Claude loads your memory automatically)
+- A **local `/checkpoint` command** in `.claude/commands/` so you never need the long name again
+
+### Step 3: Day-to-day usage
+
+```
+/checkpoint
+/checkpoint fix-auth-bug
+```
+
+That's it. `/checkpoint` saves your session, extracts pendientes, captures learnings, updates all indexes, and git commits everything.
+
+---
 
 ## What it does
 
@@ -37,19 +71,9 @@ Tier 3: detail files in typed folders (full content)
 
 Dual-write rule: sessions, pendientes, and learnings ALWAYS go to both Tier 2 (index) and Tier 3 (detail file). Plans and research only when applicable.
 
-## Install
+## Alternative install methods
 
-### Option A: Marketplace (recommended)
-
-Run these commands inside Claude Code:
-
-```
-/plugin marketplace add vzert/3-tier-memory
-/plugin install 3-tier-memory@3-tier-memory-marketplace
-/reload-plugins
-```
-
-### Option B: Team setup (auto-prompt when teammates trust the repo)
+### Team setup (auto-prompt when teammates trust the repo)
 
 Add to your project's `.claude/settings.json`:
 
@@ -66,55 +90,24 @@ Add to your project's `.claude/settings.json`:
 }
 ```
 
-Then each team member runs:
-```
-/plugin install 3-tier-memory@3-tier-memory-marketplace
-/reload-plugins
-```
+> **Important**: `extraKnownMarketplaces` only makes the marketplace *known* — each team member still needs to run the install and reload commands from Step 1. It just skips the `marketplace add` step.
 
-### Option C: Local / testing
+### Local / testing
 
 ```bash
 git clone https://github.com/vzert/3-tier-memory.git
 claude --plugin-dir ./3-tier-memory/plugins/3-tier-memory
 ```
 
-## Usage
+This loads the plugin for that session only. Good for testing changes before pushing.
 
-### 1. Initialize memory (once per project)
-
-```
-/3-tier-memory:setup-memory
-```
-
-This is the only time you use the long namespaced command. It:
-- Creates the full `memory/` directory structure with all indexes
-- Creates a starter learnings file and monthly pendientes archive
-- Sets up the auto-memory bridge
-- Updates CLAUDE.md with memory system references
-- **Installs `/checkpoint` as a local command** in `.claude/commands/`
-
-### 2. Save checkpoints (day-to-day)
-
-```
-/checkpoint
-/checkpoint fix-auth-bug
-```
-
-This is your daily command. It:
-- Creates/updates the session log (`sessions/YYYY-MM-DD-slug.md`)
-- Extracts pendientes from the conversation (dual-write to index + archive)
-- Captures learnings (dual-write to index + topic file)
-- Updates plans/research indexes if applicable
-- Git commits all memory changes and records the hash
-
-### Directory structure after setup
+## Directory structure after setup
 
 ```
 your-project/
 ├── .claude/
 │   └── commands/
-│       └── checkpoint.md      ← local /checkpoint command
+│       └── checkpoint.md      ← your local /checkpoint command
 └── memory/
     ├── MEMORY.md              # Tier 1: lean index + checkpoint protocol
     ├── _pendientes.md         # Tier 2: open action items
