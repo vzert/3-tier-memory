@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.7.0] - 2026-04-03
+### Changed
+- /checkpoint Step 5 now actively SCANS for plan/research signals instead of passively waiting. Detects plan mode usage, ExitPlanMode, web searches, comparisons, and investigation keywords.
+- Session log template now includes ## Plans and ## Research sections with wikilinks to _plans-index and _research-index
+- CORE RULE updated: plans/research are "scan for signals" not "only if applicable"
+
+### Fixed
+- Plans created in plan mode were not being registered in memory
+- Research (web searches, doc lookups, comparisons) was silently dropped at checkpoint
+
 ## [1.6.0] - 2026-04-03
 ### Added
 - `/3-tier-memory:migrate` command — for projects that already have memory/ from the playbook. Installs local commands, verifies bridge, creates missing indexes, runs audit. Does NOT overwrite existing data.

@@ -6,7 +6,9 @@ description: Save memory checkpoint — session log, action items, learnings, in
 
 Save the current session state to the 3-tier memory system. Execute ALL steps in order.
 
-CORE RULE: Dual-write ALWAYS for sessions, pendientes, and learnings (Tier 2 index + Tier 3 file). Plans and research only if applicable.
+CORE RULES:
+- Dual-write ALWAYS for sessions, action items, and learnings (Tier 2 index + Tier 3 file)
+- Plans and research: SCAN for signals below — register if ANY signal found
 
 ## Step 0: Locate memory directory
 
@@ -22,7 +24,48 @@ Set: DATE = today (YYYY-MM-DD), SESSION_FILE = memory/sessions/DATE-SLUG.md
 
 ## Step 2: Session — DUAL WRITE (always)
 
-**Tier 3**: Write SESSION_FILE with frontmatter (type: session, date, status), sections: Contexto, Cambios realizados, Bugs fixed, Learnings generados, Pendientes, Commits (filled in Step 6), Related (wikilinks to _session-index, _pendientes, _learnings).
+**Tier 3**: Write SESSION_FILE with this structure:
+
+```markdown
+---
+type: session
+date: DATE
+status: completed | completed-with-pendientes
+---
+# Session Title
+
+## Contexto
+<1-2 lines>
+
+## Cambios realizados
+- <bullets>
+
+## Bugs fixed
+- <list or "Ninguno">
+
+## Plans
+- <plans used/created this session with wikilinks, or "Ninguno">
+
+## Research
+- <research/investigations done this session with wikilinks, or "Ninguno">
+
+## Learnings generados
+- <links to learnings/ files, or "Ninguno">
+
+## Pendientes
+- [ ] <items> — ver [[_pendientes]]
+<or "Ninguno">
+
+## Commits
+<filled in Step 6>
+
+## Related
+- [[_session-index]]
+- [[_pendientes]]
+- [[_learnings]]
+- [[_plans-index]] (if plan work this session)
+- [[_research-index]] (if research this session)
+```
 
 **Tier 2**: Add/update row in memory/_session-index.md with date, session link, status emoji, summary, commit hash (filled in Step 6).
 
@@ -53,15 +96,34 @@ Review session for new patterns, gotchas, rules, or mistakes discovered.
 
 If no learnings this session, skip.
 
-## Step 5: Plans & Research — DUAL WRITE (only if applicable)
+## Step 5: Plans & Research — DUAL WRITE (scan for signals)
 
-**Plans** — if any plan started, progressed, or completed:
-- Tier 2: update row in memory/_plans-index.md
-- Tier 3: create/update memory/plans/plan-<slug>.md if substantial
+Do NOT skip this step. Actively scan the conversation for these signals:
 
-**Research** — if any research started or concluded:
-- Tier 2: update row in memory/_research-index.md
-- Tier 3: create/update memory/research/<slug>.md if substantial
+### Plan signals — if ANY found, register the plan:
+- Plan mode was used (ExitPlanMode, "plan mode", plan file created/edited)
+- A plan file exists in `~/.claude/plans/` from this session
+- Implementation steps were discussed or executed
+- User said "plan", "diseño", "arquitectura", "implementacion"
+
+**If plan signals found:**
+- Tier 2: add/update row in memory/_plans-index.md (title, status, date, session link)
+- Tier 3: create/update memory/plans/plan-<slug>.md with context, decisions, steps, outcome
+- Add wikilink in session log ## Plans section and ## Related
+
+### Research signals — if ANY found, register the research:
+- Web searches or web fetches were performed
+- Documentation was consulted (library docs, API references)
+- Options/alternatives were compared or evaluated
+- User said "investiga", "busca", "compara", "evalua", "analiza"
+
+**If research signals found:**
+- Tier 2: add/update row in memory/_research-index.md (topic, result, file link)
+- Tier 3: create/update memory/research/<slug>.md with context, findings, conclusion
+- Add wikilink in session log ## Research section and ## Related
+
+### If NO signals found for either:
+Write "Ninguno" in the session log sections and skip the index updates.
 
 ## Step 6: Git commit
 
@@ -78,4 +140,4 @@ git commit --amend --no-edit
 
 ## Step 7: Report
 
-Tell the user: session path, N pendientes extracted, M resolved, N learnings added, plans/research updated or not, indexes updated, commit hash.
+Tell the user: session path, N pendientes extracted, M resolved, N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, commit hash.
