@@ -5,9 +5,8 @@ Claude Code plugin that provides a structured 3-tier memory system for persisten
 ## Project Structure
 
 This project is BOTH a Claude Code plugin AND uses the memory system itself:
-- **Plugin files**: `.claude-plugin/`, `plugins/3-tier-memory/` (commands, hooks, bin)
+- **Plugin files**: `.claude-plugin/`, `plugins/3-tier-memory/` (commands, hooks, bin, templates)
 - **Local memory**: `memory/` (Model B — project-local)
-- **Reference docs**: `playbook-3tier-memory-V2.md`
 
 ## CRITICAL: Auto-memory MEMORY.md is a BRIDGE ONLY
 

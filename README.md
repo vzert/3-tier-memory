@@ -35,7 +35,7 @@ Then:
 /3-tier-memory:setup-memory
 ```
 
-**Existing project** (already has `memory/` from the playbook):
+**Existing project** (already has `memory/` set up manually):
 ```
 /3-tier-memory:migrate
 ```
@@ -190,10 +190,6 @@ Make sure `/3-tier-memory:setup-memory` ran successfully — it creates `.claude
 ### Hooks not firing
 
 The plugin's hooks (action items + learnings injection at session start) activate after install + reload. If they don't fire, check `/doctor` for plugin errors.
-
-## Playbook
-
-See [playbook-3tier-memory-V2.md](./playbook-3tier-memory-V2.md) for the complete 5-phase implementation guide with templates, migration strategies, and audit checklists.
 
 ## License
 
