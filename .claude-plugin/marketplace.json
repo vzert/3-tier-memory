@@ -1,0 +1,17 @@
+{
+  "name": "3-tier-memory-marketplace",
+  "owner": {
+    "name": "Will"
+  },
+  "metadata": {
+    "description": "Structured 3-tier memory system plugin for Claude Code",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "3-tier-memory",
+      "source": "./plugins/3-tier-memory",
+      "description": "Persistent memory across sessions with checkpoints, learnings, pendientes tracking, plans, and research indexes."
+    }
+  ]
+}

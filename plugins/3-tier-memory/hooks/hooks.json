@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PLUGIN_DIR/bin/session-start.sh\"",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/bin/session-start.sh\"",
             "timeout": 10
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"$CLAUDE_PLUGIN_DIR/bin/check-index-registration.sh\"",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/bin/check-index-registration.sh\"",
             "timeout": 10
           }
         ]

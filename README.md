@@ -28,20 +28,42 @@ Tier 3: detail files in typed folders (full content)
 
 ## Install
 
-### As a Claude Code Plugin (recommended)
+### From marketplace (recommended)
 
 ```bash
-# From a marketplace that includes this plugin
-/plugin install 3-tier-memory
+# Step 1: Add the marketplace
+/plugin marketplace add vzert/3-tier-memory
 
-# Or load directly from local clone
-git clone https://github.com/willhack/3-tier-memory.git
-claude --plugin-dir ./3-tier-memory
+# Step 2: Install the plugin
+/plugin install 3-tier-memory@3-tier-memory-marketplace
+
+# Step 3: Reload
+/reload-plugins
 ```
 
-### Manual setup
+### Local development / testing
 
-Copy the `skills/`, `hooks/`, and `bin/` directories to your project's `.claude/` directory.
+```bash
+git clone https://github.com/vzert/3-tier-memory.git
+claude --plugin-dir ./3-tier-memory/plugins/3-tier-memory
+```
+
+### Team setup (auto-prompt on trust)
+
+Add to your project's `.claude/settings.json`:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "3-tier-memory-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "vzert/3-tier-memory"
+      }
+    }
+  }
+}
+```
 
 ## Usage
 
