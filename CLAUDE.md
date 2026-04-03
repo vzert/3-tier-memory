@@ -5,9 +5,13 @@ Claude Code plugin that provides a structured 3-tier memory system for persisten
 ## Project Structure
 
 This project is BOTH a Claude Code plugin AND uses the memory system itself:
-- **Plugin files**: `.claude-plugin/`, `skills/`, `commands/`, `hooks/`, `bin/`
+- **Plugin files**: `.claude-plugin/`, `plugins/3-tier-memory/` (commands, hooks, bin)
 - **Local memory**: `memory/` (Model B — project-local)
 - **Reference docs**: `playbook-3tier-memory-V2.md`
+
+## CRITICAL: Auto-memory MEMORY.md is a BRIDGE ONLY
+
+The file at `~/.claude/projects/<encoded-path>/memory/MEMORY.md` is a **bridge** that redirects to `memory/` in this project. **NEVER** write content, indexes, session data, learnings, or any operational data into that file. It must ONLY contain the redirect template. All memory operations go to `memory/` in the project directory. If auto-memory MEMORY.md has more than 30 lines, something is wrong — rewrite it as a bridge immediately.
 
 ## Memory System
 
@@ -25,4 +29,4 @@ Read `memory/_learnings.md` → open the relevant topic file:
 - `memory/learnings/3tier-memory-system` — architecture rules, pendientes patterns, bridge rules, distribution patterns
 
 ### Checkpoint
-Use `/3-tier-memory:checkpoint` to save progress. Updates session log, extracts pendientes, updates indexes, and creates a git commit.
+Use `/checkpoint` to save progress. Updates session log, extracts pendientes, updates indexes, and creates a git commit.

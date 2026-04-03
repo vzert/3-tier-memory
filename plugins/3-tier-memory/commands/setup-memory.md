@@ -187,9 +187,17 @@ Also create the directory if needed: `mkdir -p PROJECT_DIR/.claude/commands`
 
 ## Step 7: Update CLAUDE.md
 
-If PROJECT_DIR/CLAUDE.md exists, append the Memory System section. If not, create it with project context + Memory System section.
+If PROJECT_DIR/CLAUDE.md exists, append the sections below. If not, create it with project context + these sections.
 
-The Memory System section should list:
+Add this CRITICAL rule section:
+
+```markdown
+## CRITICAL: Auto-memory MEMORY.md is a BRIDGE ONLY
+
+The file at `~/.claude/projects/<encoded-path>/memory/MEMORY.md` is a bridge that redirects to `memory/` in this project. NEVER write content, indexes, session data, learnings, or any operational data into that file. It must ONLY contain the redirect template. All memory operations go to `memory/` in the project directory. If auto-memory MEMORY.md has more than 30 lines, something is wrong — rewrite it as a bridge immediately.
+```
+
+Add the Memory System section listing:
 - Operational indexes with paths
 - When to consult learnings
 - How to use `/checkpoint` to save progress
