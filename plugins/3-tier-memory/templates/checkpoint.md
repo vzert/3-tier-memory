@@ -1,5 +1,5 @@
 ---
-description: Save memory checkpoint — session log, pendientes, learnings, indexes, git commit
+description: Save memory checkpoint — session log, action items, learnings, indexes, git commit
 ---
 
 # Memory Checkpoint

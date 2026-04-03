@@ -106,7 +106,7 @@ Note: this file will be auto-updated by the plugin's SessionStart hook whenever 
 
 ```markdown
 ---
-description: Save memory checkpoint — session log, pendientes, learnings, indexes, git commit
+description: Save memory checkpoint — session log, action items, learnings, indexes, git commit
 ---
 
 # Memory Checkpoint
@@ -195,7 +195,7 @@ Create `PROJECT_DIR/.claude/commands/status.md` with this content:
 
 ```markdown
 ---
-description: Quick memory health overview — pendientes, sessions, learnings, plans, research
+description: Quick memory health overview — action items, sessions, learnings, plans, research
 ---
 
 # Memory Status

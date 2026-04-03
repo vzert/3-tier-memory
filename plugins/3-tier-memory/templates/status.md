@@ -1,5 +1,5 @@
 ---
-description: Quick memory health overview — pendientes, sessions, learnings, plans, research
+description: Quick memory health overview — action items, sessions, learnings, plans, research
 ---
 
 # Memory Status
