@@ -1,10 +1,10 @@
 ---
-description: Migrate an existing 3-tier memory system (created from the playbook) to the plugin. Installs local commands, hooks, and bridge without touching your data.
+description: Migrate an existing 3-tier memory system to the plugin. Installs local commands, absorbs auto-memory content into project memory, and establishes bridge.
 ---
 
 # Migrate Existing Memory to Plugin
 
-For projects that already have a `memory/` directory set up from the playbook. This command installs the plugin's local commands and verifies the setup WITHOUT modifying your existing memory data.
+For projects that already have a `memory/` directory set up from the playbook. This command installs the plugin's local commands, absorbs any auto-memory files into the correct project memory folders, establishes the bridge, and verifies the setup.
 
 ## Step 1: Verify existing memory
 
@@ -53,14 +53,102 @@ For each missing index file, create it with the standard template. Do NOT overwr
 
 Use today's date for frontmatter.
 
-## Step 5: Verify bridge
+## Step 5: Scan and absorb auto-memory
 
-Determine auto-memory path: `~/.claude/projects/<encoded-project-path>/memory/MEMORY.md`
+Determine auto-memory path: `AUTO_MEMORY_DIR = ~/.claude/projects/<encoded-project-path>/memory/`
+(where `<encoded-project-path>` is the project root with `/` replaced by `-` and leading `-`).
 
-Check the bridge:
-- If it doesn't exist → create it with the bridge template (redirect to memory/)
-- If it exists and is a valid bridge (<40 lines, references memory/) → leave it alone
-- If it exists with inline content (>40 lines or has indexes/data) → back up to .bak, replace with bridge template
+If `AUTO_MEMORY_DIR` does not exist or is empty, skip to Step 5e (create bridge).
+
+### 5a. Scan and classify
+
+List ALL files and directories in `AUTO_MEMORY_DIR`. Ignore `.DS_Store` and non-`.md` files. Classify the scenario:
+
+- **Empty**: Only `MEMORY.md` (or nothing) — skip to 5e
+- **Scenario A** (simple auto-memory files): Individual `.md` files with frontmatter `type:` (feedback, project, user, reference), no index files, no subdirectories
+- **Scenario B** (full Model A 3-tier): Has index files (`_pendientes.md`, `_session-index.md`, etc.) AND/OR subdirectories (`sessions/`, `learnings/`, etc.)
+- **Scenario C** (mixed): Valid bridge + residual `.md` files
+
+Report the classification before proceeding:
+```
+Auto-memory scan:
+  Path: ~/.claude/projects/<path>/memory/
+  MEMORY.md: bridge | inline | missing
+  Scenario: A (N files) | B (N indexes, M dirs) | C (bridge + N residual) | Empty
+  Files to absorb: <list>
+```
+
+### 5b. Absorb individual auto-memory files
+
+For each `.md` file in `AUTO_MEMORY_DIR` that is NOT `MEMORY.md`, NOT `*.bak`, NOT an index file (`_*.md`), NOT `CLAUDE.md`:
+
+1. Read the file and extract frontmatter `type` field
+2. Map to destination:
+   - `type: reference` → `memory/research/{filename}` + add row to `_research-index.md` Completed Research table (Tema = `name`, Resultado = `description`, Archivo = link)
+   - `type: feedback` | `type: project` | `type: user` | no type → `memory/learnings/{filename}` + add row to `_learnings.md` Topic Files table (Topic = `name`, File = wikilink, When to consult = derived from `description`)
+3. If destination file already exists in project memory → **skip with warning**, do NOT overwrite
+4. Copy file to destination, add index row
+5. Delete source file from auto-memory
+
+Special case: if `CLAUDE.md` exists in auto-memory, rename to `CLAUDE.md.bak` and warn user to review it manually for any rules to add to project CLAUDE.md.
+
+### 5c. Merge Model A indexes (Scenario B only)
+
+For each index file found in `AUTO_MEMORY_DIR` (`_pendientes.md`, `_session-index.md`, `_learnings.md`, `_plans-index.md`, `_research-index.md`):
+
+1. Read both the auto-memory index and the project memory index
+2. For table-based indexes: parse each table row from the auto-memory version. If an equivalent row does NOT already exist in the project index (match on primary identifier: session slug, topic name, plan name, research topic), append it
+3. For `_pendientes.md`: parse each open item (`- [ ]`). If it does not already exist in the project `_pendientes.md` (match on text content), append it under the same priority section
+4. Delete the auto-memory index file after merging
+
+### 5d. Merge Model A subdirectories (Scenario B only)
+
+For each subdirectory in `AUTO_MEMORY_DIR`:
+
+**Standard dirs** (`sessions/`, `pendientes/`, `learnings/`, `plans/`, `research/`):
+- For each `.md` file: if it already exists in project `memory/{dir}/` → skip; else copy to project
+- Delete the now-empty auto-memory subdirectory
+
+**Non-standard dirs** (e.g. `infrastructure/`, `playbooks/`):
+- Create `memory/{dir-name}/` in project if it doesn't exist
+- Copy all `.md` files that don't already exist in the destination
+- Delete the now-empty auto-memory subdirectory
+
+For large migrations (50+ files), summarize counts in the report rather than listing every file.
+
+### 5e. Establish bridge
+
+1. If `MEMORY.md` in auto-memory has inline content (>40 lines or has indexes/data), back up to `.bak` first (use `.bak2` if `.bak` already exists)
+2. Create or overwrite `AUTO_MEMORY_DIR/MEMORY.md` with the standard bridge template:
+
+```markdown
+# <Project Name> — Memory Bridge
+
+This project uses project-local memory. Files live in `memory/` within the project directory.
+
+## At session start
+1. Read `memory/_pendientes.md` — open action items
+2. Read `memory/_learnings.md` — consult before making changes
+
+## During execution
+- New learning → `memory/learnings/<topic>.md`, update `memory/_learnings.md` if critical
+- New pendiente → `memory/_pendientes.md` with `_origen:` link + `memory/pendientes/YYYY-MM.md`
+- Executing a plan → register/update row in `memory/_plans-index.md`
+- New research → `memory/research/{slug}.md` + row in `memory/_research-index.md`
+
+## Checkpoint
+Use /checkpoint to save progress. It will update session log, extract pendientes, update indexes, and git commit.
+
+## Index
+- `memory/MEMORY.md` — lean index
+- `memory/_pendientes.md` — open action items
+- `memory/_learnings.md` — learnings by topic
+- `memory/_session-index.md` — session history
+- `memory/_plans-index.md` — plans registry
+- `memory/_research-index.md` — research tracker
+```
+
+3. Verify that `AUTO_MEMORY_DIR` contains ONLY `MEMORY.md` and optionally `.bak` files. If any other files remain, list them as warnings.
 
 ## Step 6: Update CLAUDE.md
 
@@ -79,7 +167,7 @@ Check if CLAUDE.md has a Memory System section. If not, append one listing the o
 Execute the audit checklists (same as /audit):
 1. Structure: 5 dirs + 6 indexes
 2. Content: each index has minimum valid structure
-3. Bridge: compact, redirect-only
+3. Bridge: compact, redirect-only, no residual files
 4. Wikilinks: Related sections present
 5. CLAUDE.md: has Memory System + bridge rule
 
@@ -91,8 +179,15 @@ MIGRATION COMPLETE
 Commands installed: /checkpoint, /status, /audit
 Directories: N created, M already existed
 Indexes: N created, M already existed (not overwritten)
-Bridge: created | verified | fixed (was inline, backed up)
 CLAUDE.md: updated | already had all sections
+
+AUTO-MEMORY ABSORPTION:
+  Scenario: A | B | C | Empty
+  Files absorbed: N → memory/learnings/, M → memory/research/
+  Indexes merged: N (list which ones)
+  Dirs merged: N (list which ones, file counts)
+  Skipped (already existed): N
+  Bridge: created | replaced (backed up) | already valid
 
 AUDIT RESULTS:
 <audit output from Step 7>
