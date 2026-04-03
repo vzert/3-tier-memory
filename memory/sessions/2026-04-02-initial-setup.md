@@ -35,7 +35,7 @@ Convertir el playbook 3-tier-memory en un plugin distribuible de Claude Code, co
 - [ ] Mas topic files de learnings — ver [[_pendientes]]
 
 ## Commits
-- pending
+- `3a59a09` — feat: 3-tier memory system as Claude Code plugin (2026-04-02)
 
 ## Related
 - [[_session-index]]

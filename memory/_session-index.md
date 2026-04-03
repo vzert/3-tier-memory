@@ -12,7 +12,7 @@ status: active
 
 | Fecha | Sesion | Status | Resumen | Commit |
 |---|---|---|---|---|
-| 2026-04-02 | [[sessions/2026-04-02-initial-setup\|initial-setup]] | con pendientes | Creacion del plugin: estructura, skill checkpoint, command setup-memory, hooks, README | pending |
+| 2026-04-02 | [[sessions/2026-04-02-initial-setup\|initial-setup]] | con pendientes | Creacion del plugin: estructura, skill checkpoint, command setup-memory, hooks, README | `3a59a09` |
 
 ## Convencion
 - **Archivo por sesion**: `sessions/YYYY-MM-DD-slug.md`
