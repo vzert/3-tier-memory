@@ -95,9 +95,12 @@ Use /checkpoint to save progress. It will update session log, extract pendientes
 - `memory/_research-index.md` — research tracker
 ```
 
-## Step 6: Install local /checkpoint command
+## Step 6: Install local commands
 
-Create `PROJECT_DIR/.claude/commands/checkpoint.md` so the user can type just `/checkpoint` (no plugin namespace).
+Create `PROJECT_DIR/.claude/commands/` directory if it doesn't exist, then create these 3 command files. All are auto-updated by the plugin's SessionStart hook when a new version ships — the user never needs to re-run setup for command improvements.
+
+### 6a. /checkpoint — save memory state
+Create `PROJECT_DIR/.claude/commands/checkpoint.md`:
 
 Note: this file will be auto-updated by the plugin's SessionStart hook whenever a new plugin version ships an updated template. The user doesn't need to re-run setup to get checkpoint improvements.
 
@@ -186,6 +189,50 @@ Tell the user: session path, N pendientes extracted, M resolved, N learnings add
 ```
 
 Also create the directory if needed: `mkdir -p PROJECT_DIR/.claude/commands`
+
+### 6b. /status — memory health overview
+Create `PROJECT_DIR/.claude/commands/status.md` with this content:
+
+```markdown
+---
+description: Quick memory health overview — pendientes, sessions, learnings, plans, research
+---
+
+# Memory Status
+
+Read and report the current state of the 3-tier memory system.
+
+1. Read memory/_pendientes.md — count open items by priority (Alta, Media, Baja)
+2. Read memory/_session-index.md — total sessions, most recent date and slug
+3. Read memory/_learnings.md — count topic files and Quick Reference rules
+4. Read memory/_plans-index.md — count by status (active, completed, draft)
+5. Read memory/_research-index.md — count active and completed
+6. Verify 5 dirs + 6 indexes exist
+
+Report:
+MEMORY STATUS: N pendientes (X alta, Y media, Z baja) | N sessions (last: DATE) | N learnings topics | N plans active | N research active | Structure: X/11
+```
+
+### 6c. /audit — verification checklists
+Create `PROJECT_DIR/.claude/commands/audit.md` with this content:
+
+```markdown
+---
+description: Run verification checklists on the 3-tier memory system — structure, content, bridge, wikilinks, CLAUDE.md
+---
+
+# Memory Audit
+
+Run ALL checks, report pass/fail per category:
+
+1. STRUCTURE: 5 dirs + 6 indexes + at least 1 learnings file + at least 1 pendientes archive
+2. CONTENT: MEMORY.md has checkpoint protocol, _pendientes.md has priority sections, all indexes have tables
+3. BRIDGE: auto-memory MEMORY.md is compact (<40 lines), references memory/, no inline content
+4. WIKILINKS: Related sections in session files, pendientes, learnings, plans, research with correct links
+5. CLAUDE.md: has Memory System section, mentions /checkpoint, has bridge protection rule, .gitignore has .claude/
+
+Report: X/X per category. List any failures with fix instructions.
+```
 
 ## Step 7: Update CLAUDE.md
 

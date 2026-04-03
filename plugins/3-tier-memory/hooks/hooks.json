@@ -35,6 +35,18 @@
           }
         ]
       }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/bin/session-end.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }
