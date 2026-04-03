@@ -1,13 +1,13 @@
 {
   "name": "3-tier-memory",
-  "description": "Structured 3-tier memory system for Claude Code projects. Persistent knowledge across sessions with checkpoints, learnings, pendientes tracking, plans, and research indexes.",
-  "version": "1.0.0",
+  "description": "Structured 3-tier memory system for Claude Code. Install the plugin, run /3-tier-memory:setup-memory once per project, then use /checkpoint to save progress.",
+  "version": "1.0.1",
   "author": {
     "name": "Will"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/willhack/3-tier-memory"
+    "url": "https://github.com/vzert/3-tier-memory"
   },
   "license": "MIT",
   "tags": ["memory", "persistence", "sessions", "productivity"]
