@@ -1,6 +1,6 @@
 # 3-Tier Memory System for Claude Code
 
-Structured persistent memory across sessions. Never lose context, learnings, or pendientes again.
+Structured persistent memory across sessions. Never lose context, learnings, or action items again.
 
 ## Quick start
 
@@ -36,7 +36,7 @@ Then:
 
 This is the only time you use the long namespaced command. It creates:
 - The full `memory/` directory structure with all indexes
-- A starter learnings file and monthly pendientes archive
+- A starter learnings file and monthly action items archive
 - The auto-memory bridge (so Claude loads your memory automatically)
 - A **local `/checkpoint` command** in `.claude/commands/` so you never need the long name again
 
@@ -47,17 +47,17 @@ This is the only time you use the long namespaced command. It creates:
 /checkpoint fix-auth-bug
 ```
 
-That's it. `/checkpoint` saves your session, extracts pendientes, captures learnings, updates all indexes, and git commits everything.
+That's it. `/checkpoint` saves your session, extracts action items, captures learnings, updates all indexes, and git commits everything.
 
 ---
 
 ## What it does
 
 - **Session logs** — automatic session tracking with git commits
-- **Pendientes tracking** — dual-write system (active + monthly archive)
+- **Action items tracking** — dual-write system (active aggregator + monthly archive)
 - **Learnings** — topic-based knowledge from past mistakes, injected at session start
 - **Plans & Research** — lifecycle tracking from idea to execution (when applicable)
-- **Hooks** — auto-inject open pendientes + learnings at session start, detect unregistered files
+- **Hooks** — auto-inject open action items + learnings at session start, detect unregistered files
 
 ## The 3-Tier Architecture
 
@@ -69,7 +69,7 @@ Tier 2: _index files (lean aggregators, 30-60 lines each)
 Tier 3: detail files in typed folders (full content)
 ```
 
-Dual-write rule: sessions, pendientes, and learnings ALWAYS go to both Tier 2 (index) and Tier 3 (detail file). Plans and research only when applicable.
+Dual-write rule: sessions, action items, and learnings ALWAYS go to both Tier 2 (index) and Tier 3 (detail file). Plans and research only when applicable.
 
 ## Alternative install methods
 
@@ -101,13 +101,39 @@ claude --plugin-dir ./3-tier-memory/plugins/3-tier-memory
 
 This loads the plugin for that session only. Good for testing changes before pushing.
 
+## Uninstall
+
+### Remove the plugin
+
+```
+/plugin uninstall 3-tier-memory@3-tier-memory-marketplace
+/reload-plugins
+```
+
+### Remove the marketplace
+
+```
+/plugin marketplace remove 3-tier-memory-marketplace
+```
+
+### Clean up a project's memory (optional)
+
+The plugin doesn't auto-delete project files. To fully remove from a project:
+
+```bash
+rm -rf memory/                          # memory directory
+rm -f .claude/commands/checkpoint.md    # local /checkpoint command
+```
+
+The auto-memory bridge at `~/.claude/projects/<encoded-path>/memory/MEMORY.md` can also be deleted if no longer needed.
+
 ## Directory structure after setup
 
 ```
 your-project/
 ├── .claude/
 │   └── commands/
-│       └── checkpoint.md      ← your local /checkpoint command
+│       └── checkpoint.md      <- your local /checkpoint command
 └── memory/
     ├── MEMORY.md              # Tier 1: lean index + checkpoint protocol
     ├── _pendientes.md         # Tier 2: open action items
@@ -141,7 +167,7 @@ Make sure `/3-tier-memory:setup-memory` ran successfully — it creates `.claude
 
 ### Hooks not firing
 
-The plugin's hooks (pendientes + learnings injection at session start) activate after install + reload. If they don't fire, check `/doctor` for plugin errors.
+The plugin's hooks (action items + learnings injection at session start) activate after install + reload. If they don't fire, check `/doctor` for plugin errors.
 
 ## Playbook
 
