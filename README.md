@@ -73,16 +73,18 @@ Add to your project's `.claude/settings.json`:
 /3-tier-memory:setup-memory
 ```
 
-This creates the full directory structure, all indexes, a starter learnings file, and the auto-memory bridge.
+This creates the full directory structure, all indexes, a starter learnings file, the auto-memory bridge, and **installs a local `/checkpoint` command** in the project.
 
 ### Save a checkpoint
 
+After setup, just use:
+
 ```
-/3-tier-memory:checkpoint
-/3-tier-memory:checkpoint fix-auth-bug
+/checkpoint
+/checkpoint fix-auth-bug
 ```
 
-This creates/updates the session log, extracts pendientes, updates all indexes, and commits to git.
+Creates/updates the session log, extracts pendientes, updates all indexes, and commits to git.
 
 ### Directory structure after setup
 

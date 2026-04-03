@@ -14,7 +14,7 @@ If memory/ exists in $CLAUDE_PROJECT_DIR → MEMORY_DIR = $CLAUDE_PROJECT_DIR/me
 Else → MEMORY_DIR = auto-memory directory (Model A)
 ```
 
-Read `MEMORY_DIR/MEMORY.md` to confirm the memory system is initialized. If not found, tell the user to run `/3-tier-memory:setup-memory` first and stop.
+Read `MEMORY_DIR/MEMORY.md` to confirm the memory system is initialized. If not found, tell the user to run `/3-tier-memory:setup-memory` (or `/setup-memory` if installed locally) first and stop.
 
 ## Step 1: Determine session slug
 
