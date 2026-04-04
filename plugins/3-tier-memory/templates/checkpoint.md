@@ -125,6 +125,27 @@ Do NOT skip this step. Actively scan the conversation for these signals:
 ### If NO signals found for either:
 Write "Ninguno" in the session log sections and skip the index updates.
 
+## Step 5b: Prune indexes
+
+Keep Tier 2 indexes lean. Tier 3 detail files are NEVER deleted — only index rows are removed.
+
+### _pendientes.md
+Remove any `- [x]` items. Completed pendientes should already be gone (Step 3), but clean up stragglers.
+
+### _session-index.md
+If the Sessions table has more than 10 rows, keep only the 10 most recent (by date). Remove older rows.
+
+### _plans-index.md
+Keep all rows with status active, draft, or testing. For completed/abandoned, keep only the 5 most recent. Remove older rows.
+
+### _research-index.md
+Keep the entire Active Research table. In Completed Research, keep only the 5 most recent rows. Remove older rows.
+
+### _learnings.md
+No pruning — bounded by design.
+
+Note pruned row count for Step 7 report.
+
 ## Step 6: Git commit
 
 ```
@@ -140,4 +161,4 @@ git commit --amend --no-edit
 
 ## Step 7: Report
 
-Tell the user: session path, N pendientes extracted, M resolved, N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, commit hash.
+Tell the user: session path, N pendientes extracted, M resolved, N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, N rows pruned from indexes (if any), commit hash.
