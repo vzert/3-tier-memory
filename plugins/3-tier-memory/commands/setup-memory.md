@@ -182,4 +182,16 @@ Run the structure audit:
 - Bridge exists in auto-memory
 - Bridge is compact (<40 lines) and references memory/
 
+**Git status check (informational only — setup succeeds regardless):**
+
+Run: `command -v git 2>/dev/null`
+- If missing: report "Git: not found. /checkpoint will save memory files but skip git commits. Install git if you want checkpoint commits."
+
+If git is found, run: `git rev-parse --is-inside-work-tree 2>/dev/null`
+- If not a repo: report "Git: not inside a git repository. /checkpoint will save memory files but skip git commits. Run `git init` if you want checkpoint commits."
+
+If inside a repo, run: `git config user.name && git config user.email`
+- If either missing: report "Git: user not configured. /checkpoint commits will fail until you run `git config user.name 'Your Name'` and `git config user.email 'you@example.com'`."
+- If both set: report "Git: ready for checkpoint commits."
+
 Report results to the user.

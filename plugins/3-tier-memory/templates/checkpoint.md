@@ -146,19 +146,44 @@ No pruning — bounded by design.
 
 Note pruned row count for Step 7 report.
 
-## Step 6: Git commit
+## Step 6: Git commit (best-effort)
 
+Memory files are already saved (Steps 1-5). The git commit is a convenience — if git is unavailable, skip it gracefully.
+
+**6a. Check git availability:**
+
+Run: `command -v git && git rev-parse --is-inside-work-tree 2>/dev/null`
+
+If this fails → set GIT_SKIP = "git not available or no repository initialized" and jump to 6d.
+
+**6b. Stage changes:**
+
+Run: `git add memory/`
+Then check: `git diff --cached --name-only -- memory/`
+
+If nothing is staged → set GIT_SKIP = "no changes staged (memory/ may be in .gitignore or no changes to commit)" and jump to 6d.
+
+**6c. Commit:**
+
+Run:
 ```
-git add memory/
 git commit -m "checkpoint: DATE-SLUG — summary"
 ```
 
-Record the short hash in the session log and _session-index.md, then amend:
+If the commit succeeds: get the short hash, record it in the session log `## Commits` section and `_session-index.md` Commit column, then amend to include the hash:
 ```
 git add memory/
 git commit --amend --no-edit
 ```
 
+If the commit fails (e.g., user.name/user.email not configured) → set GIT_SKIP = the error message.
+
+**6d. If GIT_SKIP is set:**
+
+- Write in session log `## Commits`: "Git commit skipped: [GIT_SKIP reason]"
+- Set commit hash to "N/A" in `_session-index.md`
+- Do NOT stop — continue to Step 7
+
 ## Step 7: Report
 
-Tell the user: session path, N pendientes extracted, M resolved, N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, N rows pruned from indexes (if any), commit hash.
+Tell the user: session path, N pendientes extracted, M resolved, N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, N rows pruned from indexes (if any), git result (commit hash OR reason skipped).
