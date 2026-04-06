@@ -22,16 +22,16 @@ Report what was found and what's missing. Continue even if some indexes are miss
 
 Create `PROJECT_DIR/.claude/commands/` directory if it doesn't exist.
 
-Install these 3 command files. If any already exist, overwrite them with the latest version:
+Install these 3 command files. All use `-3t` suffix to avoid name collisions with global skills. If any already exist, overwrite them with the latest version:
 
-### 2a. /checkpoint
-Create `.claude/commands/checkpoint.md` with the checkpoint command content (session log, dual-write for sessions/pendientes/learnings, git commit). Use the same content as the setup-memory command's Step 6a.
+### 2a. /checkpoint-3t
+Create `.claude/commands/checkpoint-3t.md` with the checkpoint command content (session log, dual-write for sessions/pendientes/learnings, git commit). Use the same content as the setup-memory command's Step 6a.
 
-### 2b. /status
-Create `.claude/commands/status.md` with the status command content (read all indexes, count items, report compact summary).
+### 2b. /status-3t
+Create `.claude/commands/status-3t.md` with the status command content (read all indexes, count items, report compact summary).
 
-### 2c. /audit
-Create `.claude/commands/audit.md` with the audit command content (5 verification checklists: structure, content, bridge, wikilinks, CLAUDE.md).
+### 2c. /audit-3t
+Create `.claude/commands/audit-3t.md` with the audit command content (5 verification checklists: structure, content, bridge, wikilinks, CLAUDE.md).
 
 ## Step 3: Create missing directories
 
@@ -137,7 +137,7 @@ This project uses project-local memory. Files live in `memory/` within the proje
 - New research → `memory/research/{slug}.md` + row in `memory/_research-index.md`
 
 ## Checkpoint
-Use /checkpoint to save progress. It will update session log, extract pendientes, update indexes, and git commit.
+Use /checkpoint-3t to save progress. It will update session log, extract pendientes, update indexes, and git commit.
 
 ## Index
 - `memory/MEMORY.md` — lean index
@@ -152,7 +152,7 @@ Use /checkpoint to save progress. It will update session log, extract pendientes
 
 ## Step 6: Update CLAUDE.md
 
-Check if CLAUDE.md has the bridge protection rule. If not, append:
+Check if CLAUDE.md has the bridge protection rule and memory system section. If not, append:
 
 ```markdown
 ## CRITICAL: Auto-memory MEMORY.md is a BRIDGE ONLY
@@ -160,7 +160,7 @@ Check if CLAUDE.md has the bridge protection rule. If not, append:
 The file at `~/.claude/projects/<encoded-path>/memory/MEMORY.md` is a bridge that redirects to `memory/` in this project. NEVER write content, indexes, session data, learnings, or any operational data into that file. It must ONLY contain the redirect template. All memory operations go to `memory/` in the project directory. If auto-memory MEMORY.md has more than 30 lines, something is wrong — rewrite it as a bridge immediately.
 ```
 
-Check if CLAUDE.md has a Memory System section. If not, append one listing the operational indexes, learnings, and /checkpoint usage.
+Check if CLAUDE.md has a Memory System section. If not, append one listing the operational indexes, learnings, and /checkpoint-3t usage.
 
 ## Step 7: Run audit
 
@@ -206,7 +206,7 @@ Store `JSONL_COUNT` for inclusion in the report.
 ```
 MIGRATION COMPLETE
 ==================
-Commands installed: /checkpoint, /status, /audit
+Commands installed: /checkpoint-3t, /status-3t, /audit-3t
 Directories: N created, M already existed
 Indexes: N created, M already existed (not overwritten)
 CLAUDE.md: updated | already had all sections
@@ -222,8 +222,8 @@ AUTO-MEMORY ABSORPTION:
 AUDIT RESULTS:
 <audit output from Step 7>
 
-JSONL HISTORY: N files detected — run /backfill to import past sessions
+JSONL HISTORY: N files detected — run /backfill-3t to import past sessions
 (If JSONL_COUNT is 0, omit this line)
 
-Next: use /checkpoint to save progress, /status for overview, /audit to verify.
+Next: use /checkpoint-3t to save progress, /status-3t for overview, /audit-3t to verify.
 ```

@@ -63,12 +63,29 @@ if [ -f "$MEMORY_DIR/_learnings.md" ]; then
   fi
 fi
 
-# Auto-update local commands if plugin has newer versions
+# Migrate old command names to -3t suffix (one-time, for existing installs)
 CMDS_DIR="$CLAUDE_PROJECT_DIR/.claude/commands"
 TEMPLATES_DIR="${CLAUDE_PLUGIN_ROOT}/templates"
+MIGRATED=""
+
+for old_cmd in checkpoint status audit backfill; do
+  OLD_FILE="$CMDS_DIR/$old_cmd.md"
+  NEW_FILE="$CMDS_DIR/${old_cmd}-3t.md"
+  if [ -f "$OLD_FILE" ] && [ ! -f "$NEW_FILE" ]; then
+    mv "$OLD_FILE" "$NEW_FILE"
+    MIGRATED="$MIGRATED /$old_cmd→/${old_cmd}-3t"
+  fi
+done
+
+if [ -n "$MIGRATED" ]; then
+  echo "MIGRADO:$MIGRATED (renamed to avoid collisions with global skills)."
+  echo ""
+fi
+
+# Auto-update local commands if plugin has newer versions
 UPDATED=""
 
-for cmd in checkpoint status audit backfill; do
+for cmd in checkpoint-3t status-3t audit-3t backfill-3t; do
   LOCAL_CMD="$CMDS_DIR/$cmd.md"
   PLUGIN_CMD="$TEMPLATES_DIR/$cmd.md"
   if [ -f "$LOCAL_CMD" ] && [ -f "$PLUGIN_CMD" ]; then
@@ -96,10 +113,10 @@ if [ -d "$JSONL_DIR" ]; then
   fi
   REMAINING=$((JSONL_COUNT - PROCESSED - 1))  # -1 for current session
   if [ "$REMAINING" -gt 0 ]; then
-    echo "BACKFILL PENDIENTE: $REMAINING sesiones sin procesar. Run /backfill to import past sessions."
+    echo "BACKFILL PENDIENTE: $REMAINING sesiones sin procesar. Run /backfill-3t to import past sessions."
     echo ""
   fi
 fi
 
 echo "PROTOCOLO: Dual-write siempre (indice + archivo detalle) para sessions, pendientes y learnings. Plans y research solo si aplica."
-echo "Usar /checkpoint para guardar progreso."
+echo "Usar /checkpoint-3t para guardar progreso."

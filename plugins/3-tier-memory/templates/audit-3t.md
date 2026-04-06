@@ -67,7 +67,7 @@ Check Related sections exist with correct links:
 
 - [ ] CLAUDE.md exists in project root
 - [ ] Has "Memory System" section
-- [ ] Mentions `/checkpoint`
+- [ ] Mentions `/checkpoint-3t`
 - [ ] Has bridge protection rule ("BRIDGE ONLY" or "NEVER write")
 - [ ] .gitignore includes `.claude/`
 

@@ -28,4 +28,4 @@ Read `memory/_learnings.md` → open the relevant topic file:
 - `memory/learnings/3tier-memory-system` — architecture rules, pendientes patterns, bridge rules, distribution patterns
 
 ### Checkpoint
-Use `/checkpoint` to save progress. Updates session log, extracts pendientes, updates indexes, and creates a git commit.
+Use `/checkpoint-3t` to save progress. Updates session log, extracts pendientes, updates indexes, and creates a git commit.

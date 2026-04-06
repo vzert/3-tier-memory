@@ -17,7 +17,7 @@ Read `memory/MEMORY.md` to confirm the system is initialized.
 
 ## Step 1: Session slug
 
-If the user provided arguments after /checkpoint, use that as the slug.
+If the user provided arguments after /checkpoint-3t, use that as the slug.
 Otherwise generate one from the session's main work (lowercase, hyphens, max 40 chars).
 
 Set: DATE = today (YYYY-MM-DD), SESSION_FILE = memory/sessions/DATE-SLUG.md

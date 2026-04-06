@@ -14,7 +14,7 @@ PROJECT_DIR = $CLAUDE_PROJECT_DIR (current project root)
 MEMORY_DIR = PROJECT_DIR/memory/
 ```
 
-Check if `MEMORY_DIR/MEMORY.md` already exists. If yes, tell the user: "Memory system already exists. Use `/3-tier-memory:migrate` to install the plugin's local commands (/checkpoint, /status, /audit) without touching your data." and stop.
+Check if `MEMORY_DIR/MEMORY.md` already exists. If yes, tell the user: "Memory system already exists. Use `/3-tier-memory:migrate` to install the plugin's local commands (/checkpoint-3t, /status-3t, /audit-3t) without touching your data." and stop.
 
 ## Step 2: Create directory structure
 
@@ -84,7 +84,7 @@ This project uses project-local memory. Files live in `memory/` within the proje
 - New research → `memory/research/{slug}.md` + row in `memory/_research-index.md`
 
 ## Checkpoint
-Use /checkpoint to save progress. It will update session log, extract pendientes, update indexes, and git commit.
+Use /checkpoint-3t to save progress. It will update session log, extract pendientes, update indexes, and git commit.
 
 ## Index
 - `memory/MEMORY.md` — lean index
@@ -97,21 +97,21 @@ Use /checkpoint to save progress. It will update session log, extract pendientes
 
 ## Step 6: Install local commands
 
-Create `PROJECT_DIR/.claude/commands/` directory if it doesn't exist, then create these 3 command files. All are auto-updated by the plugin's SessionStart hook when a new version ships — the user never needs to re-run setup for command improvements.
+Create `PROJECT_DIR/.claude/commands/` directory if it doesn't exist, then create these 3 command files. All use `-3t` suffix to avoid name collisions with global skills. Auto-updated by the plugin's SessionStart hook when a new version ships.
 
-### 6a. /checkpoint — save memory state
-Create `PROJECT_DIR/.claude/commands/checkpoint.md`:
+### 6a. /checkpoint-3t — save memory state
+Create `PROJECT_DIR/.claude/commands/checkpoint-3t.md`:
 
 Note: this file will be auto-updated by the plugin's SessionStart hook whenever a new plugin version ships an updated template. The user doesn't need to re-run setup to get checkpoint improvements.
 
-The content of this file should match `templates/checkpoint.md` from the plugin. It will be auto-updated by the SessionStart hook on future plugin updates.
+The content of this file should match `templates/checkpoint-3t.md` from the plugin. It will be auto-updated by the SessionStart hook on future plugin updates.
 
-Write the full content of the latest checkpoint template (see templates/checkpoint.md in the plugin source for the canonical version).
+Write the full content of the latest checkpoint template (see templates/checkpoint-3t.md in the plugin source for the canonical version).
 
 Also create the directory if needed: `mkdir -p PROJECT_DIR/.claude/commands`
 
-### 6b. /status — memory health overview
-Create `PROJECT_DIR/.claude/commands/status.md` with this content:
+### 6b. /status-3t — memory health overview
+Create `PROJECT_DIR/.claude/commands/status-3t.md` with this content:
 
 ```markdown
 ---
@@ -133,8 +133,8 @@ Report:
 MEMORY STATUS: N pendientes (X alta, Y media, Z baja) | N sessions (last: DATE) | N learnings topics | N plans active | N research active | Structure: X/11
 ```
 
-### 6c. /audit — verification checklists
-Create `PROJECT_DIR/.claude/commands/audit.md` with this content:
+### 6c. /audit-3t — verification checklists
+Create `PROJECT_DIR/.claude/commands/audit-3t.md` with this content:
 
 ```markdown
 ---
@@ -149,7 +149,7 @@ Run ALL checks, report pass/fail per category:
 2. CONTENT: MEMORY.md has checkpoint protocol, _pendientes.md has priority sections, all indexes have tables
 3. BRIDGE: auto-memory MEMORY.md is compact (<40 lines), references memory/, no inline content
 4. WIKILINKS: Related sections in session files, pendientes, learnings, plans, research with correct links
-5. CLAUDE.md: has Memory System section, mentions /checkpoint, has bridge protection rule, .gitignore has .claude/
+5. CLAUDE.md: has Memory System section, mentions /checkpoint-3t, has bridge protection rule, .gitignore has .claude/
 
 Report: X/X per category. List any failures with fix instructions.
 ```
@@ -169,7 +169,7 @@ The file at `~/.claude/projects/<encoded-path>/memory/MEMORY.md` is a bridge tha
 Add the Memory System section listing:
 - Operational indexes with paths
 - When to consult learnings
-- How to use `/checkpoint` to save progress
+- How to use `/checkpoint-3t` to save progress
 - Reference files
 
 ## Step 8: Enable marketplace auto-update
@@ -203,7 +203,7 @@ JSONL_COUNT=$(ls "$JSONL_DIR"/*.jsonl 2>/dev/null | wc -l | tr -d ' ')
 If `JSONL_COUNT` > 0, report:
 ```
 JSONL HISTORY DETECTED: N conversation files found.
-Run /backfill to reconstruct sessions, pendientes, learnings, plans, and research from your past conversations.
+Run /backfill-3t to reconstruct sessions, pendientes, learnings, plans, and research from your past conversations.
 ```
 
 This is informational only — setup continues regardless.
@@ -221,13 +221,13 @@ Run the structure audit:
 **Git status check (informational only — setup succeeds regardless):**
 
 Run: `command -v git 2>/dev/null`
-- If missing: report "Git: not found. /checkpoint will save memory files but skip git commits. Install git if you want checkpoint commits."
+- If missing: report "Git: not found. /checkpoint-3t will save memory files but skip git commits. Install git if you want checkpoint commits."
 
 If git is found, run: `git rev-parse --is-inside-work-tree 2>/dev/null`
-- If not a repo: report "Git: not inside a git repository. /checkpoint will save memory files but skip git commits. Run `git init` if you want checkpoint commits."
+- If not a repo: report "Git: not inside a git repository. /checkpoint-3t will save memory files but skip git commits. Run `git init` if you want checkpoint commits."
 
 If inside a repo, run: `git config user.name && git config user.email`
-- If either missing: report "Git: user not configured. /checkpoint commits will fail until you run `git config user.name 'Your Name'` and `git config user.email 'you@example.com'`."
+- If either missing: report "Git: user not configured. /checkpoint-3t commits will fail until you run `git config user.name 'Your Name'` and `git config user.email 'you@example.com'`."
 - If both set: report "Git: ready for checkpoint commits."
 
 Report results to the user.

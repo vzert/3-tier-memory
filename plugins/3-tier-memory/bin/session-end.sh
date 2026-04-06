@@ -21,5 +21,5 @@ TODAY=$(date +%Y-%m-%d)
 TODAY_SESSION=$(find "$MEMORY_DIR/sessions" -name "${TODAY}-*.md" 2>/dev/null | head -1)
 
 if [ -z "$TODAY_SESSION" ]; then
-  echo "SESION TERMINANDO SIN CHECKPOINT. Ejecuta /checkpoint antes de cerrar para guardar pendientes, learnings y el log de esta sesion."
+  echo "SESION TERMINANDO SIN CHECKPOINT. Ejecuta /checkpoint-3t antes de cerrar para guardar pendientes, learnings y el log de esta sesion."
 fi
