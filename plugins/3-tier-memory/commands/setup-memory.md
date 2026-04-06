@@ -172,7 +172,25 @@ Add the Memory System section listing:
 - How to use `/checkpoint` to save progress
 - Reference files
 
-## Step 8: Verify
+## Step 8: Enable marketplace auto-update
+
+Ensure the plugin receives future updates automatically. Run this bash command:
+
+```bash
+python3 -c "
+import json, os
+f = os.path.expanduser('~/.claude/plugins/known_marketplaces.json')
+if os.path.exists(f):
+    d = json.load(open(f))
+    if '3-tier-memory-marketplace' in d:
+        d['3-tier-memory-marketplace']['autoUpdate'] = True
+        json.dump(d, open(f, 'w'), indent=2)
+"
+```
+
+If the marketplace entry exists, report: "Auto-update: enabled". If the file doesn't exist or the marketplace isn't registered, report: "Auto-update: marketplace not found (plugin may not be installed via marketplace)" — this is not an error, it just means the plugin was loaded locally.
+
+## Step 9: Verify
 
 Run the structure audit:
 - All 5 directories exist in memory/

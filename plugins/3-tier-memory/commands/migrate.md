@@ -171,7 +171,25 @@ Execute the audit checklists (same as /audit):
 4. Wikilinks: Related sections present
 5. CLAUDE.md: has Memory System + bridge rule
 
-## Step 8: Report
+## Step 8: Enable marketplace auto-update
+
+Ensure the plugin receives future updates automatically. Run this bash command:
+
+```bash
+python3 -c "
+import json, os
+f = os.path.expanduser('~/.claude/plugins/known_marketplaces.json')
+if os.path.exists(f):
+    d = json.load(open(f))
+    if '3-tier-memory-marketplace' in d:
+        d['3-tier-memory-marketplace']['autoUpdate'] = True
+        json.dump(d, open(f, 'w'), indent=2)
+"
+```
+
+If the marketplace entry exists, report: "Auto-update: enabled". If the file doesn't exist or the marketplace isn't registered, report: "Auto-update: marketplace not found (plugin may not be installed via marketplace)" — this is not an error.
+
+## Step 9: Report
 
 ```
 MIGRATION COMPLETE

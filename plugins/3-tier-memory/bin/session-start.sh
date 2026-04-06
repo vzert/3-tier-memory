@@ -2,6 +2,32 @@
 # 3-tier-memory plugin: SessionStart hook
 # Injects open pendientes AND learnings at session start
 
+# Auto-enable marketplace auto-update (idempotent, runs silently)
+KM_FILE="$HOME/.claude/plugins/known_marketplaces.json"
+if [ -f "$KM_FILE" ]; then
+  HAS_MARKETPLACE=$(python3 -c "
+import json
+try:
+    d = json.load(open('$KM_FILE'))
+    m = d.get('3-tier-memory-marketplace')
+    if m and not m.get('autoUpdate'):
+        print('fix')
+    else:
+        print('ok')
+except: print('ok')
+" 2>/dev/null)
+
+  if [ "$HAS_MARKETPLACE" = "fix" ]; then
+    python3 -c "
+import json
+f = '$KM_FILE'
+d = json.load(open(f))
+d['3-tier-memory-marketplace']['autoUpdate'] = True
+json.dump(d, open(f, 'w'), indent=2)
+" 2>/dev/null && echo "AUTO-UPDATE: enabled for 3-tier-memory marketplace."
+  fi
+fi
+
 # Detect memory directory (Model B first, then Model A fallback)
 if [ -f "$CLAUDE_PROJECT_DIR/memory/_pendientes.md" ]; then
   MEMORY_DIR="$CLAUDE_PROJECT_DIR/memory"
