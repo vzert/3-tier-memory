@@ -6,10 +6,6 @@ description: Run verification checklists on the 3-tier memory system — structu
 
 Run ALL verification checklists below. Report results per category with pass/fail counts.
 
-## 0. Detect mode
-
-Check if `memory/.memory-config` exists and contains `multi-dev: true`. This determines whether multi-dev checks run in section 6.
-
 ## 1. Structure audit
 
 Verify ALL directories exist in memory/:
@@ -75,32 +71,7 @@ Check Related sections exist with correct links:
 - [ ] Has bridge protection rule ("BRIDGE ONLY" or "NEVER write")
 - [ ] .gitignore includes `.claude/`
 
-## 6. Multi-dev audit (only if `.memory-config` has `multi-dev: true`)
-
-Skip this section entirely if multi-dev is not active.
-
-### 6a. Config check
-- [ ] `memory/.memory-config` exists and is readable
-- [ ] Contains `multi-dev: true`
-
-### 6b. Session index format
-- [ ] `_session-index.md` header row has `Dev` column (6 columns: Fecha | Dev | Sesion | Status | Commit | Resumen)
-- [ ] At least the 5 most recent session rows have a non-empty Dev value
-
-### 6c. Session file frontmatter
-- [ ] At least the 3 most recent session files in sessions/ have `dev:` in their frontmatter
-
-### 6d. Pendientes attribution
-- [ ] At least 3 of the open `- [ ]` items in `_pendientes.md` have `_dev:` tags
-  (Note: legacy items without `_dev:` are acceptable — only check recent ones)
-
-### 6e. Plans index format
-- [ ] `_plans-index.md` header row has `Dev` column (7 columns: Plan | Status | Dev | Fecha | Sesion | Pendientes | Learnings)
-
-### 6f. MEMORY.md attribution section
-- [ ] MEMORY.md contains "Developer Attribution" or "dev:" documentation
-
-## 7. Report
+## 6. Report
 
 Present results:
 
@@ -112,7 +83,6 @@ Content:     X/X passed
 Bridge:      X/X passed (or N/A if Model A)
 Wikilinks:   X/X passed
 CLAUDE.md:   X/X passed
-Multi-dev:   X/X passed (or N/A if single-dev)
 
 ISSUES:
 - <list each failed check with what to fix>

@@ -6,7 +6,7 @@ description: Migrate an existing 3-tier memory system to the plugin. Installs lo
 
 For projects that already have a `memory/` directory set up from the playbook. This command installs the plugin's local commands, absorbs any auto-memory files into the correct project memory folders, establishes the bridge, and verifies the setup.
 
-## Step 1: Verify existing memory and detect mode
+## Step 1: Verify existing memory
 
 Check that `memory/MEMORY.md` exists in the project root. If it does NOT exist, tell the user: "No memory system found. Use `/3-tier-memory:setup-memory` instead for a fresh setup." and stop.
 
@@ -16,27 +16,7 @@ Verify the basic structure exists:
 - `memory/_session-index.md`
 - `memory/_learnings.md`
 
-**Multi-dev detection**: Check if `memory/.memory-config` exists and contains `multi-dev: true`.
-
-**Detect existing index formats**: Count the pipe-separated columns in the header row of each index:
-- `_session-index.md`: 5 columns = single-dev, 6 columns = multi-dev
-- `_plans-index.md`: 6 columns = single-dev, 7 columns = multi-dev
-
-Report what was found:
-```
-Existing memory detected:
-  MEMORY.md: ✅
-  _pendientes.md: ✅ | ❌
-  _session-index.md: ✅ (N columns) | ❌
-  _learnings.md: ✅ | ❌
-  _plans-index.md: ✅ (N columns) | ❌
-  _research-index.md: ✅ | ❌
-  .memory-config: multi-dev | single-dev | missing
-```
-
-Continue even if some indexes are missing — we'll flag them in the audit at the end.
-
-**Format mismatch warning**: If `.memory-config` says `multi-dev: true` but existing indexes have single-dev column counts (or vice versa), warn the user but do NOT reformat existing data. New entries from /checkpoint will use the format matching the current config. The user can manually reformat indexes later if desired.
+Report what was found and what's missing. Continue even if some indexes are missing — we'll flag them in the audit at the end.
 
 ## Step 2: Install local commands
 
@@ -45,13 +25,13 @@ Create `PROJECT_DIR/.claude/commands/` directory if it doesn't exist.
 Install these 3 command files. If any already exist, overwrite them with the latest version:
 
 ### 2a. /checkpoint
-Create `.claude/commands/checkpoint.md` with the full content of the latest checkpoint template (see templates/checkpoint.md in the plugin source). This template includes multi-dev support — it reads `.memory-config` at runtime to determine mode.
+Create `.claude/commands/checkpoint.md` with the checkpoint command content (session log, dual-write for sessions/pendientes/learnings, git commit). Use the same content as the setup-memory command's Step 6a.
 
 ### 2b. /status
-Create `.claude/commands/status.md` with the full content of the latest status template (see templates/status.md in the plugin source).
+Create `.claude/commands/status.md` with the status command content (read all indexes, count items, report compact summary).
 
 ### 2c. /audit
-Create `.claude/commands/audit.md` with the full content of the latest audit template (see templates/audit.md in the plugin source).
+Create `.claude/commands/audit.md` with the audit command content (5 verification checklists: structure, content, bridge, wikilinks, CLAUDE.md).
 
 ## Step 3: Create missing directories
 
@@ -66,9 +46,9 @@ mkdir -p memory/{sessions,pendientes,learnings,plans,research}
 For each missing index file, create it with the standard template. Do NOT overwrite existing indexes — only create ones that don't exist:
 
 - `memory/_pendientes.md` — if missing, create with Alta/Media/Baja prioridad sections
-- `memory/_session-index.md` — if missing, create with session table (use multi-dev 6-column format if `.memory-config` has `multi-dev: true`, otherwise 5-column)
+- `memory/_session-index.md` — if missing, create with session table
 - `memory/_learnings.md` — if missing, create with topic table + Quick Reference
-- `memory/_plans-index.md` — if missing, create with plans table (use multi-dev 7-column format if `.memory-config` has `multi-dev: true`, otherwise 6-column)
+- `memory/_plans-index.md` — if missing, create with plans table
 - `memory/_research-index.md` — if missing, create with Active/Completed Research tables
 
 Use today's date for frontmatter.
@@ -190,7 +170,6 @@ Execute the audit checklists (same as /audit):
 3. Bridge: compact, redirect-only, no residual files
 4. Wikilinks: Related sections present
 5. CLAUDE.md: has Memory System + bridge rule
-6. Multi-dev: (if active) Dev columns, dev: frontmatter, _dev: tags
 
 ## Step 8: Enable marketplace auto-update
 
@@ -218,8 +197,6 @@ MIGRATION COMPLETE
 Commands installed: /checkpoint, /status, /audit
 Directories: N created, M already existed
 Indexes: N created, M already existed (not overwritten)
-Multi-dev: active (from .memory-config) | not configured
-Index formats: session-index N cols, plans-index N cols
 CLAUDE.md: updated | already had all sections
 
 AUTO-MEMORY ABSORPTION:

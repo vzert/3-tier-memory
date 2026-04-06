@@ -97,31 +97,6 @@ Tier 3: detail files in typed folders (full content)
 
 Dual-write rule: sessions, action items, and learnings ALWAYS go to both Tier 2 (index) and Tier 3 (detail file). Plans and research only when applicable.
 
-## Multi-dev mode (teams)
-
-For teams where multiple developers share a single memory system (e.g., a VPS with SSH access per developer):
-
-Create `memory/.memory-config` in your project:
-
-```
-multi-dev: true
-prune-sessions: 50
-prune-plans-completed: 20
-```
-
-This enables:
-- **Developer attribution**: each session, pendiente, and plan tracks who did it via `$(whoami)`
-- **Session frontmatter**: `dev:` field
-- **Session index**: 6-column format with `Dev` column
-- **Pendientes**: `_dev: <username>_` tag alongside `_origen:`
-- **Plans index**: 7-column format with `Dev` column
-- **Git commits**: `checkpoint(<dev>): slug — summary`
-- **Higher prune thresholds**: configurable (defaults: 50 sessions, 20 completed plans)
-- **`/status`**: per-developer breakdown
-- **`/audit`**: multi-dev consistency checks
-
-Without `.memory-config`, the plugin runs in single-dev mode (default, no changes to existing behavior).
-
 ## Alternative install methods
 
 ### Team setup (auto-prompt when teammates trust the repo)
@@ -223,12 +198,9 @@ The auto-memory bridge at `~/.claude/projects/<encoded-path>/memory/MEMORY.md` c
 your-project/
 ├── .claude/
 │   └── commands/
-│       ├── checkpoint.md      <- /checkpoint command
-│       ├── status.md          <- /status command
-│       └── audit.md           <- /audit command
+│       └── checkpoint.md      <- your local /checkpoint command
 └── memory/
     ├── MEMORY.md              # Tier 1: lean index + checkpoint protocol
-    ├── .memory-config         # (optional) multi-dev config
     ├── _pendientes.md         # Tier 2: open action items
     ├── _session-index.md      # Tier 2: session history
     ├── _learnings.md          # Tier 2: learnings topic index

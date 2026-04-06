@@ -10,12 +10,10 @@ CORE RULES:
 - Dual-write ALWAYS for sessions, action items, and learnings (Tier 2 index + Tier 3 file)
 - Plans and research: SCAN for signals below — register if ANY signal found
 
-## Step 0: Locate memory directory and detect mode
+## Step 0: Locate memory directory
 
 If `memory/` exists in the project root, use it (Model B). Otherwise check auto-memory (Model A).
 Read `memory/MEMORY.md` to confirm the system is initialized.
-
-**Multi-dev detection**: Check if `memory/.memory-config` exists and contains `multi-dev: true`. If so, determine DEV by running `whoami` in a shell command. All subsequent steps use DEV for attribution. Also read `prune-sessions` and `prune-plans-completed` from the config for Step 5b thresholds (defaults: 50 sessions and 20 completed plans for multi-dev, 10 and 5 for single-dev).
 
 ## Step 1: Session slug
 
@@ -32,7 +30,6 @@ Set: DATE = today (YYYY-MM-DD), SESSION_FILE = memory/sessions/DATE-SLUG.md
 ---
 type: session
 date: DATE
-dev: DEV          # ← ONLY if multi-dev is active. Omit this line in single-dev mode.
 status: completed | completed-with-pendientes
 ---
 # Session Title
@@ -70,12 +67,7 @@ status: completed | completed-with-pendientes
 - [[_research-index]] (if research this session)
 ```
 
-**Tier 2**: Add/update row in memory/_session-index.md.
-
-- **Multi-dev format** (6 columns): `| DATE | DEV | [[sessions/DATE-SLUG\|Title]] | STATUS_EMOJI | COMMIT | Summary |`
-- **Single-dev format** (5 columns): `| DATE | [[sessions/DATE-SLUG\|Title]] | STATUS_EMOJI | Summary | COMMIT |`
-
-Match the existing table format — count the columns in the header row. Commit hash is filled in Step 6.
+**Tier 2**: Add/update row in memory/_session-index.md with date, session link, status emoji, summary, commit hash (filled in Step 6).
 
 ## Step 3: Pendientes — DUAL WRITE (always)
 
@@ -90,10 +82,7 @@ Scan the ENTIRE conversation for:
 8. Documentation gaps
 
 For EACH pendiente:
-**Tier 2**: Add to memory/_pendientes.md under correct priority:
-- Multi-dev: `- [ ] **description** — _origen: [[sessions/DATE-SLUG]]_ _dev: DEV_`
-- Single-dev: `- [ ] **description** — _origen: [[sessions/DATE-SLUG]]_`
-
+**Tier 2**: Add to memory/_pendientes.md under correct priority with `_origen: [[sessions/DATE-SLUG]]`
 **Tier 3**: Add row to memory/pendientes/YYYY-MM.md
 
 Also check if existing pendientes were RESOLVED this session — mark done in BOTH files.
@@ -118,10 +107,7 @@ Do NOT skip this step. Actively scan the conversation for these signals:
 - User said "plan", "diseño", "arquitectura", "implementacion"
 
 **If plan signals found:**
-- Tier 2: add/update row in memory/_plans-index.md
-  - Multi-dev format (7 columns): `| Plan | Status | DEV | Fecha | Sesión | Pendientes | Learnings |`
-  - Single-dev format (6 columns): `| Plan | Status | Fecha | Sesión | Pendientes | Learnings |`
-  - Match the existing table format.
+- Tier 2: add/update row in memory/_plans-index.md (title, status, date, session link)
 - Tier 3: create/update memory/plans/plan-<slug>.md with context, decisions, steps, outcome
 - Add wikilink in session log ## Plans section and ## Related
 
@@ -143,16 +129,14 @@ Write "Ninguno" in the session log sections and skip the index updates.
 
 Keep Tier 2 indexes lean. Tier 3 detail files are NEVER deleted — only index rows are removed.
 
-Pruning thresholds come from Step 0 detection (`.memory-config` values or defaults).
-
 ### _pendientes.md
 Remove any `- [x]` items. Completed pendientes should already be gone (Step 3), but clean up stragglers.
 
 ### _session-index.md
-If the Sessions table has more rows than the prune-sessions threshold (default: 10 single-dev, 50 multi-dev), keep only the N most recent (by date). Remove older rows.
+If the Sessions table has more than 10 rows, keep only the 10 most recent (by date). Remove older rows.
 
 ### _plans-index.md
-Keep all rows with status active, draft, or testing. For completed/abandoned, keep only the N most recent (prune-plans-completed threshold, default: 5 single-dev, 20 multi-dev). Remove older rows.
+Keep all rows with status active, draft, or testing. For completed/abandoned, keep only the 5 most recent. Remove older rows.
 
 ### _research-index.md
 Keep the entire Active Research table. In Completed Research, keep only the 5 most recent rows. Remove older rows.
@@ -181,12 +165,7 @@ If nothing is staged → set GIT_SKIP = "no changes staged (memory/ may be in .g
 
 **6c. Commit:**
 
-Multi-dev commit format:
-```
-git commit -m "checkpoint(DEV): DATE-SLUG — summary"
-```
-
-Single-dev commit format:
+Run:
 ```
 git commit -m "checkpoint: DATE-SLUG — summary"
 ```
@@ -207,4 +186,4 @@ If the commit fails (e.g., user.name/user.email not configured) → set GIT_SKIP
 
 ## Step 7: Report
 
-Tell the user: session path, dev (if multi-dev), N pendientes extracted, M resolved, N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, N rows pruned from indexes (if any), git result (commit hash OR reason skipped).
+Tell the user: session path, N pendientes extracted, M resolved, N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, N rows pruned from indexes (if any), git result (commit hash OR reason skipped).

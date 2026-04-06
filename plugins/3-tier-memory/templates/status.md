@@ -6,12 +6,10 @@ description: Quick memory health overview — action items, sessions, learnings,
 
 Read and report the current state of the 3-tier memory system. Execute ALL steps, then present a compact summary.
 
-## Step 1: Locate memory directory and detect mode
+## Step 1: Locate memory directory
 
 If `memory/` exists in the project root, use it (Model B). Otherwise check auto-memory (Model A).
 If no memory system found, tell the user to run setup-memory first and stop.
-
-**Multi-dev detection**: Check if `memory/.memory-config` exists and contains `multi-dev: true`.
 
 ## Step 2: Gather metrics
 
@@ -20,13 +18,11 @@ Read each file and collect:
 **Pendientes** (`memory/_pendientes.md`):
 - Count items with `- [ ]` (open) grouped by priority section (Alta, Media, Baja)
 - Count items with `- [x]` (resolved, if any still listed)
-- If multi-dev: also count open items per developer (extract `_dev: <username>_` tags)
 
 **Sessions** (`memory/_session-index.md`):
 - Total number of sessions
 - Most recent session: date, slug, status
 - Date of oldest session
-- If multi-dev: count sessions per developer (from Dev column)
 
 **Learnings** (`memory/_learnings.md`):
 - Number of topic files listed
@@ -58,16 +54,6 @@ Learnings:   N topics, M critical rules
 Plans:       N active, M completed
 Research:    N active, M completed
 Structure:   X/11 checks passed
-```
-
-If multi-dev, add a Dev Breakdown section:
-
-```
-DEV BREAKDOWN
-=============
-<dev1>:  N sessions, M open pendientes
-<dev2>:  N sessions, M open pendientes
-...
 ```
 
 If any structure checks failed, list what's missing.
