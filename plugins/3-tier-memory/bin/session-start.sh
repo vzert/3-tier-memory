@@ -28,6 +28,10 @@ json.dump(d, open(f, 'w'), indent=2)
   fi
 fi
 
+# Source multi-dev detection
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/detect-multidev.sh"
+
 # Detect memory directory (Model B first, then Model A fallback)
 if [ -f "$CLAUDE_PROJECT_DIR/memory/_pendientes.md" ]; then
   MEMORY_DIR="$CLAUDE_PROJECT_DIR/memory"
@@ -42,6 +46,12 @@ fi
 
 # Exit silently if no memory system found
 [ -z "$MEMORY_DIR" ] && exit 0
+
+# Inject multi-dev identity
+if [ "$MEMORY_MULTI_DEV" = "true" ]; then
+  echo "DEV: $MEMORY_DEV (multi-dev mode)"
+  echo ""
+fi
 
 # Inject open pendientes
 PENDIENTES=$(grep -E '^\- \[ \]' "$MEMORY_DIR/_pendientes.md" 2>/dev/null)

@@ -1,5 +1,41 @@
 # Changelog
 
+## [2.1.0] - 2026-04-05
+### Added
+- Optional multi-dev support via `memory/.memory-config` file. When `multi-dev: true` is set:
+  - Session frontmatter includes `dev:` field (identified via `whoami`)
+  - Session index uses 6-column format with `Dev` column
+  - Pendientes include `_dev: <username>_` tag alongside `_origen:`
+  - Plans index uses 7-column format with `Dev` column
+  - Git commits use `checkpoint(<dev>): slug — summary` format
+  - SessionStart hook injects developer identity
+- `detect-multidev.sh` — shared detection script sourced by all hooks
+- Configurable pruning thresholds in `.memory-config` (`prune-sessions`, `prune-plans-completed`)
+- `/audit` Section 6: multi-dev consistency checks (Dev columns, dev: frontmatter, _dev: tags)
+- `/status` Dev Breakdown section showing per-developer session and pendiente counts
+
+### Changed
+- `/checkpoint` now reads `.memory-config` at Step 0 to determine single-dev or multi-dev mode. All subsequent steps adapt formats conditionally.
+- `/checkpoint` Step 5b pruning thresholds are now configurable (defaults: 10/5 single-dev, 50/20 multi-dev)
+- `/migrate` detects existing index column formats and warns on mismatches without reformatting data
+- `setup-memory` creates indexes with correct column counts when multi-dev is configured
+- `setup-memory` adds "Developer Attribution — OBLIGATORIO" section to MEMORY.md when multi-dev
+
+### Fixed
+- Projects with existing multi-dev conventions can now use the plugin without losing their customizations
+
+## [2.0.0] - 2026-04-05
+### Added
+- Checkpoint Step 6 git resilience — detect-and-skip if git unavailable or not in a repo
+- Agent-proof README with HTML comment header, terminal-first commands, manual install method
+- Auto-enable marketplace auto-update in SessionStart hook
+- Git status check in setup-memory verify step
+- Marketplace auto-update step in setup-memory and migrate commands
+
+### Changed
+- Step 6 is now best-effort: checks git availability, handles .gitignore, reports skip reason
+- README rewritten with Prerequisites, troubleshooting for AI agents, `claude plugin` terminal commands
+
 ## [1.7.0] - 2026-04-03
 ### Changed
 - /checkpoint Step 5 now actively SCANS for plan/research signals instead of passively waiting. Detects plan mode usage, ExitPlanMode, web searches, comparisons, and investigation keywords.

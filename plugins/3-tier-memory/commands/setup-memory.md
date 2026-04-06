@@ -16,6 +16,8 @@ MEMORY_DIR = PROJECT_DIR/memory/
 
 Check if `MEMORY_DIR/MEMORY.md` already exists. If yes, tell the user: "Memory system already exists. Use `/3-tier-memory:migrate` to install the plugin's local commands (/checkpoint, /status, /audit) without touching your data." and stop.
 
+**Multi-dev detection**: Check if `MEMORY_DIR/.memory-config` exists and contains `multi-dev: true`. If the user explicitly asked for multi-dev setup, create the config file first (see Step 2b). This determines index column formats for Step 3.
+
 ## Step 2: Create directory structure
 
 Create ALL directories (none are optional):
@@ -24,12 +26,31 @@ Create ALL directories (none are optional):
 mkdir -p "$PROJECT_DIR/memory/"{learnings,sessions,pendientes,plans,research}
 ```
 
+### Step 2b: Create .memory-config (if multi-dev requested)
+
+If the user asked to set up multi-dev (e.g., they said "multi-dev", "multiple developers", "team"), create `memory/.memory-config`:
+
+```
+multi-dev: true
+prune-sessions: 50
+prune-plans-completed: 20
+```
+
+If the user did NOT request multi-dev, skip this step. The default is single-dev.
+
 ## Step 3: Create Tier 2 indexes
 
 Create ALL of these files in `MEMORY_DIR/`. Use today's date for `created` and `updated` fields.
 
 **MEMORY.md** (Tier 1 — lean index):
 - Checkpoint Protocol section (at session start, during execution, checkpoint trigger)
+- If multi-dev: add "Developer Attribution — OBLIGATORIO" section documenting:
+  - Session files: `dev:` field in frontmatter
+  - Session index: `Dev` column in table
+  - Pendientes: `_dev: <username>_` tag inline alongside `_origen:`
+  - Plans index: `Dev` column in table
+  - Commit messages: `checkpoint(<dev>): slug — summary`
+  - Dev identified via `$(whoami)` at session start
 - Topic Files section (empty, to be populated)
 - Operational Indexes section linking to all _index files
 - Current Status section (brief project state)
@@ -37,11 +58,17 @@ Create ALL of these files in `MEMORY_DIR/`. Use today's date for `created` and `
 
 **_pendientes.md** — Aggregator with Alta/Media/Baja prioridad sections, "Como usar" instructions, Related links.
 
-**_session-index.md** — Table with columns: Fecha, Sesion, Status, Resumen, Commit. Empty rows. Convention section.
+**_session-index.md** — Table with:
+- Multi-dev columns: `Fecha | Dev | Sesion | Status | Commit | Resumen` (6 columns)
+- Single-dev columns: `Fecha | Sesion | Status | Resumen | Commit` (5 columns)
+Empty rows. Convention section.
 
 **_learnings.md** — Table with columns: Topic, File, When to consult. One initial topic file entry. Quick Reference section (empty initially).
 
-**_plans-index.md** — Table with columns: Plan, Status, Fecha, Sesion, Pendientes, Learnings. Lifecycle description. Como agregar section.
+**_plans-index.md** — Table with:
+- Multi-dev columns: `Plan | Status | Dev | Fecha | Sesion | Pendientes | Learnings` (7 columns)
+- Single-dev columns: `Plan | Status | Fecha | Sesion | Pendientes | Learnings` (6 columns)
+Lifecycle description. Como agregar section.
 
 **_research-index.md** — Active Research table and Completed Research table. Como agregar section.
 
@@ -111,48 +138,10 @@ Write the full content of the latest checkpoint template (see templates/checkpoi
 Also create the directory if needed: `mkdir -p PROJECT_DIR/.claude/commands`
 
 ### 6b. /status — memory health overview
-Create `PROJECT_DIR/.claude/commands/status.md` with this content:
-
-```markdown
----
-description: Quick memory health overview — action items, sessions, learnings, plans, research
----
-
-# Memory Status
-
-Read and report the current state of the 3-tier memory system.
-
-1. Read memory/_pendientes.md — count open items by priority (Alta, Media, Baja)
-2. Read memory/_session-index.md — total sessions, most recent date and slug
-3. Read memory/_learnings.md — count topic files and Quick Reference rules
-4. Read memory/_plans-index.md — count by status (active, completed, draft)
-5. Read memory/_research-index.md — count active and completed
-6. Verify 5 dirs + 6 indexes exist
-
-Report:
-MEMORY STATUS: N pendientes (X alta, Y media, Z baja) | N sessions (last: DATE) | N learnings topics | N plans active | N research active | Structure: X/11
-```
+Create `PROJECT_DIR/.claude/commands/status.md` with the full content of the latest status template (see templates/status.md in the plugin source for the canonical version).
 
 ### 6c. /audit — verification checklists
-Create `PROJECT_DIR/.claude/commands/audit.md` with this content:
-
-```markdown
----
-description: Run verification checklists on the 3-tier memory system — structure, content, bridge, wikilinks, CLAUDE.md
----
-
-# Memory Audit
-
-Run ALL checks, report pass/fail per category:
-
-1. STRUCTURE: 5 dirs + 6 indexes + at least 1 learnings file + at least 1 pendientes archive
-2. CONTENT: MEMORY.md has checkpoint protocol, _pendientes.md has priority sections, all indexes have tables
-3. BRIDGE: auto-memory MEMORY.md is compact (<40 lines), references memory/, no inline content
-4. WIKILINKS: Related sections in session files, pendientes, learnings, plans, research with correct links
-5. CLAUDE.md: has Memory System section, mentions /checkpoint, has bridge protection rule, .gitignore has .claude/
-
-Report: X/X per category. List any failures with fix instructions.
-```
+Create `PROJECT_DIR/.claude/commands/audit.md` with the full content of the latest audit template (see templates/audit.md in the plugin source for the canonical version).
 
 ## Step 7: Update CLAUDE.md
 
@@ -199,6 +188,7 @@ Run the structure audit:
 - At least 1 pendientes monthly archive exists
 - Bridge exists in auto-memory
 - Bridge is compact (<40 lines) and references memory/
+- If multi-dev: .memory-config exists, indexes have correct column counts
 
 **Git status check (informational only — setup succeeds regardless):**
 
