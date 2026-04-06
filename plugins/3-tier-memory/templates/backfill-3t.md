@@ -22,9 +22,13 @@ JSONL_DIR="$HOME/.claude/projects/$ENCODED"
 
 5. Locate the extraction script:
 ```bash
-EXTRACT_SCRIPT="${CLAUDE_PLUGIN_ROOT}/bin/extract-session-digest.py"
+if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/extract-session-digest.py" ]; then
+  EXTRACT_SCRIPT="${CLAUDE_PLUGIN_ROOT}/bin/extract-session-digest.py"
+else
+  EXTRACT_SCRIPT=$(find "$HOME/.claude/plugins" -name "extract-session-digest.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)
+fi
 ```
-If `$CLAUDE_PLUGIN_ROOT` is not set or the script doesn't exist, try: `$(dirname $(dirname $(readlink -f "$0")))/bin/extract-session-digest.py` or search in the plugin installation directory. If still not found, report error and stop.
+If `$EXTRACT_SCRIPT` is empty or the file doesn't exist, report error: "Could not find extract-session-digest.py. Ensure the 3-tier-memory plugin is installed (`claude plugin install 3-tier-memory@3-tier-memory-marketplace`)." and **stop**.
 
 ## Step 1: Inventory
 
@@ -288,7 +292,7 @@ Sessions created:
 - **Pendientes are only extracted from the 5 most recent sessions** — older ones are likely resolved
 - **Progress is saved after each session** — safe to interrupt with Ctrl+C at any time
 - **Running backfill again is safe** — already-processed sessions are skipped via `.backfill-progress.json`
-- **The extraction script must exist** at `$CLAUDE_PLUGIN_ROOT/bin/extract-session-digest.py`
+- **The extraction script must exist** at `$CLAUDE_PLUGIN_ROOT/bin/extract-session-digest.py` or anywhere under `~/.claude/plugins/` within a `3-tier-memory` directory
 - **Follow dual-write protocol** for ALL artifacts: Tier 2 index row + Tier 3 detail file
 - **Use wikilinks** in all cross-references: `[[sessions/DATE-slug]]`, `[[learnings/topic]]`, etc.
 - **Backfill pendientes are marked** with `(backfill)` in their `_origen:` to distinguish from live-extracted ones
