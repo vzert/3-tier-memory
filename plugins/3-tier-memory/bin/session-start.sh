@@ -68,7 +68,7 @@ CMDS_DIR="$CLAUDE_PROJECT_DIR/.claude/commands"
 TEMPLATES_DIR="${CLAUDE_PLUGIN_ROOT}/templates"
 UPDATED=""
 
-for cmd in checkpoint status audit; do
+for cmd in checkpoint status audit backfill; do
   LOCAL_CMD="$CMDS_DIR/$cmd.md"
   PLUGIN_CMD="$TEMPLATES_DIR/$cmd.md"
   if [ -f "$LOCAL_CMD" ] && [ -f "$PLUGIN_CMD" ]; then
@@ -82,6 +82,23 @@ done
 if [ -n "$UPDATED" ]; then
   echo "ACTUALIZADO:$UPDATED se actualizaron a la version mas reciente del plugin."
   echo ""
+fi
+
+# Notify if JSONL backfill is pending
+ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's|/|-|g')
+JSONL_DIR="$HOME/.claude/projects/$ENCODED"
+if [ -d "$JSONL_DIR" ]; then
+  JSONL_COUNT=$(ls "$JSONL_DIR"/*.jsonl 2>/dev/null | wc -l | tr -d ' ')
+  PROCESSED=0
+  PROGRESS_FILE="$JSONL_DIR/.backfill-progress.json"
+  if [ -f "$PROGRESS_FILE" ]; then
+    PROCESSED=$(python3 -c "import json; print(len(json.load(open('$PROGRESS_FILE')).get('processed',[])))" 2>/dev/null || echo 0)
+  fi
+  REMAINING=$((JSONL_COUNT - PROCESSED - 1))  # -1 for current session
+  if [ "$REMAINING" -gt 0 ]; then
+    echo "BACKFILL PENDIENTE: $REMAINING sesiones sin procesar. Run /backfill to import past sessions."
+    echo ""
+  fi
 fi
 
 echo "PROTOCOLO: Dual-write siempre (indice + archivo detalle) para sessions, pendientes y learnings. Plans y research solo si aplica."

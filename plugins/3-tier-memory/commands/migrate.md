@@ -189,6 +189,18 @@ if os.path.exists(f):
 
 If the marketplace entry exists, report: "Auto-update: enabled". If the file doesn't exist or the marketplace isn't registered, report: "Auto-update: marketplace not found (plugin may not be installed via marketplace)" — this is not an error.
 
+## Step 8b: Detect JSONL history for backfill
+
+Check for existing JSONL conversation files:
+
+```bash
+ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's|/|-|g')
+JSONL_DIR="$HOME/.claude/projects/$ENCODED"
+JSONL_COUNT=$(ls "$JSONL_DIR"/*.jsonl 2>/dev/null | wc -l | tr -d ' ')
+```
+
+Store `JSONL_COUNT` for inclusion in the report.
+
 ## Step 9: Report
 
 ```
@@ -209,6 +221,9 @@ AUTO-MEMORY ABSORPTION:
 
 AUDIT RESULTS:
 <audit output from Step 7>
+
+JSONL HISTORY: N files detected — run /backfill to import past sessions
+(If JSONL_COUNT is 0, omit this line)
 
 Next: use /checkpoint to save progress, /status for overview, /audit to verify.
 ```
