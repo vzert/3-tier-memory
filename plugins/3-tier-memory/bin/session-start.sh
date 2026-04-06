@@ -82,19 +82,29 @@ if [ -n "$MIGRATED" ]; then
   echo ""
 fi
 
-# Auto-update local commands if plugin has newer versions
+# Auto-update local commands if plugin has newer versions (also installs missing ones)
 UPDATED=""
+INSTALLED=""
 
 for cmd in checkpoint-3t status-3t audit-3t backfill-3t; do
   LOCAL_CMD="$CMDS_DIR/$cmd.md"
   PLUGIN_CMD="$TEMPLATES_DIR/$cmd.md"
-  if [ -f "$LOCAL_CMD" ] && [ -f "$PLUGIN_CMD" ]; then
-    if ! diff -q "$LOCAL_CMD" "$PLUGIN_CMD" >/dev/null 2>&1; then
+  if [ -f "$PLUGIN_CMD" ]; then
+    if [ ! -f "$LOCAL_CMD" ]; then
+      mkdir -p "$CMDS_DIR"
+      cp "$PLUGIN_CMD" "$LOCAL_CMD"
+      INSTALLED="$INSTALLED /$cmd"
+    elif ! diff -q "$LOCAL_CMD" "$PLUGIN_CMD" >/dev/null 2>&1; then
       cp "$PLUGIN_CMD" "$LOCAL_CMD"
       UPDATED="$UPDATED /$cmd"
     fi
   fi
 done
+
+if [ -n "$INSTALLED" ]; then
+  echo "INSTALADO:$INSTALLED (nuevos comandos del plugin)."
+  echo ""
+fi
 
 if [ -n "$UPDATED" ]; then
   echo "ACTUALIZADO:$UPDATED se actualizaron a la version mas reciente del plugin."

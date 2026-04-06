@@ -97,7 +97,7 @@ Use /checkpoint-3t to save progress. It will update session log, extract pendien
 
 ## Step 6: Install local commands
 
-Create `PROJECT_DIR/.claude/commands/` directory if it doesn't exist, then create these 3 command files. All use `-3t` suffix to avoid name collisions with global skills. Auto-updated by the plugin's SessionStart hook when a new version ships.
+Create `PROJECT_DIR/.claude/commands/` directory if it doesn't exist, then create these 4 command files. All use `-3t` suffix to avoid name collisions with global skills. Auto-updated by the plugin's SessionStart hook when a new version ships.
 
 ### 6a. /checkpoint-3t — save memory state
 Create `PROJECT_DIR/.claude/commands/checkpoint-3t.md`:
@@ -153,6 +153,15 @@ Run ALL checks, report pass/fail per category:
 
 Report: X/X per category. List any failures with fix instructions.
 ```
+
+### 6d. /backfill-3t — reconstruct memory from JSONL history
+Create `PROJECT_DIR/.claude/commands/backfill-3t.md`:
+
+Note: this file will be auto-updated by the plugin's SessionStart hook whenever a new plugin version ships an updated template. The user doesn't need to re-run setup to get backfill improvements.
+
+The content of this file should match `templates/backfill-3t.md` from the plugin. It will be auto-updated by the SessionStart hook on future plugin updates.
+
+Write the full content of the latest backfill template (see templates/backfill-3t.md in the plugin source for the canonical version).
 
 ## Step 7: Update CLAUDE.md
 

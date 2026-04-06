@@ -22,7 +22,7 @@ Report what was found and what's missing. Continue even if some indexes are miss
 
 Create `PROJECT_DIR/.claude/commands/` directory if it doesn't exist.
 
-Install these 3 command files. All use `-3t` suffix to avoid name collisions with global skills. If any already exist, overwrite them with the latest version:
+Install these 4 command files. All use `-3t` suffix to avoid name collisions with global skills. If any already exist, overwrite them with the latest version:
 
 ### 2a. /checkpoint-3t
 Create `.claude/commands/checkpoint-3t.md` with the checkpoint command content (session log, dual-write for sessions/pendientes/learnings, git commit). Use the same content as the setup-memory command's Step 6a.
@@ -32,6 +32,9 @@ Create `.claude/commands/status-3t.md` with the status command content (read all
 
 ### 2c. /audit-3t
 Create `.claude/commands/audit-3t.md` with the audit command content (5 verification checklists: structure, content, bridge, wikilinks, CLAUDE.md).
+
+### 2d. /backfill-3t
+Create `.claude/commands/backfill-3t.md` with the backfill command content (reconstruct memory from JSONL history — sessions, pendientes, learnings, plans, research). Use the content from `templates/backfill-3t.md` in the plugin source.
 
 ## Step 3: Create missing directories
 
@@ -206,7 +209,7 @@ Store `JSONL_COUNT` for inclusion in the report.
 ```
 MIGRATION COMPLETE
 ==================
-Commands installed: /checkpoint-3t, /status-3t, /audit-3t
+Commands installed: /checkpoint-3t, /status-3t, /audit-3t, /backfill-3t
 Directories: N created, M already existed
 Indexes: N created, M already existed (not overwritten)
 CLAUDE.md: updated | already had all sections
