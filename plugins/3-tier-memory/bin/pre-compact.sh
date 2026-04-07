@@ -2,6 +2,8 @@
 # 3-tier-memory plugin: PreCompact hook
 # Injects urgent checkpoint reminder before context compaction
 
+source "$(dirname "$0")/resolve-project-dir.sh"
+
 # Detect memory directory
 if [ -f "$CLAUDE_PROJECT_DIR/memory/_pendientes.md" ]; then
   MEMORY_DIR="$CLAUDE_PROJECT_DIR/memory"

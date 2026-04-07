@@ -2,6 +2,8 @@
 # 3-tier-memory plugin: SessionEnd hook
 # Reminds to checkpoint if no checkpoint was saved this session
 
+source "$(dirname "$0")/resolve-project-dir.sh"
+
 # Detect memory directory
 if [ -f "$CLAUDE_PROJECT_DIR/memory/_pendientes.md" ]; then
   MEMORY_DIR="$CLAUDE_PROJECT_DIR/memory"

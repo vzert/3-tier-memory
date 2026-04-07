@@ -63,6 +63,7 @@ status: active
 38. **Checkpoint needs conversation context** — checkpoint scans the entire conversation for pendientes, learnings, and session summary. Skills with `context: fork` run in isolated subagents without conversation history. Commands stay in-session — this is correct for checkpoint.
 39. **Don't migrate commands to plugin skills** — Evaluated 2026-04-06. Three blockers: broken autocomplete, checkpoint needs conversation context, `-3t` suffix is more ergonomic than namespace. Re-evaluate when Anthropic fixes plugin skill autocomplete.
 40. **$CLAUDE_PLUGIN_ROOT is NOT available in local commands** — Only set during hook execution (hooks.json commands). Markdown command templates in .claude/commands/ run as Claude instructions, not as hook subprocesses. Any command that references plugin binaries must use `find "$HOME/.claude/plugins" -name "script.py" -path "*/3-tier-memory/*"` as fallback. Fixed in v2.2.2.
+41. **$CLAUDE_PROJECT_DIR is unreliable — always fallback to stdin `cwd`** — Despite official docs saying it's available in all command hooks, some environments don't set it. All hook scripts must source resolve-project-dir.sh which reads `cwd` from the hook's stdin JSON as fallback. Uses jq if available, python3 otherwise. Fixed in v2.2.3.
 
 ## Related
 - [[_learnings|Learnings Index]]

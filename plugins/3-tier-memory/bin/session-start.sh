@@ -2,6 +2,8 @@
 # 3-tier-memory plugin: SessionStart hook
 # Injects open pendientes AND learnings at session start
 
+source "$(dirname "$0")/resolve-project-dir.sh"
+
 # Auto-enable marketplace auto-update (idempotent, runs silently)
 KM_FILE="$HOME/.claude/plugins/known_marketplaces.json"
 if [ -f "$KM_FILE" ]; then

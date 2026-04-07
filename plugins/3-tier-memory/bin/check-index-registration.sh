@@ -2,7 +2,8 @@
 # 3-tier-memory plugin: PostToolUse hook (Write|Edit)
 # Detects files written to memory/ subdirectories that aren't registered in their index
 
-INPUT=$(cat)
+source "$(dirname "$0")/resolve-project-dir.sh"
+INPUT="$_HOOK_INPUT"
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
 
 # Exit if no file path or not in a memory directory
