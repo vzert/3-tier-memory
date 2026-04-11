@@ -4,7 +4,7 @@ description: Backfill memory from past JSONL conversation history. Reconstructs 
 
 # Backfill Memory from JSONL History
 
-Reconstruct the full memory system from past Claude Code conversation logs. This command reads JSONL session files, extracts meaningful content, and creates all memory artifacts following the dual-write protocol.
+Reconstruct the full memory system from past Claude Code conversation logs. Uses parallel Haiku subagents for extraction (cheaper, faster) and the main session for synthesis and writing.
 
 ## Step 0: Prerequisites
 
@@ -52,10 +52,10 @@ Parse each output and build an inventory. For each JSONL file, collect:
 
 Now classify each file:
 
-- **Already processed**: `filename` appears in `.backfill-progress.json` `processed` or `skipped` arrays → skip
-- **Trivial**: `trivial == true` → will be skipped (mark in progress file)
-- **Already in memory**: A file exists in `memory/sessions/` whose name starts with the same `dateFirst` AND whose title/slug approximately matches `customTitle` → skip
-- **Current session**: The JSONL file being actively written (check: most recent `tsLast` within last 5 minutes, or matches known current session) → skip
+- **Already processed**: `filename` appears in `.backfill-progress.json` `processed` or `skipped` arrays -> skip
+- **Trivial**: `trivial == true` -> will be skipped (mark in progress file)
+- **Already in memory**: A file exists in `memory/sessions/` whose name starts with the same `dateFirst` AND whose title/slug approximately matches `customTitle` -> skip
+- **Current session**: The JSONL file being actively written (check: most recent `tsLast` within last 5 minutes, or matches known current session) -> skip
 - **To process**: Everything else
 
 Sort the "to process" list chronologically by `dateFirst`.
@@ -71,32 +71,105 @@ Trivial (skipped):  K (< 3 user messages)
 Current session:    1
 To process:         J sessions
 
-Processing J sessions chronologically...
+Processing J sessions...
 ```
 
 If J == 0, report "Nothing to backfill. All sessions are already in memory." and **stop**.
 
-## Step 2: Full extraction + synthesis loop
+## Step 2: Parallel Extraction via Haiku Subagents
 
-Process ALL sessions continuously. For each JSONL file to process (in chronological order):
+Delegate the heavy extraction work to parallel Haiku subagents. This keeps raw JSONL content out of the main context window and processes files at Haiku rates.
 
-### 2a. Extract full digest
+### 2a. Determine batch size
 
-```bash
-python3 "$EXTRACT_SCRIPT" "$JSONL_DIR/<filename>"
+```
+files_to_process = J
+if J <= 3:    process inline (skip to Step 2c — no agents needed)
+if J <= 9:    3 agents (batches of ceil(J/3))
+if J <= 16:   4 agents (batches of ceil(J/4))
+if J > 16:    5 agents (batches of ceil(J/5))
 ```
 
-Read the JSON output. This contains `userTexts`, `assistantTexts`, `toolsUsed`, `filesTouched`, and `signals`.
+### 2b. Launch extraction agents
 
-### 2b. Generate session slug
+Launch ALL agents in a **single message** (this enables parallel execution). Use:
 
-- If `customTitle` exists: clean it to slug format (lowercase, replace spaces/special chars with hyphens, max 40 chars)
-- Otherwise: synthesize from the first 2-3 user messages (pick the main topic)
-- Check for collision: if `memory/sessions/DATE-SLUG.md` already exists, append `-2`, `-3` etc.
+```
+Agent(
+  subagent_type: "Explore",
+  model: "haiku",
+  description: "Extract JSONL batch N",
+  prompt: <see template below>
+)
+```
 
-### 2c. Create session file (Tier 3)
+**Agent prompt template** (adapt per batch):
 
-Write `memory/sessions/YYYY-MM-DD-slug.md` with this exact format:
+```
+Extract session digests from JSONL files and synthesize draft session entries.
+
+EXTRACTION SCRIPT: <$EXTRACT_SCRIPT path>
+
+FILES TO PROCESS:
+1. <full path to file1.jsonl>
+2. <full path to file2.jsonl>
+3. <full path to file3.jsonl>
+
+For EACH file, execute these steps:
+
+STEP 1: Run the extraction script:
+  python3 <EXTRACT_SCRIPT> <file_path>
+
+STEP 2: Parse the JSON output from stdout.
+
+STEP 3: From the parsed data, synthesize a draft entry:
+  - slug: clean customTitle to slug format (lowercase, hyphens, max 40 chars). If no customTitle, derive from first 2-3 userTexts
+  - title: human-readable session title
+  - summary: 1-2 sentence summary of what the user was accomplishing
+  - cambios: bullet list of key outcomes (from assistantTexts + toolsUsed patterns)
+  - pendientes: extract items matching TODO/FIXME/"hay que"/"falta"/"pendiente"/"verificar"/"proxima sesion" from userTexts and assistantTexts. Return empty array if none.
+  - learnings: extract gotchas/rules/warnings matching "cuidado"/"siempre"/"nunca"/"regla:"/"gotcha"/"ojo:" patterns. For each, identify the topic and the rule text. Return empty array if none.
+  - plan_summary: if signals.plans is true, write a 2-3 line description of the plan work. Otherwise null.
+  - research_summary: if signals.research is true, write topic + key findings in 2-3 lines. Otherwise null.
+
+STEP 4: Return your results as a JSON array with one object per file. Return ONLY the JSON, no commentary.
+
+Output format per session:
+{
+  "filename": "uuid.jsonl",
+  "date": "YYYY-MM-DD",
+  "slug": "suggested-slug",
+  "title": "Session Title",
+  "summary": "1-2 sentence summary",
+  "cambios": ["outcome 1", "outcome 2"],
+  "pendientes": ["action item 1", "action item 2"],
+  "learnings": [{"topic": "topic-name", "rule": "the rule text"}],
+  "signals": {"plans": true/false, "research": true/false},
+  "plan_summary": "..." or null,
+  "research_summary": "..." or null
+}
+```
+
+### 2c. Inline processing (for J <= 3)
+
+If only 1-3 files, skip agents and process directly in the main session:
+- Run `python3 "$EXTRACT_SCRIPT" <file>` for each
+- Parse JSON output
+- Synthesize the same draft fields as described in the agent prompt above
+- Continue to Step 3
+
+## Step 3: Review + Write
+
+Receive structured summaries from all agents (or inline processing). For each session draft:
+
+### 3a. Validate and deduplicate
+
+- Check slug doesn't collide with existing `memory/sessions/DATE-SLUG.md` — append `-2`, `-3` if needed
+- Verify date is valid
+
+### 3b. Create session file (Tier 3)
+
+Write `memory/sessions/YYYY-MM-DD-slug.md`:
 
 ```markdown
 ---
@@ -107,17 +180,16 @@ status: backfilled
 # Session Title
 
 ## Contexto
-<1-2 sentence summary synthesized from the conversation — what was the user trying to accomplish?>
+<summary from draft>
 
 ## Cambios realizados
-- <bullet points of what was done, extracted from assistant text and tool usage>
-- <focus on outcomes, not process>
+- <cambios from draft>
 
 ## Bugs fixed
-- <any bugs mentioned> OR "Ninguno"
+- Ninguno
 
 ## Plans
-- [[plans/plan-slug|Plan title]] — status (only if signals.plans is true and plan work was done)
+- [[plans/plan-slug|Plan title]] — status (only if signals.plans is true)
 - OR "Ninguno"
 
 ## Research
@@ -125,11 +197,11 @@ status: backfilled
 - OR "Ninguno"
 
 ## Learnings generados
-- [[learnings/topic]] — description (only if signals.learnings is true)
+- [[learnings/topic]] — description (only if learnings extracted)
 - OR "Ninguno"
 
 ## Pendientes
-- [ ] <action item> — ver [[_pendientes]] (only if signals.pendientes is true)
+- [ ] <item> — ver [[_pendientes]] (only if pendientes extracted)
 - OR "Ninguno"
 
 ## Commits
@@ -143,68 +215,51 @@ status: backfilled
 - [[_research-index]] (if research registered)
 ```
 
-### 2d. Update session index (Tier 2)
+### 3c. Update session index (Tier 2)
 
-Add a row to `memory/_session-index.md` in the Sessions table:
+Add a row to `memory/_session-index.md`:
 
 ```
 | YYYY-MM-DD | [[sessions/YYYY-MM-DD-slug\|slug]] | backfilled | <one-line summary> | backfill |
 ```
 
-### 2e. Extract pendientes (conditional)
+### 3d. Extract pendientes (conditional)
 
 **Only extract pendientes from the 5 most recent sessions** (by dateFirst). Older pendientes are likely already resolved.
 
-If `signals.pendientes` is true AND this session is within the 5 most recent:
-1. Scan `userTexts` and `assistantTexts` for pendiente patterns:
-   - Lines containing: TODO, FIXME, "hay que", "falta", "pendiente", "verificar", "próxima sesión"
-   - Deferred work: "después", "luego", "mañana"
-2. For each extracted pendiente:
-   - Add to `memory/_pendientes.md` under Media prioridad (default, since we can't determine exact priority from historical context) with `_origen: [[sessions/YYYY-MM-DD-slug]] (backfill)_`
-   - Add row to `memory/pendientes/YYYY-MM.md` (create the file if it doesn't exist for that month)
-3. Before adding, check if an equivalent pendiente already exists in `_pendientes.md` (fuzzy match on key phrases). Skip duplicates.
+If the draft has pendientes AND this session is within the 5 most recent:
+1. Before adding, check if an equivalent pendiente already exists in `_pendientes.md` (fuzzy match on key phrases). Skip duplicates.
+2. For each new pendiente:
+   - **Tier 2**: Add to `memory/_pendientes.md` under Media prioridad with `_origen: [[sessions/YYYY-MM-DD-slug]] (backfill)_`
+   - **Tier 3**: Add row to `memory/pendientes/YYYY-MM.md` (create the file if needed)
 
-### 2f. Extract learnings (conditional)
+### 3e. Extract learnings (conditional)
 
-If `signals.learnings` is true:
-1. Scan for learning patterns in the conversation: gotchas, rules stated, warnings, "cuidado con", "siempre hacer X", "nunca hacer Y"
-2. Determine the topic: derive from the main work done in the session (e.g., if working on plugin packaging → learnings file is about plugin packaging)
-3. Check if a learnings file already exists for that topic in `memory/learnings/`
+If the draft has learnings:
+1. For each learning, determine the topic
+2. Check if a learnings file already exists for that topic in `memory/learnings/`
    - If yes: append new rules (check for duplicates first)
    - If no: create new topic file with frontmatter
-4. If a new critical rule was found, add it to the Quick Reference in `memory/_learnings.md`
-5. If a new topic file was created, add a row to the Topic Files table in `memory/_learnings.md`
+3. If a new critical rule was found, add it to the Quick Reference in `memory/_learnings.md`
+4. If a new topic file was created, add a row to the Topic Files table in `memory/_learnings.md`
 
-### 2g. Register plans (conditional)
+### 3f. Register plans (conditional)
 
-If `signals.plans` is true (plan mode was used, or plan keywords detected):
-1. Determine plan title from conversation context
-2. Determine status: if the plan was executed in the same session → `completed`; if only designed → `draft`; if mentioned but not started → skip
-3. For substantive plans (>20 lines of plan content in the conversation):
-   - Create `memory/plans/plan-slug.md` with Context, Approach, Decisions, Outcome sections
-   - Add row to `memory/_plans-index.md`
-4. For simple plans:
-   - Add row to `memory/_plans-index.md` with "(inline)" in the Plan column
+If `signals.plans` is true and `plan_summary` is not null:
+1. Determine status: if plan was executed -> `completed`; if only designed -> `draft`
+2. For substantive plans: create `memory/plans/plan-slug.md` + row in `memory/_plans-index.md`
+3. For simple plans: row in `memory/_plans-index.md` with "(inline)"
 
-### 2h. Register research (conditional)
+### 3g. Register research (conditional)
 
-If `signals.research` is true (WebSearch/WebFetch tools used):
-1. Determine research topic from the search queries and context
-2. Determine status: if conclusions were drawn → `completed`; if ongoing → `active`
-3. For substantive research:
-   - Create `memory/research/slug.md` with Context, Findings, Conclusion sections
-   - Add row to `memory/_research-index.md`
-4. For brief lookups:
-   - Add row to `memory/_research-index.md` Completed table with "(inline)"
+If `signals.research` is true and `research_summary` is not null:
+1. Determine status: if conclusions drawn -> `completed`; if ongoing -> `active`
+2. For substantive research: create `memory/research/slug.md` + row in `memory/_research-index.md`
+3. For brief lookups: row in `memory/_research-index.md` Completed table with "(inline)"
 
-### 2i. Update progress
+### 3h. Update progress
 
-After each session is fully processed, update `.backfill-progress.json`:
-```bash
-# Read current progress, add this filename to processed, write back
-```
-
-The structure:
+After each session is fully written, update `.backfill-progress.json`:
 ```json
 {
   "processed": ["uuid1.jsonl", "uuid2.jsonl"],
@@ -215,14 +270,7 @@ The structure:
 }
 ```
 
-### 2j. Progress reporting
-
-Every 10 sessions, print a progress line:
-```
-PROGRESS: 10/40 sessions processed...
-```
-
-## Step 3: Index reconciliation
+## Step 4: Index reconciliation
 
 After all sessions are processed:
 
@@ -235,23 +283,23 @@ After all sessions are processed:
    - `_learnings.md`: no pruning
 3. **Deduplicate pendientes**: If the same pendiente text appears multiple times in `_pendientes.md`, keep only the first occurrence (earliest origin)
 
-## Step 4: Git commit (best-effort)
+## Step 5: Git commit (best-effort)
 
 Follow the same pattern as checkpoint Step 6:
 
-### 4a. Check git availability
+### 5a. Check git availability
 ```bash
 command -v git 2>/dev/null
 ```
-If missing → skip git, report "Git: not found. Memory files saved but no commit."
+If missing -> skip git, report "Git: not found. Memory files saved but no commit."
 
-### 4b. Check if inside a repo
+### 5b. Check if inside a repo
 ```bash
 git rev-parse --is-inside-work-tree 2>/dev/null
 ```
-If not → skip git, report "Git: not in a repo."
+If not -> skip git, report "Git: not in a repo."
 
-### 4c. Stage and commit
+### 5c. Stage and commit
 ```bash
 git add memory/
 git commit -m "memory: backfill N sessions from JSONL history
@@ -262,12 +310,12 @@ Created: N session files, M pendientes, K learnings, P plans, R research
 Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
-If commit fails → report the error but do NOT fail the backfill. Memory files are already written.
+If commit fails -> report the error but do NOT fail the backfill. Memory files are already written.
 
-### 4d. Record result
+### 5d. Record result
 Save the commit hash (or "skipped") for the final report.
 
-## Step 5: Report
+## Step 6: Report
 
 ```
 BACKFILL COMPLETE
@@ -278,6 +326,7 @@ Learnings added:      N rules to M topic files
 Plans registered:     N (K with detail files)
 Research registered:  N (K with detail files)
 Skipped:              N trivial, M already existed, P already processed
+Extraction:           N agents (Haiku) | inline
 Git:                  committed as <hash> | skipped (<reason>)
 
 Sessions created:
@@ -296,3 +345,4 @@ Sessions created:
 - **Follow dual-write protocol** for ALL artifacts: Tier 2 index row + Tier 3 detail file
 - **Use wikilinks** in all cross-references: `[[sessions/DATE-slug]]`, `[[learnings/topic]]`, etc.
 - **Backfill pendientes are marked** with `(backfill)` in their `_origen:` to distinguish from live-extracted ones
+- **Subagent extraction**: For 4+ files, Haiku subagents run in parallel for faster, cheaper extraction. Raw JSONL content stays in Haiku sessions — only structured summaries enter the main context.

@@ -4,76 +4,126 @@ description: Run verification checklists on the 3-tier memory system — structu
 
 # Memory Audit
 
-Run ALL verification checklists below. Report results per category with pass/fail counts.
+Run ALL verification checklists using parallel Haiku subagents, then compile results into a single report.
 
-## 1. Structure audit
+## Step 0: Determine paths
 
-Verify ALL directories exist in memory/:
+- `MEMORY_DIR`: `$CLAUDE_PROJECT_DIR/memory` (Model B) or auto-memory path (Model A)
+- `ENCODED_PATH`: `echo "$CLAUDE_PROJECT_DIR" | sed 's|/|-|g'`
+- `AUTO_MEMORY`: `$HOME/.claude/projects/$ENCODED_PATH/memory/MEMORY.md`
 
-- [ ] sessions/
-- [ ] pendientes/
-- [ ] learnings/
-- [ ] plans/
-- [ ] research/
+## Step 1: Launch parallel verification agents
 
-Verify ALL index files exist in memory/:
+Launch ALL 3 agents in a **single message** for parallel execution:
 
-- [ ] MEMORY.md
-- [ ] _pendientes.md
-- [ ] _session-index.md
-- [ ] _learnings.md
-- [ ] _plans-index.md
-- [ ] _research-index.md
+### Agent A: Structure + Content
 
-Verify at least 1 file exists in:
-- [ ] learnings/*.md (at least 1 topic file)
-- [ ] pendientes/*.md (at least 1 monthly archive)
+```
+Agent(subagent_type: "Explore", model: "haiku", description: "Audit structure + content")
+```
 
-## 2. Content audit
+Prompt:
+```
+Verify the 3-tier memory system structure and content at: <MEMORY_DIR>
 
-For each index, verify minimum valid structure:
+STRUCTURE CHECKS — verify each exists:
+Directories: sessions/, pendientes/, learnings/, plans/, research/
+Index files: MEMORY.md, _pendientes.md, _session-index.md, _learnings.md, _plans-index.md, _research-index.md
+At least 1 file in: learnings/*.md, pendientes/*.md
 
-| File | Check | Pass if contains |
-|---|---|---|
-| MEMORY.md | Checkpoint protocol | "Checkpoint" AND "session start" |
-| _pendientes.md | Priority sections | "Alta prioridad" AND "Media prioridad" AND "Baja prioridad" |
-| _session-index.md | Table | "\| Fecha \|" |
-| _learnings.md | Topic table | "\| Topic \|" |
-| _plans-index.md | Plans table | "\| Plan \|" |
-| _research-index.md | Both tables | "Active Research" AND "Completed Research" |
+CONTENT CHECKS — read each index and verify it contains required markers:
+| File | Required content |
+|---|---|
+| MEMORY.md | "Checkpoint" AND "session start" |
+| _pendientes.md | "Alta prioridad" AND "Media prioridad" AND "Baja prioridad" |
+| _session-index.md | "| Fecha |" |
+| _learnings.md | "| Topic |" |
+| _plans-index.md | "| Plan |" |
+| _research-index.md | "Active Research" AND "Completed Research" |
 
-## 3. Bridge audit (Model B only)
+Return a JSON object with results:
+{
+  "structure": [
+    {"check": "sessions/ directory", "passed": true/false},
+    ...
+  ],
+  "content": [
+    {"check": "MEMORY.md has checkpoint protocol", "passed": true/false},
+    ...
+  ]
+}
+```
 
-Determine auto-memory path: `~/.claude/projects/<encoded-project-path>/memory/MEMORY.md`
+### Agent B: Bridge + CLAUDE.md
 
-- [ ] Bridge file exists
-- [ ] Bridge is compact (<40 lines)
-- [ ] Bridge references `memory/` paths
-- [ ] Bridge does NOT contain inline indexes (no "## Alta prioridad", no "## Sessions" without "memory/" prefix)
-- [ ] No residual .md files in auto-memory besides MEMORY.md
+```
+Agent(subagent_type: "Explore", model: "haiku", description: "Audit bridge + CLAUDE.md")
+```
 
-## 4. Wikilinks audit
+Prompt:
+```
+Verify the auto-memory bridge and CLAUDE.md configuration.
 
-Check Related sections exist with correct links:
+BRIDGE CHECKS:
+1. Read: <AUTO_MEMORY path>
+2. Check: file exists
+3. Check: compact (< 40 lines)
+4. Check: references "memory/" paths
+5. Check: does NOT contain inline indexes (no "## Alta prioridad", no "## Sessions" without "memory/" prefix)
+6. Check: no other .md files exist in the auto-memory directory besides MEMORY.md
 
-- [ ] Each session file in sessions/ has `[[_session-index]]` in Related
-- [ ] _pendientes.md has Related with `[[_session-index]]` and `[[_learnings]]`
-- [ ] _learnings.md has Related with `[[_pendientes]]` and `[[_session-index]]`
-- [ ] Each learnings file has Related with `[[_learnings]]`
-- [ ] _plans-index.md has Related with `[[_pendientes]]` and `[[_research-index]]`
-- [ ] _research-index.md has Related with `[[_plans-index]]` and `[[_pendientes]]`
+CLAUDE.MD CHECKS:
+1. Read: <$CLAUDE_PROJECT_DIR>/CLAUDE.md
+2. Check: file exists
+3. Check: has "Memory System" section
+4. Check: mentions "/checkpoint-3t"
+5. Check: has bridge protection rule ("BRIDGE ONLY" or "NEVER write")
+6. Read: <$CLAUDE_PROJECT_DIR>/.gitignore — check it includes ".claude/"
 
-## 5. CLAUDE.md audit
+Return a JSON object:
+{
+  "bridge": [
+    {"check": "Bridge file exists", "passed": true/false},
+    ...
+  ],
+  "claude_md": [
+    {"check": "CLAUDE.md exists", "passed": true/false},
+    ...
+  ]
+}
+```
 
-- [ ] CLAUDE.md exists in project root
-- [ ] Has "Memory System" section
-- [ ] Mentions `/checkpoint-3t`
-- [ ] Has bridge protection rule ("BRIDGE ONLY" or "NEVER write")
-- [ ] .gitignore includes `.claude/`
+### Agent C: Wikilinks
 
-## 6. Report
+```
+Agent(subagent_type: "Explore", model: "haiku", description: "Audit wikilinks")
+```
 
-Present results:
+Prompt:
+```
+Verify wikilink cross-references in the memory system at: <MEMORY_DIR>
+
+CHECKS:
+1. Read each file in sessions/ — verify Related section contains [[_session-index]]
+2. Read _pendientes.md — verify Related contains [[_session-index]] and [[_learnings]]
+3. Read _learnings.md — verify Related contains [[_pendientes]] and [[_session-index]]
+4. Read each file in learnings/ — verify Related contains [[_learnings]]
+5. Read _plans-index.md — verify Related contains [[_pendientes]] and [[_research-index]]
+6. Read _research-index.md — verify Related contains [[_plans-index]] and [[_pendientes]]
+
+Return a JSON object:
+{
+  "wikilinks": [
+    {"check": "Session files have [[_session-index]] in Related", "passed": true/false, "details": "N/M files OK"},
+    {"check": "_pendientes.md Related links", "passed": true/false},
+    ...
+  ]
+}
+```
+
+## Step 2: Compile report
+
+Receive results from all 3 agents. Count passes and failures per category. Present:
 
 ```
 MEMORY AUDIT
