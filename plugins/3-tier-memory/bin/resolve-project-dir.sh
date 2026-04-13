@@ -5,6 +5,11 @@
 
 _HOOK_INPUT=$(cat)
 
+# Resolve CLAUDE_PLUGIN_ROOT from script path if not in environment
+if [ -z "$CLAUDE_PLUGIN_ROOT" ]; then
+  CLAUDE_PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+fi
+
 if [ -z "$CLAUDE_PROJECT_DIR" ]; then
   if command -v jq >/dev/null 2>&1; then
     CLAUDE_PROJECT_DIR=$(echo "$_HOOK_INPUT" | jq -r '.cwd // empty' 2>/dev/null)
