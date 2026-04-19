@@ -1,7 +1,7 @@
 ---
 type: learnings
 created: 2026-04-02
-updated: 2026-04-06
+updated: 2026-04-18
 status: active
 ---
 # 3-Tier Memory System — Learnings
@@ -64,6 +64,7 @@ status: active
 39. **Don't migrate commands to plugin skills** — Evaluated 2026-04-06. Three blockers: broken autocomplete, checkpoint needs conversation context, `-3t` suffix is more ergonomic than namespace. Re-evaluate when Anthropic fixes plugin skill autocomplete.
 40. **$CLAUDE_PLUGIN_ROOT is NOT available in local commands** — Only set during hook execution (hooks.json commands). Markdown command templates in .claude/commands/ run as Claude instructions, not as hook subprocesses. Any command that references plugin binaries must use `find "$HOME/.claude/plugins" -name "script.py" -path "*/3-tier-memory/*"` as fallback. Fixed in v2.2.2.
 41. **$CLAUDE_PROJECT_DIR is unreliable — always fallback to stdin `cwd`** — Despite official docs saying it's available in all command hooks, some environments don't set it. All hook scripts must source resolve-project-dir.sh which reads `cwd` from the hook's stdin JSON as fallback. Uses jq if available, python3 otherwise. Fixed in v2.2.3.
+42. **Trivial = tiny AND no signal** — `extract-session-digest.py` marks a session trivial only when `line_count < 10 AND userMessageCount < 2 AND no signal`. Signals: any `signals.*`, plan permission mode, or any tool use. OR semantics were the original bug — a 163-line plan session with 2 user msgs was dropped. `BACKFILL_FORCE_ALL=1` disables the gate and moves `skipped[]` to `previously_skipped[]` for a full re-run. Thresholds overrideable via `BACKFILL_TRIVIAL_LINE_THRESHOLD` / `BACKFILL_TRIVIAL_USER_MSG_THRESHOLD`. Fixed in v2.4.0.
 
 ## Related
 - [[_learnings|Learnings Index]]

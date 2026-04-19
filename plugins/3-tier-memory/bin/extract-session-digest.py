@@ -12,6 +12,7 @@ user/assistant text, tools used, files touched, and signal detection.
 """
 
 import json
+import os
 import sys
 import re
 
@@ -36,8 +37,9 @@ SIGNAL_KEYWORDS = {
 
 RESEARCH_TOOLS = {"WebSearch", "WebFetch", "mcp__fetcher__fetch_url", "mcp__fetcher__fetch_urls"}
 
-TRIVIAL_LINE_THRESHOLD = 15
-TRIVIAL_USER_MSG_THRESHOLD = 3
+TRIVIAL_LINE_THRESHOLD = int(os.environ.get("BACKFILL_TRIVIAL_LINE_THRESHOLD", "10"))
+TRIVIAL_USER_MSG_THRESHOLD = int(os.environ.get("BACKFILL_TRIVIAL_USER_MSG_THRESHOLD", "2"))
+FORCE_ALL = os.environ.get("BACKFILL_FORCE_ALL", "").strip() in ("1", "true", "yes")
 MAX_USER_MESSAGES = 100
 TRUNCATION_KEEP_FIRST = 20
 TRUNCATION_KEEP_LAST = 10
@@ -206,7 +208,19 @@ def extract_digest(filepath, metadata_only=False):
         "learnings": any(kw in all_text for kw in SIGNAL_KEYWORDS["learnings"]) if all_text else False,
     }
 
-    is_trivial = line_count < TRIVIAL_LINE_THRESHOLD or len(user_texts) < TRIVIAL_USER_MSG_THRESHOLD
+    # A session with any objective signal is never trivial, even if short.
+    has_signal = (
+        any(signals.values())
+        or "plan" in permission_modes
+        or bool(tools_used)
+    )
+
+    size_is_tiny = (
+        line_count < TRIVIAL_LINE_THRESHOLD
+        and len(user_texts) < TRIVIAL_USER_MSG_THRESHOLD
+    )
+
+    is_trivial = size_is_tiny and not has_signal and not FORCE_ALL
 
     result = {
         "sessionId": session_id,
@@ -221,6 +235,8 @@ def extract_digest(filepath, metadata_only=False):
         "userMessageCount": len(user_texts),
         "assistantMessageCount": len(assistant_texts),
         "trivial": is_trivial,
+        "hasSignal": has_signal,
+        "sizeIsTiny": size_is_tiny,
         "signals": signals,
         "permissionModes": sorted(permission_modes),
         "toolsUsed": sorted(tools_used),
