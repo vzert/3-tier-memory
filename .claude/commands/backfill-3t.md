@@ -6,7 +6,23 @@ description: Backfill memory from past JSONL conversation history. Reconstructs 
 
 Reconstruct the full memory system from past Claude Code conversation logs. Uses parallel Haiku subagents for extraction (cheaper, faster) and the main session for synthesis and writing.
 
-## Step 0: Prerequisites
+## Step 0: Overrides y reconsider mode
+
+`extract-session-digest.py` soporta estas env vars:
+
+- `BACKFILL_FORCE_ALL=1` — desactiva el gate trivial, procesa TODO (incluso sesiones cortas sin señal)
+- `BACKFILL_TRIVIAL_LINE_THRESHOLD=N` — ajusta umbral de líneas (default 10)
+- `BACKFILL_TRIVIAL_USER_MSG_THRESHOLD=N` — ajusta umbral de user msgs (default 2)
+
+Si `BACKFILL_FORCE_ALL=1` está presente en el env al inicio de la sesión:
+1. Lee `memory/.backfill-progress.json` (si existe)
+2. Renombra el array `skipped` -> `previously_skipped` (preserva auditoría)
+3. Deja `skipped` como array vacío
+4. Escribe el progress file actualizado y procede al Step 1
+
+`processed[]` nunca se reconsidera automáticamente — esas sesiones ya tienen entrada en `memory/sessions/`. Para reconstruir una entrada específica: borrar el archivo en `memory/sessions/` y eliminar el UUID de `processed[]` manualmente.
+
+## Step 0b: Prerequisites
 
 1. Verify `memory/MEMORY.md` exists in `$CLAUDE_PROJECT_DIR`. If not: tell the user "No memory system found. Run `/setup-memory` first." and **stop**.
 
@@ -53,7 +69,7 @@ Parse each output and build an inventory. For each JSONL file, collect:
 Now classify each file:
 
 - **Already processed**: `filename` appears in `.backfill-progress.json` `processed` or `skipped` arrays -> skip
-- **Trivial**: `trivial == true` -> will be skipped (mark in progress file)
+- **Trivial**: `trivial == true` (tiny size AND no signal: no tools used, no plan mode, no signals.*) -> will be skipped (mark in progress file)
 - **Already in memory**: A file exists in `memory/sessions/` whose name starts with the same `dateFirst` AND whose title/slug approximately matches `customTitle` -> skip
 - **Current session**: The JSONL file being actively written (check: most recent `tsLast` within last 5 minutes, or matches known current session) -> skip
 - **To process**: Everything else
@@ -67,7 +83,7 @@ BACKFILL INVENTORY
 JSONL files found: N
 Already in memory:  M (matched by date+title)
 Already processed:  P (from previous backfill run)
-Trivial (skipped):  K (< 3 user messages)
+Trivial (skipped):  K (sin señal y <10 líneas y <2 user msgs)
 Current session:    1
 To process:         J sessions
 

@@ -150,6 +150,7 @@ Run ALL checks, report pass/fail per category:
 3. BRIDGE: auto-memory MEMORY.md is compact (<40 lines), references memory/, no inline content
 4. WIKILINKS: Related sections in session files, pendientes, learnings, plans, research with correct links
 5. CLAUDE.md: has Memory System section, mentions /checkpoint-3t, has bridge protection rule, .gitignore has .claude/
+6. HOOKS (warning-only): .claude/settings.json and .claude/settings.local.json contain no orphaned entries referencing plugin hook scripts (session-start.sh, session-end.sh, pre-compact.sh, post-tool-use.sh, check-index-registration.sh) via $CLAUDE_PROJECT_DIR/.claude/hooks/ or as project-local paths — those duplicate the plugin's hooks.json and often reference missing files. If any found, suggest running /migrate to clean up.
 
 Report: X/X per category. List any failures with fix instructions.
 ```

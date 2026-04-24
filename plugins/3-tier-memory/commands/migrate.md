@@ -36,6 +36,38 @@ Create `.claude/commands/audit-3t.md` with the audit command content (5 verifica
 ### 2d. /backfill-3t
 Create `.claude/commands/backfill-3t.md` with the backfill command content (reconstruct memory from JSONL history — sessions, pendientes, learnings, plans, research). Use the content from `templates/backfill-3t.md` in the plugin source.
 
+### 2e. Detect orphaned hook entries in project settings
+
+The plugin registers its own hooks via `hooks.json` (using `${CLAUDE_PLUGIN_ROOT}`). Any 3-tier-memory hooks registered in `.claude/settings.json` or `.claude/settings.local.json` of the project are redundant, and if they use `$CLAUDE_PROJECT_DIR/.claude/hooks/...` (legacy per-project pattern) they often reference files that don't exist, causing `SessionStart:startup hook error`.
+
+For each file that exists — `.claude/settings.json` and `.claude/settings.local.json`:
+
+1. Read the file. If it's not valid JSON or has no `hooks` key, skip it.
+2. For every nested hook `command` under `hooks.SessionStart|PostToolUse|PreCompact|SessionEnd|UserPromptSubmit`, flag the entry as suspicious if ANY of these match:
+   - Command references one of the plugin's hook script filenames: `session-start.sh`, `session-end.sh`, `pre-compact.sh`, `check-index-registration.sh`, `post-tool-use.sh`
+   - Command contains `.claude/hooks/` (per-project legacy path — the plugin never installs files there)
+   - Command contains `plugins/3-tier-memory/` but does NOT use `${CLAUDE_PLUGIN_ROOT}` (plugin path referenced as project-local)
+3. For each flagged command, expand `$CLAUDE_PROJECT_DIR` to the current project directory and check if the target script exists on disk.
+
+Present findings to the user in a compact block, e.g.:
+
+```
+ORPHANED HOOK ENTRIES DETECTED
+File: .claude/settings.local.json
+  [MISSING] SessionStart → bash $CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh
+  [MISSING] PostToolUse  → bash $CLAUDE_PROJECT_DIR/.claude/hooks/post-tool-use.sh
+
+These entries duplicate what the plugin provides via hooks.json and
+reference files that don't exist. Remove them? (y/n)
+```
+
+Behavior rules:
+- **If the user confirms removal**: edit the settings file and remove ONLY the flagged hook entries. If removing an entry leaves a matcher block with an empty `hooks` array, remove that matcher too. If an event (e.g. `SessionStart`) ends up with an empty array, remove that event key. Preserve every other setting untouched.
+- **If the flagged hook's target file DOES exist**: do NOT offer automatic removal. Warn: "Found existing custom hook at `<expanded path>` — not removing. Verify this is intentional; if it's a stale copy of a plugin script, remove it manually."
+- **If no orphaned entries are found**: report `Hook entries: clean`.
+
+Never touch hooks for other plugins or commands — only entries matching the heuristics above.
+
 ## Step 3: Create missing directories
 
 Check and create any missing directories (don't touch existing ones):

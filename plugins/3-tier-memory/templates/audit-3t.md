@@ -80,6 +80,15 @@ CLAUDE.MD CHECKS:
 5. Check: has bridge protection rule ("BRIDGE ONLY" or "NEVER write")
 6. Read: <$CLAUDE_PROJECT_DIR>/.gitignore — check it includes ".claude/"
 
+HOOK HYGIENE CHECKS (warning-only):
+For each of <$CLAUDE_PROJECT_DIR>/.claude/settings.json and <$CLAUDE_PROJECT_DIR>/.claude/settings.local.json that exists:
+1. Parse as JSON. If invalid or no `hooks` key, skip.
+2. For every nested hook `command` under hooks.SessionStart|PostToolUse|PreCompact|SessionEnd|UserPromptSubmit, flag it as a potential orphan if it:
+   - References one of: session-start.sh, session-end.sh, pre-compact.sh, post-tool-use.sh, check-index-registration.sh
+   - AND uses "$CLAUDE_PROJECT_DIR/.claude/hooks/" or contains "plugins/3-tier-memory/" without "${CLAUDE_PLUGIN_ROOT}"
+3. For each flagged command, expand $CLAUDE_PROJECT_DIR and check if the target script exists on disk.
+4. Report result (do NOT auto-fix — /audit-3t is read-only): "No orphaned hook entries" OR list each flagged entry with file/path/event and whether the target exists. Suggest running /migrate to clean up.
+
 Return a JSON object:
 {
   "bridge": [
@@ -89,6 +98,9 @@ Return a JSON object:
   "claude_md": [
     {"check": "CLAUDE.md exists", "passed": true/false},
     ...
+  ],
+  "hooks": [
+    {"check": "No orphaned hook entries in settings*.json", "passed": true/false, "details": "list of flagged entries with file+event+target+exists flag"}
   ]
 }
 ```
@@ -133,6 +145,7 @@ Content:     X/X passed
 Bridge:      X/X passed (or N/A if Model A)
 Wikilinks:   X/X passed
 CLAUDE.md:   X/X passed
+Hooks:       X/X passed (warning-only: orphaned entries in settings*.json)
 
 ISSUES:
 - <list each failed check with what to fix>
