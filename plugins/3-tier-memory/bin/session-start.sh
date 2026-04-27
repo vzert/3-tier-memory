@@ -45,23 +45,34 @@ fi
 # Exit silently if no memory system found
 [ -z "$MEMORY_DIR" ] && exit 0
 
-# Inject open pendientes
-PENDIENTES=$(grep -E '^\- \[ \]' "$MEMORY_DIR/_pendientes.md" 2>/dev/null)
+# Detect if running in Paperclip agent
+IS_PAPERCLIP_AGENT=false
+[ -n "$PAPERCLIP_RUN_ID" ] && IS_PAPERCLIP_AGENT=true
 
-if [ -n "$PENDIENTES" ]; then
-  echo "PENDIENTES ABIERTOS:"
-  echo "$PENDIENTES"
-  echo ""
-fi
+if [ "$IS_PAPERCLIP_AGENT" = true ]; then
+  # Paperclip agent: only inject learnings, no pendientes
+  if [ -f "$MEMORY_DIR/_learnings.md" ]; then
+    LEARNINGS_COUNT=$(sed -n '/## Quick Reference/,/## Related/p' "$MEMORY_DIR/_learnings.md" 2>/dev/null | grep -c '^\- ' || echo 0)
+    if [ "$LEARNINGS_COUNT" -gt 0 ]; then
+      echo "REGLAS CRITICAS: $LEARNINGS_COUNT. Revisa _learnings.md para ver el detalle."
+      echo ""
+    fi
+  fi
+else
+  # CLI: inject pendientes + learnings (current behavior)
+  PENDIENTES_COUNT=$(grep -cE '^\- \[ \]' "$MEMORY_DIR/_pendientes.md" 2>/dev/null || echo 0)
 
-# Inject learnings quick reference
-if [ -f "$MEMORY_DIR/_learnings.md" ]; then
-  # Extract the Quick Reference section
-  LEARNINGS=$(sed -n '/## Quick Reference/,/## Related/p' "$MEMORY_DIR/_learnings.md" 2>/dev/null | head -20 | grep -v '^## ')
-  if [ -n "$LEARNINGS" ]; then
-    echo "LEARNINGS — REGLAS CRITICAS:"
-    echo "$LEARNINGS"
+  if [ "$PENDIENTES_COUNT" -gt 0 ]; then
+    echo "PENDIENTES ABIERTOS: $PENDIENTES_COUNT. Revisa _pendientes.md para ver el detalle."
     echo ""
+  fi
+
+  if [ -f "$MEMORY_DIR/_learnings.md" ]; then
+    LEARNINGS_COUNT=$(sed -n '/## Quick Reference/,/## Related/p' "$MEMORY_DIR/_learnings.md" 2>/dev/null | grep -c '^\- ' || echo 0)
+    if [ "$LEARNINGS_COUNT" -gt 0 ]; then
+      echo "REGLAS CRITICAS: $LEARNINGS_COUNT. Revisa _learnings.md para ver el detalle."
+      echo ""
+    fi
   fi
 fi
 
@@ -88,7 +99,7 @@ fi
 UPDATED=""
 INSTALLED=""
 
-for cmd in checkpoint-3t status-3t audit-3t backfill-3t; do
+for cmd in checkpoint-3t status-3t audit-3t backfill-3t save-learning; do
   LOCAL_CMD="$CMDS_DIR/$cmd.md"
   PLUGIN_CMD="$TEMPLATES_DIR/$cmd.md"
   if [ -f "$PLUGIN_CMD" ]; then
@@ -130,5 +141,9 @@ if [ -d "$JSONL_DIR" ]; then
   fi
 fi
 
-echo "PROTOCOLO: Dual-write siempre (indice + archivo detalle) para sessions, pendientes y learnings. Plans y research solo si aplica."
-echo "Usar /checkpoint-3t para guardar progreso."
+if [ "$IS_PAPERCLIP_AGENT" = true ]; then
+  echo "PROTOCOLO: Usar /save-learning cuando descubras un patron o regla nueva."
+else
+  echo "PROTOCOLO: Dual-write siempre (indice + archivo detalle) para sessions, pendientes y learnings. Plans y research solo si aplica."
+  echo "Usar /checkpoint-3t para guardar progreso."
+fi
