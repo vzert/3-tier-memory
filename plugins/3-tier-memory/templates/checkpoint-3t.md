@@ -59,6 +59,9 @@ status: completed | completed-with-pendientes
 ## Commits
 <filled in Step 6>
 
+## Como retomar
+<filled in Step 8>
+
 ## Related
 - [[_session-index]]
 - [[_pendientes]]
@@ -219,3 +222,55 @@ If the commit fails (e.g., user.name/user.email not configured) → set GIT_SKIP
 ## Step 7: Report
 
 Tell the user: session path, N pendientes extracted, M resolved, N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, N rows pruned from indexes (if any), git result (commit hash OR reason skipped).
+
+## Step 8: Como retomar — snippet de continuidad
+
+Genera un prompt breve y autosuficiente que el usuario pueda copiar y pegar al iniciar la proxima sesion (despues de `/exit` o `/clear`) para retomar contexto sin pensar.
+
+**Plantilla fija de 3 lineas (todas obligatorias)**:
+
+```
+Retomamos: <contexto-1-linea>.
+Lee memory/sessions/DATE-SLUG.md para el contexto completo.
+Proximo paso: <next-step>. Antes de actuar, dime en 3 lineas donde quedamos.
+```
+
+Reglas para llenar los slots:
+
+- `<contexto-1-linea>`: una frase que describa el trabajo principal de la sesion (max 90 chars). Toma como base la primera linea de ## Contexto del session file.
+- `<next-step>`: la accion mas inmediata pendiente, en orden de preferencia:
+  1. El pendiente nuevo de mayor prioridad creado en Step 3b de esta sesion.
+  2. Si no hay nuevo, el pendiente existente de mayor prioridad relacionado con el trabajo de la sesion.
+  3. Si tampoco aplica, escribir literalmente `revisar _pendientes.md y proponer siguiente prioridad`.
+
+La ultima linea `Antes de actuar, dime en 3 lineas donde quedamos.` es INVARIABLE — fuerza al agente de la siguiente sesion a leer el session file y confirmar contexto antes de tocar nada.
+
+**8a. Persistir en el session file**:
+
+Reemplaza el placeholder `<filled in Step 8>` de la seccion `## Como retomar` con el snippet de 3 lineas dentro de un bloque de codigo:
+
+````markdown
+## Como retomar
+
+```
+Retomamos: <contexto-1-linea>.
+Lee memory/sessions/DATE-SLUG.md para el contexto completo.
+Proximo paso: <next-step>. Antes de actuar, dime en 3 lineas donde quedamos.
+```
+````
+
+**8b. Imprimir al terminal**:
+
+Despues del reporte de Step 7, imprime el bloque al usuario con separadores visuales para que sea facil de identificar y copiar:
+
+```
+─── ¿Como retomar en la siguiente sesion? ───
+Copia y pega esto al iniciar una nueva sesion de Claude Code:
+
+Retomamos: <contexto-1-linea>.
+Lee memory/sessions/DATE-SLUG.md para el contexto completo.
+Proximo paso: <next-step>. Antes de actuar, dime en 3 lineas donde quedamos.
+─────────────────────────────────────────────
+```
+
+No agregues git commit aqui — el cambio al session file ya quedo dentro del flujo de Step 6, pero como Step 8 corre DESPUES, este `## Como retomar` no estara en el commit. Es aceptable: el snippet vive en disco y el commit es best-effort. Si el usuario quiere comitearlo, puede `git add memory/sessions/DATE-SLUG.md && git commit --amend --no-edit` manualmente o esperar al proximo checkpoint.
