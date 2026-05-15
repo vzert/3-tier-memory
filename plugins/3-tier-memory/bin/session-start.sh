@@ -59,12 +59,78 @@ if [ "$IS_PAPERCLIP_AGENT" = true ]; then
     fi
   fi
 else
-  # CLI: inject pendientes + learnings (current behavior)
-  PENDIENTES_COUNT=$(grep -cE '^\- \[ \]' "$MEMORY_DIR/_pendientes.md" 2>/dev/null || echo 0)
+  # CLI: inject pendientes (as directive with inline list) + learnings
+  if [ -f "$MEMORY_DIR/_pendientes.md" ]; then
+    PENDIENTES_OUTPUT=$(PENDIENTES_FILE="$MEMORY_DIR/_pendientes.md" python3 <<'PYEOF' 2>/dev/null
+import os, re, sys
 
-  if [ "$PENDIENTES_COUNT" -gt 0 ]; then
-    echo "PENDIENTES ABIERTOS: $PENDIENTES_COUNT. Revisa _pendientes.md para ver el detalle."
-    echo ""
+path = os.environ.get("PENDIENTES_FILE", "")
+try:
+    with open(path, encoding="utf-8") as f:
+        content = f.read()
+except Exception:
+    sys.exit(0)
+
+PRIORITY_ORDER = ["alta", "media", "baja"]
+buckets = {p: [] for p in PRIORITY_ORDER}
+current = None
+for line in content.splitlines():
+    s = line.strip()
+    low = s.lower()
+    if low.startswith("## alta"):
+        current = "alta"
+    elif low.startswith("## media"):
+        current = "media"
+    elif low.startswith("## baja"):
+        current = "baja"
+    elif low.startswith("## "):
+        current = None
+    elif current and re.match(r"^- \[ \]", s):
+        m = re.search(r"_creado:\s*(\d{4}-\d{2}-\d{2})", s)
+        created = m.group(1) if m else None
+        text = s[6:]
+        text = re.sub(r"\s*—\s*_origen:[^—]*", "", text)
+        text = re.sub(r"\s*—\s*_creado:[^—]*", "", text)
+        text = text.strip()
+        buckets[current].append((created or "9999", text))
+
+total = sum(len(v) for v in buckets.values())
+if total == 0:
+    sys.exit(0)
+
+for k in buckets:
+    buckets[k].sort(key=lambda x: x[0])
+
+selected = []
+for prio in PRIORITY_ORDER:
+    for it in buckets[prio]:
+        selected.append((prio, it))
+
+CAP = 10
+shown = selected[:CAP]
+extra = total - len(shown)
+
+print(f"PENDIENTES ABIERTOS ({total}). Antes de responder, verifica si la peticion del usuario se relaciona con alguno de estos items — si lo resuelves durante la sesion, marcalo en /checkpoint-3t:")
+print()
+last = None
+for prio, (created, text) in shown:
+    if prio != last:
+        print(f"{prio.upper()}:")
+        last = prio
+    if created != "9999":
+        print(f"  - [ ] {text} — _creado: {created}_")
+    else:
+        print(f"  - [ ] {text}")
+if extra > 0:
+    print()
+    print(f"[+ {extra} mas — revisa _pendientes.md]")
+PYEOF
+)
+
+    if [ -n "$PENDIENTES_OUTPUT" ]; then
+      echo "$PENDIENTES_OUTPUT"
+      echo ""
+    fi
   fi
 
   if [ -f "$MEMORY_DIR/_learnings.md" ]; then

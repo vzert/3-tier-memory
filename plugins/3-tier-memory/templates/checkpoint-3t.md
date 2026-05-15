@@ -71,6 +71,35 @@ status: completed | completed-with-pendientes
 
 ## Step 3: Pendientes — DUAL WRITE (always)
 
+This step runs in TWO sub-phases. Do 3a FIRST, then 3b. Do not merge them.
+
+### Step 3a — Reconciliacion de pendientes existentes (RECONCILIATION FIRST)
+
+Read `memory/_pendientes.md`. Enumerate EVERY open item (`- [ ]`). For each, classify into exactly one of:
+
+- **resolved** — the work described was completed in this session, directly or indirectly (e.g., the user asked for X and X happens to satisfy the pendiente).
+- **still-open** — the work is still pending and was not touched this session.
+- **superseded** — the item was absorbed by another pendiente or a scope change (reference the new owner/scope).
+- **abandoned** — the item no longer applies (architecture changed, feature dropped, etc.).
+
+**Print a reconciliation table** to the user before continuing, so the decision is explicit:
+```
+RECONCILIACION:
+- #1 <pendiente text> → still-open
+- #2 <pendiente text> → resolved (this session)
+- #3 <pendiente text> → superseded by <new pendiente or scope ref>
+- #4 <pendiente text> → abandoned — <reason>
+...
+```
+
+For items classified `resolved`, `superseded`, or `abandoned`:
+- **Tier 2**: remove the line from `memory/_pendientes.md`.
+- **Tier 3**: in `memory/pendientes/YYYY-MM.md`, fill `Resuelto` with today's date and `Sesion resolucion` with `[[sessions/DATE-SLUG]]`. For `abandoned`, note `ABANDONED — <reason>` in the resolution column. For `superseded`, note `SUPERSEDED — <new ref>`.
+
+If reconciliation finds zero existing pendientes, say so and continue.
+
+### Step 3b — Extraccion de pendientes nuevos
+
 Scan the ENTIRE conversation for:
 1. Verification items ("confirmar", "verificar", "monitorear")
 2. Deferred work ("despues hay que", "proxima sesion", TODO, FIXME)
@@ -81,11 +110,14 @@ Scan the ENTIRE conversation for:
 7. Tests not run
 8. Documentation gaps
 
-For EACH pendiente:
-**Tier 2**: Add to memory/_pendientes.md under correct priority with `_origen: [[sessions/DATE-SLUG]]`
-**Tier 3**: Add row to memory/pendientes/YYYY-MM.md
+For EACH new pendiente:
+**Tier 2**: Add to `memory/_pendientes.md` under correct priority with this format (creation date inline):
+```
+- [ ] <texto del pendiente> — _origen: [[sessions/DATE-SLUG]]_ — _creado: YYYY-MM-DD_
+```
+Where `YYYY-MM-DD` is today's date.
 
-Also check if existing pendientes were RESOLVED this session — mark done in BOTH files.
+**Tier 3**: Add a row to `memory/pendientes/YYYY-MM.md` with the standard columns (#, Pendiente, Prioridad, Creado, Origen, Resuelto blank, Sesion resolucion blank).
 
 ## Step 4: Learnings — DUAL WRITE (always)
 

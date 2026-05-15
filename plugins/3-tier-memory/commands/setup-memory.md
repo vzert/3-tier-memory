@@ -35,7 +35,7 @@ Create ALL of these files in `MEMORY_DIR/`. Use today's date for `created` and `
 - Current Status section (brief project state)
 - Memory Rules section
 
-**_pendientes.md** — Aggregator with Alta/Media/Baja prioridad sections, "Como usar" instructions, Related links.
+**_pendientes.md** — Aggregator with Alta/Media/Baja prioridad sections, "Como usar" instructions, Related links. Each item uses format `- [ ] <texto> — _origen: [[sessions/...]]_ — _creado: YYYY-MM-DD_` so SessionStart can sort by age.
 
 **_session-index.md** — Table with columns: Fecha, Sesion, Status, Resumen, Commit. Empty rows. Convention section.
 
@@ -79,7 +79,7 @@ This project uses project-local memory. Files live in `memory/` within the proje
 
 ## During execution
 - New learning → `memory/learnings/<topic>.md`, update `memory/_learnings.md` if critical
-- New pendiente → `memory/_pendientes.md` with `_origen:` link + `memory/pendientes/YYYY-MM.md`
+- New pendiente → `memory/_pendientes.md` with `_origen:` link AND `_creado: YYYY-MM-DD` + `memory/pendientes/YYYY-MM.md`
 - Executing a plan → register/update row in `memory/_plans-index.md`
 - New research → `memory/research/{slug}.md` + row in `memory/_research-index.md`
 

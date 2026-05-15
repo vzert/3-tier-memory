@@ -246,7 +246,7 @@ Add a row to `memory/_session-index.md`:
 If the draft has pendientes AND this session is within the 5 most recent:
 1. Before adding, check if an equivalent pendiente already exists in `_pendientes.md` (fuzzy match on key phrases). Skip duplicates.
 2. For each new pendiente:
-   - **Tier 2**: Add to `memory/_pendientes.md` under Media prioridad with `_origen: [[sessions/YYYY-MM-DD-slug]] (backfill)_`
+   - **Tier 2**: Add to `memory/_pendientes.md` under Media prioridad with format `- [ ] <texto> — _origen: [[sessions/YYYY-MM-DD-slug]] (backfill)_ — _creado: YYYY-MM-DD_` (use the session's `dateFirst`, NOT today)
    - **Tier 3**: Add row to `memory/pendientes/YYYY-MM.md` (create the file if needed)
 
 ### 3e. Extract learnings (conditional)
