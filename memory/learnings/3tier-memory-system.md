@@ -66,5 +66,11 @@ status: active
 41. **$CLAUDE_PROJECT_DIR is unreliable — always fallback to stdin `cwd`** — Despite official docs saying it's available in all command hooks, some environments don't set it. All hook scripts must source resolve-project-dir.sh which reads `cwd` from the hook's stdin JSON as fallback. Uses jq if available, python3 otherwise. Fixed in v2.2.3.
 42. **Trivial = tiny AND no signal** — `extract-session-digest.py` marks a session trivial only when `line_count < 10 AND userMessageCount < 2 AND no signal`. Signals: any `signals.*`, plan permission mode, or any tool use. OR semantics were the original bug — a 163-line plan session with 2 user msgs was dropped. `BACKFILL_FORCE_ALL=1` disables the gate and moves `skipped[]` to `previously_skipped[]` for a full re-run. Thresholds overrideable via `BACKFILL_TRIVIAL_LINE_THRESHOLD` / `BACKFILL_TRIVIAL_USER_MSG_THRESHOLD`. Fixed in v2.4.0.
 
+## Pendientes Lifecycle
+
+43. **Inyecta contenido, no contadores** — SessionStart debe meter los pendientes abiertos *inline* en el contexto del agente, no solo un conteo. Sin el texto visible, el agente nunca cruza la peticion del usuario contra items abiertos y los resuelve sin marcarlos. Cap a 10 items, ordenados por prioridad luego por edad (mas viejos primero porque son los mas sospechosos de estar ya resueltos). Framing imperativo: "Antes de responder, verifica si la peticion se relaciona con...". v2.7.0.
+44. **Reconciliacion antes de extraccion** — Checkpoint Step 3 debe enumerar y clasificar CADA pendiente existente (resolved/still-open/superseded/abandoned) ANTES de buscar nuevos. Con extraccion primero el agente entra en modo "nuevo trabajo" y la reconciliacion se vuelve un afterthought. El paso debe imprimir tabla de reconciliacion al usuario para comprometer la decision. v2.7.0.
+45. **`_creado: YYYY-MM-DD` inline en cada pendiente** — Formato canonico: `- [ ] <texto> — _origen: [[sessions/...]]_ — _creado: YYYY-MM-DD_`. Habilita ordenamiento por edad en SessionStart y senales de staleness futuras. Parser de session-start.sh debe tolerar items legacy sin `_creado:` (van al final del bucket). Backfill usa la fecha de la sesion origen (`dateFirst`), no hoy. v2.7.0.
+
 ## Related
 - [[_learnings|Learnings Index]]
