@@ -36,6 +36,8 @@ Create `.claude/commands/audit-3t.md` with the audit command content (5 verifica
 ### 2d. /backfill-3t
 Create `.claude/commands/backfill-3t.md` with the backfill command content (reconstruct memory from JSONL history — sessions, pendientes, learnings, plans, research). Use the content from `templates/backfill-3t.md` in the plugin source.
 
+Also create `.claude/commands/consolidate-3t.md` from `templates/consolidate-3t.md` (dedup learnings, supersede contradictions, reflect sessions into higher-level rules). The SessionStart hook auto-installs any command that is missing, so this is also covered automatically.
+
 ### 2e. Detect orphaned hook entries in project settings
 
 The plugin registers its own hooks via `hooks.json` (using `${CLAUDE_PLUGIN_ROOT}`). Any 3-tier-memory hooks registered in `.claude/settings.json` or `.claude/settings.local.json` of the project are redundant, and if they use `$CLAUDE_PROJECT_DIR/.claude/hooks/...` (legacy per-project pattern) they often reference files that don't exist, causing `SessionStart:startup hook error`.
@@ -241,7 +243,7 @@ Store `JSONL_COUNT` for inclusion in the report.
 ```
 MIGRATION COMPLETE
 ==================
-Commands installed: /checkpoint-3t, /status-3t, /audit-3t, /backfill-3t
+Commands installed: /checkpoint-3t, /status-3t, /audit-3t, /backfill-3t, /consolidate-3t
 Directories: N created, M already existed
 Indexes: N created, M already existed (not overwritten)
 CLAUDE.md: updated | already had all sections
