@@ -83,7 +83,17 @@ That's it. `/checkpoint` saves your session, extracts action items, captures lea
 - **Action items tracking** — dual-write system (active aggregator + monthly archive)
 - **Learnings** — topic-based knowledge from past mistakes, injected at session start
 - **Plans & Research** — lifecycle tracking from idea to execution (when applicable)
-- **Hooks** — auto-inject open action items + learnings at session start, detect unregistered files
+- **Relevance recall** — on every prompt, the most relevant memory (rules, sessions, action items) is surfaced automatically, ranked by `relevance × recency × importance` (lexical engine, zero dependencies)
+- **Staleness signals** — action items older than 30 days are flagged for reconciliation; learnings can carry `last_verified` and are surfaced by `/audit-3t`
+- **Hooks** — auto-inject open action items + learnings at session start, surface relevant memory per prompt, detect unregistered files
+
+### Commands
+
+- `/checkpoint-3t` — save session state (logs, action items, learnings, indexes, git commit)
+- `/status-3t` — quick health overview
+- `/audit-3t` — run verification checklists (structure, bridge, wikilinks, staleness)
+- `/backfill-3t` — reconstruct memory from past JSONL conversation history
+- `/consolidate-3t` — dedup learnings, resolve contradictions via supersede, reflect recent sessions into higher-level rules
 
 ## The 3-Tier Architecture
 

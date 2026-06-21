@@ -52,7 +52,8 @@ IS_PAPERCLIP_AGENT=false
 if [ "$IS_PAPERCLIP_AGENT" = true ]; then
   # Paperclip agent: only inject learnings, no pendientes
   if [ -f "$MEMORY_DIR/_learnings.md" ]; then
-    LEARNINGS_COUNT=$(sed -n '/## Quick Reference/,/## Related/p' "$MEMORY_DIR/_learnings.md" 2>/dev/null | grep -c '^\- ' || echo 0)
+    LEARNINGS_COUNT=$(sed -n '/## Quick Reference/,/## Related/p' "$MEMORY_DIR/_learnings.md" 2>/dev/null | grep -cE '^([0-9]+\.|[-*] )')
+    LEARNINGS_COUNT=${LEARNINGS_COUNT:-0}
     if [ "$LEARNINGS_COUNT" -gt 0 ]; then
       echo "REGLAS CRITICAS: $LEARNINGS_COUNT. Revisa _learnings.md para ver el detalle."
       echo ""
@@ -63,6 +64,19 @@ else
   if [ -f "$MEMORY_DIR/_pendientes.md" ]; then
     PENDIENTES_OUTPUT=$(PENDIENTES_FILE="$MEMORY_DIR/_pendientes.md" python3 <<'PYEOF' 2>/dev/null
 import os, re, sys
+from datetime import date
+
+STALE_DAYS = 30  # a pendiente older than this is flagged as suspect-stale
+
+def days_old(created):
+    m = re.match(r"(\d{4})-(\d{2})-(\d{2})", created or "")
+    if not m:
+        return None
+    try:
+        d = date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    except ValueError:
+        return None
+    return (date.today() - d).days
 
 path = os.environ.get("PENDIENTES_FILE", "")
 try:
@@ -118,12 +132,17 @@ for prio, (created, text) in shown:
         print(f"{prio.upper()}:")
         last = prio
     if created != "9999":
-        print(f"  - [ ] {text} — _creado: {created}_")
+        age = days_old(created)
+        stale = " ⚠ posible stale — reconciliar" if age is not None and age > STALE_DAYS else ""
+        print(f"  - [ ] {text} — _creado: {created}_{stale}")
     else:
         print(f"  - [ ] {text}")
 if extra > 0:
     print()
     print(f"[+ {extra} mas — revisa _pendientes.md]")
+if any(days_old(c) is not None and days_old(c) > STALE_DAYS for _, (c, _t) in shown):
+    print()
+    print(f"Items marcados ⚠ tienen >{STALE_DAYS} dias sin cerrar — probables candidatos a resolved/abandoned en /checkpoint-3t Step 3a.")
 PYEOF
 )
 
@@ -134,7 +153,8 @@ PYEOF
   fi
 
   if [ -f "$MEMORY_DIR/_learnings.md" ]; then
-    LEARNINGS_COUNT=$(sed -n '/## Quick Reference/,/## Related/p' "$MEMORY_DIR/_learnings.md" 2>/dev/null | grep -c '^\- ' || echo 0)
+    LEARNINGS_COUNT=$(sed -n '/## Quick Reference/,/## Related/p' "$MEMORY_DIR/_learnings.md" 2>/dev/null | grep -cE '^([0-9]+\.|[-*] )')
+    LEARNINGS_COUNT=${LEARNINGS_COUNT:-0}
     if [ "$LEARNINGS_COUNT" -gt 0 ]; then
       echo "REGLAS CRITICAS: $LEARNINGS_COUNT. Revisa _learnings.md para ver el detalle."
       echo ""
@@ -165,7 +185,7 @@ fi
 UPDATED=""
 INSTALLED=""
 
-for cmd in checkpoint-3t status-3t audit-3t backfill-3t save-learning; do
+for cmd in checkpoint-3t status-3t audit-3t backfill-3t save-learning consolidate-3t; do
   LOCAL_CMD="$CMDS_DIR/$cmd.md"
   PLUGIN_CMD="$TEMPLATES_DIR/$cmd.md"
   if [ -f "$PLUGIN_CMD" ]; then

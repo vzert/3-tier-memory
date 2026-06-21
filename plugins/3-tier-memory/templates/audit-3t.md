@@ -41,6 +41,11 @@ CONTENT CHECKS — read each index and verify it contains required markers:
 | _plans-index.md | "| Plan |" |
 | _research-index.md | "Active Research" AND "Completed Research" |
 
+STALENESS CHECKS (warning-only — these never fail the audit, they surface decay):
+1. In _pendientes.md, count open `- [ ]` items whose `_creado: YYYY-MM-DD` is more than 30 days before today. These are stale candidates for reconciliation (/checkpoint-3t Step 3a).
+2. In each learnings/*.md, read frontmatter `last_verified:` (if present). Flag any file whose last_verified is more than 180 days before today (or has no last_verified at all) as "needs review". Suggest running /consolidate-3t.
+3. Recall index: check whether `$HOME/.claude/projects/<ENCODED_PATH>/.recall-index.jsonl` exists. If absent, note it will build lazily on the next prompt (not an error).
+
 Return a JSON object with results:
 {
   "structure": [
@@ -50,6 +55,11 @@ Return a JSON object with results:
   "content": [
     {"check": "MEMORY.md has checkpoint protocol", "passed": true/false},
     ...
+  ],
+  "staleness": [
+    {"check": "Stale pendientes (>30d)", "count": N, "details": "list of stale item texts"},
+    {"check": "Learnings needing review (>180d or no last_verified)", "count": N, "details": "list of file names"},
+    {"check": "Recall index present", "passed": true/false}
   ]
 }
 ```
@@ -146,11 +156,14 @@ Bridge:      X/X passed (or N/A if Model A)
 Wikilinks:   X/X passed
 CLAUDE.md:   X/X passed
 Hooks:       X/X passed (warning-only: orphaned entries in settings*.json)
+Staleness:   N stale pendientes (>30d), M learnings need review — recall index: present/lazy
 
 ISSUES:
 - <list each failed check with what to fix>
 
 STATUS: ALL PASSED | N issues found
 ```
+
+Staleness items are warnings, not failures — they never change STATUS. Surface them so the user can run /checkpoint-3t (pendientes) or /consolidate-3t (learnings).
 
 If any check fails, explain what's wrong and how to fix it.
