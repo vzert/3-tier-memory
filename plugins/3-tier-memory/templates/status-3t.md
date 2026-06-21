@@ -19,6 +19,7 @@ Read each file and collect:
 - Count items with `- [ ]` (open) grouped by priority section (Alta, Media, Baja)
 - Count items with `- [x]` (resolved, if any still listed)
 - Count open items whose `_creado: YYYY-MM-DD` is more than 30 days before today (stale candidates)
+- Backlog flag: if total open exceeds 50, note it — resolution isn't keeping pace (recommend a reconciliation pass)
 
 **Sessions** (`memory/_session-index.md`):
 - Total number of sessions
@@ -49,7 +50,7 @@ Present in this format:
 ```
 MEMORY STATUS
 =============
-Pendientes:  N open (X alta, Y media, Z baja) — S stale (>30d)
+Pendientes:  N open (X alta, Y media, Z baja) — S stale (>30d)[ ⚠ backlog if >50]
 Sessions:    N total | last: YYYY-MM-DD (slug)
 Learnings:   N topics, M critical rules
 Plans:       N active, M completed

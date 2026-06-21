@@ -17,24 +17,70 @@ CORE RULES:
 - Contradictions are resolved by `supersedes`, keeping both entries — not by overwrite.
 - This command reads the whole conversation only for the reflection step; the rest is file-driven.
 
+Throughout, **skip archived content**: ignore `memory/archive/`, and any file named
+`*.bak` / `*.bak-*` / `*.zip` / `*.archived.md` / `*-archived-*.md`. Archived files are
+out of scope for dedup, supersede, and reflection.
+
 ## Step 0: Locate memory directory
 
 If `memory/` exists in the project root, use it (Model B). Otherwise check auto-memory (Model A).
 Read `memory/_learnings.md` and list the topic files in `memory/learnings/`.
 
-## Step 1: Dedup — find near-duplicate learnings
+## Step 0.5: Generate duplicate candidates from the recall index (pre-filter)
 
-Read every rule across `memory/learnings/*.md` (numbered rules) plus the Quick Reference
-bullets in `memory/_learnings.md`. Identify clusters of rules that say substantially the
-same thing (same mechanism, same gotcha, same constraint), even if worded differently or
-living in different topic files.
+Do NOT scan the whole corpus by hand — that cost is proportional to corpus SIZE, not to
+the number of real duplicates (on a 300+ learning corpus it means an O(n²) blind read).
+Instead, let the derived recall index surface the few high-overlap PAIRS worth judging.
 
-For each duplicate cluster, **print a proposal** before changing anything:
+1. Resolve paths (same scheme as recall.sh). `MEMORY_DIR` is the directory located in Step 0 (`memory/` for Model B):
+```bash
+MEMORY_DIR="memory"   # Model B; use the auto-memory path if Step 0 found Model A
+ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's|/|-|g')
+INDEX="$HOME/.claude/projects/$ENCODED/.recall-index.jsonl"
+```
+2. Locate the plugin scripts (mirror /backfill-3t Step 5):
+```bash
+if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/find-dup-candidates.py" ]; then
+  BIN="${CLAUDE_PLUGIN_ROOT}/bin"
+else
+  BIN=$(dirname "$(find "$HOME/.claude/plugins" -name "find-dup-candidates.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)")
+fi
+```
+If `find-dup-candidates.py` is not found, fall back to the legacy manual scan in Step 1 (and tell the user the pre-filter was unavailable).
+3. **Rebuild the index first** (it is ~70ms and prevents dedup against a stale view):
+```bash
+python3 "$BIN/build-recall-index.py" "$MEMORY_DIR" "$INDEX" >/dev/null 2>&1
+```
+4. Run the candidate generator (tune with `DUP_JACCARD_THRESHOLD`, default 0.5 — raise to 0.6–0.7 if too noisy, lower to 0.4 if it misses known dups):
+```bash
+python3 "$BIN/find-dup-candidates.py" "$INDEX"
+```
+It prints JSON: `candidates` (strong pairs ≥ threshold) and `borderline` (top-5 just below).
+
+**EARLY-EXIT:** if `candidates` AND `borderline` are both empty, print:
+> Corpus limpio: 0 pares duplicados sobre el umbral (N unidades evaluadas). No se requiere consolidación de dedup.
+
+…and **skip Step 1 entirely** — do NOT spawn any judging agent. Proceed to Step 2/3 only if the user asked for contradictions/reflection. This is the whole point: when there is nothing to merge, consolidation costs milliseconds, not a multi-agent fan-out.
+
+## Step 1: Dedup — judge ONLY the candidate pairs
+
+For each pair in `candidates` (and optionally `borderline`), the two sides give you
+`path` + `texto` for each rule. **Map back to the live rule by `path` + matching its
+text — never by the `id`** (the index `id` is a positional counter, unstable across
+rebuilds). Re-read the rule in its `path`, read its neighbor, and judge: a high lexical
+overlap is a *candidate*, not a verdict — many will be complementary rules about the same
+topic, not true duplicates. Confirm true semantic duplication before proposing a merge.
+
+When the pair is large, fan out: hand each judging agent a slice of the candidate pairs
+(each pair carries both `path`s and `texto`s — enough to locate and judge without reading
+the whole corpus).
+
+For each pair you confirm is a true duplicate, **print a proposal** before changing anything:
 
 ```
 DEDUP:
-- Cluster 1: learnings/<topic>.md #N + #M say the same thing about <X>
-  → propose: keep #N (clearer), fold #M's extra detail into it, remove #M
+- learnings/<topic>.md "<texto A>" duplicates learnings/<topic>.md "<texto B>"  (jaccard 0.78)
+  → propose: keep the clearer one, fold the other's unique detail in, remove the duplicate
 ```
 
 Apply only the merges the user approves (or all, if the user said "consolida todo").
