@@ -28,7 +28,7 @@ BUILDER="$CLAUDE_PLUGIN_ROOT/bin/build-recall-index.py"
 NEEDS_BUILD=false
 if [ ! -f "$INDEX" ]; then
   NEEDS_BUILD=true
-elif [ -n "$(find "$MEMORY_DIR" -name '*.md' -newer "$INDEX" -print -quit 2>/dev/null)" ]; then
+elif [ -n "$(find "$MEMORY_DIR" -name '*.md' -not -path '*/archive/*' -not -name '*.bak*' -not -name '*.archived.md' -not -name 'archived-*.md' -newer "$INDEX" -print -quit 2>/dev/null)" ]; then
   NEEDS_BUILD=true
 fi
 if [ "$NEEDS_BUILD" = true ] && [ -f "$BUILDER" ]; then

@@ -41,6 +41,19 @@ WORD_RE = re.compile(r"[a-záéíóúüñ0-9]{2,}", re.IGNORECASE)
 DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
 IMPORTANCE_RE = re.compile(r"^\s*importance\s*:\s*(\d+)", re.IGNORECASE | re.MULTILINE)
 
+# Archived content is excluded from the recall index (and skipped by
+# consolidate/audit too). Convention: anything under an `archive/` subtree, or
+# files named *.bak / *.bak-* / *.zip / *.archived.md / archived-*.md.
+EXCLUDE_NAME_RE = re.compile(r"(\.bak(-|$)|\.zip$|\.archived\.md$|(^|-)archived-)", re.IGNORECASE)
+
+
+def is_excluded(path):
+    """True if a memory file should be ignored (archived / backup / zip)."""
+    parts = path.replace("\\", "/").split("/")
+    if "archive" in parts:
+        return True
+    return bool(EXCLUDE_NAME_RE.search(os.path.basename(path)))
+
 
 def tokenize(text):
     """Lowercase, strip accents-insensitive isn't needed; keep ES letters."""
@@ -111,7 +124,7 @@ def parse_learnings(memory_dir, units):
     rule_re = re.compile(r"^\s*\d+\.\s+(.*)")
     if os.path.isdir(ldir):
         for fn in sorted(os.listdir(ldir)):
-            if not fn.endswith(".md"):
+            if not fn.endswith(".md") or is_excluded(fn):
                 continue
             path = os.path.join(ldir, fn)
             content = read(path)
@@ -157,7 +170,7 @@ def parse_sessions(memory_dir, units):
     sdir = os.path.join(memory_dir, "sessions")
     if os.path.isdir(sdir):
         for fn in sorted(os.listdir(sdir)):
-            if not fn.endswith(".md"):
+            if not fn.endswith(".md") or is_excluded(fn):
                 continue
             content = read(os.path.join(sdir, fn))
             md = DATE_RE.search(fn)
