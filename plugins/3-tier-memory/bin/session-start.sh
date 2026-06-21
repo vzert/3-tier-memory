@@ -185,7 +185,7 @@ fi
 UPDATED=""
 INSTALLED=""
 
-for cmd in checkpoint-3t status-3t audit-3t backfill-3t save-learning consolidate-3t; do
+for cmd in checkpoint-3t status-3t audit-3t backfill-3t save-learning consolidate-3t enrich-3t; do
   LOCAL_CMD="$CMDS_DIR/$cmd.md"
   PLUGIN_CMD="$TEMPLATES_DIR/$cmd.md"
   if [ -f "$PLUGIN_CMD" ]; then

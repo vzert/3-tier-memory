@@ -91,9 +91,10 @@ That's it. `/checkpoint` saves your session, extracts action items, captures lea
 
 - `/checkpoint-3t` — save session state (logs, action items, learnings, indexes, git commit)
 - `/status-3t` — quick health overview
-- `/audit-3t` — run verification checklists (structure, bridge, wikilinks, staleness)
+- `/audit-3t` — run verification checklists (structure, bridge, wikilinks, staleness, index budget, broken links)
 - `/backfill-3t` — reconstruct memory from past JSONL conversation history
-- `/consolidate-3t` — dedup learnings, resolve contradictions via supersede, reflect recent sessions into higher-level rules
+- `/consolidate-3t` — dedup learnings (index-driven pre-filter + early-exit), resolve contradictions via supersede, reflect recent sessions into higher-level rules
+- `/enrich-3t` — one-time backfill of `importance:`/`_creado:` into a pre-existing corpus so recall and staleness work on legacy files
 
 ## The 3-Tier Architecture
 

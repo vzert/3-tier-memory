@@ -46,6 +46,12 @@ STALENESS CHECKS (warning-only — these never fail the audit, they surface deca
 2. In each learnings/*.md, read frontmatter `last_verified:` (if present). Flag any file whose last_verified is more than 180 days before today (or has no last_verified at all) as "needs review". Suggest running /consolidate-3t.
 3. Recall index: check whether `$HOME/.claude/projects/<ENCODED_PATH>/.recall-index.jsonl` exists. If absent, note it will build lazily on the next prompt (not an error).
 
+SCALE CHECKS (warning-only — Tier 2 should COORDINATE, not STORE; design budget is "<60 lines"):
+4. For each index file (MEMORY.md and the _*.md indexes), measure size with: `wc -l <file>` and `wc -c <file>`. Compute avg chars/line = bytes ÷ lines. Flag an index as OVER BUDGET if it exceeds ANY of: 60 data lines, 120 avg chars/line, or 40000 bytes. An over-budget index is storing content instead of coordinating — recommend sharding it into family sub-indexes (e.g. `_learnings/<family>.md`) and trimming rows to one-line pointers.
+5. Pendientes backlog: count ALL open `- [ ]` items in _pendientes.md. If more than 50, flag a backlog warning — resolution isn't keeping pace; recommend a reconciliation pass (/checkpoint-3t Step 3a) and/or archiving resolved-but-unmarked items.
+
+Skip archived content everywhere: ignore `memory/archive/`, `*.bak`, `*.zip`, `*.archived.md`, `*-archived-*.md`.
+
 Return a JSON object with results:
 {
   "structure": [
@@ -60,6 +66,10 @@ Return a JSON object with results:
     {"check": "Stale pendientes (>30d)", "count": N, "details": "list of stale item texts"},
     {"check": "Learnings needing review (>180d or no last_verified)", "count": N, "details": "list of file names"},
     {"check": "Recall index present", "passed": true/false}
+  ],
+  "scale": [
+    {"check": "Index budget (<60 lines / <120 chars-per-line / <40KB)", "over_budget": ["_learnings.md (536 lines, 443 chars/line)", ...]},
+    {"check": "Pendientes backlog (>50 open)", "count": N, "over": true/false}
   ]
 }
 ```
@@ -125,20 +135,29 @@ Prompt:
 ```
 Verify wikilink cross-references in the memory system at: <MEMORY_DIR>
 
-CHECKS:
-1. Read each file in sessions/ — verify Related section contains [[_session-index]]
-2. Read _pendientes.md — verify Related contains [[_session-index]] and [[_learnings]]
-3. Read _learnings.md — verify Related contains [[_pendientes]] and [[_session-index]]
-4. Read each file in learnings/ — verify Related contains [[_learnings]]
-5. Read _plans-index.md — verify Related contains [[_pendientes]] and [[_research-index]]
-6. Read _research-index.md — verify Related contains [[_plans-index]] and [[_pendientes]]
+PART 1 — BROKEN LINKS (run the deterministic checker; do NOT read links by hand):
+Locate and run check-wikilinks.py — it extracts every [[target]] and reports those whose
+target file doesn't exist (scales to hundreds of links; archived files are skipped):
+  if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/check-wikilinks.py" ]; then
+    CHK="${CLAUDE_PLUGIN_ROOT}/bin/check-wikilinks.py"
+  else
+    CHK=$(find "$HOME/.claude/plugins" -name "check-wikilinks.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)
+  fi
+  python3 "$CHK" "<MEMORY_DIR>"
+Report the SUMMARY line (broken_links=N) and up to ~15 sample BROKEN lines. This is
+warning-only — broken links surface link rot for the user to fix, they don't fail the audit.
+
+PART 2 — PRESENCE (structural Related links still expected):
+1. Spot-check a few files in sessions/ — Related section contains [[_session-index]]
+2. _pendientes.md — Related contains [[_session-index]] and [[_learnings]]
+3. _learnings.md — Related contains [[_pendientes]] and [[_session-index]]
+4. _plans-index.md and _research-index.md cross-link each other and [[_pendientes]]
 
 Return a JSON object:
 {
   "wikilinks": [
-    {"check": "Session files have [[_session-index]] in Related", "passed": true/false, "details": "N/M files OK"},
-    {"check": "_pendientes.md Related links", "passed": true/false},
-    ...
+    {"check": "Broken wikilinks", "count": N, "samples": ["source -> [[target]]", ...]},
+    {"check": "Structural Related links present", "passed": true/false, "details": "..."}
   ]
 }
 ```
@@ -153,17 +172,23 @@ MEMORY AUDIT
 Structure:   X/X passed
 Content:     X/X passed
 Bridge:      X/X passed (or N/A if Model A)
-Wikilinks:   X/X passed
+Wikilinks:   structural X/X passed — N broken links (warning)
 CLAUDE.md:   X/X passed
 Hooks:       X/X passed (warning-only: orphaned entries in settings*.json)
 Staleness:   N stale pendientes (>30d), M learnings need review — recall index: present/lazy
+Scale:       N indexes over budget, P open pendientes (backlog if >50)
 
 ISSUES:
 - <list each failed check with what to fix>
 
+WARNINGS (do not change STATUS):
+- <over-budget indexes → recommend sharding into family sub-indexes>
+- <broken wikilinks → sample + suggest fixing/removing dead refs>
+- <pendientes backlog → recommend reconciliation pass>
+
 STATUS: ALL PASSED | N issues found
 ```
 
-Staleness items are warnings, not failures — they never change STATUS. Surface them so the user can run /checkpoint-3t (pendientes) or /consolidate-3t (learnings).
+Staleness, scale, and broken-link items are warnings, not failures — they never change STATUS. Surface them so the user can run /checkpoint-3t (pendientes), /consolidate-3t (learnings), or /enrich-3t (backfill importance/_creado on a legacy corpus).
 
 If any check fails, explain what's wrong and how to fix it.
