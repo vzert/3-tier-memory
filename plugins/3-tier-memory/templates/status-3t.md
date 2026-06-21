@@ -18,6 +18,7 @@ Read each file and collect:
 **Pendientes** (`memory/_pendientes.md`):
 - Count items with `- [ ]` (open) grouped by priority section (Alta, Media, Baja)
 - Count items with `- [x]` (resolved, if any still listed)
+- Count open items whose `_creado: YYYY-MM-DD` is more than 30 days before today (stale candidates)
 
 **Sessions** (`memory/_session-index.md`):
 - Total number of sessions
@@ -48,7 +49,7 @@ Present in this format:
 ```
 MEMORY STATUS
 =============
-Pendientes:  N open (X alta, Y media, Z baja)
+Pendientes:  N open (X alta, Y media, Z baja) — S stale (>30d)
 Sessions:    N total | last: YYYY-MM-DD (slug)
 Learnings:   N topics, M critical rules
 Plans:       N active, M completed

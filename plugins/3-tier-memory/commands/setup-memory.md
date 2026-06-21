@@ -164,6 +164,11 @@ The content of this file should match `templates/backfill-3t.md` from the plugin
 
 Write the full content of the latest backfill template (see templates/backfill-3t.md in the plugin source for the canonical version).
 
+### 6e. /consolidate-3t — dedup, supersede, reflect
+Create `PROJECT_DIR/.claude/commands/consolidate-3t.md` with the content of `templates/consolidate-3t.md` from the plugin. It merges duplicate learnings, supersedes contradictions, and reflects recent sessions into higher-level rules. Auto-updated by the SessionStart hook on future plugin updates.
+
+Note: the SessionStart hook auto-installs any of these commands that are missing, so even if a step is skipped here they appear on the next session.
+
 ## Step 7: Update CLAUDE.md
 
 If PROJECT_DIR/CLAUDE.md exists, append the sections below. If not, create it with project context + these sections.

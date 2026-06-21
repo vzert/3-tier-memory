@@ -31,6 +31,7 @@ Set: DATE = today (YYYY-MM-DD), SESSION_FILE = memory/sessions/DATE-SLUG.md
 type: session
 date: DATE
 status: completed | completed-with-pendientes
+importance: <0-10>
 ---
 # Session Title
 
@@ -69,6 +70,8 @@ status: completed | completed-with-pendientes
 - [[_plans-index]] (if plan work this session)
 - [[_research-index]] (if research this session)
 ```
+
+Set `importance` to a salience score 0-10 (Generative-Agents style): how reusable/critical is this session for future recall? Routine work ≈ 3-4, normal feature work ≈ 5-6, an architectural decision or hard-won fix ≈ 8-10. This score feeds the relevance-recall ranking (UserPromptSubmit hook). If unsure, omit it — the recall engine defaults to 5.
 
 **Tier 2**: Add/update row in memory/_session-index.md with date, session link, status emoji, summary, commit hash (filled in Step 6).
 
@@ -127,6 +130,7 @@ Where `YYYY-MM-DD` is today's date.
 Review session for new patterns, gotchas, rules, or mistakes discovered.
 
 **Tier 3**: Add each learning to the relevant memory/learnings/<topic>.md. Create new topic file if needed.
+When creating a NEW topic file, include `importance: <0-10>` and `last_verified: DATE` in its frontmatter (salience for recall + staleness tracking; see /audit-3t). Critical, broadly-applicable rules ≈ 8-10; niche/contextual rules ≈ 3-5. Both fields are optional — recall defaults importance to 5.
 **Tier 2**: Update memory/_learnings.md — add topic row if new file, add critical rules to Quick Reference.
 
 If no learnings this session, skip.
@@ -180,6 +184,8 @@ Keep the entire Active Research table. In Completed Research, keep only the 5 mo
 No pruning — bounded by design.
 
 Note pruned row count for Step 7 report.
+
+**Recall index:** no action needed. The derived recall index (`~/.claude/projects/<encoded>/.recall-index.jsonl`, consumed by the UserPromptSubmit hook) auto-rebuilds on the next prompt because the memory files you just wrote are newer than the index.
 
 ## Step 6: Git commit (best-effort)
 
