@@ -50,6 +50,7 @@ SCALE CHECKS (warning-only — Tier 2 should COORDINATE, not STORE; design budge
 4. For each index file (MEMORY.md and the _*.md indexes), measure size with: `wc -l <file>` and `wc -c <file>`. Compute avg chars/line = bytes ÷ lines. Flag an index as OVER BUDGET if it exceeds ANY of: 60 data lines, 120 avg chars/line, or 40000 bytes. An over-budget index is storing content instead of coordinating — recommend sharding it into family sub-indexes (e.g. `_learnings/<family>.md`) and trimming rows to one-line pointers.
 5. Pendientes backlog: count ALL open `- [ ]` items in _pendientes.md. If more than 50, flag a backlog warning — resolution isn't keeping pace; recommend a reconciliation pass (/checkpoint-3t Step 3a) and/or archiving resolved-but-unmarked items.
 6. Frontmatter integrity: count top-level typed Tier-3 files (sessions/, learnings/, plans/, research/, reference/) missing a leading `---` frontmatter block. Locate and run `ensure-frontmatter.py` in count mode if available (`if [ -n "$CLAUDE_PLUGIN_ROOT" ]...` else `find "$HOME/.claude/plugins" -name ensure-frontmatter.py -path "*/3-tier-memory/*"`), e.g. `python3 <script> <MEMORY_DIR> --count`. If N>0, flag it — those files run degraded (recall default 5, no type/date). Recommend /enrich-3t (which repairs them) or a /checkpoint-3t (Step 5c seals them).
+7. Tier-1 volatile data: MEMORY.md must hold STABLE orientation (protocol + pointers), never live numbers — nothing refreshes it, so any computed/volatile data goes stale silently. Read MEMORY.md and flag stale-prone content: hardcoded corpus counts (e.g. "N sessions", "304 learnings", "329 open pendientes", "N recall units"), date ranges ("2026-04-06 to 2026-04-08"), or a "latest session: <date>" line. If found, flag it (warning-only) — recommend moving those live numbers OUT and letting `/status-3t` compute them on demand. A stable one-line status (e.g. "Plugin structure created") is fine; numbers/dates that duplicate the indexes are the problem.
 
 Skip archived content everywhere: ignore `memory/archive/`, `*.bak`, `*.zip`, `*.archived.md`, `*-archived-*.md`.
 
@@ -71,7 +72,8 @@ Return a JSON object with results:
   "scale": [
     {"check": "Index budget (<60 lines / <120 chars-per-line / <40KB)", "over_budget": ["_learnings.md (536 lines, 443 chars/line)", ...]},
     {"check": "Pendientes backlog (>50 open)", "count": N, "over": true/false},
-    {"check": "Files missing frontmatter", "count": N}
+    {"check": "Files missing frontmatter", "count": N},
+    {"check": "MEMORY.md volatile/stale-prone data", "found": true/false, "details": "e.g. hardcoded counts / date ranges → move to /status-3t"}
   ]
 }
 ```
@@ -178,7 +180,7 @@ Wikilinks:   structural X/X passed — N broken links (warning)
 CLAUDE.md:   X/X passed
 Hooks:       X/X passed (warning-only: orphaned entries in settings*.json)
 Staleness:   N stale pendientes (>30d), M learnings need review — recall index: present/lazy
-Scale:       N indexes over budget, P open pendientes (backlog if >50), F files missing frontmatter
+Scale:       N indexes over budget, P open pendientes (backlog if >50), F files missing frontmatter, MEMORY.md volatile-data: yes/no
 
 ISSUES:
 - <list each failed check with what to fix>
