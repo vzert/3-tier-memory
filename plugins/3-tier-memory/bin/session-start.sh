@@ -45,6 +45,17 @@ fi
 # Exit silently if no memory system found
 [ -z "$MEMORY_DIR" ] && exit 0
 
+# Frontmatter integrity (detection only — no mutation here). Surfaces typed Tier-3 files
+# that slipped through without a frontmatter block; they run degraded (recall default 5).
+# Repair via /enrich-3t, or they self-heal on the next /checkpoint-3t (Step 5c seal).
+if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/ensure-frontmatter.py" ]; then
+  FM_MISSING=$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/ensure-frontmatter.py" "$MEMORY_DIR" --count 2>/dev/null)
+  if [ -n "$FM_MISSING" ] && [ "$FM_MISSING" -gt 0 ] 2>/dev/null; then
+    echo "⚠ $FM_MISSING archivo(s) de memoria sin frontmatter — corre /enrich-3t para repararlos (o se auto-sellan en el proximo /checkpoint-3t)."
+    echo ""
+  fi
+fi
+
 # Detect if running in Paperclip agent
 IS_PAPERCLIP_AGENT=false
 [ -n "$PAPERCLIP_RUN_ID" ] && IS_PAPERCLIP_AGENT=true

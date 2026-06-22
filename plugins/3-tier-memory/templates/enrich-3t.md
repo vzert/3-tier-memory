@@ -25,23 +25,27 @@ CORE RULES:
 If `memory/` exists in the project root, use it (Model B); else use the auto-memory path (Model A).
 ```bash
 MEMORY_DIR="memory"   # or the Model A path if that's what you found
-if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/enrich-memory.py" ]; then
-  ENRICH="${CLAUDE_PLUGIN_ROOT}/bin/enrich-memory.py"
-else
-  ENRICH=$(find "$HOME/.claude/plugins" -name "enrich-memory.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)
-fi
+BIN="${CLAUDE_PLUGIN_ROOT}/bin"
+[ -f "$BIN/enrich-memory.py" ] || BIN=$(dirname "$(find "$HOME/.claude/plugins" -name "enrich-memory.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)")
+ENRICH="$BIN/enrich-memory.py"
+SEAL="$BIN/ensure-frontmatter.py"
 ```
 If `enrich-memory.py` is not found, report: "Could not find enrich-memory.py — ensure the 3-tier-memory plugin is installed." and **stop**.
 
 ## Step 1: Dry-run preview (no writes)
 
+Preview BOTH passes — the frontmatter seal runs FIRST (it adds missing `---` blocks), then
+enrich adds `_creado:`/`importance:`. Sealing first means files that had no frontmatter at all
+get a block now and then get scored by the importance pass, instead of being skipped.
+
 ```bash
-python3 "$ENRICH" "$MEMORY_DIR"
+python3 "$SEAL" "$MEMORY_DIR"      # frontmatter seal — files missing a block
+python3 "$ENRICH" "$MEMORY_DIR"    # _creado + importance
 ```
-Show the user the preview verbatim. It reports how many pendientes will get `_creado:`
-(and how many fall back to file mtime because no date was derivable), how many
-learnings/sessions will get `importance:` (and how many substantive sessions are left
-neutral), and which files are FLAGGED as having no frontmatter.
+Show the user both previews verbatim. The seal reports how many typed files are missing a
+frontmatter block (these get a minimal `type`/`date`/`status` block). Enrich reports how many
+pendientes will get `_creado:` (and how many fall back to file mtime), how many learnings/sessions
+will get `importance:` (and how many substantive sessions are left neutral).
 
 **How the values are chosen** (so you can explain it):
 - `_creado:` — derived in priority order: (1) the date in the `_origen` wikilink slug, (2) the `date:` frontmatter of the file `_origen` links to, (3) `_pendientes.md` file mtime (coarse last resort; never a future date).
@@ -50,11 +54,12 @@ neutral), and which files are FLAGGED as having no frontmatter.
 
 ## Step 2: Approve, then apply
 
-Ask the user to confirm. On approval:
+Ask the user to confirm. On approval, run the seal FIRST, then enrich (so newly-sealed files get scored):
 ```bash
-python3 "$ENRICH" "$MEMORY_DIR" --apply
+python3 "$SEAL" "$MEMORY_DIR" --apply     # prepend missing frontmatter blocks
+python3 "$ENRICH" "$MEMORY_DIR" --apply   # _creado + importance (now scores the sealed files too)
 ```
-Optionally scope a single job with `--only creado` or `--only importance`.
+Optionally scope a single enrich job with `--only creado` or `--only importance`.
 
 ## Step 3: Rebuild the recall index
 
@@ -68,6 +73,8 @@ python3 "$(dirname "$ENRICH")/build-recall-index.py" "$MEMORY_DIR" "$INDEX" >/de
 
 ## Step 4: Report
 
-Tell the user: N pendientes got `_creado:` (M via mtime fallback), K files got `importance:`,
-L substantive sessions left neutral, and any FLAGGED no-frontmatter files they should fix by hand.
-Note that Fase C staleness will now start flagging the legacy pendientes as they age past 30 days.
+Tell the user: F files got a frontmatter block sealed, N pendientes got `_creado:` (M via mtime
+fallback), K files got `importance:`, L substantive sessions left neutral. Note that the sealed
+files only cover top-level typed files (recall units) — nested .md attachments in subfolders are
+intentionally left alone. Fase C staleness will now start flagging the legacy pendientes as they
+age past 30 days.
