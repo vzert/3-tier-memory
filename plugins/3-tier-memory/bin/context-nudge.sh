@@ -16,7 +16,7 @@
 source "$(dirname "$0")/resolve-project-dir.sh"
 
 # Only nudge if a memory system exists (consistent with the other hooks)
-ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's|/|-|g')
+ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
 if [ ! -f "$CLAUDE_PROJECT_DIR/memory/_pendientes.md" ] \
    && [ ! -f "$HOME/.claude/projects/$ENCODED/memory/_pendientes.md" ]; then
   exit 0

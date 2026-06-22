@@ -231,7 +231,7 @@ If the marketplace entry exists, report: "Auto-update: enabled". If the file doe
 Check for existing JSONL conversation files:
 
 ```bash
-ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's|/|-|g')
+ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
 JSONL_DIR="$HOME/.claude/projects/$ENCODED"
 JSONL_COUNT=$(ls "$JSONL_DIR"/*.jsonl 2>/dev/null | wc -l | tr -d ' ')
 ```

@@ -28,7 +28,7 @@ Si `BACKFILL_FORCE_ALL=1` está presente en el env al inicio de la sesión:
 
 2. Determine the JSONL directory:
 ```bash
-ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's|/|-|g')
+ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
 JSONL_DIR="$HOME/.claude/projects/$ENCODED"
 ```
 
