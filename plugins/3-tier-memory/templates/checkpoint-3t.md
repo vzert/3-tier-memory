@@ -187,6 +187,25 @@ Note pruned row count for Step 7 report.
 
 **Recall index:** no action needed. The derived recall index (`~/.claude/projects/<encoded>/.recall-index.jsonl`, consumed by the UserPromptSubmit hook) auto-rebuilds on the next prompt because the memory files you just wrote are newer than the index.
 
+## Step 5c: Seal frontmatter (deterministic guarantee)
+
+You just hand-wrote Tier-3 files. Don't trust yourself to have gotten every frontmatter
+block right — enforce it deterministically. Locate and run the seal script; it PREPENDS a
+minimal `---` block (type/date/status) to any typed file that's missing one, and is a no-op
+if you wrote them correctly. Idempotent, atomic, never touches the body.
+
+```bash
+MEMORY_DIR="memory"   # the directory located in Step 0 (Model B); use the Model A path otherwise
+if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/ensure-frontmatter.py" ]; then
+  SEAL="${CLAUDE_PLUGIN_ROOT}/bin/ensure-frontmatter.py"
+else
+  SEAL=$(find "$HOME/.claude/plugins" -name "ensure-frontmatter.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)
+fi
+[ -n "$SEAL" ] && python3 "$SEAL" "$MEMORY_DIR" --apply
+```
+If it reports `frontmatter_sealed=N` with N>0, note it for the Step 7 report — it means a
+file slipped through without frontmatter and was auto-repaired (importance is left to /enrich-3t).
+
 ## Step 6: Git commit (best-effort)
 
 Memory files are already saved (Steps 1-5). The git commit is a convenience — if git is unavailable, skip it gracefully.
