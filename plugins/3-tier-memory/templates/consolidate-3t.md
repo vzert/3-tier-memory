@@ -35,7 +35,7 @@ Instead, let the derived recall index surface the few high-overlap PAIRS worth j
 1. Resolve paths (same scheme as recall.sh). `MEMORY_DIR` is the directory located in Step 0 (`memory/` for Model B):
 ```bash
 MEMORY_DIR="memory"   # Model B; use the auto-memory path if Step 0 found Model A
-ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's|/|-|g')
+ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
 INDEX="$HOME/.claude/projects/$ENCODED/.recall-index.jsonl"
 ```
 2. Locate the plugin scripts (mirror /backfill-3t Step 5):

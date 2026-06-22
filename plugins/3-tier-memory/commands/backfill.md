@@ -12,7 +12,7 @@ Reconstruct the full memory system from past Claude Code conversation logs. Uses
 
 2. Determine the JSONL directory:
 ```bash
-ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's|/|-|g')
+ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
 JSONL_DIR="$HOME/.claude/projects/$ENCODED"
 ```
 

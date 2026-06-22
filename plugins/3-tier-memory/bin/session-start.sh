@@ -35,7 +35,7 @@ if [ -f "$CLAUDE_PROJECT_DIR/memory/_pendientes.md" ]; then
   MEMORY_DIR="$CLAUDE_PROJECT_DIR/memory"
 elif [ -d "$HOME/.claude/projects" ]; then
   # Model A: try auto-memory
-  ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's|/|-|g')
+  ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
   AUTO_DIR="$HOME/.claude/projects/$ENCODED/memory"
   if [ -f "$AUTO_DIR/_pendientes.md" ]; then
     MEMORY_DIR="$AUTO_DIR"
@@ -222,7 +222,7 @@ if [ -n "$UPDATED" ]; then
 fi
 
 # Notify if JSONL backfill is pending
-ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's|/|-|g')
+ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
 JSONL_DIR="$HOME/.claude/projects/$ENCODED"
 if [ -d "$JSONL_DIR" ]; then
   JSONL_COUNT=$(ls "$JSONL_DIR"/*.jsonl 2>/dev/null | wc -l | tr -d ' ')
