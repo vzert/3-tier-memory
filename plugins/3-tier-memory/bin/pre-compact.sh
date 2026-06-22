@@ -8,7 +8,7 @@ source "$(dirname "$0")/resolve-project-dir.sh"
 if [ -f "$CLAUDE_PROJECT_DIR/memory/_pendientes.md" ]; then
   MEMORY_DIR="$CLAUDE_PROJECT_DIR/memory"
 elif [ -d "$HOME/.claude/projects" ]; then
-  ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's|/|-|g')
+  ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
   AUTO_DIR="$HOME/.claude/projects/$ENCODED/memory"
   if [ -f "$AUTO_DIR/_pendientes.md" ]; then
     MEMORY_DIR="$AUTO_DIR"
