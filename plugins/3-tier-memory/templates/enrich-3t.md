@@ -65,7 +65,7 @@ Optionally scope a single enrich job with `--only creado` or `--only importance`
 
 The enriched fields only take effect once the derived index is rebuilt:
 ```bash
-ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's|/|-|g')
+ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
 INDEX="$HOME/.claude/projects/$ENCODED/.recall-index.jsonl"
 python3 "$(dirname "$ENRICH")/build-recall-index.py" "$MEMORY_DIR" "$INDEX" >/dev/null 2>&1
 ```
