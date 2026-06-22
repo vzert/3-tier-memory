@@ -286,6 +286,28 @@ claude plugin install 3-tier-memory@3-tier-memory-marketplace
 
 After this, version 1.9.0+ will auto-enable updates for all future sessions.
 
+### Checkpoint reminder fires too early (large-context models)
+
+The plugin nudges you to run `/checkpoint-3t` as the conversation fills the context window.
+By **default it assumes a 200k window** — so on a **1M-context model** (e.g. `opus[1m]`) the
+reminder, and Claude Code's own auto-compaction, can feel premature. Two independent things:
+
+- **Claude Code's auto-compaction** triggers on its own threshold (often ~200k) and doesn't
+  reliably scale to 1M. The harness exposes no threshold setting — only on/off. To stop premature
+  compaction on a 1M model, disable it: `export DISABLE_AUTO_COMPACT=1` (or `/config` →
+  auto-compact off). The transcript records the base model id without the `[1m]` suffix, so the
+  plugin can't auto-detect your real window either.
+- **The plugin's checkpoint nudge** reads your actual token usage from the transcript and is
+  **configurable**. Tell it your real window so it nudges at ~80% of *that*, not of 200k:
+
+  ```bash
+  export THREET_CONTEXT_WINDOW=1000000   # your model's context window in tokens
+  export THREET_CHECKPOINT_RATIO=0.8     # optional: nudge at this fraction (default 0.8)
+  ```
+
+  Put these in your shell profile (or `.claude/settings.json` `env`) so they persist. The nudge
+  is independent of auto-compaction, so it still works after you disable it.
+
 ## License
 
 MIT
