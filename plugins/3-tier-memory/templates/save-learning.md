@@ -49,6 +49,22 @@ For each learning:
 - If new topic file created, add a row to the Topics table
 - If the learning is critical (affects correctness/safety), add it to the ## Quick Reference section
 
+## Step 3b: Seal frontmatter (deterministic guarantee)
+
+Don't trust the write above to have a frontmatter block — enforce it. Run the seal script:
+it prepends a minimal `---` block to any learning file missing one (no-op if you wrote it
+right). Idempotent, atomic, never touches the body.
+
+```bash
+MEMORY_DIR="memory"   # or the Model A path from Step 1
+if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/ensure-frontmatter.py" ]; then
+  SEAL="${CLAUDE_PLUGIN_ROOT}/bin/ensure-frontmatter.py"
+else
+  SEAL=$(find "$HOME/.claude/plugins" -name "ensure-frontmatter.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)
+fi
+[ -n "$SEAL" ] && python3 "$SEAL" "$MEMORY_DIR" --apply
+```
+
 ## Step 4: Git commit (best-effort)
 
 If git is available and there are changes:
