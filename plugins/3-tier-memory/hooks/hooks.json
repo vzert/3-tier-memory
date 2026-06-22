@@ -20,6 +20,11 @@
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/bin/recall.sh\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/bin/context-nudge.sh\"",
+            "timeout": 10
           }
         ]
       }
