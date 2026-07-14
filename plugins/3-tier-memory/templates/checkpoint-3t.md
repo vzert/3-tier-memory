@@ -206,6 +206,30 @@ fi
 If it reports `frontmatter_sealed=N` with N>0, note it for the Step 7 report — it means a
 file slipped through without frontmatter and was auto-repaired (importance is left to /enrich-3t).
 
+## Step 5d: Redact secrets (deterministic gate — runs BEFORE any commit)
+
+Session/plan/research digests can capture real API keys, tokens, or private keys pasted
+verbatim from the work. Step 6 runs `git add memory/`, so in any project where `memory/` is
+NOT gitignored, an unredacted secret would be committed and (on push) leak. A "remember to
+redact" rule is not enough — enforce it deterministically. Run the scanner in `--apply` mode
+so it replaces each detected secret VALUE with `<REDACTED>` in place. It skips values already
+in safe form (`$VAR`, `<REDACTED>`, placeholders), so it's idempotent and a no-op when clean.
+
+```bash
+MEMORY_DIR="memory"   # the directory located in Step 0 (Model B); use the Model A path otherwise
+if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/scan-secrets.py" ]; then
+  SCAN="${CLAUDE_PLUGIN_ROOT}/bin/scan-secrets.py"
+else
+  SCAN=$(find "$HOME/.claude/plugins" -name "scan-secrets.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)
+fi
+[ -n "$SCAN" ] && python3 "$SCAN" "$MEMORY_DIR" --apply
+```
+
+If it reports `secrets_redacted=N` with N>0, **tell the user explicitly in the Step 7 report**:
+list the file:line of each finding (the output is already masked — never echo the secret) and
+warn that **any key that was committed/pushed in a previous checkpoint is compromised and must
+be rotated** — redaction here only protects future commits, it does not un-leak history.
+
 ## Step 6: Git commit (best-effort)
 
 Memory files are already saved (Steps 1-5). The git commit is a convenience — if git is unavailable, skip it gracefully.
@@ -246,7 +270,7 @@ If the commit fails (e.g., user.name/user.email not configured) → set GIT_SKIP
 
 ## Step 7: Report
 
-Tell the user: session path, N pendientes extracted, M resolved, N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, N rows pruned from indexes (if any), git result (commit hash OR reason skipped).
+Tell the user: session path, N pendientes extracted, M resolved, N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, N rows pruned from indexes (if any), frontmatter sealed (if N>0), **secrets redacted (if N>0, with file:line list + rotate-your-keys warning)**, git result (commit hash OR reason skipped).
 
 ## Step 8: Como retomar — snippet de continuidad
 
