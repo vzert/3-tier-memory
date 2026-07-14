@@ -1,3 +1,7 @@
 .claude/
 .DS_Store
 memory/
+
+# Python bytecode cache
+__pycache__/
+*.pyc

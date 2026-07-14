@@ -28,6 +28,12 @@ import re
 import sys
 from datetime import date
 
+# Windows consoles often default to a legacy codepage (e.g. cp1252) that can't
+# encode the →/—/… characters this script prints, raising UnicodeEncodeError.
+# Force UTF-8 regardless of the calling shell's locale.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 EXCLUDE_NAME_RE = re.compile(r"(\.bak(-|$)|\.zip$|\.archived\.md$|(^|-)archived-)", re.IGNORECASE)
 DATE_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")
 ORIGEN_RE = re.compile(r"(_origen:\s*\[\[[^\]]+\]\]_)")
