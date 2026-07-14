@@ -65,6 +65,21 @@ fi
 [ -n "$SEAL" ] && python3 "$SEAL" "$MEMORY_DIR" --apply
 ```
 
+## Step 3c: Redact secrets (deterministic gate — before commit)
+
+Step 4 commits memory/. Redact any plaintext key/token captured in the learning before it
+gets committed. Idempotent and a no-op when clean (skips `$VAR`/`<REDACTED>`/placeholders).
+
+```bash
+if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/scan-secrets.py" ]; then
+  SCAN="${CLAUDE_PLUGIN_ROOT}/bin/scan-secrets.py"
+else
+  SCAN=$(find "$HOME/.claude/plugins" -name "scan-secrets.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)
+fi
+[ -n "$SCAN" ] && python3 "$SCAN" "$MEMORY_DIR" --apply
+```
+If it reports `secrets_redacted=N` with N>0, warn the user to rotate any key that was pushed earlier.
+
 ## Step 4: Git commit (best-effort)
 
 If git is available and there are changes:

@@ -56,6 +56,16 @@ if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/ensure-frontm
   fi
 fi
 
+# Plaintext secrets (detection only — no mutation here). Memory committed to a repo with a
+# remote leaks any key captured verbatim in a digest. Auto-redacted by /checkpoint-3t Step 5d.
+if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/scan-secrets.py" ]; then
+  SEC_FOUND=$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/scan-secrets.py" "$MEMORY_DIR" --count 2>/dev/null)
+  if [ -n "$SEC_FOUND" ] && [ "$SEC_FOUND" -gt 0 ] 2>/dev/null; then
+    echo "⚠ SECRETS: $SEC_FOUND posible(s) secreto(s) en texto plano en memory/ — corre /checkpoint-3t para redactarlos (Step 5d) y ROTA cualquier key ya pusheada (la redacción no des-filtra el historial)."
+    echo ""
+  fi
+fi
+
 # Detect if running in Paperclip agent
 IS_PAPERCLIP_AGENT=false
 [ -n "$PAPERCLIP_RUN_ID" ] && IS_PAPERCLIP_AGENT=true
