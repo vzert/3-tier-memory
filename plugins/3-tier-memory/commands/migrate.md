@@ -38,6 +38,13 @@ Create `.claude/commands/backfill-3t.md` with the backfill command content (reco
 
 Also create `.claude/commands/consolidate-3t.md` from `templates/consolidate-3t.md` (dedup learnings, supersede contradictions, reflect sessions into higher-level rules). The SessionStart hook auto-installs any command that is missing, so this is also covered automatically.
 
+> **Antes de escribir aqui: si `PROJECT_DIR` es el directorio HOME del usuario, DETENTE.**
+> `~/.claude/commands/` no es el ambito del proyecto: es el ambito **USER**, global. Instalar
+> ahi hace que `/checkpoint-3t` y compañia aparezcan DUPLICADOS (user + project) en todos los
+> demas proyectos, de forma permanente y sin rastro de su origen — y la copia global se queda
+> vieja, porque el hook solo actualiza las locales. Si detectas ese caso, no escribas los
+> comandos: dile al usuario que abra la sesion desde el directorio del proyecto y explica por que.
+
 ### 2e. Detect orphaned hook entries in project settings
 
 The plugin registers its own hooks via `hooks.json` (using `${CLAUDE_PLUGIN_ROOT}`). Any 3-tier-memory hooks registered in `.claude/settings.json` or `.claude/settings.local.json` of the project are redundant, and if they use `$CLAUDE_PROJECT_DIR/.claude/hooks/...` (legacy per-project pattern) they often reference files that don't exist, causing `SessionStart:startup hook error`.
