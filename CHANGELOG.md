@@ -3,13 +3,32 @@
 ## [2.11.0] - 2026-08-17
 ### Fixed
 - **El parser de `_pendientes.md` descartaba en silencio toda seccion fuera de `## Alta/Media/Baja` (`bin/session-start.sh`).** Un `## <header>` no reconocido ponia `current = None`, asi que sus items nunca entraban a un bucket — y como `total` se calculaba DESPUES del descarte, el encabezado del bloque imprimia un numero plausible pero falso. El fallo era invisible: se ve igual que "no hay pendientes". Medido en 12 proyectos reales: `unifi-expert` inyectaba **0 de 15** pendientes (su archivo usa `## Abiertos`, nunca tuvo secciones de prioridad); `Vecinex` 1 de 11; `Will-Ops` 86 de 109; `paperclip` 540 de 546. Las secciones desconocidas ahora caen en un bucket `otros` que se muestra al final; las secciones cerradas (`Como usar`, `Related`, `Completados`, `Scope`) se siguen saltando a proposito.
+- **Items fuera de toda seccion tampoco se descartan.** Un pendiente escrito en el preambulo del archivo (antes del primer `## `) se perdia igual que los de seccion desconocida — real en `sms-masivos/landings`. El parser arranca en el bucket `otros` y salta el frontmatter YAML explicitamente.
+- **Items bajo secciones cerradas se reportan en vez de desaparecer.** `## Completados`/`## Scope`/`## Related`/`## Como usar` se siguen excluyendo de la inyeccion (es correcto), pero ahora el bloque dice cuantos y de que seccion — 16 en `paperclip`, 7 en `sms-masivos/google_ads`, 2 en `landings`. La regla es que nada se cae en silencio, ni siquiera lo que se excluye a proposito.
+- **El match de secciones cerradas ya no colisiona por prefijo.** Se comparaba con `## notas` entre otros, asi que una seccion viva llamada `## Notas pendientes` se habria saltado entera Y sus items se restaban del auto-chequeo, reintroduciendo el mismo fallo silencioso por otra puerta. `## notas` sale de la lista; las que quedan se comparan por prefijo a proposito (el nombre real varia: `## Como usar`, `## Cómo usar este archivo`) y cualquier item que caiga ahi se reporta.
+- **El auto-chequeo normaliza igual que la clasificacion.** Clasificaba con `strip()` pero contaba con un regex anclado a columna cero, asi que un `  - [ ]` indentado producia un desajuste falso permanente.
+- **Los avisos de estructura se recortan a 3 secciones + contador.** `sms-masivos/seo` organiza el archivo por fecha/tarea y tiene 7 secciones no canonicas: listarlas todas metia una linea de 300+ chars en cada sesion — el ruido que este release vino a quitar.
 - **ALTA ya no se oculta por el cap.** El cap plano de 10 items cortaba por prioridad: un proyecto con 13 ALTA solo veia 10. Ahora ALTA se muestra completa (techo duro de 25) y el cap aplica al resto; si el techo recorta ALTA, el bloque lo declara (`OJO: solo 25 de 482 ALTA caben aqui`) en vez de omitirlo en silencio.
 
 ### Changed
-- **El cuerpo de cada pendiente se trunca a 120 chars en el bloque SessionStart.** Un pendiente puede pasar de 900 chars; inyectarlo entero en CADA sesion ahoga el prompt real del usuario (bloque top-10 medido: 10.3 KB en `cloudflare-expert`, 8.0 KB en `scalar-api-docs`, 7.8 KB en `goal-spec-skill`). Se corta en frontera de palabra, cierra cualquier `**` abierto y marca con `…`. El detalle completo sigue en `_pendientes.md`, que el agente abre si el item resulta relevante. Reduccion medida: 48-71% del bloque.
+- **El cuerpo de cada pendiente se trunca a 120 chars en el bloque SessionStart.** Un pendiente puede pasar de 900 chars; inyectarlo entero en CADA sesion ahoga el prompt real del usuario. Se corta en frontera de palabra, cierra cualquier `**` abierto y marca con `…`. El detalle completo sigue en `_pendientes.md`, que el agente abre si el item resulta relevante.
+
+  Efecto neto por proyecto (bytes del bloque de pendientes, parser viejo vs nuevo, medido ejecutando ambos contra los mismos archivos): **el bloque encoge donde estaba inflado y crece donde estaba roto** — la correccion de conteo manda sobre el ahorro, no al reves.
+
+  | proyecto | viejo | nuevo | |
+  |---|---|---|---|
+  | cloudflare-expert | 15407 | 4341 | −72% |
+  | goal-spec-skill | 7590 | 2091 | −73% |
+  | scalar-api-docs | 8715 | 2604 | −71% |
+  | Will-Ops | 4210 | 2294 | −46% |
+  | claude-vzert | 4346 | 2486 | −43% |
+  | time-tracker | 1500 | 1317 | −13% |
+  | paperclip | 3131 | 5310 | **+69%** — 482 ALTA: ahora muestra 25 en vez de 10 |
+  | Vecinex | 385 | 1797 | **+366%** — recupera 10 items que estaban ocultos |
+  | unifi-expert | 0 | 1960 | inyectaba **nada**; ahora sus 15 items |
 
 ### Added
-- **Auto-verificacion de estructura en el hook SessionStart.** La leccion del bug anterior no es "faltaba un header" sino que **el hook fallaba en silencio y nadie comparaba su output contra el archivo**. Ahora el hook audita su propio parseo y emite una linea `ESTRUCTURA de _pendientes.md:` cuando detecta (a) secciones fuera del esquema de prioridad, (b) encabezados duplicados (`## Media prioridad` dos veces, real en 2 proyectos), o (c) un desajuste entre las lineas `- [ ]` clasificables del archivo y las clasificadas. En proyectos con estructura sana no imprime nada.
+- **Auto-verificacion de estructura en el hook SessionStart.** La leccion del bug anterior no es "faltaba un header" sino que **el hook fallaba en silencio y nadie comparaba su output contra el archivo**. Ahora el hook audita su propio parseo y emite una linea `ESTRUCTURA de _pendientes.md:` cuando detecta (a) secciones fuera del esquema de prioridad, (b) encabezados duplicados (`## Media prioridad` dos veces, real en 2 proyectos), (c) items `- [ ]` bajo secciones cerradas que por eso no se inyectan (real en paperclip: 16 sin cerrar bajo `## Completados`/`## Scope`), o (d) un desajuste entre las lineas `- [ ]` clasificables del archivo y las clasificadas. En proyectos con estructura sana no imprime nada.
 - **`/migrate` ahora resuelve el hook legacy que duplica al plugin.** El comando detectaba estas entradas pero se abstenia explicitamente cuando el script existia en disco ("not removing, verify this is intentional") — justo el unico caso que de verdad duplica contexto. Dos instalaciones anteriores al plugin (marzo 2026) llevaban meses inyectando los pendientes crudos ADEMAS del bloque curado: 31.5 KB extra por sesion en una de ellas. Ahora `/migrate` clasifica cada linea del script (emision duplicada / protocolo duplicado / genuinamente custom, tratando placeholders sin sustituir como texto muerto), mide los bytes que inyecta, y ofrece recortarlo conservando solo lo propio — o borrarlo junto con su registro si no queda nada custom.
 
 ## [2.10.0] - 2026-06-22

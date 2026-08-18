@@ -68,7 +68,7 @@ Behavior rules:
 - **If the flagged hook's target file DOES exist**: read it and decide whether it duplicates the plugin, instead of skipping. This is the case that actually costs context — a working legacy hook that dumps the same memory the plugin already injects, silently, every session. Historically it went unnoticed for months (one project shipped ~31 KB of raw pendientes per session on top of the plugin's curated block).
 
   Classify each line of the existing script:
-  - **Duplicated emission** — reads `_pendientes.md`, `_learnings.md`, or any `memory/` index and echoes its contents (typically `grep -E '^- \[ \]' .../_pendientes.md` piped to `echo`). The plugin's `session-start.sh` already emits this, curated by priority and truncated.
+  - **Duplicated emission** — reads `_pendientes.md` and echoes its contents (typically `grep -E '^- \[ \]' .../_pendientes.md` piped to `echo`). This is the ONLY memory content the plugin's `session-start.sh` re-emits, curated by priority and truncated. Scope this narrowly: for `_learnings.md` the plugin emits a **count** (`REGLAS CRITICAS: N`) and never its contents, and it emits no other index at all — so a script that echoes learnings, plans, research, or any other index is providing something the plugin does NOT, and counts as custom. Getting this wrong deletes context the user never gets back.
   - **Duplicated protocol** — an `echo` whose text restates the plugin's own PROTOCOLO/dual-write reminder.
   - **Genuinely custom** — anything project-specific the plugin does not emit (e.g. a domain rule like "read learnings before SSH ops"). Note that scaffolding placeholders left unsubstituted (`<DOMAIN-SPECIFIC-ACTION>` and similar) are NOT custom — they are dead template text.
 
@@ -159,6 +159,11 @@ Special case: if `CLAUDE.md` exists in auto-memory, rename to `CLAUDE.md.bak` an
 ### 5c. Merge Model A indexes (Scenario B only)
 
 For each index file found in `AUTO_MEMORY_DIR` (`_pendientes.md`, `_session-index.md`, `_learnings.md`, `_plans-index.md`, `_research-index.md`):
+
+Immediately before writing the project memory index (steps 2-3 below), re-read its current
+content — don't rely on the read in step 1 if time has passed. A per-file lock now serializes
+concurrent writers, but it only guarantees exclusive access at write time, not that your
+in-context copy is current.
 
 1. Read both the auto-memory index and the project memory index
 2. For table-based indexes: parse each table row from the auto-memory version. If an equivalent row does NOT already exist in the project index (match on primary identifier: session slug, topic name, plan name, research topic), append it
