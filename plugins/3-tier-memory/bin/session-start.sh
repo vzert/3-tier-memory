@@ -84,19 +84,19 @@ for name in ("settings.json", "settings.local.json"):
                 # El hook del plugin se registra con ${CLAUDE_PLUGIN_ROOT}; no es duplicado de si mismo.
                 if "CLAUDE_PLUGIN_ROOT" in cmd:
                     continue
-                m = re.search(r"(/[^\s\"']+\.sh)", cmd.replace("$CLAUDE_PROJECT_DIR", proj))
-                if not m:
-                    continue
-                script = m.group(1)
-                if not os.path.isfile(script):
-                    continue   # entrada huerfana: eso lo reporta /migrate, no es duplicacion
-                try:
-                    with open(script, encoding="utf-8", errors="replace") as fh:
-                        body = fh.read()
-                except Exception:
-                    continue
-                if "_pendientes.md" in body and re.search(r"\becho\b", body):
-                    found.append((os.path.relpath(script, proj), name))
+                # Ambas formas de la variable, y TODOS los .sh del comando: con un solo
+                # candidato, una entrada huerfana al principio esconde al script real.
+                expanded = cmd.replace("${CLAUDE_PROJECT_DIR}", proj).replace("$CLAUDE_PROJECT_DIR", proj)
+                for script in re.findall(r"(/[^\s\"']+\.sh)", expanded):
+                    if not os.path.isfile(script):
+                        continue   # entrada huerfana: eso lo reporta /migrate, no es duplicacion
+                    try:
+                        with open(script, encoding="utf-8", errors="replace") as fh:
+                            body = fh.read(200_000)   # techo: no leer un archivo enorme en un hook
+                    except Exception:
+                        continue
+                    if "_pendientes.md" in body and re.search(r"\becho\b", body):
+                        found.append((os.path.relpath(script, proj), name))
 
 if not found:
     sys.exit(0)
