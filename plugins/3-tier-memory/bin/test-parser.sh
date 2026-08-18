@@ -95,9 +95,20 @@ mkproj() { # dir, comando-del-hook
   mkdir -p "$1/.claude/hooks" "$1/memory"
   printf '#!/bin/bash\nP=$(grep -E "^- \\[ \\]" "$CLAUDE_PROJECT_DIR/memory/_pendientes.md")\necho "$P"\n' > "$1/.claude/hooks/session-start.sh"
   printf '# P\n\n## Alta prioridad\n- [ ] x\n' > "$1/memory/_pendientes.md"
-  printf '{"hooks":{"SessionStart":[{"matcher":"","hooks":[{"type":"command","command":"%s"}]}]}}\n' "$2" > "$1/.claude/settings.local.json"
+  # El comando se serializa con json.dumps: escribirlo con printf rompia el JSON en
+  # cuanto llevaba comillas, y entonces el detector no leia nada — un test que pasa
+  # porque su fixture esta roto es exactamente la no-evidencia que este arnes rechaza.
+  CMD="$2" python3 - "$1/.claude/settings.local.json" <<'PY'
+import json, os, sys
+cfg = {"hooks": {"SessionStart": [{"matcher": "", "hooks": [
+    {"type": "command", "command": os.environ["CMD"]}]}]}}
+json.dump(cfg, open(sys.argv[1], "w", encoding="utf-8"))
+PY
 }
 expect() { # nombre, dir, si|no
+  if ! python3 -c "import json,sys;json.load(open(sys.argv[1]))" "$2/.claude/settings.local.json" 2>/dev/null; then
+    fail "$1 (fixture invalido: settings.local.json no es JSON)"; return
+  fi
   if ! CLAUDE_PROJECT_DIR="$2" MEMORY_DIR="$2/memory" run python3 "$DUP"; then
     fail "$1 (el detector murio)" "$(cat "$ERR")"; return
   fi
@@ -154,6 +165,19 @@ mkproj "$TMP/d11" 'FOO=1 bash $CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh
 expect "asignacion antes del interprete" "$TMP/d11" si
 mkproj "$TMP/d12" 'bash ./.claude/hooks/session-start.sh'
 expect "ruta relativa" "$TMP/d12" si
+
+# `builtin bash x.sh` no ejecuta nada (bash no es builtin): tratarlo como prefijo
+# transparente reportaba una ejecucion inexistente.
+mkproj "$TMP/d13" 'builtin bash $CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh'
+expect "builtin no es prefijo transparente" "$TMP/d13" no
+
+# `-c` lleva un PROGRAMA, no una ruta: aplanar sus tokens colaba una mencion.
+mkproj "$TMP/d14" 'bash -c "echo ./.claude/hooks/session-start.sh"'
+expect "mencion dentro de -c no es ejecucion" "$TMP/d14" no
+
+# ...pero si el programa de -c si ejecuta el script, cuenta.
+mkproj "$TMP/d15" 'bash -c "bash $CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh"'
+expect "ejecucion dentro de -c si cuenta" "$TMP/d15" si
 
 echo "  ---- $PASS ok, $FAIL fallo(s)"
 [ "$FAIL" -eq 0 ]

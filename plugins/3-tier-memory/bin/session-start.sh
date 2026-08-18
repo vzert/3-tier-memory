@@ -63,7 +63,7 @@ fi
 # a cada instalacion sin que nadie pida nada.
 if [ -n "$CLAUDE_PROJECT_DIR" ]; then
   DUP_HOOK=$(CLAUDE_PROJECT_DIR="$CLAUDE_PROJECT_DIR" MEMORY_DIR="$MEMORY_DIR" python3 <<'DUPEOF' 2>/dev/null
-import json, os, re, sys
+import json, os, re, shlex, sys
 
 proj = os.environ.get("CLAUDE_PROJECT_DIR", "")
 mem = os.environ.get("MEMORY_DIR", "")
@@ -71,36 +71,63 @@ EVENTS = ("SessionStart", "UserPromptSubmit", "PreCompact")
 
 INTERPRETES = {"bash", "sh", "zsh", "ksh", "dash", "env",
                "/bin/bash", "/bin/sh", "/bin/zsh", "/usr/bin/env"}
-MODIFICADORES = {"exec", "nohup", "command", "time", "builtin"}
+# Prefijos que NO cambian que se ejecuta. "builtin" queda fuera a proposito:
+# `builtin bash x.sh` no ejecuta nada (bash no es un builtin), asi que tratarlo
+# como transparente reportaria una ejecucion inexistente.
+MODIFICADORES = {"exec", "nohup", "command", "time"}
+SEPARADORES = {"&&", "||", ";", "|", "&"}
 
-def scripts_ejecutados(command):
+def scripts_ejecutados(command, proj, _depth=0):
     """Rutas .sh que el comando EJECUTA, no las que solo menciona.
 
     Buscar cualquier ".sh" en el texto reporta un `echo "…/session-start.sh"` o una
-    ruta dentro de un comentario como si fuera un hook activo. Un falso positivo aqui
-    manda al usuario a /migrate por nada, asi que se exige posicion de ejecucion:
-    primer token del segmento, o segundo detras de un interprete.
+    ruta en un comentario como si fuera un hook activo. Un falso positivo aqui manda
+    al usuario a /migrate por nada, asi que se exige posicion de ejecucion: primer
+    token del segmento, o posterior detras de un interprete. `-c` se sigue hacia
+    adentro en vez de aplanarse, porque su argumento es un programa, no una ruta.
     """
+    if _depth > 3:
+        return []
+    try:
+        toks = shlex.split(command, posix=True)
+    except ValueError:
+        toks = command.split()
+
     out = []
-    for seg in re.split(r"&&|\|\||[;|]", command):
-        toks = [t.strip("\"'") for t in seg.split()]
-        toks = [t for t in toks if t and not t.startswith("-")]
-        # Prefijos que no cambian que se ejecuta: `exec bash x.sh`, `nohup bash x.sh`,
-        # `command bash x.sh`, `VAR=1 bash x.sh`. Sin esto el script real queda invisible.
-        while toks and (toks[0] in MODIFICADORES or re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", toks[0])):
-            toks = toks[1:]
-        if not toks:
-            continue
-        cand = None
-        if toks[0].endswith(".sh"):
-            cand = toks[0]
-        elif toks[0] in INTERPRETES or os.path.basename(toks[0]) in INTERPRETES:
-            cand = next((t for t in toks[1:] if t.endswith(".sh")), None)
-        if not cand:
-            continue
-        # Ruta relativa: se resuelve contra el proyecto, que es el cwd del hook.
-        out.append(cand if cand.startswith("/") else os.path.normpath(os.path.join(proj, cand)))
+    seg = []
+    for tok in toks + ["&&"]:
+        if tok in SEPARADORES:
+            out.extend(_segmento(seg, proj, _depth))
+            seg = []
+        else:
+            seg.append(tok)
     return out
+
+def _segmento(toks, proj, depth):
+    while toks and (toks[0] in MODIFICADORES or re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", toks[0])):
+        toks = toks[1:]
+    if not toks:
+        return []
+
+    # `sh -c "<programa>"`: el argumento es codigo, se analiza como comando propio.
+    if "-c" in toks:
+        i = toks.index("-c")
+        if i + 1 < len(toks):
+            return scripts_ejecutados(toks[i + 1], proj, depth + 1)
+        return []
+
+    args = [t for t in toks if not t.startswith("-")]
+    if not args:
+        return []
+    cand = None
+    if args[0].endswith(".sh"):
+        cand = args[0]
+    elif args[0] in INTERPRETES or os.path.basename(args[0]) in INTERPRETES:
+        cand = next((t for t in args[1:] if t.endswith(".sh")), None)
+    if not cand:
+        return []
+    # Ruta relativa: se resuelve contra el proyecto, que es el cwd del hook.
+    return [cand if cand.startswith("/") else os.path.normpath(os.path.join(proj, cand))]
 
 found = []
 for name in ("settings.json", "settings.local.json"):
@@ -120,7 +147,7 @@ for name in ("settings.json", "settings.local.json"):
                 # Ambas formas de la variable. Y se miran TODOS los segmentos del comando:
                 # con un solo candidato, una entrada huerfana al principio esconde al real.
                 expanded = cmd.replace("${CLAUDE_PROJECT_DIR}", proj).replace("$CLAUDE_PROJECT_DIR", proj)
-                for script in scripts_ejecutados(expanded):
+                for script in scripts_ejecutados(expanded, proj):
                     if not os.path.isfile(script):
                         continue   # entrada huerfana: eso lo reporta /migrate, no es duplicacion
                     try:
