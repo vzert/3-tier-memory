@@ -110,7 +110,9 @@ def _segmento(toks, proj, depth):
         return []
 
     # `sh -c "<programa>"`: el argumento es codigo, se analiza como comando propio.
-    if "-c" in toks:
+    # Solo si quien lo recibe ES una shell: `echo -c "bash x.sh"` no ejecuta nada.
+    es_shell = toks[0] in INTERPRETES or os.path.basename(toks[0]) in INTERPRETES
+    if es_shell and "-c" in toks:
         i = toks.index("-c")
         if i + 1 < len(toks):
             return scripts_ejecutados(toks[i + 1], proj, depth + 1)

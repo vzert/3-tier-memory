@@ -179,5 +179,9 @@ expect "mencion dentro de -c no es ejecucion" "$TMP/d14" no
 mkproj "$TMP/d15" 'bash -c "bash $CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh"'
 expect "ejecucion dentro de -c si cuenta" "$TMP/d15" si
 
+# -c solo es un programa si quien lo recibe es una shell.
+mkproj "$TMP/d16" 'echo -c "bash $CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh"'
+expect "-c de un no-interprete no es ejecucion" "$TMP/d16" no
+
 echo "  ---- $PASS ok, $FAIL fallo(s)"
 [ "$FAIL" -eq 0 ]
