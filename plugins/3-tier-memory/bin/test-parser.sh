@@ -143,5 +143,17 @@ open(p, "w", encoding="utf-8").write(body)
 PY
 expect "marcador mas alla de 200 KB se detecta" "$TMP/d7" si
 
+# Prefijos que no cambian que se ejecuta, y ruta relativa. Los cinco se escapaban.
+mkproj "$TMP/d8" 'exec bash $CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh'
+expect "exec bash" "$TMP/d8" si
+mkproj "$TMP/d9" 'nohup bash $CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh'
+expect "nohup bash" "$TMP/d9" si
+mkproj "$TMP/d10" 'command bash $CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh'
+expect "command bash" "$TMP/d10" si
+mkproj "$TMP/d11" 'FOO=1 bash $CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh'
+expect "asignacion antes del interprete" "$TMP/d11" si
+mkproj "$TMP/d12" 'bash ./.claude/hooks/session-start.sh'
+expect "ruta relativa" "$TMP/d12" si
+
 echo "  ---- $PASS ok, $FAIL fallo(s)"
 [ "$FAIL" -eq 0 ]
