@@ -106,12 +106,24 @@ try:
 except Exception:
     sys.exit(0)
 
-PRIORITY_ORDER = ["alta", "media", "baja"]
+PRIORITY_ORDER = ["alta", "media", "baja", "otros"]
+# Secciones no reconocidas caen en "otros" en vez de descartarse: un archivo con
+# encabezados custom perdia esos items Y reportaba un total falso en el header.
+NON_PENDIENTE_SECTIONS = ("## como usar", "## cómo usar", "## related", "## notas",
+                          "## completad", "## scope")
 buckets = {p: [] for p in PRIORITY_ORDER}
+odd_sections = []   # headers fuera del esquema de prioridad
+skipped = 0         # items bajo secciones cerradas, excluidos a proposito
+seen_headers = set()
+dup_headers = []
 current = None
 for line in content.splitlines():
     s = line.strip()
     low = s.lower()
+    if low.startswith("## "):
+        if low in seen_headers:
+            dup_headers.append(s)
+        seen_headers.add(low)
     if low.startswith("## alta"):
         current = "alta"
     elif low.startswith("## media"):
@@ -119,7 +131,13 @@ for line in content.splitlines():
     elif low.startswith("## baja"):
         current = "baja"
     elif low.startswith("## "):
-        current = None
+        if low.startswith(NON_PENDIENTE_SECTIONS):
+            current = "skip"
+        else:
+            current = "otros"
+            odd_sections.append(s)
+    elif current == "skip" and re.match(r"^- \[ \]", s):
+        skipped += 1   # item en seccion cerrada (Completados/Scope): no se inyecta a proposito
     elif current and re.match(r"^- \[ \]", s):
         m = re.search(r"_creado:\s*(\d{4}-\d{2}-\d{2})", s)
         created = m.group(1) if m else None
@@ -141,8 +159,30 @@ for prio in PRIORITY_ORDER:
     for it in buckets[prio]:
         selected.append((prio, it))
 
+# El cuerpo completo de un pendiente puede pasar de 900 chars; inyectarlo entero en
+# CADA sesion ahoga el prompt real del usuario. Se trunca a la primera frase util —
+# el detalle vive en _pendientes.md, que el agente abre si el item resulta relevante.
+BODY_CAP = 120
+
+def shorten(text):
+    if len(text) <= BODY_CAP:
+        return text
+    cut = text[:BODY_CAP]
+    sp = cut.rfind(" ")
+    if sp > BODY_CAP * 0.6:
+        cut = cut[:sp]
+    cut = cut.rstrip(" ,;:—-")
+    if cut.count("**") % 2:  # no dejar un bold abierto
+        cut += "**"
+    return cut + "…"
+
+# ALTA nunca se recorta por cap: esconder un item de alta prioridad es peor que el
+# costo de mostrarlo. El cap aplica al resto, con techo duro por seguridad.
 CAP = 10
-shown = selected[:CAP]
+CEILING = 25
+altas = [x for x in selected if x[0] == "alta"]
+resto = [x for x in selected if x[0] != "alta"]
+shown = (altas + resto[: max(0, CAP - len(altas))])[:CEILING]
 extra = total - len(shown)
 
 print(f"PENDIENTES ABIERTOS ({total}). Antes de responder, verifica si la peticion del usuario se relaciona con alguno de estos items — si lo resuelves durante la sesion, marcalo en /checkpoint-3t:")
@@ -155,15 +195,37 @@ for prio, (created, text) in shown:
     if created != "9999":
         age = days_old(created)
         stale = " ⚠ posible stale — reconciliar" if age is not None and age > STALE_DAYS else ""
-        print(f"  - [ ] {text} — _creado: {created}_{stale}")
+        print(f"  - [ ] {shorten(text)} — _creado: {created}_{stale}")
     else:
-        print(f"  - [ ] {text}")
+        print(f"  - [ ] {shorten(text)}")
 if extra > 0:
     print()
-    print(f"[+ {extra} mas — revisa _pendientes.md]")
+    if len(altas) > CEILING:
+        print(f"[+ {extra} mas — revisa _pendientes.md. OJO: solo {CEILING} de {len(altas)} ALTA caben aqui]")
+    else:
+        print(f"[+ {extra} mas — revisa _pendientes.md]")
 if any(days_old(c) is not None and days_old(c) > STALE_DAYS for _, (c, _t) in shown):
     print()
     print(f"Items marcados ⚠ tienen >{STALE_DAYS} dias sin cerrar — probables candidatos a resolved/abandoned en /checkpoint-3t Step 3a.")
+
+# Auto-verificacion del parseo. Un fallo de parseo aqui es INVISIBLE: el header
+# imprime un total plausible y nadie lo compara contra el archivo (unifi-expert
+# inyecto 0 de 15 pendientes durante meses y se veia igual que "no hay nada").
+# Estas dos senales convierten cualquier drift de estructura en algo que se ve.
+raw_total = len(re.findall(r"(?m)^- \[ \]", content)) - skipped
+notes = []
+if odd_sections:
+    notes.append("seccion(es) fuera del esquema Alta/Media/Baja, mostradas al final como OTROS: "
+                 + ", ".join(dict.fromkeys(odd_sections))
+                 + " — mueve esos items a Alta/Media/Baja prioridad para que se prioricen")
+if dup_headers:
+    notes.append("encabezado(s) duplicado(s): " + ", ".join(dict.fromkeys(dup_headers)))
+if raw_total != total:
+    notes.append(f"el archivo tiene {raw_total} lineas '- [ ]' pero se clasificaron {total} "
+                 f"— {abs(raw_total - total)} quedaron fuera del conteo")
+if notes:
+    print()
+    print("ESTRUCTURA de _pendientes.md: " + "; ".join(notes) + ".")
 PYEOF
 )
 
