@@ -22,13 +22,24 @@ open(sys.argv[2], "w", encoding="utf-8").write("\n".join(lines[a + 1:b]))
 PY
 
 PASS=0; FAIL=0
+ERR="$TMP/stderr"
+
+# Un test que acepta cualquier salida acepta tambien un traceback: la ausencia del
+# patron y la muerte del script se ven igual. Por eso stderr va aparte y se exige
+# salida limpia ANTES de mirar el patron — el arnes no puede consumir no-evidencia.
+run() { # comando de python -> stdout; falla si escribio en stderr o salio != 0
+  : > "$ERR"
+  OUT=$("$@" 2>"$ERR"); RC=$?
+  [ "$RC" -eq 0 ] && [ ! -s "$ERR" ]
+}
+fail() { FAIL=$((FAIL + 1)); echo "  FAIL $1"; shift; [ -n "${1:-}" ] && echo "$1" | sed 's/^/         /'; }
+
 check() { # nombre, archivo, patron-que-debe-aparecer
-  local out; out=$(PENDIENTES_FILE="$2" python3 "$PARSER" 2>&1)
-  if echo "$out" | grep -q "$3"; then
-    PASS=$((PASS + 1)); echo "  ok   $1"
-  else
-    FAIL=$((FAIL + 1)); echo "  FAIL $1"; echo "$out" | sed 's/^/         /'
+  if ! PENDIENTES_FILE="$2" run python3 "$PARSER"; then
+    fail "$1 (el parser murio)" "$(cat "$ERR")"; return
   fi
+  if echo "$OUT" | grep -q "$3"; then PASS=$((PASS + 1)); echo "  ok   $1"
+  else fail "$1" "$OUT"; fi
 }
 
 # Seccion fuera del esquema de prioridad. Real: unifi-expert (## Abiertos) inyecto
@@ -59,9 +70,10 @@ check "supresion total avisa igual" "$TMP/6.md" 'ESTRUCTURA'
 
 # Item indentado: se clasifica con strip() y se contaba a columna cero -> desajuste falso.
 printf '# P\n\n## Alta prioridad\n  - [ ] item indentado\n' > "$TMP/7.md"
-out=$(PENDIENTES_FILE="$TMP/7.md" python3 "$PARSER" 2>&1)
-if echo "$out" | grep -q 'quedaron fuera del conteo'; then
-  FAIL=$((FAIL + 1)); echo "  FAIL item indentado no debe dar desajuste falso"
+if ! PENDIENTES_FILE="$TMP/7.md" run python3 "$PARSER"; then
+  fail "item indentado (el parser murio)" "$(cat "$ERR")"
+elif echo "$OUT" | grep -q 'quedaron fuera del conteo'; then
+  fail "item indentado no debe dar desajuste falso" "$OUT"
 else
   PASS=$((PASS + 1)); echo "  ok   item indentado no da desajuste falso"
 fi
@@ -85,12 +97,14 @@ mkproj() { # dir, comando-del-hook
   printf '# P\n\n## Alta prioridad\n- [ ] x\n' > "$1/memory/_pendientes.md"
   printf '{"hooks":{"SessionStart":[{"matcher":"","hooks":[{"type":"command","command":"%s"}]}]}}\n' "$2" > "$1/.claude/settings.local.json"
 }
-dupcheck() { CLAUDE_PROJECT_DIR="$1" MEMORY_DIR="$1/memory" python3 "$DUP" 2>&1; }
 expect() { # nombre, dir, si|no
-  local out; out=$(dupcheck "$2")
-  local got=no; [ -n "$out" ] && got=si
+  if ! CLAUDE_PROJECT_DIR="$2" MEMORY_DIR="$2/memory" run python3 "$DUP"; then
+    fail "$1 (el detector murio)" "$(cat "$ERR")"; return
+  fi
+  # El marcador exacto, no "hubo salida": un traceback no es una deteccion.
+  local got=no; echo "$OUT" | grep -q '^HOOK DUPLICADO' && got=si
   if [ "$got" = "$3" ]; then PASS=$((PASS + 1)); echo "  ok   $1"
-  else FAIL=$((FAIL + 1)); echo "  FAIL $1 (esperado=$3 obtenido=$got)"; fi
+  else fail "$1 (esperado=$3 obtenido=$got)" "$OUT"; fi
 }
 
 # Forma con llaves: se expandia solo $CLAUDE_PROJECT_DIR, no ${CLAUDE_PROJECT_DIR}.
@@ -109,6 +123,25 @@ expect "no se autodenuncia (CLAUDE_PLUGIN_ROOT)" "$TMP/d3" no
 mkproj "$TMP/d4" 'bash $CLAUDE_PROJECT_DIR/.claude/hooks/no-existe.sh'
 rm -f "$TMP/d4/.claude/hooks/session-start.sh"
 expect "entrada huerfana no cuenta como duplicado" "$TMP/d4" no
+
+# Solo MENCIONADO, no ejecutado: buscar ".sh" en el texto del comando mandaba al
+# usuario a /migrate por un echo. Falso positivo encontrado por verificacion adversarial.
+mkproj "$TMP/d5" 'echo "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh"'
+expect "ruta solo mencionada no es ejecucion" "$TMP/d5" no
+
+# ...pero detras de un interprete si cuenta, aunque no sea el primer token.
+mkproj "$TMP/d6" '/usr/bin/env bash $CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh'
+expect "interprete + script si es ejecucion" "$TMP/d6" si
+
+# Marcador dentro del script pero mas alla de 200 KB: el tope de lectura lo ocultaba.
+mkproj "$TMP/d7" 'bash $CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh'
+python3 - "$TMP/d7/.claude/hooks/session-start.sh" <<'PY'
+import sys
+p = sys.argv[1]
+body = "#!/bin/bash\n" + ("# relleno\n" * 30000) + 'echo "$(cat memory/_pendientes.md)"\n'
+open(p, "w", encoding="utf-8").write(body)
+PY
+expect "marcador mas alla de 200 KB se detecta" "$TMP/d7" si
 
 echo "  ---- $PASS ok, $FAIL fallo(s)"
 [ "$FAIL" -eq 0 ]
