@@ -71,6 +71,7 @@ EVENTS = ("SessionStart", "UserPromptSubmit", "PreCompact")
 
 INTERPRETES = {"bash", "sh", "zsh", "ksh", "dash", "env",
                "/bin/bash", "/bin/sh", "/bin/zsh", "/usr/bin/env"}
+MODIFICADORES = {"exec", "nohup", "command", "time", "builtin"}
 
 def scripts_ejecutados(command):
     """Rutas .sh que el comando EJECUTA, no las que solo menciona.
@@ -84,6 +85,10 @@ def scripts_ejecutados(command):
     for seg in re.split(r"&&|\|\||[;|]", command):
         toks = [t.strip("\"'") for t in seg.split()]
         toks = [t for t in toks if t and not t.startswith("-")]
+        # Prefijos que no cambian que se ejecuta: `exec bash x.sh`, `nohup bash x.sh`,
+        # `command bash x.sh`, `VAR=1 bash x.sh`. Sin esto el script real queda invisible.
+        while toks and (toks[0] in MODIFICADORES or re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", toks[0])):
+            toks = toks[1:]
         if not toks:
             continue
         cand = None
@@ -91,8 +96,10 @@ def scripts_ejecutados(command):
             cand = toks[0]
         elif toks[0] in INTERPRETES or os.path.basename(toks[0]) in INTERPRETES:
             cand = next((t for t in toks[1:] if t.endswith(".sh")), None)
-        if cand and cand.startswith("/"):
-            out.append(cand)
+        if not cand:
+            continue
+        # Ruta relativa: se resuelve contra el proyecto, que es el cwd del hook.
+        out.append(cand if cand.startswith("/") else os.path.normpath(os.path.join(proj, cand)))
     return out
 
 found = []
