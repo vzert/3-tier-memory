@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.11.1] - 2026-08-18
+### Fixed
+- **Nunca se instalan los comandos `-3t` en el ambito USER.** Si la sesion se abre desde `$HOME`, `"$CLAUDE_PROJECT_DIR/.claude/commands"` **es** `~/.claude/commands` — el ambito global, no el del proyecto. El hook (y `/setup-memory` y `/migrate`, que escriben ahi directamente) dejaban una copia global de cada comando, y a partir de ese momento el usuario ve `/checkpoint-3t` DUPLICADO (user + project) en todos sus proyectos, de forma permanente y sin ninguna pista de su origen — ademas la copia global se queda vieja, porque el auto-update solo toca las locales. Condiciones para caer en esto: que exista memoria para `$HOME` (Model B en `~/memory/`, o auto-memory en `~/.claude/projects/-Users-<user>/memory/`) y abrir una sesion desde `~`; es exactamente lo que hace quien prueba el plugin por primera vez sin entrar a un proyecto. Ahora el hook detecta el caso, se salta la escritura de comandos (la inyeccion de memoria sigue normal) y explica por que; `/setup-memory` y `/migrate` llevan la misma guarda documentada. Reportado por un usuario que encontro dos `/checkpoint-3t`, uno "user" y uno "project".
+
+### Added
+- **`bin/test-parser.sh` cubre la guarda de ambito** (25 casos): que no instala comandos cuando `$CLAUDE_PROJECT_DIR` es `$HOME` —probado con un `HOME` falso, sin tocar el real— y el control de que si los instala en un proyecto normal.
+
 ## [2.11.0] - 2026-08-17
 ### Fixed
 - **El parser de `_pendientes.md` descartaba en silencio toda seccion fuera de `## Alta/Media/Baja` (`bin/session-start.sh`).** Un `## <header>` no reconocido ponia `current = None`, asi que sus items nunca entraban a un bucket — y como `total` se calculaba DESPUES del descarte, el encabezado del bloque imprimia un numero plausible pero falso. El fallo era invisible: se ve igual que "no hay pendientes". Medido en 12 proyectos reales: `unifi-expert` inyectaba **0 de 15** pendientes (su archivo usa `## Abiertos`, nunca tuvo secciones de prioridad); `Vecinex` 1 de 11; `Will-Ops` 86 de 109; `paperclip` 540 de 546. Las secciones desconocidas ahora caen en un bucket `otros` que se muestra al final; las secciones cerradas (`Como usar`, `Related`, `Completados`, `Scope`) se siguen saltando a proposito.

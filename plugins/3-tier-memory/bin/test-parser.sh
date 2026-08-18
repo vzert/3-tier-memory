@@ -183,5 +183,37 @@ expect "ejecucion dentro de -c si cuenta" "$TMP/d15" si
 mkproj "$TMP/d16" 'echo -c "bash $CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh"'
 expect "-c de un no-interprete no es ejecucion" "$TMP/d16" no
 
+# --- guarda de ambito: no instalar comandos en el ambito USER --------------------
+# Si la sesion se abre desde $HOME, "$CLAUDE_PROJECT_DIR/.claude/commands" ES
+# ~/.claude/commands (ambito user), y el usuario termina con cada comando duplicado
+# en todos sus proyectos, sin rastro del origen. Se prueba con un HOME falso.
+FAKEHOME="$TMP/fakehome"
+mkdir -p "$FAKEHOME/memory"
+printf '# P\n\n## Alta prioridad\n- [ ] x\n' > "$FAKEHOME/memory/_pendientes.md"
+
+: > "$ERR"
+HOME="$FAKEHOME" CLAUDE_PROJECT_DIR="$FAKEHOME" CLAUDE_PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)" \
+  bash "$HOOK" < /dev/null > "$TMP/home.out" 2>"$ERR"
+INSTALADOS=$(find "$FAKEHOME/.claude/commands" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
+if [ "$INSTALADOS" -eq 0 ] && grep -q '^AVISO:' "$TMP/home.out"; then
+  PASS=$((PASS + 1)); echo "  ok   no instala comandos en el ambito USER"
+else
+  fail "no instala comandos en el ambito USER (instalados=$INSTALADOS)" "$(head -5 "$TMP/home.out")"
+fi
+
+# Control: desde un proyecto normal si los instala.
+PROJ="$TMP/proyecto"
+mkdir -p "$PROJ/memory"
+printf '# P\n\n## Alta prioridad\n- [ ] x\n' > "$PROJ/memory/_pendientes.md"
+: > "$ERR"
+HOME="$FAKEHOME" CLAUDE_PROJECT_DIR="$PROJ" CLAUDE_PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)" \
+  bash "$HOOK" < /dev/null > "$TMP/proj.out" 2>"$ERR"
+INSTALADOS=$(find "$PROJ/.claude/commands" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
+if [ "$INSTALADOS" -gt 0 ]; then
+  PASS=$((PASS + 1)); echo "  ok   si instala comandos en un proyecto normal"
+else
+  fail "si instala comandos en un proyecto normal (instalados=$INSTALADOS)" "$(head -5 "$TMP/proj.out")"
+fi
+
 echo "  ---- $PASS ok, $FAIL fallo(s)"
 [ "$FAIL" -eq 0 ]

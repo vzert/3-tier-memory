@@ -415,7 +415,21 @@ CMDS_DIR="$CLAUDE_PROJECT_DIR/.claude/commands"
 TEMPLATES_DIR="${CLAUDE_PLUGIN_ROOT}/templates"
 MIGRATED=""
 
+# Si la sesion se abrio desde $HOME, "$CLAUDE_PROJECT_DIR/.claude/commands" ES
+# ~/.claude/commands — o sea el ambito USER, no el del proyecto. Instalar ahi deja
+# cada comando duplicado (user + project) en TODOS los demas proyectos, para siempre,
+# y el usuario no tiene como saber de donde salio. El hook sigue inyectando memoria
+# normalmente; lo unico que se salta es la escritura de comandos.
+if [ "$(cd "$CLAUDE_PROJECT_DIR" 2>/dev/null && pwd -P)" = "$(cd "$HOME" 2>/dev/null && pwd -P)" ]; then
+  echo "AVISO: la sesion se abrio desde \$HOME, asi que .claude/commands/ es el ambito USER (global)."
+  echo "No se instalan los comandos -3t aqui: apareceria un duplicado user+project en cada proyecto."
+  echo "Abre la sesion desde el directorio del proyecto para que se instalen donde corresponde."
+  echo ""
+  SKIP_CMD_INSTALL=1
+fi
+
 for old_cmd in checkpoint status audit backfill; do
+  [ -n "${SKIP_CMD_INSTALL:-}" ] && break
   OLD_FILE="$CMDS_DIR/$old_cmd.md"
   NEW_FILE="$CMDS_DIR/${old_cmd}-3t.md"
   if [ -f "$OLD_FILE" ] && [ ! -f "$NEW_FILE" ]; then
@@ -434,6 +448,7 @@ UPDATED=""
 INSTALLED=""
 
 for cmd in checkpoint-3t status-3t audit-3t backfill-3t save-learning consolidate-3t enrich-3t; do
+  [ -n "${SKIP_CMD_INSTALL:-}" ] && break
   LOCAL_CMD="$CMDS_DIR/$cmd.md"
   PLUGIN_CMD="$TEMPLATES_DIR/$cmd.md"
   if [ -f "$PLUGIN_CMD" ]; then
