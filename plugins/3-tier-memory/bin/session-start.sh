@@ -56,6 +56,77 @@ if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/ensure-frontm
   fi
 fi
 
+# Hook local duplicado (deteccion, warning-only). Un hook propio del proyecto que vuelca
+# _pendientes.md se SUMA a este bloque en vez de reemplazarlo — el usuario paga el corpus
+# dos veces, una cruda y una curada, cada sesion. Vive aqui y no solo en /migrate porque
+# /migrate es opt-in y se corre una vez al adoptar: esta es la unica superficie que alcanza
+# a cada instalacion sin que nadie pida nada.
+if [ -n "$CLAUDE_PROJECT_DIR" ]; then
+  DUP_HOOK=$(CLAUDE_PROJECT_DIR="$CLAUDE_PROJECT_DIR" MEMORY_DIR="$MEMORY_DIR" python3 <<'DUPEOF' 2>/dev/null
+import json, os, re, sys
+
+proj = os.environ.get("CLAUDE_PROJECT_DIR", "")
+mem = os.environ.get("MEMORY_DIR", "")
+EVENTS = ("SessionStart", "UserPromptSubmit", "PreCompact")
+
+found = []
+for name in ("settings.json", "settings.local.json"):
+    path = os.path.join(proj, ".claude", name)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except Exception:
+        continue
+    for event in EVENTS:
+        for block in (data.get("hooks", {}) or {}).get(event, []) or []:
+            for hook in block.get("hooks", []) or []:
+                cmd = hook.get("command", "") or ""
+                # El hook del plugin se registra con ${CLAUDE_PLUGIN_ROOT}; no es duplicado de si mismo.
+                if "CLAUDE_PLUGIN_ROOT" in cmd:
+                    continue
+                m = re.search(r"(/[^\s\"']+\.sh)", cmd.replace("$CLAUDE_PROJECT_DIR", proj))
+                if not m:
+                    continue
+                script = m.group(1)
+                if not os.path.isfile(script):
+                    continue   # entrada huerfana: eso lo reporta /migrate, no es duplicacion
+                try:
+                    with open(script, encoding="utf-8", errors="replace") as fh:
+                        body = fh.read()
+                except Exception:
+                    continue
+                if "_pendientes.md" in body and re.search(r"\becho\b", body):
+                    found.append((os.path.relpath(script, proj), name))
+
+if not found:
+    sys.exit(0)
+
+size = 0
+try:
+    with open(os.path.join(mem, "_pendientes.md"), encoding="utf-8") as fh:
+        size = sum(len(l) for l in fh if l.lstrip().startswith("- [ ]"))
+except Exception:
+    pass
+
+script, settings = found[0]
+extra = f" (+{len(found) - 1} mas)" if len(found) > 1 else ""
+if size >= 1024:
+    cost = f"vuelca ~{size // 1024} KB de pendientes crudos"
+elif size > 0:
+    cost = f"vuelca {size} B de pendientes crudos"
+else:
+    cost = "vuelca los pendientes crudos (hoy el archivo esta vacio, pero crece con el)"
+print(f"HOOK DUPLICADO: {script}{extra}, registrado en .claude/{settings}, {cost} "
+      f"que este bloque ya inyecta curado — se suma, no reemplaza. "
+      f"Corre /migrate para recortarlo conservando lo que ese hook tenga de propio.")
+DUPEOF
+)
+  if [ -n "$DUP_HOOK" ]; then
+    echo "$DUP_HOOK"
+    echo ""
+  fi
+fi
+
 # Plaintext secrets (detection only — no mutation here). Memory committed to a repo with a
 # remote leaks any key captured verbatim in a digest. Auto-redacted by /checkpoint-3t Step 5d.
 if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/scan-secrets.py" ]; then
