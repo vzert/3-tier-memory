@@ -254,11 +254,7 @@ Run:
 git commit -m "checkpoint: DATE-SLUG — summary"
 ```
 
-If the commit succeeds: get the short hash, record it in the session log `## Commits` section and `_session-index.md` Commit column, then amend to include the hash:
-```
-git add memory/
-git commit --amend --no-edit
-```
+If the commit succeeds: get the short hash and record it in the session log `## Commits` section and `_session-index.md` Commit column. Do NOT amend to embed the hash into that same commit — a commit cannot contain its own hash: writing the hash changes the tree, which produces a new hash, and amending to "fix" the mismatch loops forever. Leave the hash annotation as an uncommitted forward reference; it rolls into the next checkpoint's commit, exactly like the `## Como retomar` snippet already does in Step 8.
 
 If the commit fails (e.g., user.name/user.email not configured) → set GIT_SKIP = the error message.
 
