@@ -97,6 +97,13 @@ Use /checkpoint-3t to save progress. It will update session log, extract pendien
 
 ## Step 6: Install local commands
 
+> **Antes de escribir aqui: si `PROJECT_DIR` es el directorio HOME del usuario, DETENTE.**
+> `~/.claude/commands/` no es el ambito del proyecto: es el ambito **USER**, global. Instalar
+> ahi hace que `/checkpoint-3t` y compañia aparezcan DUPLICADOS (user + project) en todos los
+> demas proyectos, de forma permanente y sin rastro de su origen — y la copia global se queda
+> vieja, porque el hook solo actualiza las locales. Si detectas ese caso, no escribas los
+> comandos: dile al usuario que abra la sesion desde el directorio del proyecto y explica por que.
+
 Create `PROJECT_DIR/.claude/commands/` directory if it doesn't exist, then create these 4 command files. All use `-3t` suffix to avoid name collisions with global skills. Auto-updated by the plugin's SessionStart hook when a new version ships.
 
 ### 6a. /checkpoint-3t — save memory state
