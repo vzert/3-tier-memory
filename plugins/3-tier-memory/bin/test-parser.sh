@@ -66,5 +66,49 @@ else
   PASS=$((PASS + 1)); echo "  ok   item indentado no da desajuste falso"
 fi
 
+# --- detector de hook local duplicado -----------------------------------------
+# Vive en el mismo hook. Los dos casos de aqui los encontro una verificacion
+# adversarial: la deteccion pasaba por alto formas de escritura perfectamente
+# normales, o sea fallaba en silencio igual que el parser.
+DUP="$TMP/dupcheck.py"
+python3 - "$HOOK" "$DUP" <<'PY'
+import sys
+lines = open(sys.argv[1], encoding="utf-8").read().split("\n")
+a = next(i for i, l in enumerate(lines) if "<<'DUPEOF'" in l)
+b = next(i for i, l in enumerate(lines) if l.strip() == "DUPEOF" and i > a)
+open(sys.argv[2], "w", encoding="utf-8").write("\n".join(lines[a + 1:b]))
+PY
+
+mkproj() { # dir, comando-del-hook
+  mkdir -p "$1/.claude/hooks" "$1/memory"
+  printf '#!/bin/bash\nP=$(grep -E "^- \\[ \\]" "$CLAUDE_PROJECT_DIR/memory/_pendientes.md")\necho "$P"\n' > "$1/.claude/hooks/session-start.sh"
+  printf '# P\n\n## Alta prioridad\n- [ ] x\n' > "$1/memory/_pendientes.md"
+  printf '{"hooks":{"SessionStart":[{"matcher":"","hooks":[{"type":"command","command":"%s"}]}]}}\n' "$2" > "$1/.claude/settings.local.json"
+}
+dupcheck() { CLAUDE_PROJECT_DIR="$1" MEMORY_DIR="$1/memory" python3 "$DUP" 2>&1; }
+expect() { # nombre, dir, si|no
+  local out; out=$(dupcheck "$2")
+  local got=no; [ -n "$out" ] && got=si
+  if [ "$got" = "$3" ]; then PASS=$((PASS + 1)); echo "  ok   $1"
+  else FAIL=$((FAIL + 1)); echo "  FAIL $1 (esperado=$3 obtenido=$got)"; fi
+}
+
+# Forma con llaves: se expandia solo $CLAUDE_PROJECT_DIR, no ${CLAUDE_PROJECT_DIR}.
+mkproj "$TMP/d1" 'bash ${CLAUDE_PROJECT_DIR}/.claude/hooks/session-start.sh'
+expect "detecta \${CLAUDE_PROJECT_DIR} con llaves" "$TMP/d1" si
+
+# Un comando con dos scripts: se miraba solo el primero, asi que un huerfano lo tapaba.
+mkproj "$TMP/d2" 'bash $CLAUDE_PROJECT_DIR/.claude/hooks/no-existe.sh && bash $CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh'
+expect "huerfano primero no tapa al script real" "$TMP/d2" si
+
+# El propio hook del plugin no es duplicado de si mismo.
+mkproj "$TMP/d3" 'bash "${CLAUDE_PLUGIN_ROOT}/bin/session-start.sh"'
+expect "no se autodenuncia (CLAUDE_PLUGIN_ROOT)" "$TMP/d3" no
+
+# Entrada huerfana sola: la reporta /migrate, no es duplicacion de contexto.
+mkproj "$TMP/d4" 'bash $CLAUDE_PROJECT_DIR/.claude/hooks/no-existe.sh'
+rm -f "$TMP/d4/.claude/hooks/session-start.sh"
+expect "entrada huerfana no cuenta como duplicado" "$TMP/d4" no
+
 echo "  ---- $PASS ok, $FAIL fallo(s)"
 [ "$FAIL" -eq 0 ]
