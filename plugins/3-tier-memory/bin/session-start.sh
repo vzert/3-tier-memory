@@ -69,6 +69,32 @@ proj = os.environ.get("CLAUDE_PROJECT_DIR", "")
 mem = os.environ.get("MEMORY_DIR", "")
 EVENTS = ("SessionStart", "UserPromptSubmit", "PreCompact")
 
+INTERPRETES = {"bash", "sh", "zsh", "ksh", "dash", "env",
+               "/bin/bash", "/bin/sh", "/bin/zsh", "/usr/bin/env"}
+
+def scripts_ejecutados(command):
+    """Rutas .sh que el comando EJECUTA, no las que solo menciona.
+
+    Buscar cualquier ".sh" en el texto reporta un `echo "…/session-start.sh"` o una
+    ruta dentro de un comentario como si fuera un hook activo. Un falso positivo aqui
+    manda al usuario a /migrate por nada, asi que se exige posicion de ejecucion:
+    primer token del segmento, o segundo detras de un interprete.
+    """
+    out = []
+    for seg in re.split(r"&&|\|\||[;|]", command):
+        toks = [t.strip("\"'") for t in seg.split()]
+        toks = [t for t in toks if t and not t.startswith("-")]
+        if not toks:
+            continue
+        cand = None
+        if toks[0].endswith(".sh"):
+            cand = toks[0]
+        elif toks[0] in INTERPRETES or os.path.basename(toks[0]) in INTERPRETES:
+            cand = next((t for t in toks[1:] if t.endswith(".sh")), None)
+        if cand and cand.startswith("/"):
+            out.append(cand)
+    return out
+
 found = []
 for name in ("settings.json", "settings.local.json"):
     path = os.path.join(proj, ".claude", name)
@@ -84,15 +110,15 @@ for name in ("settings.json", "settings.local.json"):
                 # El hook del plugin se registra con ${CLAUDE_PLUGIN_ROOT}; no es duplicado de si mismo.
                 if "CLAUDE_PLUGIN_ROOT" in cmd:
                     continue
-                # Ambas formas de la variable, y TODOS los .sh del comando: con un solo
-                # candidato, una entrada huerfana al principio esconde al script real.
+                # Ambas formas de la variable. Y se miran TODOS los segmentos del comando:
+                # con un solo candidato, una entrada huerfana al principio esconde al real.
                 expanded = cmd.replace("${CLAUDE_PROJECT_DIR}", proj).replace("$CLAUDE_PROJECT_DIR", proj)
-                for script in re.findall(r"(/[^\s\"']+\.sh)", expanded):
+                for script in scripts_ejecutados(expanded):
                     if not os.path.isfile(script):
                         continue   # entrada huerfana: eso lo reporta /migrate, no es duplicacion
                     try:
                         with open(script, encoding="utf-8", errors="replace") as fh:
-                            body = fh.read(200_000)   # techo: no leer un archivo enorme en un hook
+                            body = fh.read()
                     except Exception:
                         continue
                     if "_pendientes.md" in body and re.search(r"\becho\b", body):
