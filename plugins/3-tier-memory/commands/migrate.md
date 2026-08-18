@@ -65,7 +65,34 @@ reference files that don't exist. Remove them? (y/n)
 
 Behavior rules:
 - **If the user confirms removal**: edit the settings file and remove ONLY the flagged hook entries. If removing an entry leaves a matcher block with an empty `hooks` array, remove that matcher too. If an event (e.g. `SessionStart`) ends up with an empty array, remove that event key. Preserve every other setting untouched.
-- **If the flagged hook's target file DOES exist**: do NOT offer automatic removal. Warn: "Found existing custom hook at `<expanded path>` — not removing. Verify this is intentional; if it's a stale copy of a plugin script, remove it manually."
+- **If the flagged hook's target file DOES exist**: read it and decide whether it duplicates the plugin, instead of skipping. This is the case that actually costs context — a working legacy hook that dumps the same memory the plugin already injects, silently, every session. Historically it went unnoticed for months (one project shipped ~31 KB of raw pendientes per session on top of the plugin's curated block).
+
+  Classify each line of the existing script:
+  - **Duplicated emission** — reads `_pendientes.md`, `_learnings.md`, or any `memory/` index and echoes its contents (typically `grep -E '^- \[ \]' .../_pendientes.md` piped to `echo`). The plugin's `session-start.sh` already emits this, curated by priority and truncated.
+  - **Duplicated protocol** — an `echo` whose text restates the plugin's own PROTOCOLO/dual-write reminder.
+  - **Genuinely custom** — anything project-specific the plugin does not emit (e.g. a domain rule like "read learnings before SSH ops"). Note that scaffolding placeholders left unsubstituted (`<DOMAIN-SPECIFIC-ACTION>` and similar) are NOT custom — they are dead template text.
+
+  Measure the duplicated emission before asking, so the user sees the real cost:
+
+  ```bash
+  grep -E '^- \[ \]' memory/_pendientes.md | wc -c   # bytes injected per session by the legacy hook
+  ```
+
+  Then report and offer the specific action:
+
+  ```
+  DUPLICATE HOOK DETECTED
+  File: .claude/hooks/session-start.sh (exists, runs every session)
+    [DUPLICATE] dumps 109 raw pendientes = 31.5 KB — the plugin already injects this, curated
+    [DUPLICATE] PROTOCOLO reminder — the plugin emits an equivalent line
+    [CUSTOM]    "ANTES de SSH/remote ops: leer memory/_learnings.md"
+
+  Trim to the custom line only? (y/n)
+  ```
+
+  - If custom lines remain, rewrite the script keeping ONLY those, and leave its registration in settings intact.
+  - If NOTHING custom remains, say so and offer to delete the script and its settings entry together.
+  - If the script contains logic you cannot classify with confidence, do not rewrite it — fall back to warning the user with the byte measurement, so the decision is at least informed.
 - **If no orphaned entries are found**: report `Hook entries: clean`.
 
 Never touch hooks for other plugins or commands — only entries matching the heuristics above.
