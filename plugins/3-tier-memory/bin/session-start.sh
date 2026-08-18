@@ -109,17 +109,30 @@ except Exception:
 PRIORITY_ORDER = ["alta", "media", "baja", "otros"]
 # Secciones no reconocidas caen en "otros" en vez de descartarse: un archivo con
 # encabezados custom perdia esos items Y reportaba un total falso en el header.
-NON_PENDIENTE_SECTIONS = ("## como usar", "## cómo usar", "## related", "## notas",
+# Secciones de documentacion/cierre. Se comparan por prefijo porque el nombre real varia
+# ("## Como usar", "## Cómo usar este archivo"). Cualquier item que caiga aqui se REPORTA
+# abajo — el error a evitar no es clasificar de mas, es desaparecer algo en silencio.
+NON_PENDIENTE_SECTIONS = ("## como usar", "## cómo usar", "## related",
                           "## completad", "## scope")
 buckets = {p: [] for p in PRIORITY_ORDER}
 odd_sections = []   # headers fuera del esquema de prioridad
 skipped = 0         # items bajo secciones cerradas, excluidos a proposito
+skip_sections = []  # que secciones los contienen (se reportan, no se ocultan)
 seen_headers = set()
 dup_headers = []
-current = None
+# Un item puede vivir antes del primer "## " (preambulo del archivo). Descartarlo es el
+# mismo fallo silencioso que este parser vino a arreglar, asi que arranca en "otros".
+current = "otros"
+current_skip_header = ""
+in_frontmatter = False
 for line in content.splitlines():
     s = line.strip()
     low = s.lower()
+    if s == "---" and not buckets["otros"]:
+        in_frontmatter = not in_frontmatter
+        continue
+    if in_frontmatter:
+        continue
     if low.startswith("## "):
         if low in seen_headers:
             dup_headers.append(s)
@@ -133,11 +146,13 @@ for line in content.splitlines():
     elif low.startswith("## "):
         if low.startswith(NON_PENDIENTE_SECTIONS):
             current = "skip"
+            current_skip_header = s
         else:
             current = "otros"
             odd_sections.append(s)
     elif current == "skip" and re.match(r"^- \[ \]", s):
         skipped += 1   # item en seccion cerrada (Completados/Scope): no se inyecta a proposito
+        skip_sections.append(current_skip_header)
     elif current and re.match(r"^- \[ \]", s):
         m = re.search(r"_creado:\s*(\d{4}-\d{2}-\d{2})", s)
         created = m.group(1) if m else None
@@ -212,14 +227,22 @@ if any(days_old(c) is not None and days_old(c) > STALE_DAYS for _, (c, _t) in sh
 # imprime un total plausible y nadie lo compara contra el archivo (unifi-expert
 # inyecto 0 de 15 pendientes durante meses y se veia igual que "no hay nada").
 # Estas dos senales convierten cualquier drift de estructura en algo que se ve.
-raw_total = len(re.findall(r"(?m)^- \[ \]", content)) - skipped
+raw_total = len(re.findall(r"(?m)^[ \t]*- \[ \]", content)) - skipped
 notes = []
 if odd_sections:
+    uniq = list(dict.fromkeys(odd_sections))
+    shown_secs = ", ".join(uniq[:3]) + (f" [+{len(uniq) - 3} mas]" if len(uniq) > 3 else "")
     notes.append("seccion(es) fuera del esquema Alta/Media/Baja, mostradas al final como OTROS: "
-                 + ", ".join(dict.fromkeys(odd_sections))
+                 + shown_secs
                  + " — mueve esos items a Alta/Media/Baja prioridad para que se prioricen")
 if dup_headers:
     notes.append("encabezado(s) duplicado(s): " + ", ".join(dict.fromkeys(dup_headers)))
+if skipped:
+    uniq_skip = list(dict.fromkeys(skip_sections))
+    notes.append(f"{skipped} item(s) '- [ ]' bajo secciones cerradas ("
+                 + ", ".join(uniq_skip[:3])
+                 + (f" [+{len(uniq_skip) - 3} mas]" if len(uniq_skip) > 3 else "")
+                 + ") — no se inyectan")
 if raw_total != total:
     notes.append(f"el archivo tiene {raw_total} lineas '- [ ]' pero se clasificaron {total} "
                  f"— {abs(raw_total - total)} quedaron fuera del conteo")
