@@ -1,7 +1,7 @@
 ---
 type: learnings
 created: 2026-04-02
-updated: 2026-07-14
+updated: 2026-09-02
 status: active
 ---
 # 3-Tier Memory System — Learnings
@@ -133,6 +133,7 @@ status: active
 74. **El fix de un template no llega a las copias ya congeladas — ni siquiera a la de este mismo repo.** `.claude/commands/checkpoint-3t.md` (gitignoreado) es la copia que ESTE proyecto ejecuta de verdad al dogfoodear `/checkpoint-3t`; arreglar solo `plugins/3-tier-memory/templates/checkpoint-3t.md` no la toca, porque el repo del plugin no se auto-actualiza a si mismo. Todo fix de template necesita dos pasos: la fuente (para instalaciones nuevas/con auto-update) y, si este mismo repo tiene una copia local instalada, tambien esa copia — igual que las demas instalaciones congeladas (paperclip, Will-Ops, Vecinex, etc.) que ya se rastrean en pendientes tras cada fix de template. Ver tambien #70 (mismo patron: "copia congelada no se entera sola").
 
 75. **`find -iname` puede fallar en silencio bajo el proxy `rtk`.** `find <dir> -iname "archivo.md"` no encontro una copia que si existia y que `grep -rn` si encontro segundos despues — sin mensaje de error, solo un resultado incompleto. Causa probable: el shim de `rtk` sobre `find` no soporta todas las formas de invocacion y filtra en silencio (confirmado que rechaza predicados compuestos como `-o`/`-not` con un error explicito, pero el caso simple de `-iname` fallo sin avisar). Regla: para confirmar la AUSENCIA de un archivo (no solo su presencia), usar `grep -rn` como respaldo antes de concluir "no existe".
+76. **Claude Code no impide perder cambios ajenos en un archivo compartido — solo avisa.** Verificado 2026-09-02: `Read` → otro proceso inserta una línea → `Edit` con ancla que aún coincide se aplica con un aviso; luego `Write` con la copia vieja se aplica sin error y borra las líneas ajenas. Un lock alrededor de la escritura (el intento previo con `mkdir`) hace atómico el byte, no la decisión: dos agentes reconciliando pendientes o numerando la regla siguiente chocan igual. La comunidad que funciona (Basic Memory, claude-remember, Letta, Backlog.md) escribe lo concurrente append-only y deja que un solo compactador proyecte al markdown; donde SQLite es la verdad aparecen corrupciones (claude-mem) o hay que pasar a servidor (Beads). Diseño adoptado: [[plans/plan-journal-concurrencia-v2.12.0]], investigación en [[research/concurrent-memory-writes]].
 
 ## Related
 - [[_learnings|Learnings Index]]
