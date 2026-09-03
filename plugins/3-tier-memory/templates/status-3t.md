@@ -45,7 +45,7 @@ J="memory/.journal"   # Model A: "<auto-memory path>/.journal"
 P=$(ls "$J/pending" 2>/dev/null | grep -c '\.json$')
 Q=$(ls "$J/quarantine" 2>/dev/null | grep -c '\.json$')
 A=$(ls -R "$J/applied" 2>/dev/null | grep -c '\.json$')
-L="none"; if [ -d "$J/.lock" ]; then AGE=$(( $(date +%s) - $(cat "$J/.lock/acquired_at" 2>/dev/null || echo 0) )); [ "$AGE" -gt 60 ] && L="orphaned ${AGE}s" || L="held ${AGE}s"; fi
+L="none"; if [ -d "$J/.lock" ]; then AT=$(cat "$J/.lock/acquired_at" 2>/dev/null); [ -n "$AT" ] || AT=$(python3 -c 'import os,sys;print(int(os.stat(sys.argv[1]).st_mtime))' "$J/.lock" 2>/dev/null || date +%s); AGE=$(( $(date +%s) - AT )); [ "$AGE" -gt 60 ] && L="orphaned ${AGE}s" || L="held ${AGE}s"; fi
 S="off"; grep -Eq '^[[:space:]]*journal_strict[[:space:]]*=[[:space:]]*1' memory/.memory-config 2>/dev/null && S="on"
 echo "pending=$P quarantine=$Q applied=$A lock=$L strict=$S"
 ```
@@ -53,6 +53,8 @@ echo "pending=$P quarantine=$Q applied=$A lock=$L strict=$S"
 - `pending` > 0 means events were emitted and no compactor has run since. Normally the SessionStart and
   UserPromptSubmit hooks apply them; if the number persists, run `python3 "$JBIN/journal-compact.py" --memory-dir memory`
   (locate `JBIN` as in /checkpoint-3t Step 0).
+- `lock`: a lock without an `acquired_at` marker is not orphaned by itself — the compactor ages it by the directory's
+  mtime (the marker can be missing for an instant right after `mkdir`, or if writing it failed), which is what the snippet does.
 - `quarantine` > 0 means the compactor refused events (anchor deleted by hand, id collision, malformed JSON).
   Each `.json` has a `.reason` file next to it. They are never deleted automatically: read the reason,
   apply the change by hand if it still applies, delete the pair.

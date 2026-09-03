@@ -52,6 +52,16 @@ expect_deny "MultiEdit _learnings.md" MultiEdit "$P/memory/_learnings.md"
 expect_deny "Write mensual pendientes/2026-09.md" Write "$P/memory/pendientes/2026-09.md"
 expect_deny "ruta relativa al cwd" Edit "memory/_plans-index.md"
 expect_deny "ruta con .." Edit "$P/src/../memory/_research-index.md"
+# Git Bash (Windows): Claude Code manda rutas nativas (C:\\...) en el JSON; el test las reproduce con
+# cygpath. En POSIX cygpath no existe y estos casos se saltan (se informa cuantos).
+if command -v cygpath >/dev/null 2>&1; then
+  PW=$(cygpath -w "$P"); PWJ=${PW//\\/\\\\}   # backslashes escapados para el JSON
+  echo "  (Git Bash: rutas nativas $PW)"
+  expect_deny "nativa: Edit _pendientes.md" Edit "$PWJ\\\\memory\\\\_pendientes.md"
+  expect_deny "nativa: Write mensual" Write "$PWJ\\\\memory\\\\pendientes\\\\2026-09.md"
+  expect_pass "nativa: sessions/ pasa" Write "$PWJ\\\\memory\\\\sessions\\\\x.md"
+  expect_pass "nativa: fuera de memory/ pasa" Write "$PWJ\\\\src\\\\_config.md"
+fi
 expect_pass "MEMORY.md (Tier 1) pasa" Edit "$P/memory/MEMORY.md"
 expect_pass "sessions/ (Tier 3) pasa" Write "$P/memory/sessions/2026-09-02-x.md"
 expect_pass "learnings/<topic>.md (Tier 3) pasa" Edit "$P/memory/learnings/topic.md"

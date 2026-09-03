@@ -37,7 +37,24 @@ CONFIG="$MEMORY_DIR/.memory-config"
 grep -Eq '^[[:space:]]*journal_strict[[:space:]]*=[[:space:]]*1[[:space:]]*$' "$CONFIG" || exit 0
 
 HOOK_INPUT="$_HOOK_INPUT" MEMORY_DIR="$MEMORY_DIR" python3 - <<'PY'
-import json, os, re, sys
+import json, os, re, subprocess, sys
+
+
+def native(p):
+    # Git Bash en Windows: bash ve rutas POSIX (/tmp/x, /c/Users/x) pero python3 es nativo y las
+    # entiende como C:\tmp\x. MSYS ya convierte las variables de entorno que parecen rutas
+    # (MEMORY_DIR llega como C:\...), pero no toca el JSON del hook. Sin esto, relpath entre una
+    # ruta convertida y otra sin convertir empieza con ".." y la guardia se apaga en silencio
+    # (medido en windows-latest, 2026-09-03: 6/6 casos de deny salian vacios). Fail-open.
+    if sys.platform == "win32" and p.startswith("/"):
+        try:
+            out = subprocess.run(["cygpath", "-w", p], capture_output=True, text=True, timeout=5)
+            if out.returncode == 0 and out.stdout.strip():
+                return out.stdout.strip()
+        except Exception:
+            pass
+    return p
+
 
 try:
     data = json.loads(os.environ.get("HOOK_INPUT", "") or "{}")
@@ -51,10 +68,11 @@ path = (data.get("tool_input") or {}).get("file_path") or ""
 if not path:
     sys.exit(0)
 
-cwd = data.get("cwd") or os.getcwd()
+path = native(path)
+cwd = native(data.get("cwd") or os.getcwd())
 if not os.path.isabs(path):
     path = os.path.join(cwd, path)
-mem = os.path.realpath(os.environ["MEMORY_DIR"])
+mem = os.path.realpath(native(os.environ["MEMORY_DIR"]))
 # realpath del padre + basename: el archivo puede no existir todavia (Write nuevo).
 parent = os.path.realpath(os.path.dirname(path))
 full = os.path.join(parent, os.path.basename(path))
