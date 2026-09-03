@@ -54,8 +54,12 @@ for i in $(seq 1 10); do python3 bin/journal-emit.py --type pendiente.add --text
 python3 bin/journal-compact.py --quiet || FAIL=1
 T1=$(python3 -c 'import time;print(time.time_ns())'); MS=$(( (T1 - T0) / 1000000 ))
 SOLO=$(grep -c '^- \[ \] solo item' $M/_pendientes.md); SLOCK=$(ls -d $M/.journal/.lock 2>/dev/null | wc -l | tr -d ' ')
-echo "solo: items=$SOLO lock=$SLOCK ms=$MS"           # esperado: items=10 lock=0 ms<1000
-[ "$SOLO" = 10 ] && [ "$SLOCK" = 0 ] && [ "$MS" -lt 1000 ] || FAIL=1
+# Umbral de velocidad: <1 s en POSIX. En Git Bash (Windows) arrancar 10 procesos python es mas
+# lento (medido en windows-latest 2026-09-03: 967 y 1057 ms) — 3 s ahi; lo que se exige igual en
+# todas las plataformas es items=10 y lock=0.
+SOLO_MAX=1000; case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) SOLO_MAX=3000;; esac
+echo "solo: items=$SOLO lock=$SLOCK ms=$MS max=$SOLO_MAX"   # esperado: items=10 lock=0 ms<max
+[ "$SOLO" = 10 ] && [ "$SLOCK" = 0 ] && [ "$MS" -lt "$SOLO_MAX" ] || FAIL=1
 
 # Complementaria 2: lock huerfano (TTL vencido), 5 compactadores compiten, exactamente 1 lo roba
 mkdir -p $M/.journal/.lock; echo $(( $(date +%s) - 120 )) > $M/.journal/.lock/acquired_at
@@ -79,6 +83,70 @@ echo "virgin: rc=$VRC out='$VOUT' replay='$ROUT' lines=$RN"   # esperado: rc=0, 
 [ "$VRC" = 0 ] && echo "$VOUT" | grep -q '^JOURNAL applied=0 quarantined=0 pending_left=0$' \
   && echo "$ROUT" | grep -q '^JOURNAL applied=0 quarantined=0 pending_left=0 noop=1' && [ "$RN" = 1 ] || FAIL=1
 rm -r "$V"
+
+# Complementaria 4 (Fase 4): reintento de os.replace ante PermissionError (Windows: antivirus o
+# indexador con el .md o el .json abierto un instante). Se inyecta el fallo parcheando
+# os.replace dentro del modulo; time.sleep se anula para que el caso tarde ms, no segundos.
+#   a) atomic_write: 4 fallos transitorios y luego exito -> archivo escrito, 5 intentos
+#   b) atomic_write: 5 fallos -> PermissionError, exactamente 5 intentos (no reintenta infinito)
+#   c) move_to: 3 fallos transitorios -> evento movido, 4 intentos
+#   d) FileNotFoundError NO se reintenta: 1 intento y propaga
+#   e) release(): rmtree falla 2 veces (Windows: otro proceso leyendo acquired_at) -> el lock
+#      desaparece igual, 3 llamadas a rmtree
+#   f) acquire() con os.replace fallando siempre (no se puede sellar el marcador) -> el lock
+#      se adquiere igual (la mtime del directorio hace de acquired_at) y se libera limpio
+# Sin el reintento (control negativo: range(1) en replace_with_retry) a), c) y e) fallan.
+RETRY=$(python3 - "$(pwd)/bin/journal-compact.py" "$M" <<'PYEOF'
+import importlib.util, os, sys
+spec = importlib.util.spec_from_file_location("jc", sys.argv[1]); jc = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(jc)
+jc.time.sleep = lambda s: None
+real = os.replace; d = sys.argv[2]; out = []
+def inject(n, exc):
+    state = {"calls": 0}
+    def fake(src, dst):
+        state["calls"] += 1
+        if state["calls"] <= n: raise exc(f"inyectado {state['calls']}")
+        return real(src, dst)
+    os.replace = fake; return state
+st = inject(4, PermissionError)
+pa = os.path.join(d, "retry-a.md")
+try: jc.atomic_write(pa, ["ok"]); ok = os.path.exists(pa) and open(pa).read() == "ok"
+except PermissionError: ok = False
+out.append(f"a={'ok' if ok and st['calls'] == 5 else 'FAIL'}({st['calls']})")
+st = inject(5, PermissionError)
+try: jc.atomic_write(os.path.join(d, "retry-b.md"), ["x"]); r = "wrote"
+except PermissionError: r = "raised"
+out.append(f"b={'ok' if r == 'raised' and st['calls'] == 5 else 'FAIL'}({r},{st['calls']})")
+src = os.path.join(d, "retry-c.json"); open(src, "w").write("{}")
+st = inject(3, PermissionError)
+try: jc.move_to(src, os.path.join(d, "retry-applied")); ok = os.path.exists(os.path.join(d, "retry-applied", "retry-c.json")) and not os.path.exists(src)
+except PermissionError: ok = False
+out.append(f"c={'ok' if ok and st['calls'] == 4 else 'FAIL'}({st['calls']})")
+st = inject(9, FileNotFoundError)
+try: jc.atomic_write(os.path.join(d, "retry-d.md"), ["x"]); r = "wrote"
+except FileNotFoundError: r = "raised"
+out.append(f"d={'ok' if r == 'raised' and st['calls'] == 1 else 'FAIL'}({r},{st['calls']})")
+os.replace = real
+journal = os.path.join(d, "retry-journal"); lk = jc.Lock(journal, 1)
+ok = lk.acquire(); real_rm = jc.shutil.rmtree; rm = {"calls": 0}
+def flaky_rm(path, ignore_errors=False):
+    rm["calls"] += 1
+    if rm["calls"] <= 2: return None
+    return real_rm(path, ignore_errors=ignore_errors)
+jc.shutil.rmtree = flaky_rm; lk.release(); jc.shutil.rmtree = real_rm
+out.append(f"e={'ok' if ok and not os.path.exists(lk.dir) and rm['calls'] == 3 else 'FAIL'}({rm['calls']},{os.path.exists(lk.dir)})")
+lk2 = jc.Lock(journal, 1); st = inject(99, PermissionError)
+try: ok = lk2.acquire()
+except PermissionError: ok = "raised"
+os.replace = real
+stale = lk2._is_stale(); lk2.release()
+out.append(f"f={'ok' if ok is True and stale is False and not os.path.exists(lk2.dir) else 'FAIL'}({ok},{stale},{os.path.exists(lk2.dir)})")
+print(" ".join(out))
+PYEOF
+)
+echo "retry: $RETRY"                                     # esperado: a=ok(5) b=ok(raised,5) c=ok(4) d=ok(raised,1) e=ok(3,False) f=ok(True,False,False)
+echo "$RETRY" | grep -q '^a=ok(5) b=ok(raised,5) c=ok(4) d=ok(raised,1) e=ok(3,False) f=ok(True,False,False)$' || FAIL=1
 
 # ---------------------------------------------------------------------------- Fase 2
 # Sesiones, reglas, planes y research: 2 workers concurrentes contra 2 compactadores.

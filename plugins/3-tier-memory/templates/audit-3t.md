@@ -58,12 +58,12 @@ Run exactly this (do NOT use `find`: under some shell proxies it fails silently)
   J="<MEMORY_DIR>/.journal"
   P=$(ls "$J/pending" 2>/dev/null | grep -c '\.json$'); Q=$(ls "$J/quarantine" 2>/dev/null | grep -c '\.json$')
   A=$(ls -R "$J/applied" 2>/dev/null | grep -c '\.json$')
-  if [ -d "$J/.lock" ]; then echo "lock_age=$(( $(date +%s) - $(cat "$J/.lock/acquired_at" 2>/dev/null || echo 0) ))"; else echo "lock_age=none"; fi
+  if [ -d "$J/.lock" ]; then AT=$(cat "$J/.lock/acquired_at" 2>/dev/null); [ -n "$AT" ] || AT=$(python3 -c 'import os,sys;print(int(os.stat(sys.argv[1]).st_mtime))' "$J/.lock" 2>/dev/null || date +%s); echo "lock_age=$(( $(date +%s) - AT ))"; else echo "lock_age=none"; fi
   S="off"; grep -Eq '^[[:space:]]*journal_strict[[:space:]]*=[[:space:]]*1' "<MEMORY_DIR>/.memory-config" 2>/dev/null && S="on"
   echo "pending=$P quarantine=$Q applied=$A strict=$S"; ls "$J/quarantine" 2>/dev/null | grep '\.reason$' | head -5 | while read r; do echo "$r: $(head -c 160 "$J/quarantine/$r")"; done
 9. `pending` > 0: events emitted but not applied yet. The SessionStart/UserPromptSubmit hooks normally apply them; if they persist across sessions, the hooks are not running (check `/plugin` and Troubleshooting) — recommend running `journal-compact.py --memory-dir <MEMORY_DIR>` by hand.
 10. `quarantine` > 0: events the compactor refused (anchor deleted by hand, id collision, malformed JSON). Report the count and the first reasons (the `.reason` files) — the user resolves each pair by hand; never delete them from the audit.
-11. `lock_age` > 60 s: orphaned lock (a compactor died). The next compactor steals it; report it, do not remove it.
+11. `lock_age` > 60 s: orphaned lock (a compactor died). The next compactor steals it; report it, do not remove it. A lock without `acquired_at` is aged by the directory mtime (same rule as the compactor), never treated as epoch 0.
 12. `applied` (informational: events applied so far, all months) and `strict` (`on` = the PreToolUse guard denies direct `Edit`/`Write` on `_*.md` and `pendientes/YYYY-MM.md`; `off` = default). Report both as-is; neither is a warning.
 
 Skip archived content everywhere: ignore `memory/archive/`, `*.bak`, `*.zip`, `*.archived.md`, `*-archived-*.md`.

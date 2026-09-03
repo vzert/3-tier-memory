@@ -4,12 +4,18 @@
 
 Aplica los eventos de memory/.journal/pending/ a los indices markdown, en orden de nombre
 (= orden de emision), bajo un lock de directorio. Primitiva: mkdir — en POSIX, mkdir(2) es
-atomico entre procesos (uno crea, el resto recibe EEXIST); es lo que se midio aqui (macOS,
-prueba de aceptacion 10/10). En Windows se asume el mismo comportamiento de CreateDirectory
-pero NO se ha medido: queda para Fase 4 del plan (Linux + Git Bash). flock no existe como
-CLI en macOS, por eso no se usa. Cada .md se escribe a tmp + os.replace. Cada evento aplicado
-se mueve a applied/YYYY-MM/; un evento invalido o cuyo ancla no existe va a quarantine/ con
-un archivo .reason al lado. Nunca se pierde un evento en silencio.
+atomico entre procesos (uno crea, el resto recibe EEXIST). Medido con la prueba de aceptacion
+(2026-09-03) en macOS, Linux (python:3.12-slim, kernel 6.8) y Windows (Git Bash en
+windows-latest, Python 3.12 nativo, sys.platform win32); en Windows ademas una sonda directa:
+16 procesos x 40 rondas compiten por el mismo os.mkdir y siempre gana exactamente 1
+(CreateDirectoryW es atomico). flock no existe como CLI en macOS, por eso no se usa. Cada .md
+se escribe a tmp + os.replace; el os.replace (tambien el que mueve eventos a applied/ y
+quarantine/ y el que sella el lock) se reintenta REPLACE_RETRIES veces ante PermissionError
+porque en Windows un antivirus, el indexador u otro compactador pueden tener el archivo abierto
+un instante; por la misma razon el lock se borra con rmtree_with_retry (medido: sin reintento
+el lock quedaba huerfano en 1 de 5 ensayos en Windows). Cada evento aplicado se mueve a
+applied/YYYY-MM/; un evento invalido o cuyo ancla no existe va a quarantine/ con un archivo
+.reason al lado. Nunca se pierde un evento en silencio.
 
 Idempotente: re-aplicar un evento ya aplicado es no-op (la linea ya existe / ya no existe).
 Deltas anclados, nunca regeneracion: insertar tras el header de prioridad, borrar linea por
@@ -106,18 +112,40 @@ def read_lines(path):
         return fh.read().split("\n")
 
 
-def atomic_write(path, lines):
-    tmp = f"{path}.{os.getpid()}.tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(lines))
+def replace_with_retry(src, dst):
+    """os.replace con REPLACE_RETRIES intentos ante PermissionError (Windows: antivirus o
+    indexador con el archivo abierto un instante). Entre intentos espera 50, 100, 150 y 200 ms
+    (4 esperas para 5 intentos); tras el ultimo fallo propaga sin dormir.
+    Otros errores (ENOENT, EXDEV) no se reintentan: no son transitorios."""
     for attempt in range(REPLACE_RETRIES):
         try:
-            os.replace(tmp, path)
+            os.replace(src, dst)
             return
         except PermissionError:
             if attempt == REPLACE_RETRIES - 1:
                 raise
             time.sleep(0.05 * (attempt + 1))
+
+
+def rmtree_with_retry(path):
+    """shutil.rmtree con REPLACE_RETRIES intentos. En Windows borrar un archivo que otro proceso
+    tiene abierto da PermissionError (WinError 32): un compactador en espera lee acquired_at cada
+    50 ms, asi que el que libera el lock choca con el a menudo. Medido en windows-latest
+    (2026-09-03): con un solo intento el lock quedaba huerfano y los demas salian "busy" hasta el
+    TTL. En POSIX el primer intento siempre basta. Devuelve True si el directorio ya no existe."""
+    for attempt in range(REPLACE_RETRIES):
+        shutil.rmtree(path, ignore_errors=True)
+        if not os.path.exists(path):
+            return True
+        time.sleep(0.05 * (attempt + 1))
+    return not os.path.exists(path)
+
+
+def atomic_write(path, lines):
+    tmp = f"{path}.{os.getpid()}.tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines))
+    replace_with_retry(tmp, path)
 
 
 def resolve_memory_dir(explicit):
@@ -150,7 +178,7 @@ class Lock:
         tmp = os.path.join(self.dir, f".{name}.{self.owner}.tmp")
         with open(tmp, "w") as fh:
             fh.write(value)
-        os.replace(tmp, os.path.join(self.dir, name))
+        replace_with_retry(tmp, os.path.join(self.dir, name))
 
     def _stamp(self):
         self._write_marker("owner", self.owner)
@@ -190,13 +218,17 @@ class Lock:
         while True:
             try:
                 os.mkdir(self.dir)
-                self._stamp()
-                self.held = True
-                return True
             except FileExistsError:
                 pass
             except OSError:
                 return False  # fs de solo lectura, permisos: fail-open, no bloquear
+            else:
+                self.held = True
+                try:
+                    self._stamp()
+                except OSError:
+                    pass  # sin marcador, _acquired_at() usa la mtime del directorio: el lock sigue valido
+                return True
             if self._is_stale():
                 # Solo un proceso reclama: el que gana el mkdir del steal-gate. Re-verifica
                 # el TTL dentro del gate — el lock pudo refrescarse o cambiar de dueno.
@@ -204,7 +236,7 @@ class Lock:
                     os.mkdir(self.steal)
                     try:
                         if self._is_stale():
-                            shutil.rmtree(self.dir, ignore_errors=True)
+                            rmtree_with_retry(self.dir)
                             log("STOLEN")
                     finally:
                         try:
@@ -235,7 +267,8 @@ class Lock:
             owner = ""
         if owner and owner != self.owner:
             return  # alguien nos robo el lock (TTL vencido): no borrar el suyo
-        shutil.rmtree(self.dir, ignore_errors=True)
+        if not rmtree_with_retry(self.dir):
+            log("RELEASE-FAILED")  # quedara huerfano hasta el TTL; lo roba el siguiente
         self.held = False
 
 
@@ -881,7 +914,7 @@ def move_to(src, dest_dir, reason=None):
     dest = os.path.join(dest_dir, os.path.basename(src))
     if os.path.exists(dest):
         dest += f".{uuid.uuid4().hex[:6]}"
-    os.replace(src, dest)
+    replace_with_retry(src, dest)
     if reason:
         with open(dest + ".reason", "w", encoding="utf-8") as fh:
             fh.write(reason + "\n")

@@ -3,8 +3,12 @@
 # Mutual-exclusion lock for the 5 Tier-2 index files, so concurrent agents/sessions
 # on the same project don't corrupt a shared file with an interleaved read-modify-write.
 #
-# Primitive: mkdir (atomic between processes on POSIX per mkdir(2); on Windows it is
-# ASSUMED from CreateDirectory semantics, not measured — see plan v2.12.0 Fase 4) — NOT flock, which
+# Primitive: mkdir (atomic between processes on POSIX per mkdir(2). On Windows, CreateDirectoryW
+# was measured 2026-09-03 on windows-latest/Git Bash through Python's os.mkdir — 16 processes x 40
+# rounds racing for the same directory, exactly 1 winner every round; GitHub Actions run
+# https://github.com/vzert/3-tier-memory/actions/runs/33776716992, branch ci/windows-journal-tests,
+# step "mkdir atomico entre procesos". This hook calls coreutils `mkdir` from Git Bash, which
+# reaches the same Win32 call, but that bash path itself was not probed) — NOT flock, which
 # doesn't exist as a CLI on macOS and is Linux-only, so it can't ship in a cross-platform
 # plugin. Staleness is mtime-based (an "acquired_at" epoch marker), not PID-liveness —
 # checking whether a PID is alive isn't portable across the platforms this plugin ships to.
