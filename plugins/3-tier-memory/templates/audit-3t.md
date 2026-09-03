@@ -53,6 +53,19 @@ SCALE CHECKS (warning-only — Tier 2 should COORDINATE, not STORE; design budge
 7. Tier-1 volatile data: MEMORY.md must hold STABLE orientation (protocol + pointers), never live numbers — nothing refreshes it, so any computed/volatile data goes stale silently. Read MEMORY.md and flag stale-prone content: hardcoded corpus counts (e.g. "N sessions", "304 learnings", "329 open pendientes", "N recall units"), date ranges ("2026-04-06 to 2026-04-08"), or a "latest session: <date>" line. If found, flag it (warning-only) — recommend moving those live numbers OUT and letting `/status-3t` compute them on demand. A stable one-line status (e.g. "Plugin structure created") is fine; numbers/dates that duplicate the indexes are the problem.
 8. Plaintext secrets: memory files committed to a repo with a remote will leak any API key, token, or private key captured verbatim in a digest. Locate and run `scan-secrets.py` in count mode if available (`if [ -n "$CLAUDE_PLUGIN_ROOT" ]...` else `find "$HOME/.claude/plugins" -name scan-secrets.py -path "*/3-tier-memory/*"`), e.g. `python3 <script> <MEMORY_DIR> --count`. If N>0, flag it (warning-only) — recommend running /checkpoint-3t (Step 5d auto-redacts) and, critically, **rotating any key already pushed** (history is not un-leaked by redaction). Do NOT print the secrets; the count is enough for the report.
 
+JOURNAL CHECKS (warning-only — v2.12.0 event log at <MEMORY_DIR>/.journal/; skip all three if the directory does not exist):
+Run exactly this (do NOT use `find`: under some shell proxies it fails silently) and read the numbers:
+  J="<MEMORY_DIR>/.journal"
+  P=$(ls "$J/pending" 2>/dev/null | grep -c '\.json$'); Q=$(ls "$J/quarantine" 2>/dev/null | grep -c '\.json$')
+  A=$(ls -R "$J/applied" 2>/dev/null | grep -c '\.json$')
+  if [ -d "$J/.lock" ]; then echo "lock_age=$(( $(date +%s) - $(cat "$J/.lock/acquired_at" 2>/dev/null || echo 0) ))"; else echo "lock_age=none"; fi
+  S="off"; grep -Eq '^[[:space:]]*journal_strict[[:space:]]*=[[:space:]]*1' "<MEMORY_DIR>/.memory-config" 2>/dev/null && S="on"
+  echo "pending=$P quarantine=$Q applied=$A strict=$S"; ls "$J/quarantine" 2>/dev/null | grep '\.reason$' | head -5 | while read r; do echo "$r: $(head -c 160 "$J/quarantine/$r")"; done
+9. `pending` > 0: events emitted but not applied yet. The SessionStart/UserPromptSubmit hooks normally apply them; if they persist across sessions, the hooks are not running (check `/plugin` and Troubleshooting) — recommend running `journal-compact.py --memory-dir <MEMORY_DIR>` by hand.
+10. `quarantine` > 0: events the compactor refused (anchor deleted by hand, id collision, malformed JSON). Report the count and the first reasons (the `.reason` files) — the user resolves each pair by hand; never delete them from the audit.
+11. `lock_age` > 60 s: orphaned lock (a compactor died). The next compactor steals it; report it, do not remove it.
+12. `applied` (informational: events applied so far, all months) and `strict` (`on` = the PreToolUse guard denies direct `Edit`/`Write` on `_*.md` and `pendientes/YYYY-MM.md`; `off` = default). Report both as-is; neither is a warning.
+
 Skip archived content everywhere: ignore `memory/archive/`, `*.bak`, `*.zip`, `*.archived.md`, `*-archived-*.md`.
 
 Return a JSON object with results:
@@ -76,6 +89,14 @@ Return a JSON object with results:
     {"check": "Files missing frontmatter", "count": N},
     {"check": "MEMORY.md volatile/stale-prone data", "found": true/false, "details": "e.g. hardcoded counts / date ranges → move to /status-3t"},
     {"check": "Plaintext secrets in memory files", "count": N, "details": "run /checkpoint-3t (Step 5d redacts) + ROTATE any pushed key"}
+  ],
+  "journal": [
+    {"check": "Journal present", "passed": true/false},
+    {"check": "Pending events (not yet applied)", "count": N},
+    {"check": "Quarantined events", "count": N, "details": "first .reason contents"},
+    {"check": "Compactor lock", "status": "none | held Ns | orphaned Ns"},
+    {"check": "Applied events (all months)", "count": N},
+    {"check": "journal_strict guard", "status": "on | off"}
   ]
 }
 ```
@@ -184,6 +205,7 @@ Hooks:       X/X passed (warning-only: orphaned entries in settings*.json)
 Staleness:   N stale pendientes (>30d), M learnings need review — recall index: present/lazy
 Scale:       N indexes over budget, P open pendientes (backlog if >50), F files missing frontmatter, MEMORY.md volatile-data: yes/no
 Security:    S plaintext secrets in memory files (run /checkpoint-3t to redact + ROTATE pushed keys)
+Journal:     P pending, Q quarantine, A applied | lock: none | strict: off (warning-only; "not present" if memory/.journal/ does not exist)
 
 ISSUES:
 - <list each failed check with what to fix>
@@ -192,10 +214,11 @@ WARNINGS (do not change STATUS):
 - <over-budget indexes → recommend sharding into family sub-indexes>
 - <broken wikilinks → sample + suggest fixing/removing dead refs>
 - <pendientes backlog → recommend reconciliation pass>
+- <journal: pending events that persist → run journal-compact.py by hand and check the hooks; quarantined events → list the .reason files, the user resolves each pair by hand; orphaned lock → report only>
 
 STATUS: ALL PASSED | N issues found
 ```
 
-Staleness, scale, and broken-link items are warnings, not failures — they never change STATUS. Surface them so the user can run /checkpoint-3t (pendientes), /consolidate-3t (learnings), or /enrich-3t (backfill importance/_creado on a legacy corpus).
+Staleness, scale, broken-link, and journal items are warnings, not failures — they never change STATUS. Surface them so the user can run /checkpoint-3t (pendientes), /consolidate-3t (learnings), or /enrich-3t (backfill importance/_creado on a legacy corpus).
 
 If any check fails, explain what's wrong and how to fix it.

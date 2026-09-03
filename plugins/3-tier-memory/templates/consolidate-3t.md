@@ -117,6 +117,9 @@ When merging:
 - Keep the clearest phrasing; preserve any unique detail from the other(s).
 - Tier 3: edit the canonical rule in `learnings/<topic>.md`; remove the merged-away rule(s) and renumber if needed.
 - Tier 2: update the Quick Reference in `_learnings.md` if a merged rule was listed there.
+- If `memory/.memory-config` contains `journal_strict=1`, the plugin's PreToolUse guard denies these
+  direct edits to `_learnings.md`. Merges are the one legitimate hand edit: set `journal_strict=0`,
+  do the merge, set it back to `1` (the guard reads the file on every call; nothing to restart).
 
 ## Step 2: Contradictions — supersede, don't overwrite
 
@@ -162,7 +165,7 @@ python3 "$JBIN/journal-emit.py" --type learning.add --topic <topic-slug> \
 The topic file's `last_verified: DATE` is refreshed in Step 4 (direct edit).
 
 **Fallback (no JBIN)**: append the rule with the next number to `learnings/<topic>.md` and the Quick
-Reference entry to `_learnings.md` by hand.
+Reference entry to `_learnings.md` by hand (denied while `journal_strict=1`: the guard requires JBIN).
 
 ## Step 4: Refresh last_verified
 
