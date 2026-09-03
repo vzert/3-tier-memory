@@ -53,7 +53,7 @@ SCALE CHECKS (warning-only — Tier 2 should COORDINATE, not STORE; design budge
 7. Tier-1 volatile data: MEMORY.md must hold STABLE orientation (protocol + pointers), never live numbers — nothing refreshes it, so any computed/volatile data goes stale silently. Read MEMORY.md and flag stale-prone content: hardcoded corpus counts (e.g. "N sessions", "304 learnings", "329 open pendientes", "N recall units"), date ranges ("2026-04-06 to 2026-04-08"), or a "latest session: <date>" line. If found, flag it (warning-only) — recommend moving those live numbers OUT and letting `/status-3t` compute them on demand. A stable one-line status (e.g. "Plugin structure created") is fine; numbers/dates that duplicate the indexes are the problem.
 8. Plaintext secrets: memory files committed to a repo with a remote will leak any API key, token, or private key captured verbatim in a digest. Locate and run `scan-secrets.py` in count mode if available (`if [ -n "$CLAUDE_PLUGIN_ROOT" ]...` else `find "$HOME/.claude/plugins" -name scan-secrets.py -path "*/3-tier-memory/*"`), e.g. `python3 <script> <MEMORY_DIR> --count`. If N>0, flag it (warning-only) — recommend running /checkpoint-3t (Step 5d auto-redacts) and, critically, **rotating any key already pushed** (history is not un-leaked by redaction). Do NOT print the secrets; the count is enough for the report.
 
-JOURNAL CHECKS (warning-only — v2.12.0 event log at <MEMORY_DIR>/.journal/; skip all three if the directory does not exist):
+JOURNAL CHECKS (warning-only — v2.12.0 event log at <MEMORY_DIR>/.journal/; skip 9-12 if the directory does not exist; check 13 always runs):
 Run exactly this (do NOT use `find`: under some shell proxies it fails silently) and read the numbers:
   J="<MEMORY_DIR>/.journal"
   P=$(ls "$J/pending" 2>/dev/null | grep -c '\.json$'); Q=$(ls "$J/quarantine" 2>/dev/null | grep -c '\.json$')
@@ -65,6 +65,7 @@ Run exactly this (do NOT use `find`: under some shell proxies it fails silently)
 10. `quarantine` > 0: events the compactor refused (anchor deleted by hand, id collision, malformed JSON). Report the count and the first reasons (the `.reason` files) — the user resolves each pair by hand; never delete them from the audit.
 11. `lock_age` > 60 s: orphaned lock (a compactor died). The next compactor steals it; report it, do not remove it. A lock without `acquired_at` is aged by the directory mtime (same rule as the compactor), never treated as epoch 0.
 12. `applied` (informational: events applied so far, all months) and `strict` (`on` = the PreToolUse guard denies direct `Edit`/`Write` on `_*.md` and `pendientes/YYYY-MM.md`; `off` = default). Report both as-is; neither is a warning.
+13. Priority anchors: `python3 "$JBIN/normalize-pendientes.py" <MEMORY_DIR>` (dry-run; locate `JBIN` as in /checkpoint-3t Step 0). `headers_added=0` is the expected result. Anything else is a WARNING: `_pendientes.md` lacks a header the compactor can anchor `pendiente.add` under (`## Alta/Media/Baja prioridad`, case-insensitive prefix), so new pendientes would land in `quarantine/`. The SessionStart hook adds the missing headers automatically on the next session (2.12.1); report which are missing, do not edit the file here.
 
 Skip archived content everywhere: ignore `memory/archive/`, `*.bak`, `*.zip`, `*.archived.md`, `*-archived-*.md`.
 
