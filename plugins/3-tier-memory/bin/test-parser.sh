@@ -78,6 +78,20 @@ else
   PASS=$((PASS + 1)); echo "  ok   item indentado no da desajuste falso"
 fi
 
+# Sufijo `_id: p-…_` (journal v2.12.0): es la identidad de la linea para el compactador,
+# nunca texto para el usuario. Si se cuela al prompt, cada sesion paga 20 chars de ruido
+# por pendiente; si el parser lo confunde con el texto, el item se muestra mutilado.
+printf '# P\n\n## Alta prioridad\n- [ ] item con id — _origen: [[sessions/x]]_ — _creado: 2026-09-02_ — _id: p-0123456789_\n' > "$TMP/8.md"
+if ! PENDIENTES_FILE="$TMP/8.md" run python3 "$PARSER"; then
+  fail "sufijo _id (el parser murio)" "$(cat "$ERR")"
+elif echo "$OUT" | grep -q '_id:'; then
+  fail "sufijo _id no debe inyectarse al prompt" "$OUT"
+elif ! echo "$OUT" | grep -q 'item con id — _creado: 2026-09-02_'; then
+  fail "sufijo _id: el item debe seguir mostrandose entero con su fecha" "$OUT"
+else
+  PASS=$((PASS + 1)); echo "  ok   sufijo _id se oculta y el item se muestra entero"
+fi
+
 # --- detector de hook local duplicado -----------------------------------------
 # Vive en el mismo hook. Los dos casos de aqui los encontro una verificacion
 # adversarial: la deteccion pasaba por alto formas de escritura perfectamente

@@ -79,7 +79,7 @@ This project uses project-local memory. Files live in `memory/` within the proje
 
 ## During execution
 - New learning → `memory/learnings/<topic>.md`, update `memory/_learnings.md` if critical
-- New pendiente → `memory/_pendientes.md` with `_origen:` link AND `_creado: YYYY-MM-DD` + `memory/pendientes/YYYY-MM.md`
+- New pendiente → `memory/_pendientes.md` with `_origen:` link AND `_creado: YYYY-MM-DD` + `memory/pendientes/YYYY-MM.md` — since v2.12.0 do this through `/checkpoint-3t` Step 3b (it emits a `pendiente.add` event via `bin/journal-emit.py`; the compactor writes both files), never by editing the index directly while other agents may be writing
 - Executing a plan → register/update row in `memory/_plans-index.md`
 - New research → `memory/research/{slug}.md` + row in `memory/_research-index.md`
 

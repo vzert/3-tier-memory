@@ -9,6 +9,12 @@ On a pre-existing corpus these fields are absent, so recall runs degraded (every
 defaults to importance 5) and staleness never fires (no `_creado` → no age). This script
 backfills those fields into existing files, deterministically and idempotently.
 
+v2.12.0 added a third one, `_id: p-<10 hex>_` on pendientes: the identity the journal
+compactor (journal-compact.py) uses to resolve a line without editing the index by hand.
+Same hash as journal-emit.py (sha1 of normalized text + creado + origen), loaded from that
+script so the two can never drift. Lines without `_creado` are skipped for ids until the
+creado pass has run (in one `--apply` run creado goes first, so both land together).
+
 It MUTATES the live memory tree, so it is conservative by construction:
   - DRY-RUN by default; writes only with --apply.
   - Idempotent: only touches lines/files that LACK the field. Re-runs are no-ops.
@@ -18,7 +24,7 @@ It MUTATES the live memory tree, so it is conservative by construction:
   - Files without frontmatter are FLAGGED, never auto-rewritten.
 
 Usage:
-    enrich-memory.py <MEMORY_DIR> [--apply] [--only creado|importance]
+    enrich-memory.py <MEMORY_DIR> [--apply] [--only creado|importance|id[,...]]
 
 Output: a human-readable preview/report to stdout, ending with a one-line machine summary
 (`SUMMARY creado_added=.. importance_added=.. skipped_no_frontmatter=..`).
@@ -139,6 +145,58 @@ def enrich_pendientes(memory_dir, apply):
     return {"creado_added": added, "samples": samples, "fallback_mtime": mtime_used}
 
 
+# ----------------------------------------------------------------------------- _id (journal)
+ID_RE = re.compile(r"_id:\s*p-[0-9a-f]{10}_")
+
+
+def load_pendiente_id():
+    """journal-emit.pendiente_id, importado del script vecino: una sola definicion del hash."""
+    import importlib.util
+
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "journal-emit.py")
+    spec = importlib.util.spec_from_file_location("journal_emit", path)
+    if spec is None or spec.loader is None:
+        return None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.pendiente_id
+
+
+def enrich_ids(memory_dir, apply):
+    path = os.path.join(memory_dir, "_pendientes.md")
+    stats = {"id_added": 0, "id_skipped_no_creado": 0, "samples": []}
+    if not os.path.isfile(path):
+        return stats
+    pendiente_id = load_pendiente_id()
+    if pendiente_id is None:
+        print("   ! journal-emit.py no encontrado junto a este script — ids omitidos")
+        return stats
+    with open(path, encoding="utf-8") as f:
+        lines = f.read().split("\n")
+    out = []
+    for line in lines:
+        if not re.match(r"^- \[ \]", line) or ID_RE.search(line):
+            out.append(line)
+            continue
+        creado = re.search(r"_creado:\s*(\d{4}-\d{2}-\d{2})", line)
+        if not creado:
+            stats["id_skipped_no_creado"] += 1
+            out.append(line)
+            continue
+        origen = ORIGEN_RE.search(line)
+        origen_txt = re.search(r"\[\[[^\]]+\]\]", origen.group(1)).group(0) if origen else ""
+        text = re.sub(r"\s*—\s*_(origen|creado):[^—]*", "", line[5:]).strip()
+        pid = pendiente_id(text, creado.group(1), origen_txt)
+        newline = line.rstrip() + f" — _id: {pid}_"
+        stats["id_added"] += 1
+        if len(stats["samples"]) < 4:
+            stats["samples"].append((line, newline))
+        out.append(newline)
+    if apply and stats["id_added"]:
+        atomic_write(path, "\n".join(out))
+    return stats
+
+
 # ----------------------------------------------------------------------------- importance
 def split_frontmatter(content):
     """Return (fm, rest, has_fm). fm excludes the fences; rest is the body incl. fences boundary."""
@@ -222,11 +280,16 @@ def main():
         sys.exit("usage: enrich-memory.py <MEMORY_DIR> [--apply] [--only creado|importance]")
     memory_dir = args[0]
     apply = "--apply" in args
+    # --only acepta una lista: `--only creado,id` es lo que corre /checkpoint-3t Step 3-pre
+    # (creado primero, porque el id se calcula con esa fecha).
     only = None
     if "--only" in args:
         i = args.index("--only")
         if i + 1 < len(args):
-            only = args[i + 1]
+            only = set(p.strip() for p in args[i + 1].split(",") if p.strip())
+
+    def wants(kind):
+        return only is None or kind in only
     if not os.path.isdir(memory_dir):
         sys.exit(f"not a directory: {memory_dir}")
 
@@ -236,7 +299,7 @@ def main():
     p_stats = {"creado_added": 0, "samples": [], "fallback_mtime": 0}
     i_stats = {"importance_added": 0, "left_neutral": 0, "skipped_no_frontmatter": [], "samples": []}
 
-    if only in (None, "creado"):
+    if wants("creado"):
         p_stats = enrich_pendientes(memory_dir, apply)
         print(f"[_creado] pendientes to enrich: {p_stats['creado_added']} "
               f"({p_stats['fallback_mtime']} via file mtime, rest from _origen slug)")
@@ -245,7 +308,17 @@ def main():
             print(f"   + …{tail.strip()[:70]}")
         print()
 
-    if only in (None, "importance"):
+    id_stats = {"id_added": 0, "id_skipped_no_creado": 0, "samples": []}
+    if wants("id"):
+        id_stats = enrich_ids(memory_dir, apply)
+        print(f"[_id] pendientes to enrich: {id_stats['id_added']} "
+              f"({id_stats['id_skipped_no_creado']} skipped: no _creado yet)")
+        for old, new in id_stats["samples"]:
+            tail = new[len(os.path.commonprefix([old, new])):]
+            print(f"   + …{tail.strip()[:70]}")
+        print()
+
+    if wants("importance"):
         i_stats = enrich_importance(memory_dir, apply)
         print(f"[importance] files to enrich: {i_stats['importance_added']} "
               f"({i_stats['left_neutral']} substantive sessions left neutral=5)")
@@ -261,6 +334,7 @@ def main():
     if not apply:
         print("DRY-RUN only — re-run with --apply to write these changes.")
     print(f"SUMMARY creado_added={p_stats['creado_added']} "
+          f"id_added={id_stats['id_added']} "
           f"importance_added={i_stats['importance_added']} "
           f"skipped_no_frontmatter={len(i_stats['skipped_no_frontmatter'])}")
 

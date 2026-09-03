@@ -202,7 +202,7 @@ def parse_pendientes(memory_dir, units):
         elif re.match(r"^- \[ \]", s):
             md = DATE_RE.search(s)
             d = md.group(1) if md else ""
-            text = re.sub(r"\s*—\s*_(origen|creado):[^—]*", "", s[6:]).strip()
+            text = re.sub(r"\s*—\s*_(origen|creado|id):[^—]*", "", s[6:]).strip()
             add_unit(units, "pendiente", text, "memory/_pendientes.md", d, prio_imp[current])
 
 

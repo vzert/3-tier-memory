@@ -21,6 +21,6 @@ fi
 echo "COMPACTACION INMINENTE — Ejecuta /checkpoint-3t AHORA antes de que se pierda contexto de la conversacion."
 echo ""
 echo "Si no puedes ejecutar /checkpoint-3t completo, como minimo:"
-echo "1. Escribe los pendientes abiertos a memory/_pendientes.md"
+echo "1. Registra los pendientes abiertos con /checkpoint-3t (Step 3b emite eventos al journal; no edites memory/_pendientes.md a mano)"
 echo "2. Escribe los learnings nuevos a memory/learnings/"
 echo "3. Actualiza memory/_session-index.md con esta sesion"

@@ -45,6 +45,30 @@ fi
 # Exit silently if no memory system found
 [ -z "$MEMORY_DIR" ] && exit 0
 
+# Journal (v2.12.0): aplicar los eventos que otros agentes dejaron en pending/ ANTES de leer
+# los indices, para que lo que se inyecta abajo este fresco. Fast path: solo si pending/
+# tiene algo (un listado de directorio). Presupuesto corto (1 s esperando el lock): si otro
+# compactador lo tiene en ese momento, el aplicara lo pendiente; nada se pierde.
+JOURNAL_PENDING="$MEMORY_DIR/.journal/pending"
+if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] && [ -d "$JOURNAL_PENDING" ] \
+   && [ -n "$(ls -A "$JOURNAL_PENDING" 2>/dev/null)" ]; then
+  JOURNAL_OUT=$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" --memory-dir "$MEMORY_DIR" --budget 1 --quiet 2>/dev/null)
+  if [ -n "$JOURNAL_OUT" ]; then
+    echo "$JOURNAL_OUT"
+    echo ""
+  fi
+fi
+# Cuarentena: eventos que no se pudieron aplicar de forma segura (ancla borrada a mano,
+# colision de id, JSON roto). Nunca se borran solos; cada uno lleva un .reason al lado.
+JOURNAL_Q="$MEMORY_DIR/.journal/quarantine"
+if [ -d "$JOURNAL_Q" ]; then
+  JOURNAL_QN=$(ls "$JOURNAL_Q" 2>/dev/null | grep -c '\.json$')
+  if [ "${JOURNAL_QN:-0}" -gt 0 ] 2>/dev/null; then
+    echo "⚠ JOURNAL: $JOURNAL_QN evento(s) en cuarentena en memory/.journal/quarantine/ — lee el .reason de cada uno, aplica el cambio a mano si aplica y borra el par .json/.reason."
+    echo ""
+  fi
+fi
+
 # Frontmatter integrity (detection only — no mutation here). Surfaces typed Tier-3 files
 # that slipped through without a frontmatter block; they run degraded (recall default 5).
 # Repair via /enrich-3t, or they self-heal on the next /checkpoint-3t (Step 5c seal).
@@ -296,6 +320,7 @@ for idx, line in enumerate(_lines):
         text = s[6:]
         text = re.sub(r"\s*—\s*_origen:[^—]*", "", text)
         text = re.sub(r"\s*—\s*_creado:[^—]*", "", text)
+        text = re.sub(r"\s*—\s*_id:[^—]*", "", text)   # identidad del journal (v2.12.0), no es texto
         text = text.strip()
         buckets[current].append((created or "9999", text))
 
