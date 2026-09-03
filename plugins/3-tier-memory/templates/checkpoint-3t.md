@@ -22,7 +22,10 @@ at the same time, and a hand edit silently drops their lines (Claude Code only w
 block). Every change is an EVENT emitted with `journal-emit.py`; a single compactor
 (`journal-compact.py`) applies the events under a lock, as anchored deltas. Tier-3 files that
 belong to this session alone (`sessions/DATE-SLUG.md`, `plans/plan-<slug>.md`,
-`research/<slug>.md`) are still written directly: one writer per file. Locate the scripts once:
+`research/<slug>.md`) are still written directly: one writer per file. Optional strict guard: with
+`journal_strict=1` in `memory/.memory-config` the plugin's PreToolUse hook denies direct `Edit`/`Write`
+on those index files (off by default; the "Fallback (no JBIN)" branches below are then unavailable —
+set it to `0` for a deliberate hand edit). Locate the scripts once:
 
 ```bash
 MEMORY_DIR="memory"   # the directory located above (Model B); use the Model A path otherwise
