@@ -45,6 +45,18 @@ fi
 # Exit silently if no memory system found
 [ -z "$MEMORY_DIR" ] && exit 0
 
+# Headers de prioridad (v2.12.1): el compactador ancla cada pendiente.add bajo `## Alta/Media/Baja
+# prioridad`; instalaciones anteriores a 2.12.0 a veces no los tienen (`## Abiertos`, secciones
+# por tema) y el evento iria a cuarentena. Se anaden los que falten, sin tocar nada mas, con
+# el lock del journal. Idempotente: con los tres presentes no escribe. Fail-open.
+if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/normalize-pendientes.py" ]; then
+  NORM_OUT=$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/normalize-pendientes.py" "$MEMORY_DIR" --apply --quiet --budget 1 2>/dev/null)
+  if [ -n "$NORM_OUT" ]; then
+    echo "NORMALIZADO: _pendientes.md — $NORM_OUT (headers de prioridad que faltaban; los items no se movieron)."
+    echo ""
+  fi
+fi
+
 # Journal (v2.12.0): aplicar los eventos que otros agentes dejaron en pending/ ANTES de leer
 # los indices, para que lo que se inyecta abajo este fresco. Fast path: solo si pending/
 # tiene algo (un listado de directorio). Presupuesto corto (1 s esperando el lock): si otro
