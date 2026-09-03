@@ -175,6 +175,7 @@ in-context copy is current.
 1. Read both the auto-memory index and the project memory index
 2. For table-based indexes: parse each table row from the auto-memory version. If an equivalent row does NOT already exist in the project index (match on primary identifier: session slug, topic name, plan name, research topic), append it
 3. For `_pendientes.md`: parse each open item (`- [ ]`). If it does not already exist in the project `_pendientes.md` (match on text content), append it under the same priority section
+   > **Journal (v2.12.0)**: direct append is intentional here — `/migrate` runs once, by one agent, before any concurrent checkpoint exists in the new location. `/checkpoint-3t` itself now writes pendientes through `bin/journal-emit.py` + `bin/journal-compact.py`; migrating this step to events is Fase 2 of `plans/plan-journal-concurrencia-v2.12.0`. Lines appended here get their `_id` on the next checkpoint (Step 3-pre runs `enrich-memory.py --only creado,id`).
 4. Delete the auto-memory index file after merging
 
 ### 5d. Merge Model A subdirectories (Scenario B only)
@@ -208,7 +209,7 @@ This project uses project-local memory. Files live in `memory/` within the proje
 
 ## During execution
 - New learning → `memory/learnings/<topic>.md`, update `memory/_learnings.md` if critical
-- New pendiente → `memory/_pendientes.md` with `_origen:` link + `memory/pendientes/YYYY-MM.md`
+- New pendiente → `memory/_pendientes.md` with `_origen:` link + `memory/pendientes/YYYY-MM.md` — since v2.12.0 do this through `/checkpoint-3t` Step 3b (it emits a `pendiente.add` event via `bin/journal-emit.py`; the compactor writes both files), never by editing the index directly while other agents may be writing
 - Executing a plan → register/update row in `memory/_plans-index.md`
 - New research → `memory/research/{slug}.md` + row in `memory/_research-index.md`
 

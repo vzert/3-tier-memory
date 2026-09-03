@@ -75,13 +75,46 @@ Set `importance` to a salience score 0-10 (Generative-Agents style): how reusabl
 
 **Tier 2**: Add/update row in memory/_session-index.md with date, session link, status emoji, summary, commit hash (filled in Step 6).
 
-## Step 3: Pendientes — DUAL WRITE (always)
+## Step 3: Pendientes — DUAL WRITE via journal (always)
 
-This step runs in TWO sub-phases. Do 3a FIRST, then 3b. Do not merge them.
+Since v2.12.0 you do NOT edit `memory/_pendientes.md` or `memory/pendientes/YYYY-MM.md` by hand.
+Several agents may be checkpointing on this machine at the same time, and a hand edit silently
+drops their lines (Claude Code only warns; it does not block). Every change is an EVENT emitted
+with `journal-emit.py`; a single compactor (`journal-compact.py`) applies the events under a lock,
+as anchored deltas (insert under the priority header, delete by id, fill a cell by id). Locate
+the scripts once:
+
+```bash
+MEMORY_DIR="memory"   # the directory located in Step 0 (Model B); use the Model A path otherwise
+if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-emit.py" ]; then
+  JBIN="${CLAUDE_PLUGIN_ROOT}/bin"
+elif [ -f "plugins/3-tier-memory/bin/journal-emit.py" ]; then
+  JBIN="$PWD/plugins/3-tier-memory/bin"     # the plugin's own repo: dogfood the working tree, not the cache
+else
+  JEMIT=$(find "$HOME/.claude/plugins" -name "journal-emit.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)
+  JBIN=${JEMIT:+$(dirname "$JEMIT")}   # empty when find found nothing (dirname "" would give ".")
+fi
+[ -n "$JBIN" ] && [ -f "$JBIN/journal-compact.py" ] && echo "JBIN=$JBIN" || echo "JBIN=NONE"
+```
+
+If it prints `JBIN=NONE` (plugin older than 2.12.0), fall back to the manual edits marked
+**Fallback** below and say so in the Step 7 report.
+
+This step runs in FOUR sub-phases, in order: 3-pre, 3a, 3b, 3c. Do not merge them.
+
+### Step 3-pre — Fresh state + ids
+
+```bash
+python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"       # apply whatever other agents left pending
+python3 "$JBIN/enrich-memory.py" "$MEMORY_DIR" --apply --only creado,id   # legacy lines get `_creado` (if missing) and `_id: p-…_`; idempotent
+```
+
+THEN read `memory/_pendientes.md`. Every open line now ends with `_id: p-xxxxxxxxxx_`. That id is
+how you resolve it in 3a; never match a line by its text.
 
 ### Step 3a — Reconciliacion de pendientes existentes (RECONCILIATION FIRST)
 
-Read `memory/_pendientes.md`. Enumerate EVERY open item (`- [ ]`). For each, classify into exactly one of:
+Enumerate EVERY open item (`- [ ]`) you just read. For each, classify into exactly one of:
 
 - **resolved** — the work described was completed in this session, directly or indirectly (e.g., the user asked for X and X happens to satisfy the pendiente).
 - **still-open** — the work is still pending and was not touched this session.
@@ -98,9 +131,22 @@ RECONCILIACION:
 ...
 ```
 
-For items classified `resolved`, `superseded`, or `abandoned`:
-- **Tier 2**: remove the line from `memory/_pendientes.md`.
-- **Tier 3**: in `memory/pendientes/YYYY-MM.md`, fill `Resuelto` with today's date and `Sesion resolucion` with `[[sessions/DATE-SLUG]]`. For `abandoned`, note `ABANDONED — <reason>` in the resolution column. For `superseded`, note `SUPERSEDED — <new ref>`.
+For EACH item classified `resolved`, `superseded`, or `abandoned`, emit one event:
+
+```bash
+python3 "$JBIN/journal-emit.py" --type pendiente.resolve --id p-xxxxxxxxxx \
+  --estado resolved|superseded|abandoned --sesion "[[sessions/DATE-SLUG]]" --nota "<reason or new ref>"
+```
+
+The compactor (Step 3c) removes the line from `_pendientes.md` (**Tier 2**) and fills `Resuelto`
+with today's date and `Sesion resolucion` with `<sesion> — <estado> — <nota>` in the monthly row
+that carries the same id (**Tier 3**). Legacy items (created before 2.12.0) have no id in their
+monthly row: the compactor logs a WARN for them and you fill that one monthly row by hand, as
+before (`Resuelto` = today, `Sesion resolucion` = `[[sessions/DATE-SLUG]]` plus `SUPERSEDED — <ref>`
+or `ABANDONED — <reason>` when applicable).
+
+**Fallback (no JBIN)**: remove the line from `memory/_pendientes.md` and fill the monthly row as
+described above.
 
 If reconciliation finds zero existing pendientes, say so and continue.
 
@@ -116,14 +162,33 @@ Scan the ENTIRE conversation for:
 7. Tests not run
 8. Documentation gaps
 
-For EACH new pendiente:
-**Tier 2**: Add to `memory/_pendientes.md` under correct priority with this format (creation date inline):
-```
-- [ ] <texto del pendiente> — _origen: [[sessions/DATE-SLUG]]_ — _creado: YYYY-MM-DD_
-```
-Where `YYYY-MM-DD` is today's date.
+For EACH new pendiente, emit one event:
 
-**Tier 3**: Add a row to `memory/pendientes/YYYY-MM.md` with the standard columns (#, Pendiente, Prioridad, Creado, Origen, Resuelto blank, Sesion resolucion blank).
+```bash
+python3 "$JBIN/journal-emit.py" --type pendiente.add --text "<texto del pendiente>" \
+  --prioridad Alta|Media|Baja --origen "[[sessions/DATE-SLUG]]"
+```
+
+It prints the id. Do NOT also edit the files. The compactor (Step 3c) writes both tiers:
+**Tier 2** the line `- [ ] <texto> — _origen: [[sessions/DATE-SLUG]]_ — _creado: <today>_ — _id: p-…_`
+right under the priority header of `memory/_pendientes.md`; **Tier 3** a row in
+`memory/pendientes/YYYY-MM.md` with the standard columns (#, Pendiente, Prioridad, Creado, Origen,
+Resuelto blank, Sesion resolucion blank). Identity = text + origin + day: two agents that emit the
+same pendiente the same day produce the same id and the line is written once.
+
+**Fallback (no JBIN)**: write the Tier 2 line (without `_id`) and the Tier 3 row by hand.
+
+### Step 3c — Compactar
+
+```bash
+python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"
+```
+
+It must print `JOURNAL applied=N quarantined=0 pending_left=0`. If `quarantined>0`, open each
+`memory/.journal/quarantine/*.reason` (a hand-edited anchor, an id collision, a broken JSON), apply
+that change by hand, delete the `.json`/`.reason` pair, and report it in Step 7. If it prints
+`JOURNAL busy`, another agent holds the lock right now: run it again after a few seconds. This
+runs BEFORE Step 5b and Step 6 so the prune and the commit see the applied state.
 
 ## Step 4: Learnings — DUAL WRITE (always)
 
@@ -266,7 +331,7 @@ If the commit fails (e.g., user.name/user.email not configured) → set GIT_SKIP
 
 ## Step 7: Report
 
-Tell the user: session path, N pendientes extracted, M resolved, N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, N rows pruned from indexes (if any), frontmatter sealed (if N>0), **secrets redacted (if N>0, with file:line list + rotate-your-keys warning)**, git result (commit hash OR reason skipped).
+Tell the user: session path, N pendientes extracted, M resolved, journal result (`applied=N`, and any quarantined event with its reason), N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, N rows pruned from indexes (if any), frontmatter sealed (if N>0), **secrets redacted (if N>0, with file:line list + rotate-your-keys warning)**, git result (commit hash OR reason skipped).
 
 ## Step 8: Como retomar — snippet de continuidad
 

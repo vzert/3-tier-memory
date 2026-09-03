@@ -229,6 +229,7 @@ Add a row to `memory/_session-index.md`:
 
 If the draft has pendientes AND this session is within the 5 most recent:
 1. Before adding, check if an equivalent pendiente already exists in `_pendientes.md` (fuzzy match on key phrases). Skip duplicates.
+   > **Journal (v2.12.0)**: `/checkpoint-3t` no longer edits `_pendientes.md` by hand — it emits `pendiente.add` events with `bin/journal-emit.py` and lets `bin/journal-compact.py` write both tiers. This command still writes directly on purpose: backfill runs once, by one agent, never concurrently with a checkpoint. Moving it to journal events is Fase 2 of `plans/plan-journal-concurrencia-v2.12.0`. If you run it while another agent may be checkpointing, run `python3 <plugin>/bin/journal-compact.py --memory-dir memory` first.
 2. For each new pendiente:
    - **Tier 2**: Add to `memory/_pendientes.md` under Media prioridad with format `- [ ] <texto> — _origen: [[sessions/YYYY-MM-DD-slug]] (backfill)_ — _creado: YYYY-MM-DD_` (use the session's `dateFirst`, NOT today)
    - **Tier 3**: Add row to `memory/pendientes/YYYY-MM.md` (create the file if needed)

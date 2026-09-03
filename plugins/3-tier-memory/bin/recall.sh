@@ -16,6 +16,15 @@ elif [ -d "$HOME/.claude/projects" ]; then
 fi
 [ -z "$MEMORY_DIR" ] && exit 0
 
+# Journal (v2.12.0): un evento que nadie compacto (el agente que lo emitio se cerro antes de
+# su checkpoint) se aplica en el siguiente prompt de cualquier sesion. Fast path: un listado
+# de directorio; solo se lanza python3 si pending/ tiene algo.
+JOURNAL_PENDING="$MEMORY_DIR/.journal/pending"
+if [ -f "$CLAUDE_PLUGIN_ROOT/bin/journal-compact.py" ] && [ -d "$JOURNAL_PENDING" ] \
+   && [ -n "$(ls -A "$JOURNAL_PENDING" 2>/dev/null)" ]; then
+  python3 "$CLAUDE_PLUGIN_ROOT/bin/journal-compact.py" --memory-dir "$MEMORY_DIR" --budget 1 --quiet >/dev/null 2>&1
+fi
+
 # Derived recall index lives alongside other per-machine state (like
 # .backfill-progress.json), NOT in memory/ — so it never gets committed.
 ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
