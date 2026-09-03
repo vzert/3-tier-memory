@@ -49,6 +49,17 @@ All index files must have:
 - Frontmatter: type, created, updated, status
 - Related section with wikilinks to other indexes
 
+> **Journal anchors (v2.12.0)**: from this version on, `/checkpoint-3t`, `/save-learning`, `/backfill-3t`
+> and `/consolidate-3t` never edit these indexes by hand — they emit events that `bin/journal-compact.py`
+> applies as anchored deltas. The anchors are the exact section headers and table layouts below:
+> `## Alta prioridad` / `## Media prioridad` / `## Baja prioridad` in `_pendientes.md`; the `## Sessions`
+> table (Fecha, Sesion, Status, Resumen, Commit); the `## Topic Files` table (Topic, File, When to consult)
+> and the `## Quick Reference` section in `_learnings.md`; the `## Plans` table (Plan, Status, Fecha, Sesion,
+> Pendientes, Learnings); the `## Active Research` table (Tema, Next step, Origen, Archivo) and the
+> `## Completed Research` table (Tema, Resultado, Archivo). Keep them verbatim, each followed by its table
+> header + separator row; an event whose anchor is missing goes to `memory/.journal/quarantine/` instead
+> of being applied. `.journal/` itself is created by the compactor on first use.
+
 ## Step 4: Create Tier 3 starter files
 
 **learnings/<project-slug>.md** — One starter learnings file named after the project. Frontmatter + "Rules will be added as patterns are discovered."
@@ -78,10 +89,12 @@ This project uses project-local memory. Files live in `memory/` within the proje
 2. Read `memory/_learnings.md` — consult before making changes
 
 ## During execution
-- New learning → `memory/learnings/<topic>.md`, update `memory/_learnings.md` if critical
-- New pendiente → `memory/_pendientes.md` with `_origen:` link AND `_creado: YYYY-MM-DD` + `memory/pendientes/YYYY-MM.md` — since v2.12.0 do this through `/checkpoint-3t` Step 3b (it emits a `pendiente.add` event via `bin/journal-emit.py`; the compactor writes both files), never by editing the index directly while other agents may be writing
-- Executing a plan → register/update row in `memory/_plans-index.md`
-- New research → `memory/research/{slug}.md` + row in `memory/_research-index.md`
+Since v2.12.0 the shared indexes are written ONLY through journal events (`bin/journal-emit.py` +
+`bin/journal-compact.py`), never by editing them directly while other agents may be writing:
+- New learning → `learning.add` event (`/checkpoint-3t` Step 4 or `/save-learning`): the compactor numbers the rule in `memory/learnings/<topic>.md` and updates `memory/_learnings.md`
+- New pendiente → `pendiente.add` event (`/checkpoint-3t` Step 3b): the compactor writes `memory/_pendientes.md` (with `_origen:`, `_creado:`, `_id:`) and `memory/pendientes/YYYY-MM.md`
+- Executing a plan → write `memory/plans/plan-<slug>.md` directly + `plan.upsert` event for the row in `memory/_plans-index.md` (`/checkpoint-3t` Step 5)
+- New research → write `memory/research/{slug}.md` directly + `research.upsert` event for the row in `memory/_research-index.md` (`/checkpoint-3t` Step 5)
 
 ## Checkpoint
 Use /checkpoint-3t to save progress. It will update session log, extract pendientes, update indexes, and git commit.

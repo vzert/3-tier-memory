@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-3-tier-memory plugin: compactador unico del journal (v2.12.0, Fase 1).
+3-tier-memory plugin: compactador unico del journal (v2.12.0, Fases 1 y 2).
 
 Aplica los eventos de memory/.journal/pending/ a los indices markdown, en orden de nombre
 (= orden de emision), bajo un lock de directorio. Primitiva: mkdir — en POSIX, mkdir(2) es
@@ -14,6 +14,27 @@ un archivo .reason al lado. Nunca se pierde un evento en silencio.
 Idempotente: re-aplicar un evento ya aplicado es no-op (la linea ya existe / ya no existe).
 Deltas anclados, nunca regeneracion: insertar tras el header de prioridad, borrar linea por
 id, llenar celda por id. Las ediciones a mano del humano sobreviven.
+
+Fase 2 (sesiones, reglas, planes, research) — mismo principio, anclas de tabla:
+  session.add      fila arriba de la tabla '## Sessions' de _session-index.md (clave: slug);
+                   si ya existe, rellena status/summary/commit; poda a las 10 mas recientes
+                   por la columna Fecha (filas sin fecha valida no se podan).
+  learning.add     crea learnings/<topic>.md y su fila en '## Topic Files' si faltan; agrega
+                   la regla con numero max+1 (bajo este lock: dos agentes nunca reciben el
+                   mismo numero) al final de --section o del ultimo bloque antes de
+                   '## Related'; si el archivo solo usa bullets, agrega bullet. --quickref
+                   agrega la version corta numerada (max+1) en '## Quick Reference'.
+                   Idempotente por texto normalizado.
+  plan.upsert      fila en '## Plans' por [[plans/plan-<slug>]] o titulo; actualiza Status,
+                   Sesion, Pendientes, Learnings (Fecha no cambia en updates); poda
+                   completed/abandoned a los 5 mas recientes por Fecha.
+  research.upsert  fila en '## Active Research' o '## Completed Research' por
+                   [[research/<slug>]] o Tema; completed la mueve de Active a Completed y un
+                   research completado no vuelve a Active (monotono: reabrir es a mano). La celda
+                   Archivo de una fila completada lleva `_completado: YYYY-MM-DD_` (fecha del
+                   evento); la poda de Completed (5 mas recientes) va por esa fecha, y las filas
+                   sin ella (a mano, o anteriores a 2.12.0) nunca se podan — igual que sesiones.
+  Todo indice que se escribe recibe `updated: <hoy>` en su frontmatter.
 
 Lock: memory/.journal/.lock (dir) con acquired_at + owner. TTL 60 s. Un lock vencido lo
 reclama exactamente un proceso: el que gana mkdir de .lock-steal re-verifica el TTL y borra.
@@ -51,6 +72,14 @@ MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto
          "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 ID_RE = re.compile(r"_id: (p-[0-9a-f]{10})_")
 HEADERS = {"alta": "## Alta prioridad", "media": "## Media prioridad", "baja": "## Baja prioridad"}
+SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$")   # tambien guarda contra '../'
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+CELL_SPLIT = re.compile(r"(?<!\\)\|")   # un `\|` dentro de una celda (alias de wikilink) no separa
+MAX_SESSIONS = 10
+MAX_PLANS_DONE = 5
+MAX_RESEARCH_DONE = 5
+COMPLETADO_RE = re.compile(r"_completado: (\d{4}-\d{2}-\d{2})_")
+RESEARCH_STATUS = ("active", "completed")
 
 LOG_FILE = None
 
@@ -370,6 +399,405 @@ def apply_resolve_monthly(mem, p):
     return True
 
 
+
+# ----------------------------------------------------------------------------- tablas (Fase 2)
+def split_cells(line):
+    s = line.strip()
+    if s.startswith("|"):
+        s = s[1:]
+    if s.endswith("|") and not s.endswith("\\|"):
+        s = s[:-1]
+    return [c.strip() for c in CELL_SPLIT.split(s)]
+
+
+def join_cells(cells):
+    return "| " + " | ".join(cells) + " |"
+
+
+def pad(cells, n):
+    cells = list(cells)
+    while len(cells) < n:
+        cells.append("")
+    return cells
+
+
+def is_separator(line):
+    return re.match(r"^\|\s*:?-+", line.strip()) is not None
+
+
+def section_bounds(lines, header):
+    """(start, end) del bloque bajo un header `## X`: start = indice del header, end = indice
+    del siguiente `## ` (o len). None si el header no existe."""
+    start = None
+    for i, line in enumerate(lines):
+        if line.strip().lower().startswith(header.lower()):
+            start = i
+            break
+    if start is None:
+        return None
+    end = len(lines)
+    for j in range(start + 1, len(lines)):
+        if lines[j].startswith("## "):
+            end = j
+            break
+    return start, end
+
+
+def table_in(lines, start, end):
+    """(header_row, sep_row, [filas de datos]) de la primera tabla en [start, end). None si no hay."""
+    i = start
+    while i + 1 < end:
+        if lines[i].strip().startswith("|") and is_separator(lines[i + 1]):
+            rows = []
+            k = i + 2
+            while k < end and lines[k].strip().startswith("|"):
+                rows.append(k)
+                k += 1
+            return i, i + 1, rows
+        i += 1
+    return None
+
+
+def need_table(lines, header, fname):
+    sec = section_bounds(lines, header)
+    if not sec:
+        raise Quarantine(f"no-anchor: falta '{header}' en {fname}")
+    tab = table_in(lines, *sec)
+    if not tab:
+        raise Quarantine(f"no-anchor: '{header}' de {fname} no tiene tabla")
+    return sec, tab
+
+
+def plain(cell_text):
+    """Texto de celda sin wikilinks ni enfasis, normalizado y en minusculas, para comparar."""
+    t = re.sub(r"\[\[([^\]|]*?)(?:\\\|([^\]]*))?\]\]", lambda m: m.group(2) or m.group(1), cell_text)
+    t = re.sub(r"\((?:inline|backfill)\)", "", t, flags=re.I)
+    return normalize_text(re.sub(r"[*_`]", "", t)).lower()
+
+
+def bump_updated(lines):
+    if lines and lines[0].strip() == "---":
+        for i in range(1, min(len(lines), 20)):
+            if lines[i].strip() == "---":
+                return
+            if lines[i].startswith("updated:"):
+                lines[i] = f"updated: {date.today().isoformat()}"
+                return
+
+
+def link_re(prefix, slug):
+    return re.compile(r"\[\[" + re.escape(prefix + slug) + r"(\\\||\||\]\])")
+
+
+def delete_rows(lines, idxs):
+    for i in sorted(idxs, reverse=True):
+        del lines[i]
+
+
+def check_slug(value, what):
+    if not isinstance(value, str) or not SLUG_RE.match(value):
+        raise Quarantine(f"malformed: {what} '{value}' no es un slug valido")
+    return value
+
+
+# ----------------------------------------------------------------------------- _session-index.md
+def session_alias(slug):
+    return slug[11:] if re.match(r"^\d{4}-\d{2}-\d{2}-.+", slug) else slug
+
+
+def apply_session_add(mem, p):
+    path = os.path.join(mem, "_session-index.md")
+    if not os.path.isfile(path):
+        raise Quarantine("no-index: _session-index.md no existe")
+    lines = read_lines(path)
+    orig = list(lines)
+    (start, end), (hdr, sep, rows) = need_table(lines, "## Sessions", "_session-index.md")
+    key = link_re("sessions/", p["slug"])
+    hit = next((i for i in rows if key.search(lines[i])), None)
+    if hit is not None:
+        cells = pad(split_cells(lines[hit]), 5)
+        new = list(cells)
+        for idx, k in ((2, "status"), (3, "summary"), (4, "commit")):
+            if p.get(k):
+                new[idx] = p[k]
+        if new == cells:
+            return False
+        lines[hit] = join_cells(new)
+    else:
+        row = join_cells([p["date"], f"[[sessions/{p['slug']}\\|{session_alias(p['slug'])}]]",
+                          p.get("status") or "", p.get("summary") or "", p.get("commit") or ""])
+        lines.insert(sep + 1, row)   # la mas nueva arriba
+        # Poda: solo filas con Fecha valida compiten; el resto se conserva tal cual.
+        _, (hdr, sep, rows) = need_table(lines, "## Sessions", "_session-index.md")
+        dated = [(i, split_cells(lines[i])[0]) for i in rows]
+        dated = [(i, d) for i, d in dated if DATE_RE.match(d)]
+        if len(dated) > MAX_SESSIONS:
+            dated.sort(key=lambda x: (x[1], -x[0]), reverse=True)   # misma fecha: la de arriba gana
+            delete_rows(lines, [i for i, _ in dated[MAX_SESSIONS:]])
+    if lines == orig:
+        return False   # la fila entro y la poda la saco en el acto (mas vieja que las 10): noop
+    bump_updated(lines)
+    atomic_write(path, lines)
+    return True
+
+
+# ----------------------------------------------------------------------------- learnings
+def rule_text(line):
+    """(numero|None, texto|None) de una linea de regla numerada o bullet."""
+    s = line.strip()
+    m = re.match(r"^(\d+)\.\s+(.*)$", s)
+    if m:
+        return int(m.group(1)), m.group(2)
+    m = re.match(r"^[-*]\s+(.*)$", s)
+    if m:
+        return None, m.group(1)
+    return None, None
+
+
+def body_region(lines):
+    """(inicio del cuerpo tras el frontmatter, indice de '## Related' o len)."""
+    start = 0
+    if lines and lines[0].strip() == "---":
+        for i in range(1, len(lines)):
+            if lines[i].strip() == "---":
+                start = i + 1
+                break
+    related = len(lines)
+    for i in range(start, len(lines)):
+        if lines[i].strip().lower().startswith("## related"):
+            related = i
+            break
+    return start, related
+
+
+def insert_at_section_end(lines, start, end, new_line):
+    """Inserta new_line al final del bloque [start, end), antes de las lineas en blanco que
+    preceden al siguiente header, y garantiza una linea en blanco despues."""
+    at = end
+    while at - 1 > start and lines[at - 1].strip() == "":
+        at -= 1
+    if at - 1 == start:            # seccion vacia: dejar una linea en blanco tras el header
+        lines.insert(at, "")
+        at += 1
+    lines.insert(at, new_line)
+    if at + 1 < len(lines) and lines[at + 1].strip() != "":
+        lines.insert(at + 1, "")
+    return at
+
+
+def apply_learning_add(mem, p):
+    topic = check_slug(p["topic"], "topic")
+    title = p.get("title") or topic
+    changed = False
+    today = date.today().isoformat()
+
+    tpath = os.path.join(mem, "learnings", topic + ".md")
+    if not os.path.isfile(tpath):
+        os.makedirs(os.path.dirname(tpath), exist_ok=True)
+        fm = ["---", "type: learnings", f"topic: {topic}", f"created: {today}",
+              f"updated: {today}", "status: active"]
+        if p.get("importance"):
+            fm.append(f"importance: {p['importance']}")
+        fm += [f"last_verified: {today}", "---"]
+        atomic_write(tpath, fm + [f"# {title}", "", "## Rules", "", "## Related",
+                                  "- [[_learnings|Learnings Index]]", ""])
+        changed = True
+
+    ipath = os.path.join(mem, "_learnings.md")
+    if not os.path.isfile(ipath):
+        raise Quarantine("no-index: _learnings.md no existe")
+    ilines = read_lines(ipath)
+    tkey = link_re("learnings/", topic)
+    if not any(tkey.search(l) for l in ilines):
+        _, (hdr, sep, rows) = need_table(ilines, "## Topic Files", "_learnings.md")
+        at = (rows[-1] + 1) if rows else (sep + 1)
+        ilines.insert(at, join_cells([title, f"[[learnings/{topic}]]", p.get("when") or ""]))
+        bump_updated(ilines)
+        atomic_write(ipath, ilines)
+        changed = True
+
+    text = normalize_text(p.get("text") or "")
+    if text:
+        lines = read_lines(tpath)
+        start, related = body_region(lines)
+        parsed = [rule_text(l) for l in lines[start:related]]
+        if not any(t and normalize_text(t) == text for _, t in parsed):
+            nums = [n for n, _ in parsed if n]
+            bullets = any(n is None and t for n, t in parsed)
+            numbered = bool(nums) or not bullets
+            new_line = f"{max(nums) + 1 if nums else 1}. {text}" if numbered else f"- {text}"
+            section = p.get("section") or ""
+            sec = section_bounds(lines, f"## {section}") if section else None
+            if sec and sec[0] < related:
+                insert_at_section_end(lines, sec[0], min(sec[1], related), new_line)
+            elif section:
+                at = related
+                while at - 1 > start and lines[at - 1].strip() == "":
+                    at -= 1
+                lines[at:at] = ["", f"## {section}", "", new_line]
+            else:
+                insert_at_section_end(lines, start, related, new_line)
+            bump_updated(lines)
+            atomic_write(tpath, lines)
+            changed = True
+
+    q = normalize_text(p.get("quickref") or "")
+    if q:
+        ilines = read_lines(ipath)
+        sec = section_bounds(ilines, "## Quick Reference")
+        if not sec:
+            raise Quarantine("no-anchor: falta '## Quick Reference' en _learnings.md "
+                             "(la regla ya quedo en el topic file; agrega el Quick Ref a mano)")
+        s0, s1 = sec
+        parsed = [rule_text(l) for l in ilines[s0:s1]]
+        if not any(t and normalize_text(t) == q for _, t in parsed):
+            nums = [n for n, _ in parsed if n]
+            insert_at_section_end(ilines, s0, s1, f"{max(nums) + 1 if nums else 1}. {q}")
+            bump_updated(ilines)
+            atomic_write(ipath, ilines)
+            changed = True
+    return changed
+
+
+# ----------------------------------------------------------------------------- _plans-index.md
+def apply_plan_upsert(mem, p):
+    slug = check_slug(p["slug"], "slug")
+    path = os.path.join(mem, "_plans-index.md")
+    if not os.path.isfile(path):
+        raise Quarantine("no-index: _plans-index.md no existe")
+    lines = read_lines(path)
+    orig = list(lines)
+    _, (hdr, sep, rows) = need_table(lines, "## Plans", "_plans-index.md")
+    key = link_re("plans/plan-", slug)
+    tplain = plain(p["title"])
+    hit = next((i for i in rows if key.search(lines[i])
+                or plain(split_cells(lines[i])[0]) == tplain), None)
+    if hit is not None:
+        cells = pad(split_cells(lines[hit]), 6)
+        new = list(cells)
+        for idx, k in ((1, "status"), (3, "sesion"), (4, "pendientes"), (5, "learnings")):
+            if p.get(k):
+                new[idx] = p[k]
+        if new == cells:
+            return False
+        lines[hit] = join_cells(new)
+    else:
+        plan_cell = f"{p['title']} (inline)" if p.get("inline") \
+            else f"[[plans/plan-{slug}\\|{p['title']}]]"
+        lines.insert(sep + 1, join_cells([plan_cell, p["status"], p["date"], p.get("sesion") or "",
+                                          p.get("pendientes") or "", p.get("learnings") or ""]))
+    _, (hdr, sep, rows) = need_table(lines, "## Plans", "_plans-index.md")
+    done = []
+    for i in rows:
+        c = pad(split_cells(lines[i]), 3)
+        st = c[1].lower().split()
+        if st and st[0] in ("completed", "abandoned") and DATE_RE.match(c[2]):
+            done.append((i, c[2]))
+    if len(done) > MAX_PLANS_DONE:
+        done.sort(key=lambda x: (x[1], -x[0]), reverse=True)
+        delete_rows(lines, [i for i, _ in done[MAX_PLANS_DONE:]])
+    if lines == orig:
+        return False
+    bump_updated(lines)
+    atomic_write(path, lines)
+    return True
+
+
+# ----------------------------------------------------------------------------- _research-index.md
+ACTIVE_PLACEHOLDER = "<!-- Sin research activo -->"
+
+
+def find_research_row(lines, header, key, tplain):
+    _, (hdr, sep, rows) = need_table(lines, header, "_research-index.md")
+    hit = next((i for i in rows if key.search(lines[i])
+                or plain(split_cells(lines[i])[0]) == tplain), None)
+    return sep, rows, hit
+
+
+def apply_research_upsert(mem, p):
+    slug = check_slug(p["slug"], "slug")
+    path = os.path.join(mem, "_research-index.md")
+    if not os.path.isfile(path):
+        raise Quarantine("no-index: _research-index.md no existe")
+    lines = read_lines(path)
+    need_table(lines, "## Active Research", "_research-index.md")
+    need_table(lines, "## Completed Research", "_research-index.md")
+    key = link_re("research/", slug)
+    tplain = plain(p["tema"])
+    archivo = "(inline)" if p.get("inline") else f"[[research/{slug}]]"
+    changed = False
+
+    if p["status"] == "active":
+        sep, rows, hit = find_research_row(lines, "## Completed Research", key, tplain)
+        if hit is not None:
+            return False               # ya maduro: un research no vuelve a Active (monotono;
+                                       # reabrir es una edicion a mano). Asi un replay de un
+                                       # `active` viejo no deshace el `completed`.
+        sep, rows, hit = find_research_row(lines, "## Active Research", key, tplain)
+        if hit is not None:
+            cells = pad(split_cells(lines[hit]), 4)
+            new = list(cells)
+            for idx, k in ((1, "next_step"), (2, "origen")):
+                if p.get(k):
+                    new[idx] = p[k]
+            if new != cells:
+                lines[hit] = join_cells(new)
+                changed = True
+        else:
+            lines.insert(sep + 1, join_cells([p["tema"], p.get("next_step") or "",
+                                              p.get("origen") or "", archivo]))
+            changed = True
+            a0, a1 = section_bounds(lines, "## Active Research")
+            for j in range(a0, a1):
+                if lines[j].strip() == ACTIVE_PLACEHOLDER:
+                    del lines[j]
+                    break
+    else:
+        sep, rows, hit = find_research_row(lines, "## Active Research", key, tplain)
+        if hit is not None:            # madura: sale de Active
+            del lines[hit]
+            changed = True
+            a0, a1 = section_bounds(lines, "## Active Research")
+            tab = table_in(lines, a0, a1)
+            if tab and not tab[2]:
+                lines.insert(tab[1] + 1, ACTIVE_PLACEHOLDER)
+        sep, rows, hit = find_research_row(lines, "## Completed Research", key, tplain)
+        fecha = p.get("date") or time.strftime("%Y-%m-%d", time.gmtime(int(p.get("_ts", 0)) / 1e9))
+        if hit is not None:
+            cells = pad(split_cells(lines[hit]), 3)
+            new = list(cells)
+            if p.get("resultado"):
+                new[1] = p["resultado"]
+            if not COMPLETADO_RE.search(new[2]):
+                # Fila anterior a 2.12.0 (o a mano): recibe la marca con la fecha del evento y
+                # desde ahora compite en la poda por fecha.
+                new[2] = f"{new[2]} _completado: {fecha}_".strip()
+            if new != cells:
+                lines[hit] = join_cells(new)
+                changed = True
+        else:
+            lines.insert(sep + 1, join_cells([p["tema"], p.get("resultado") or "",
+                                              f"{archivo} _completado: {fecha}_"]))
+            changed = True
+        # Poda por fecha, nunca por posicion: solo compiten las filas con `_completado:`; una fila
+        # sin fecha (a mano, o anterior a 2.12.0) se conserva. Asi un `completed` viejo re-aplicado
+        # entra con su fecha vieja y es el que sale, no una fila mas nueva del fondo.
+        sep, rows, _ = find_research_row(lines, "## Completed Research", key, tplain)
+        dated = []
+        for i in rows:
+            m = COMPLETADO_RE.search(lines[i])
+            if m:
+                dated.append((i, m.group(1)))
+        if len(dated) > MAX_RESEARCH_DONE:
+            dated.sort(key=lambda x: (x[1], -x[0]), reverse=True)
+            delete_rows(lines, [i for i, _ in dated[MAX_RESEARCH_DONE:]])
+            changed = True
+    if changed:
+        bump_updated(lines)
+        atomic_write(path, lines)
+    return changed
+
+
 # ----------------------------------------------------------------------------- dispatch
 def validate(ev):
     if not isinstance(ev, dict) or ev.get("v") != 1:
@@ -388,9 +816,43 @@ def validate(ev):
         for k in ("id", "estado"):
             if not p.get(k):
                 raise Quarantine(f"malformed: pendiente.resolve sin '{k}'")
+    elif t == "session.add":
+        for k in ("slug", "date"):
+            if not p.get(k):
+                raise Quarantine(f"malformed: session.add sin '{k}'")
+        if not (p.get("status") or p.get("summary") or p.get("commit")):
+            raise Quarantine("malformed: session.add sin status/summary/commit")
+        if not DATE_RE.match(str(p["date"])):
+            raise Quarantine(f"malformed: date '{p['date']}' invalida")
+        check_slug(p["slug"], "slug")
+        return t, p
+    elif t == "learning.add":
+        if not p.get("topic"):
+            raise Quarantine("malformed: learning.add sin 'topic'")
+        check_slug(p["topic"], "topic")
+        return t, p
+    elif t == "plan.upsert":
+        for k in ("slug", "title", "status", "date"):
+            if not p.get(k):
+                raise Quarantine(f"malformed: plan.upsert sin '{k}'")
+        if not DATE_RE.match(str(p["date"])):
+            raise Quarantine(f"malformed: date '{p['date']}' invalida")
+        check_slug(p["slug"], "slug")
+        return t, p
+    elif t == "research.upsert":
+        for k in ("slug", "tema", "status"):
+            if not p.get(k):
+                raise Quarantine(f"malformed: research.upsert sin '{k}'")
+        if p["status"] not in RESEARCH_STATUS:
+            raise Quarantine(f"malformed: status '{p['status']}' de research desconocido")
+        if p.get("date") and not DATE_RE.match(str(p["date"])):
+            raise Quarantine(f"malformed: date '{p['date']}' invalida")
+        p["_ts"] = ev.get("ts", 0)   # respaldo para eventos sin `date` (emisor viejo)
+        check_slug(p["slug"], "slug")
+        return t, p
     else:
         raise Quarantine(f"malformed: tipo '{t}' desconocido")
-    if not re.match(r"^p-[0-9a-f]{10}$", p["id"]):
+    if not re.match(r"^p-[0-9a-f]{10}$", str(p["id"])):
         raise Quarantine(f"malformed: id '{p['id']}' invalido")
     return t, p
 
@@ -401,9 +863,17 @@ def apply_event(mem, ev):
         a = apply_add_index(mem, p)
         b = apply_add_monthly(mem, p)
         return a or b
-    a = apply_resolve_index(mem, p)
-    b = apply_resolve_monthly(mem, p)
-    return a or b
+    if t == "pendiente.resolve":
+        a = apply_resolve_index(mem, p)
+        b = apply_resolve_monthly(mem, p)
+        return a or b
+    if t == "session.add":
+        return apply_session_add(mem, p)
+    if t == "learning.add":
+        return apply_learning_add(mem, p)
+    if t == "plan.upsert":
+        return apply_plan_upsert(mem, p)
+    return apply_research_upsert(mem, p)
 
 
 def move_to(src, dest_dir, reason=None):

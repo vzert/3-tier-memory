@@ -21,10 +21,39 @@ Throughout, **skip archived content**: ignore `memory/archive/`, and any file na
 `*.bak` / `*.bak-*` / `*.zip` / `*.archived.md` / `*-archived-*.md`. Archived files are
 out of scope for dedup, supersede, and reflection.
 
-## Step 0: Locate memory directory
+## Step 0: Locate memory directory, apply pending journal events
 
 If `memory/` exists in the project root, use it (Model B). Otherwise check auto-memory (Model A).
-Read `memory/_learnings.md` and list the topic files in `memory/learnings/`.
+
+Since v2.12.0 other agents write rules through the journal (`bin/journal-emit.py` +
+`bin/journal-compact.py`). Compact FIRST, so you dedup and renumber against the real state and not
+against a copy that is missing rules still sitting in `memory/.journal/pending/`:
+
+```bash
+MEMORY_DIR="memory"   # the directory located above (Model B); use the Model A path otherwise
+if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-emit.py" ]; then
+  JBIN="${CLAUDE_PLUGIN_ROOT}/bin"
+elif [ -f "plugins/3-tier-memory/bin/journal-emit.py" ]; then
+  JBIN="$PWD/plugins/3-tier-memory/bin"     # the plugin's own repo: dogfood the working tree, not the cache
+else
+  JEMIT=$(find "$HOME/.claude/plugins" -name "journal-emit.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)
+  JBIN=${JEMIT:+$(dirname "$JEMIT")}   # empty when find found nothing (dirname "" would give ".")
+fi
+[ -n "$JBIN" ] && [ -f "$JBIN/journal-compact.py" ] && echo "JBIN=$JBIN" || echo "JBIN=NONE"
+```
+
+```bash
+[ "$JBIN" != NONE ] && python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"
+```
+
+Then read `memory/_learnings.md` and list the topic files in `memory/learnings/`.
+
+Which edits below go through the journal and which do not: **new rules** (Step 3 reflections)
+are emitted as `learning.add` events. **Merges, supersede markers, renumbering and
+`last_verified`** (Steps 1, 2, 4) are still direct edits, on purpose: they rewrite existing
+rules after the user approves each one, and no event can express "fold rule B into A". The
+window is bounded because you compacted just now and compact again in Step 4b; keep the direct
+edits short (one topic file at a time, read right before you write).
 
 ## Step 0.5: Generate duplicate candidates from the recall index (pre-filter)
 
@@ -121,16 +150,36 @@ REFLECTION:
   derived_from: [[sessions/...]], [[sessions/...]]
 ```
 
-For approved reflections, dual-write like a normal learning:
-- Tier 3: add to the relevant `learnings/<topic>.md` with `derived_from:` noted inline on the rule.
-- Tier 2: add to `_learnings.md` Quick Reference if broadly critical.
-- Set/refresh the topic file's `last_verified: DATE` frontmatter.
+For approved reflections, emit one `learning.add` event each (the compactor numbers it under the
+lock and writes both tiers):
+
+```bash
+python3 "$JBIN/journal-emit.py" --type learning.add --topic <topic-slug> \
+  --text "**<higher-level insight>** — <explanation> (derived_from: [[sessions/...]], [[sessions/...]])" \
+  [--quickref "**<insight>** — <short form>"]   # only if broadly critical
+```
+
+The topic file's `last_verified: DATE` is refreshed in Step 4 (direct edit).
+
+**Fallback (no JBIN)**: append the rule with the next number to `learnings/<topic>.md` and the Quick
+Reference entry to `_learnings.md` by hand.
 
 ## Step 4: Refresh last_verified
 
 For every `learnings/<topic>.md` you reviewed and confirmed still accurate this run, set its
 frontmatter `last_verified: DATE` (today). Add the field if missing. This clears the staleness
 flag surfaced by /audit-3t and /status-3t. Leave `importance:` untouched unless the user changes it.
+
+## Step 4b: Compactar
+
+```bash
+[ "$JBIN" != NONE ] && python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"
+```
+
+Applies the Step 3 reflections and anything other agents emitted while you were editing. It must
+print `quarantined=0 pending_left=0`; if an event was quarantined (its anchor moved because of a
+merge you just made), read `memory/.journal/quarantine/*.reason`, apply it by hand, delete the
+`.json`/`.reason` pair, and report it in Step 6.
 
 ## Step 5: Git commit (best-effort)
 
@@ -144,5 +193,6 @@ The recall index rebuilds automatically on the next prompt (memory files are now
 
 ## Step 6: Report
 
-Tell the user: N duplicate clusters merged, M contradictions superseded, K reflections added,
-L topic files re-verified, git result (hash or skip reason).
+Tell the user: N duplicate clusters merged, M contradictions superseded, K reflections added
+(journal `applied=K`, or "Fallback: hand edit"), L topic files re-verified, quarantined events
+if any, git result (hash or skip reason).
