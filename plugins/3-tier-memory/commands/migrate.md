@@ -122,7 +122,26 @@ For each missing index file, create it with the standard template. Do NOT overwr
 - `memory/_plans-index.md` — if missing, create with plans table
 - `memory/_research-index.md` — if missing, create with Active/Completed Research tables
 
-Use today's date for frontmatter.
+Use today's date for frontmatter. Keep the section headers and table layouts of `/setup-memory` Step 3
+verbatim: since v2.12.0 they are the anchors `bin/journal-compact.py` writes under.
+
+### 4b. Locate the journal scripts (v2.12.0)
+
+Steps 5b and 5c below add rows and pendientes to the project indexes. They do it through journal
+events, never by hand, because the project may already have agents checkpointing while you migrate:
+
+```bash
+MEMORY_DIR="memory"
+if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-emit.py" ]; then
+  JBIN="${CLAUDE_PLUGIN_ROOT}/bin"
+else
+  JEMIT=$(find "$HOME/.claude/plugins" -name "journal-emit.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)
+  JBIN=${JEMIT:+$(dirname "$JEMIT")}
+fi
+[ -n "$JBIN" ] && [ -f "$JBIN/journal-compact.py" ] && echo "JBIN=$JBIN" || echo "JBIN=NONE"
+```
+
+If it prints `JBIN=NONE` (plugin older than 2.12.0), use the **Fallback** in 5b/5c and say so in the report.
 
 ## Step 5: Scan and absorb auto-memory
 
@@ -155,10 +174,12 @@ For each `.md` file in `AUTO_MEMORY_DIR` that is NOT `MEMORY.md`, NOT `*.bak`, N
 
 1. Read the file and extract frontmatter `type` field
 2. Map to destination:
-   - `type: reference` → `memory/research/{filename}` + add row to `_research-index.md` Completed Research table (Tema = `name`, Resultado = `description`, Archivo = link)
-   - `type: feedback` | `type: project` | `type: user` | no type → `memory/learnings/{filename}` + add row to `_learnings.md` Topic Files table (Topic = `name`, File = wikilink, When to consult = derived from `description`)
+   - `type: reference` → `memory/research/{filename}` + a `research.upsert` event for the Completed Research row:
+     `python3 "$JBIN/journal-emit.py" --type research.upsert --slug <filename-without-.md> --tema "<name>" --status completed --resultado "<description>" --date <file's frontmatter date or mtime, YYYY-MM-DD>` (never today: the date decides pruning)
+   - `type: feedback` | `type: project` | `type: user` | no type → `memory/learnings/{filename}` + a `learning.add` event with no `--text` (registers the Topic Files row only; the copied file is not rewritten):
+     `python3 "$JBIN/journal-emit.py" --type learning.add --topic <filename-without-.md> --title "<name>" --when "<derived from description>"`
 3. If destination file already exists in project memory → **skip with warning**, do NOT overwrite
-4. Copy file to destination, add index row
+4. Copy file to destination, emit the index event (**Fallback (no JBIN)**: add the row by hand)
 5. Delete source file from auto-memory
 
 Special case: if `CLAUDE.md` exists in auto-memory, rename to `CLAUDE.md.bak` and warn user to review it manually for any rules to add to project CLAUDE.md.
@@ -167,16 +188,30 @@ Special case: if `CLAUDE.md` exists in auto-memory, rename to `CLAUDE.md.bak` an
 
 For each index file found in `AUTO_MEMORY_DIR` (`_pendientes.md`, `_session-index.md`, `_learnings.md`, `_plans-index.md`, `_research-index.md`):
 
-Immediately before writing the project memory index (steps 2-3 below), re-read its current
-content — don't rely on the read in step 1 if time has passed. A per-file lock now serializes
-concurrent writers, but it only guarantees exclusive access at write time, not that your
-in-context copy is current.
+The project index is never written by hand here: each row or item becomes a journal event and the
+compactor merges it under its lock, so a checkpoint running in parallel loses nothing. The compactor
+is idempotent by identifier (session slug, topic, plan slug/title, research slug/tema, pendiente
+text+date+origin), so a row that already exists in the project index is a no-op.
 
-1. Read both the auto-memory index and the project memory index
-2. For table-based indexes: parse each table row from the auto-memory version. If an equivalent row does NOT already exist in the project index (match on primary identifier: session slug, topic name, plan name, research topic), append it
-3. For `_pendientes.md`: parse each open item (`- [ ]`). If it does not already exist in the project `_pendientes.md` (match on text content), append it under the same priority section
-   > **Journal (v2.12.0)**: direct append is intentional here — `/migrate` runs once, by one agent, before any concurrent checkpoint exists in the new location. `/checkpoint-3t` itself now writes pendientes through `bin/journal-emit.py` + `bin/journal-compact.py`; migrating this step to events is Fase 2 of `plans/plan-journal-concurrencia-v2.12.0`. Lines appended here get their `_id` on the next checkpoint (Step 3-pre runs `enrich-memory.py --only creado,id`).
-4. Delete the auto-memory index file after merging
+1. Read the auto-memory index (the project index is read by the compactor itself)
+2. For table-based indexes, emit one event per row of the auto-memory version:
+   - `_session-index.md` row → `session.add --slug <slug> --date <Fecha> --status "<Status>" --summary "<Resumen>" --commit "<Commit>"`
+   - `_learnings.md` Topic Files row → `learning.add --topic <slug from the wikilink> --title "<Topic>" --when "<When to consult>"` (no `--text`); Quick Reference entries → `learning.add --topic <topic that holds the rule> --quickref "<entry text>"` (no `--text`)
+   - `_plans-index.md` row → `plan.upsert --slug <slug from the wikilink, or a slug from the title> --title "<Plan>" --status "<Status>" --date <Fecha> --sesion "<Sesion>" --pendientes "<Pendientes>" --learnings "<Learnings>"` (add `--inline` when the row has no plan file)
+   - `_research-index.md` Active row → `research.upsert --slug <slug> --tema "<Tema>" --status active --next-step "<Next step>" --origen "<Origen>"`; Completed row → `research.upsert --slug <slug> --tema "<Tema>" --status completed --resultado "<Resultado>" --date <the _completado: date in the source row, else the source index's frontmatter `updated` date, YYYY-MM-DD>` (`--inline` when Archivo is "(inline)"; never today: the date decides pruning)
+3. For `_pendientes.md`: for each open item (`- [ ]`) emit
+   `pendiente.add --text "<texto without the _origen/_creado/_id suffixes>" --prioridad <section> --origen "<_origen value>" --creado <_creado value, or the file's date if missing>`
+   Items with the same text, origin and creation date as one already in the project are written once.
+4. Compact, then delete the auto-memory index file:
+   ```bash
+   python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"   # must print quarantined=0 pending_left=0
+   ```
+   If an event is quarantined (its anchor is missing in the project index — e.g. an index created by hand
+   without the standard headers), read `memory/.journal/quarantine/*.reason`, add that row by hand, delete
+   the `.json`/`.reason` pair, and report it.
+
+   **Fallback (no JBIN)**: re-read the project index right before writing, append the missing rows/items
+   by hand (match on the identifiers above), and let the next checkpoint's Step 3-pre assign `_id`s.
 
 ### 5d. Merge Model A subdirectories (Scenario B only)
 
@@ -208,10 +243,12 @@ This project uses project-local memory. Files live in `memory/` within the proje
 2. Read `memory/_learnings.md` — consult before making changes
 
 ## During execution
-- New learning → `memory/learnings/<topic>.md`, update `memory/_learnings.md` if critical
-- New pendiente → `memory/_pendientes.md` with `_origen:` link + `memory/pendientes/YYYY-MM.md` — since v2.12.0 do this through `/checkpoint-3t` Step 3b (it emits a `pendiente.add` event via `bin/journal-emit.py`; the compactor writes both files), never by editing the index directly while other agents may be writing
-- Executing a plan → register/update row in `memory/_plans-index.md`
-- New research → `memory/research/{slug}.md` + row in `memory/_research-index.md`
+Since v2.12.0 the shared indexes are written ONLY through journal events (`bin/journal-emit.py` +
+`bin/journal-compact.py`), never by editing them directly while other agents may be writing:
+- New learning → `learning.add` event (`/checkpoint-3t` Step 4 or `/save-learning`): the compactor numbers the rule in `memory/learnings/<topic>.md` and updates `memory/_learnings.md`
+- New pendiente → `pendiente.add` event (`/checkpoint-3t` Step 3b): the compactor writes `memory/_pendientes.md` (with `_origen:`, `_creado:`, `_id:`) and `memory/pendientes/YYYY-MM.md`
+- Executing a plan → write `memory/plans/plan-<slug>.md` directly + `plan.upsert` event for the row in `memory/_plans-index.md` (`/checkpoint-3t` Step 5)
+- New research → write `memory/research/{slug}.md` directly + `research.upsert` event for the row in `memory/_research-index.md` (`/checkpoint-3t` Step 5)
 
 ## Checkpoint
 Use /checkpoint-3t to save progress. It will update session log, extract pendientes, update indexes, and git commit.

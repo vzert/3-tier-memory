@@ -30,6 +30,23 @@ fi
 ```
 If `$EXTRACT_SCRIPT` is empty or the file doesn't exist, report error: "Could not find extract-session-digest.py. Ensure the 3-tier-memory plugin is installed (`claude plugin install 3-tier-memory@3-tier-memory-marketplace`)." and **stop**.
 
+6. Locate the journal scripts (v2.12.0). Every index row, rule and pendiente this command produces
+is emitted as an event and written by the compactor in Step 4 — never by editing the indexes by hand:
+```bash
+MEMORY_DIR="memory"   # Model B; use the auto-memory path for Model A
+if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-emit.py" ]; then
+  JBIN="${CLAUDE_PLUGIN_ROOT}/bin"
+elif [ -f "plugins/3-tier-memory/bin/journal-emit.py" ]; then
+  JBIN="$PWD/plugins/3-tier-memory/bin"     # the plugin's own repo: dogfood the working tree, not the cache
+else
+  JEMIT=$(find "$HOME/.claude/plugins" -name "journal-emit.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)
+  JBIN=${JEMIT:+$(dirname "$JEMIT")}   # empty when find found nothing (dirname "" would give ".")
+fi
+[ -n "$JBIN" ] && [ -f "$JBIN/journal-compact.py" ] && echo "JBIN=$JBIN" || echo "JBIN=NONE"
+```
+If it prints `JBIN=NONE` (plugin older than 2.12.0), use the **Fallback** noted in each Step 3 sub-step
+and say so in the final report.
+
 ## Step 1: Inventory
 
 Run the extraction script in metadata-only mode for every JSONL file:
@@ -215,13 +232,20 @@ status: backfilled
 - [[_research-index]] (if research registered)
 ```
 
-### 3c. Update session index (Tier 2)
+### 3c. Update session index (Tier 2) — via journal
 
-Add a row to `memory/_session-index.md`:
+Emit one `session.add` event per session (the compactor writes the row in Step 4):
 
+```bash
+python3 "$JBIN/journal-emit.py" --type session.add --slug "YYYY-MM-DD-slug" --date YYYY-MM-DD \
+  --status backfilled --summary "<one-line summary>" --commit backfill
 ```
-| YYYY-MM-DD | [[sessions/YYYY-MM-DD-slug\|slug]] | backfilled | <one-line summary> | backfill |
-```
+
+It becomes `| YYYY-MM-DD | [[sessions/YYYY-MM-DD-slug\|slug]] | backfilled | <summary> | backfill |`
+at the top of the `## Sessions` table; the compactor keeps the 10 most recent rows by date, so an old
+backfilled session may be pruned from the index right away (its Tier 3 file stays).
+
+**Fallback (no JBIN)**: add the row to `memory/_session-index.md` by hand.
 
 ### 3d. Extract pendientes (conditional)
 
@@ -229,34 +253,64 @@ Add a row to `memory/_session-index.md`:
 
 If the draft has pendientes AND this session is within the 5 most recent:
 1. Before adding, check if an equivalent pendiente already exists in `_pendientes.md` (fuzzy match on key phrases). Skip duplicates.
-   > **Journal (v2.12.0)**: `/checkpoint-3t` no longer edits `_pendientes.md` by hand — it emits `pendiente.add` events with `bin/journal-emit.py` and lets `bin/journal-compact.py` write both tiers. This command still writes directly on purpose: backfill runs once, by one agent, never concurrently with a checkpoint. Moving it to journal events is Fase 2 of `plans/plan-journal-concurrencia-v2.12.0`. If you run it while another agent may be checkpointing, run `python3 <plugin>/bin/journal-compact.py --memory-dir memory` first.
-2. For each new pendiente:
-   - **Tier 2**: Add to `memory/_pendientes.md` under Media prioridad with format `- [ ] <texto> — _origen: [[sessions/YYYY-MM-DD-slug]] (backfill)_ — _creado: YYYY-MM-DD_` (use the session's `dateFirst`, NOT today)
-   - **Tier 3**: Add row to `memory/pendientes/YYYY-MM.md` (create the file if needed)
+2. For each new pendiente, emit one event (the compactor writes both tiers in Step 4):
+   ```bash
+   python3 "$JBIN/journal-emit.py" --type pendiente.add --text "<texto>" --prioridad Media \
+     --origen "[[sessions/YYYY-MM-DD-slug]] (backfill)" --creado YYYY-MM-DD   # dateFirst, NOT today
+   ```
+   **Tier 2**: `- [ ] <texto> — _origen: [[sessions/YYYY-MM-DD-slug]] (backfill)_ — _creado: YYYY-MM-DD_ — _id: p-…_`
+   under Media prioridad of `memory/_pendientes.md`. **Tier 3**: a row in `memory/pendientes/YYYY-MM.md`
+   (the month of `--creado`; the file is created if needed).
+
+   **Fallback (no JBIN)**: write the Tier 2 line (without `_id`) and the Tier 3 row by hand.
 
 ### 3e. Extract learnings (conditional)
 
 If the draft has learnings:
-1. For each learning, determine the topic
-2. Check if a learnings file already exists for that topic in `memory/learnings/`
-   - If yes: append new rules (check for duplicates first)
-   - If no: create new topic file with frontmatter
-3. If a new critical rule was found, add it to the Quick Reference in `memory/_learnings.md`
-4. If a new topic file was created, add a row to the Topic Files table in `memory/_learnings.md`
+1. For each learning, determine the topic (existing slug in `memory/learnings/`, or a new one)
+2. Check the topic file for an equivalent rule (fuzzy match); skip duplicates
+3. Emit one `learning.add` event per rule (the compactor numbers it, creates the topic file with
+   frontmatter and its Topic Files row if new, and adds the `--quickref` text to the Quick Reference):
+   ```bash
+   python3 "$JBIN/journal-emit.py" --type learning.add --topic <topic-slug> \
+     --text "**<Rule name>** — <explanation> (backfill: [[sessions/YYYY-MM-DD-slug]])" \
+     [--quickref "**<Rule name>** — <short form>"] [--title "<Topic Title>" --when "<when to consult>" --importance <0-10>]
+   ```
+
+   **Fallback (no JBIN)**: append the rule with the next number, create the topic file, and update
+   `memory/_learnings.md` by hand.
 
 ### 3f. Register plans (conditional)
 
 If `signals.plans` is true and `plan_summary` is not null:
 1. Determine status: if plan was executed -> `completed`; if only designed -> `draft`
-2. For substantive plans: create `memory/plans/plan-slug.md` + row in `memory/_plans-index.md`
-3. For simple plans: row in `memory/_plans-index.md` with "(inline)"
+2. For substantive plans: create `memory/plans/plan-slug.md` (direct write) and emit
+   `plan.upsert`; for simple plans emit it with `--inline` (no plan file):
+   ```bash
+   python3 "$JBIN/journal-emit.py" --type plan.upsert --slug <slug> --title "<Plan title>" \
+     --status completed|draft --date YYYY-MM-DD --sesion "[[sessions/YYYY-MM-DD-slug]]" [--inline]
+   ```
+   The compactor keeps active/draft/testing rows and the 5 most recent completed/abandoned by date.
+
+   **Fallback (no JBIN)**: add the row to `memory/_plans-index.md` by hand ("(inline)" for simple plans).
 
 ### 3g. Register research (conditional)
 
 If `signals.research` is true and `research_summary` is not null:
 1. Determine status: if conclusions drawn -> `completed`; if ongoing -> `active`
-2. For substantive research: create `memory/research/slug.md` + row in `memory/_research-index.md`
-3. For brief lookups: row in `memory/_research-index.md` Completed table with "(inline)"
+2. For substantive research: create `memory/research/slug.md` (direct write) and emit
+   `research.upsert`; for brief lookups emit it with `--inline` (no research file):
+   ```bash
+   python3 "$JBIN/journal-emit.py" --type research.upsert --slug <slug> --tema "<Topic>" \
+     --status completed|active --date YYYY-MM-DD [--resultado "<conclusion>"] [--next-step "<next step>"] \
+     --origen "[[sessions/YYYY-MM-DD-slug]]" [--inline]     # --date = the session's dateFirst, NOT today
+   ```
+   `completed` rows go to Completed Research with `_completado: DATE_` in the Archivo cell taken from
+   `--date` (without it the emitter stamps today, which would misdate a historical research and let it
+   evict a genuinely newer row); `active` rows go to Active Research. The compactor keeps the 5 most
+   recent Completed rows by that date.
+
+   **Fallback (no JBIN)**: add the row to `memory/_research-index.md` by hand ("(inline)" for brief lookups).
 
 ### 3h. Update progress
 
@@ -275,13 +329,22 @@ After each session is fully written, update `.backfill-progress.json`:
 
 After all sessions are processed:
 
-1. **Sort session index**: Read `memory/_session-index.md`, sort the table rows by date (oldest first)
-2. **Apply pruning rules** (same as checkpoint):
-   - `_session-index.md`: keep only 10 most recent rows
-   - `_plans-index.md`: keep active/draft/testing + 5 most recent completed
-   - `_research-index.md`: keep all Active + 5 most recent Completed
-   - `_pendientes.md`: no pruning (manual management)
-   - `_learnings.md`: no pruning
+1. **Compact the journal** — this is what writes every index row and pendiente emitted in Step 3:
+   ```bash
+   python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"
+   ```
+   It must print `JOURNAL applied=N quarantined=0 pending_left=0`. If `quarantined>0`, read each
+   `memory/.journal/quarantine/*.reason`, apply that change by hand, delete the `.json`/`.reason` pair,
+   and report it in Step 6. Compacting once at the end (instead of per session) is fine: events are
+   applied in emission order.
+2. **Pruning** of sessions and plans is done by the compactor on every event it applies (same limits
+   as checkpoint): `_session-index.md` 10 most recent by date; `_plans-index.md` active/draft/testing +
+   5 most recent completed. Rows are inserted newest-first; the session table is no longer re-sorted
+   by hand. `_research-index.md` Completed Research is pruned to the 5 most recent by the
+   `_completado: DATE_` mark (rows without it are never pruned). `_pendientes.md` and `_learnings.md`
+   are never pruned.
+
+   **Fallback (no JBIN)**: sort `_session-index.md` by date and apply the limits above by hand.
 3. **Deduplicate pendientes**: If the same pendiente text appears multiple times in `_pendientes.md`, keep only the first occurrence (earliest origin)
 
 ## Step 5: Git commit (best-effort)

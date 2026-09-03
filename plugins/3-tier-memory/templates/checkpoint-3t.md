@@ -10,10 +10,35 @@ CORE RULES:
 - Dual-write ALWAYS for sessions, action items, and learnings (Tier 2 index + Tier 3 file)
 - Plans and research: SCAN for signals below — register if ANY signal found
 
-## Step 0: Locate memory directory
+## Step 0: Locate memory directory and the journal scripts
 
 If `memory/` exists in the project root, use it (Model B). Otherwise check auto-memory (Model A).
 Read `memory/MEMORY.md` to confirm the system is initialized.
+
+Since v2.12.0 you do NOT edit the shared indexes (`_pendientes.md`, `pendientes/YYYY-MM.md`,
+`_session-index.md`, `_learnings.md`, `_plans-index.md`, `_research-index.md`) or the rule
+numbering of `learnings/<topic>.md` by hand. Several agents may be checkpointing on this machine
+at the same time, and a hand edit silently drops their lines (Claude Code only warns; it does not
+block). Every change is an EVENT emitted with `journal-emit.py`; a single compactor
+(`journal-compact.py`) applies the events under a lock, as anchored deltas. Tier-3 files that
+belong to this session alone (`sessions/DATE-SLUG.md`, `plans/plan-<slug>.md`,
+`research/<slug>.md`) are still written directly: one writer per file. Locate the scripts once:
+
+```bash
+MEMORY_DIR="memory"   # the directory located above (Model B); use the Model A path otherwise
+if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-emit.py" ]; then
+  JBIN="${CLAUDE_PLUGIN_ROOT}/bin"
+elif [ -f "plugins/3-tier-memory/bin/journal-emit.py" ]; then
+  JBIN="$PWD/plugins/3-tier-memory/bin"     # the plugin's own repo: dogfood the working tree, not the cache
+else
+  JEMIT=$(find "$HOME/.claude/plugins" -name "journal-emit.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)
+  JBIN=${JEMIT:+$(dirname "$JEMIT")}   # empty when find found nothing (dirname "" would give ".")
+fi
+[ -n "$JBIN" ] && [ -f "$JBIN/journal-compact.py" ] && echo "JBIN=$JBIN" || echo "JBIN=NONE"
+```
+
+If it prints `JBIN=NONE` (plugin older than 2.12.0), use the manual edits marked **Fallback**
+in each step and say so in the Step 7 report.
 
 ## Step 1: Session slug
 
@@ -73,32 +98,25 @@ importance: <0-10>
 
 Set `importance` to a salience score 0-10 (Generative-Agents style): how reusable/critical is this session for future recall? Routine work ≈ 3-4, normal feature work ≈ 5-6, an architectural decision or hard-won fix ≈ 8-10. This score feeds the relevance-recall ranking (UserPromptSubmit hook). If unsure, omit it — the recall engine defaults to 5.
 
-**Tier 2**: Add/update row in memory/_session-index.md with date, session link, status emoji, summary, commit hash (filled in Step 6).
+**Tier 2**: emit one `session.add` event (the compactor writes the row in Step 5a):
+
+```bash
+python3 "$JBIN/journal-emit.py" --type session.add --slug "DATE-SLUG" --date DATE \
+  --status "completada|con pendientes" --summary "<one-line summary, no newlines>"
+```
+
+The compactor inserts `| DATE | [[sessions/DATE-SLUG\|SLUG]] | <status> | <summary> | |` at the
+top of the `## Sessions` table of `memory/_session-index.md` and prunes that table to the 10
+most recent rows by date. The Commit cell is filled in Step 6c with a second `session.add`
+(same slug, `--commit`). Do NOT edit the index by hand.
+
+**Fallback (no JBIN)**: add the row by hand, commit hash "filled in Step 6".
 
 ## Step 3: Pendientes — DUAL WRITE via journal (always)
 
-Since v2.12.0 you do NOT edit `memory/_pendientes.md` or `memory/pendientes/YYYY-MM.md` by hand.
-Several agents may be checkpointing on this machine at the same time, and a hand edit silently
-drops their lines (Claude Code only warns; it does not block). Every change is an EVENT emitted
-with `journal-emit.py`; a single compactor (`journal-compact.py`) applies the events under a lock,
-as anchored deltas (insert under the priority header, delete by id, fill a cell by id). Locate
-the scripts once:
-
-```bash
-MEMORY_DIR="memory"   # the directory located in Step 0 (Model B); use the Model A path otherwise
-if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-emit.py" ]; then
-  JBIN="${CLAUDE_PLUGIN_ROOT}/bin"
-elif [ -f "plugins/3-tier-memory/bin/journal-emit.py" ]; then
-  JBIN="$PWD/plugins/3-tier-memory/bin"     # the plugin's own repo: dogfood the working tree, not the cache
-else
-  JEMIT=$(find "$HOME/.claude/plugins" -name "journal-emit.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)
-  JBIN=${JEMIT:+$(dirname "$JEMIT")}   # empty when find found nothing (dirname "" would give ".")
-fi
-[ -n "$JBIN" ] && [ -f "$JBIN/journal-compact.py" ] && echo "JBIN=$JBIN" || echo "JBIN=NONE"
-```
-
-If it prints `JBIN=NONE` (plugin older than 2.12.0), fall back to the manual edits marked
-**Fallback** below and say so in the Step 7 report.
+Pendientes go through the journal too (`JBIN` and `MEMORY_DIR` from Step 0): `pendiente.add` /
+`pendiente.resolve` events, applied as anchored deltas (insert under the priority header, delete
+by id, fill a cell by id).
 
 This step runs in FOUR sub-phases, in order: 3-pre, 3a, 3b, 3c. Do not merge them.
 
@@ -188,15 +206,35 @@ It must print `JOURNAL applied=N quarantined=0 pending_left=0`. If `quarantined>
 `memory/.journal/quarantine/*.reason` (a hand-edited anchor, an id collision, a broken JSON), apply
 that change by hand, delete the `.json`/`.reason` pair, and report it in Step 7. If it prints
 `JOURNAL busy`, another agent holds the lock right now: run it again after a few seconds. This
-runs BEFORE Step 5b and Step 6 so the prune and the commit see the applied state.
+runs now so the reconciliation report is fresh; Steps 2, 4 and 5 emit more events, and Step 5a
+compacts everything again before the commit.
 
 ## Step 4: Learnings — DUAL WRITE (always)
 
 Review session for new patterns, gotchas, rules, or mistakes discovered.
 
-**Tier 3**: Add each learning to the relevant memory/learnings/<topic>.md. Create new topic file if needed.
-When creating a NEW topic file, include `importance: <0-10>` and `last_verified: DATE` in its frontmatter (salience for recall + staleness tracking; see /audit-3t). Critical, broadly-applicable rules ≈ 8-10; niche/contextual rules ≈ 3-5. Both fields are optional — recall defaults importance to 5.
-**Tier 2**: Update memory/_learnings.md — add topic row if new file, add critical rules to Quick Reference.
+For EACH learning, emit one `learning.add` event; the compactor writes both tiers in Step 5a:
+
+```bash
+python3 "$JBIN/journal-emit.py" --type learning.add --topic <topic-slug> \
+  --text "**<Rule name>** — <one-line explanation, no newlines>" \
+  [--section "<## header to append under, existing or new>"] \
+  [--quickref "**<Rule name>** — <short form for the Quick Reference>"] \
+  [--title "<Topic Title>" --when "<when to consult>" --importance <0-10>]
+```
+
+**Tier 3**: the compactor appends the rule to `memory/learnings/<topic>.md` with the next number
+(`max + 1`, assigned under the lock — two agents never get the same number), at the end of
+`--section` (created before `## Related` if it does not exist) or of the last block before
+`## Related`. A topic file that only uses bullets gets a bullet. If the topic file does not exist
+it is created with frontmatter (`importance` from `--importance`, `last_verified: DATE`; recall
+defaults importance to 5 — critical, broadly-applicable rules ≈ 8-10, niche ≈ 3-5).
+**Tier 2**: a row `| <title> | [[learnings/<topic>]] | <when> |` is added to the Topic Files table
+of `memory/_learnings.md` if missing; `--quickref` adds the short form to `## Quick Reference`
+with the next number. Identity = topic + text: the same rule emitted twice is written once.
+
+**Fallback (no JBIN)**: append the rule with the next number by hand, create the topic file with
+`importance` and `last_verified` in its frontmatter, and update `_learnings.md` yourself.
 
 If no learnings this session, skip.
 
@@ -211,9 +249,20 @@ Do NOT skip this step. Actively scan the conversation for these signals:
 - User said "plan", "diseño", "arquitectura", "implementacion"
 
 **If plan signals found:**
-- Tier 2: add/update row in memory/_plans-index.md (title, status, date, session link)
-- Tier 3: create/update memory/plans/plan-<slug>.md with context, decisions, steps, outcome
+- Tier 3: create/update memory/plans/plan-<slug>.md with context, decisions, steps, outcome (direct write: one writer per file)
+- Tier 2: emit one `plan.upsert` event (the compactor writes the row in Step 5a):
+  ```bash
+  python3 "$JBIN/journal-emit.py" --type plan.upsert --slug <slug> --title "<Plan title>" \
+    --status draft|active|testing|completed|abandoned --date DATE --sesion "[[sessions/DATE-SLUG]]" \
+    [--pendientes N] [--learnings "N rules"] [--inline]
+  ```
+  New plan → row `| [[plans/plan-<slug>\|<title>]] | <status> | DATE | <sesion> | ... |` at the top of
+  `## Plans` (`--inline` writes `<title> (inline)` instead of the link). Existing plan (matched by
+  `plans/plan-<slug>` or by title) → only the cells you pass are updated; Fecha never changes. The
+  compactor prunes completed/abandoned rows to the 5 most recent by date.
 - Add wikilink in session log ## Plans section and ## Related
+
+**Fallback (no JBIN)**: add/update the row in memory/_plans-index.md by hand.
 
 ### Research signals — if ANY found, register the research:
 - Web searches or web fetches were performed
@@ -222,33 +271,56 @@ Do NOT skip this step. Actively scan the conversation for these signals:
 - User said "investiga", "busca", "compara", "evalua", "analiza"
 
 **If research signals found:**
-- Tier 2: add/update row in memory/_research-index.md (topic, result, file link)
-- Tier 3: create/update memory/research/<slug>.md with context, findings, conclusion
+- Tier 3: create/update memory/research/<slug>.md with context, findings, conclusion (direct write: one writer per file)
+- Tier 2: emit one `research.upsert` event (the compactor writes the row in Step 5a):
+  ```bash
+  python3 "$JBIN/journal-emit.py" --type research.upsert --slug <slug> --tema "<Topic>" \
+    --status active|completed [--next-step "<next step>"] [--origen "[[sessions/DATE-SLUG]]"] \
+    [--resultado "<one-line conclusion>"] [--inline]
+  ```
+  `active` → row in `## Active Research` (Tema, Next step, Origen, Archivo); `completed` → row in
+  `## Completed Research` (Tema, Resultado, Archivo), removing it from Active if it was there. A
+  completed research never moves back to Active (reopen by hand). Archivo is `[[research/<slug>]]`
+  or `(inline)`, followed by `_completado: DATE_` on completed rows (DATE = `--date`, today by
+  default): the compactor prunes Completed Research to the 5 most recent by that date; rows without
+  it (hand-written, or older than 2.12.0) are never pruned.
 - Add wikilink in session log ## Research section and ## Related
+
+**Fallback (no JBIN)**: add/update the row in memory/_research-index.md by hand.
 
 ### If NO signals found for either:
 Write "Ninguno" in the session log sections and skip the index updates.
+
+## Step 5a: Compactar (all events from Steps 2-5)
+
+```bash
+python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"
+```
+
+It must print `JOURNAL applied=N quarantined=0 pending_left=0`. Same handling as Step 3c for
+`quarantined>0` (read each `.reason`, apply by hand, delete the pair, report) and for `JOURNAL busy`
+(retry after a few seconds). This MUST run before Step 5d and Step 6: the secrets scan and the
+commit have to see the applied rows. Skip if `JBIN=NONE`.
 
 ## Step 5b: Prune indexes
 
 Keep Tier 2 indexes lean. Tier 3 detail files are NEVER deleted — only index rows are removed.
 
+Since v2.12.0 the compactor prunes on every event it applies, always by date and never by
+position: `_session-index.md` to the 10 most recent sessions (Fecha column), `_plans-index.md` to
+active/draft/testing + the 5 most recent completed/abandoned (Fecha column), `_research-index.md`
+Completed Research to the 5 most recent by the `_completado: DATE_` mark in the Archivo cell. Rows
+without a valid date (hand-written, or older than 2.12.0) are never pruned by the compactor. Do NOT
+prune those three tables by hand (it is the same race the journal removes); if legacy undated rows
+pile up in Completed Research, add `_completado: DATE_` to them once and the compactor takes over.
+
 ### _pendientes.md
 Remove any `- [x]` items. Completed pendientes should already be gone (Step 3), but clean up stragglers.
-
-### _session-index.md
-If the Sessions table has more than 10 rows, keep only the 10 most recent (by date). Remove older rows.
-
-### _plans-index.md
-Keep all rows with status active, draft, or testing. For completed/abandoned, keep only the 5 most recent. Remove older rows.
-
-### _research-index.md
-Keep the entire Active Research table. In Completed Research, keep only the 5 most recent rows. Remove older rows.
 
 ### _learnings.md
 No pruning — bounded by design.
 
-Note pruned row count for Step 7 report.
+**Fallback (no JBIN)**: prune sessions and plans by hand with the limits above too. Note pruned row count for Step 7 report.
 
 **Recall index:** no action needed. The derived recall index (`~/.claude/projects/<encoded>/.recall-index.jsonl`, consumed by the UserPromptSubmit hook) auto-rebuilds on the next prompt because the memory files you just wrote are newer than the index.
 
@@ -319,7 +391,14 @@ Run:
 git commit -m "checkpoint: DATE-SLUG — summary"
 ```
 
-If the commit succeeds: get the short hash and record it in the session log `## Commits` section and `_session-index.md` Commit column. Do NOT amend to embed the hash into that same commit — a commit cannot contain its own hash: writing the hash changes the tree, which produces a new hash, and amending to "fix" the mismatch loops forever. Leave the hash annotation as an uncommitted forward reference; it rolls into the next checkpoint's commit, exactly like the `## Como retomar` snippet already does in Step 8.
+If the commit succeeds: get the short hash, record it in the session log `## Commits` section, and fill the `_session-index.md` Commit column through the journal:
+
+```bash
+python3 "$JBIN/journal-emit.py" --type session.add --slug "DATE-SLUG" --date DATE --commit '`<short-hash>`'
+python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"
+```
+
+(**Fallback (no JBIN)**: write the hash into the Commit cell by hand.) Do NOT amend to embed the hash into that same commit — a commit cannot contain its own hash: writing the hash changes the tree, which produces a new hash, and amending to "fix" the mismatch loops forever. Leave the hash annotation as an uncommitted forward reference; it rolls into the next checkpoint's commit, exactly like the `## Como retomar` snippet already does in Step 8.
 
 If the commit fails (e.g., user.name/user.email not configured) → set GIT_SKIP = the error message.
 
@@ -331,7 +410,7 @@ If the commit fails (e.g., user.name/user.email not configured) → set GIT_SKIP
 
 ## Step 7: Report
 
-Tell the user: session path, N pendientes extracted, M resolved, journal result (`applied=N`, and any quarantined event with its reason), N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, N rows pruned from indexes (if any), frontmatter sealed (if N>0), **secrets redacted (if N>0, with file:line list + rotate-your-keys warning)**, git result (commit hash OR reason skipped).
+Tell the user: session path, N pendientes extracted, M resolved, journal result (`applied=N` for Steps 3c, 5a and 6c together, any quarantined event with its reason, and whether any **Fallback** path was used), N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, N rows pruned by hand (if any), frontmatter sealed (if N>0), **secrets redacted (if N>0, with file:line list + rotate-your-keys warning)**, git result (commit hash OR reason skipped).
 
 ## Step 8: Como retomar — snippet de continuidad
 
