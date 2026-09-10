@@ -86,6 +86,7 @@ That's it. `/checkpoint` saves your session, extracts action items, captures lea
 - **Relevance recall** — on every prompt, the most relevant memory (rules, sessions, action items) is surfaced automatically, ranked by `relevance × recency × importance` (lexical engine, zero dependencies)
 - **Staleness signals** — action items older than 30 days are flagged for reconciliation; learnings can carry `last_verified` and are surfaced by `/audit-3t`
 - **Concurrent writes** — since 2.12.0 the shared indexes are written through an event journal (`memory/.journal/`) and one locked compactor, so several sessions or subagents can checkpoint on the same machine without overwriting each other's lines (see [the event journal](#concurrent-writes-the-event-journal-2120))
+- **Continuity snippet** — every checkpoint ends with a paste-ready prompt for the next session. Since 2.12.2 it carries what did **not** work (`## Callejones sin salida` → the `No repitas:` line) and where the next step ends (`Terminas cuando:`), not just what got done — so the next session doesn't retry a dead end or expand without a bar
 - **Hooks** — auto-inject open action items + learnings at session start, apply pending journal events, surface relevant memory per prompt, detect unregistered files, optional strict guard on the indexes
 
 ### Commands
