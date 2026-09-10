@@ -5,3 +5,6 @@ memory/
 # Python bytecode cache
 __pycache__/
 *.pyc
+
+# estado interno de goalspec (per-sesion, nunca se publica)
+.goalspec/
