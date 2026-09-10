@@ -1,7 +1,7 @@
 ---
 type: learnings
 created: 2026-04-02
-updated: 2026-09-03
+updated: 2026-09-09
 status: active
 ---
 # 3-Tier Memory System — Learnings
@@ -151,6 +151,11 @@ status: active
 87. **Claude Code 2.1.259 no persiste en el transcript .jsonl algunos bloques de texto del asistente.** Seis textos de la sesion 2026-09-03 (incluidos los que citaban [ADVERSARY-VERDICT] verbatim) no aparecen como bloques text; el precheck de push de goalspec solo lee texto del transcript y deniega el push aunque el hold exista (y un waiver tampoco se veria). Salida: el usuario corre el push con ! desde el prompt; los verdictos quedan en los tool_results y en el checkpoint de goalspec. Feedback en cola (/feedback).
 88. **Una sonda debe medir la primitiva del portador exacto.** La sonda de Fase 4 midio os.mkdir de Python (la primitiva de journal-compact.py); lock-tier2-write.sh usa mkdir de coreutils desde Git Bash, que llega a la misma llamada Win32 pero no se sondeo. Decirlo tal cual en el comentario del portador y citar el run; el adversario externo lo cazo en la ronda 6 tras dos rondas de portadores desactualizados (snippets de status/audit, comentario de lock-tier2).
 89. **Los headers de _pendientes.md de otras instalaciones no estan corruptos: son variantes y secciones a proposito, y el compactador solo exige el prefijo.** header_index() acepta cualquier header que empiece por '## alta|media|baja' sin distinguir mayusculas ('## Alta Prioridad', '## Alta', '## Alta prioridad — anterior' valen); de 38 proyectos locales (2026-09-03) solo 9 carecian de alguno (## Abiertos, P0-P3, secciones por tema). Arreglo que no pide nada al usuario: bin/normalize-pendientes.py en SessionStart anade solo los headers que faltan, bajo el lock del journal, conservando CRLF y sin mover items; las secciones extra se quedan. Antes de escribir un script sobre memory/, medir primero que exige el consumidor real: la mitad de los 'no canonicos' ya funcionaban.
+90. **El comentario de un cap puede mentir sobre el cap real — lee el slice completo.** `session-start.sh` dice "ALTA nunca se recorta por cap" y es cierto solo de `CAP`: la linea `shown = (altas + resto[...])[:CEILING]` recorta el total, altas incluidas. Una auditoria que creyo el comentario reporto ~489 items inyectados donde el maximo real es 25. Reproducir la expresion completa en python antes de afirmar un limite.
+91. **El bloque de pendientes se ordena por `_creado` ascendente, y eso lo congela.** `session-start.sh` ordena cada bucket por fecha de creacion, asi que los 25 slots los ocupan siempre los items mas antiguos — que tienden a ser los mas caducos — y su fecha nunca cambia. Medido: 3 de 98 pendientes vencidos llegan a mostrarse (3.1%).
+92. **Los agentes ya escriben la fecha de revision en prosa, y ningun codigo la lee.** 105 de 925 pendientes abiertos traen `(target 2026-06-09)`, `kill-round ~2026-07-25`, `revisar el 08-21`. Es un campo de facto sin consumidor: antes de disenar un mecanismo nuevo, buscar la conducta que el agente YA tiene.
+93. **Un regex sobre el texto de un pendiente no puede clasificarlo por criterio de cierre.** Se intento tres veces medir cuantos vencidos son "vigilar que no se rompa": 61%, luego banda 26-61%, y el adversario mostro que hasta el extremo estricto incluye items que piden consultar un dato. El criterio de cierre solo se puede saber si quien crea el item lo declara.
+94. **Un subagente barato puede errar un conteo en dos ordenes de magnitud — re-deriva siempre.** Un Explore en haiku reporto 14 pendientes abiertos en 4 proyectos donde `grep -c '^- \[ \]'` da 941. Todo conteo que sostenga una decision se re-corre con un script propio y persistente, no con el reporte del subagente.
 
 ## Related
 - [[_learnings|Learnings Index]]
