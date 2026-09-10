@@ -456,7 +456,10 @@ Reglas para llenar los slots:
   Incluye aqui los umbrales o criterios que ya se acordaron en esta sesion (un numero, un limite,
   una condicion de exito), si los hay. Sin ellos la sesion siguiente los vuelve a negociar contigo.
 - `<callejones sin salida>`: **copia condensada de la seccion `## Callejones sin salida`** del
-  session file, solo los que afectan al proximo paso. Una linea, con el "que hacer en su lugar"
+  session file, solo los que afectan al proximo paso. **Si el session file no tiene esa seccion**
+  (lo escribio una version anterior a 2.12.2, o /backfill-3t lo reconstruyo desde JSONL), no la
+  crees ni migres nada: omite la linea `No repitas:` y sigue. El resto del snippet no depende
+  de ella. Una linea, con el "que hacer en su lugar"
   incluido: `X no funciona porque Y — usa Z`. **Omite la linea entera si esa seccion dice "Ninguno"**
   o si ningun callejon toca el proximo paso; no la rellenes con ruido. Esta es la linea que evita
   que la sesion siguiente repita, a tu costa, el camino que ya se descarto.
