@@ -81,6 +81,10 @@ importance: <0-10>
 ## Learnings generados
 - <links to learnings/ files, or "Ninguno">
 
+## Callejones sin salida
+- <what was tried> → <why it failed> → <what to do instead>
+<or "Ninguno">
+
 ## Pendientes
 - [ ] <items> — ver [[_pendientes]]
 <or "Ninguno">
@@ -98,6 +102,18 @@ importance: <0-10>
 - [[_plans-index]] (if plan work this session)
 - [[_research-index]] (if research this session)
 ```
+
+**`## Callejones sin salida` — la seccion que la sesion siguiente no puede reconstruir sola.**
+Todo lo demas del session file registra lo que SI salio; esto registra lo que se intento y no
+funciono, que es la informacion mas cara de la sesion y la unica que nadie puede recuperar leyendo
+el resultado. Escribe una linea por callejon, con las tres partes: **que se intento**, **por que
+fallo** (con la evidencia, no con una impresion), y **que hacer en su lugar**. Cuenta como callejon:
+un enfoque que se abandono a mitad, una medicion que resulto mal calibrada, una herramienta o
+libreria que no servia para el caso, un diseno que un revisor rompio, una hipotesis que los datos
+refutaron. NO cuenta un bug que arreglaste (eso va en `## Bugs fixed`) ni trabajo que quedo a medias
+(eso es un pendiente). Si de verdad no hubo ninguno, escribe "Ninguno" — pero revisa primero: una
+sesion sustancial sin ningun callejon suele significar que no se exploro nada, o que se te olvido.
+Step 8 lee esta seccion para llenar la linea `No repitas:` del snippet de continuidad.
 
 Set `importance` to a salience score 0-10 (Generative-Agents style): how reusable/critical is this session for future recall? Routine work ≈ 3-4, normal feature work ≈ 5-6, an architectural decision or hard-won fix ≈ 8-10. This score feeds the relevance-recall ranking (UserPromptSubmit hook). If unsure, omit it — the recall engine defaults to 5.
 
@@ -419,12 +435,15 @@ Tell the user: session path, N pendientes extracted, M resolved, journal result 
 
 Genera un prompt breve y autosuficiente que el usuario pueda copiar y pegar al iniciar la proxima sesion (despues de `/exit` o `/clear`) para retomar contexto sin pensar.
 
-**Plantilla fija de 3 lineas (todas obligatorias)**:
+**Plantilla de 6 lineas: 4 obligatorias y 2 condicionales**:
 
 ```
 Retomamos: <contexto-1-linea>.
 Lee memory/sessions/DATE-SLUG.md para el contexto completo.
-Proximo paso: <next-step>. Antes de actuar, dime en 3 lineas donde quedamos.
+Proximo paso: <next-step>.
+No repitas: <callejones sin salida>.                      <- omitir si no hubo
+Terminas cuando: <done-bar>.                              <- omitir si no aplica
+Antes de actuar, dime en 3 lineas donde quedamos.
 ```
 
 Reglas para llenar los slots:
@@ -434,12 +453,31 @@ Reglas para llenar los slots:
   1. El pendiente nuevo de mayor prioridad creado en Step 3b de esta sesion.
   2. Si no hay nuevo, el pendiente existente de mayor prioridad relacionado con el trabajo de la sesion.
   3. Si tampoco aplica, escribir literalmente `revisar _pendientes.md y proponer siguiente prioridad`.
+  Incluye aqui los umbrales o criterios que ya se acordaron en esta sesion (un numero, un limite,
+  una condicion de exito), si los hay. Sin ellos la sesion siguiente los vuelve a negociar contigo.
+- `<callejones sin salida>`: **copia condensada de la seccion `## Callejones sin salida`** del
+  session file, solo los que afectan al proximo paso. Una linea, con el "que hacer en su lugar"
+  incluido: `X no funciona porque Y — usa Z`. **Omite la linea entera si esa seccion dice "Ninguno"**
+  o si ningun callejon toca el proximo paso; no la rellenes con ruido. Esta es la linea que evita
+  que la sesion siguiente repita, a tu costa, el camino que ya se descarto.
+- `<done-bar>`: cuando se considera terminado el proximo paso — el entregable concreto y su limite
+  de alcance (`un veredicto con numero, sin implementar el resto del plan`). Sacalo del plan si hay
+  uno, del criterio de aceptacion si existe, o de lo que el usuario pidio. **Omite la linea si el
+  proximo paso es exploratorio** y su final no se puede nombrar de antemano: un done-bar inventado
+  es peor que ninguno, porque la sesion siguiente lo trata como acordado contigo.
 
-La ultima linea `Antes de actuar, dime en 3 lineas donde quedamos.` es INVARIABLE — fuerza al agente de la siguiente sesion a leer el session file y confirmar contexto antes de tocar nada.
+La ultima linea `Antes de actuar, dime en 3 lineas donde quedamos.` es INVARIABLE — fuerza al agente
+de la siguiente sesion a leer el session file y confirmar contexto antes de tocar nada. Va siempre al
+final, sola, aunque se omitan las condicionales.
+
+**Por que estas dos lineas.** Las tres originales transmitian solo lo que salio bien. Un snippet que
+dice donde quedamos pero no que ya se descarto hace que la sesion siguiente vuelva a intentar el
+enfoque muerto — y uno sin done-bar la deja expandirse hasta que el usuario la corta a mano. Son
+condicionales, no opcionales: si la informacion existe, la linea va.
 
 **8a. Persistir en el session file**:
 
-Reemplaza el placeholder `<filled in Step 8>` de la seccion `## Como retomar` con el snippet de 3 lineas dentro de un bloque de codigo:
+Reemplaza el placeholder `<filled in Step 8>` de la seccion `## Como retomar` con el snippet dentro de un bloque de codigo (aqui con las dos condicionales presentes; omite la linea entera cuando no apliquen):
 
 ````markdown
 ## Como retomar
@@ -447,7 +485,23 @@ Reemplaza el placeholder `<filled in Step 8>` de la seccion `## Como retomar` co
 ```
 Retomamos: <contexto-1-linea>.
 Lee memory/sessions/DATE-SLUG.md para el contexto completo.
-Proximo paso: <next-step>. Antes de actuar, dime en 3 lineas donde quedamos.
+Proximo paso: <next-step>.
+No repitas: <callejones sin salida>.
+Terminas cuando: <done-bar>.
+Antes de actuar, dime en 3 lineas donde quedamos.
+```
+````
+
+Ejemplo real, con las 6 lineas:
+
+````markdown
+```
+Retomamos: plan v2.13.0 ratificado para que los pendientes dejen de ser un cementerio.
+Lee memory/sessions/2026-09-09-pendientes-cementerio-plan.md para el contexto completo.
+Proximo paso: medir en seco la precision del cierre por silencio sobre los 98 vencidos (umbrales ya acordados: >=90% de aciertos, cero cierres de items que pedian consultar un dato).
+No repitas: clasificar los pendientes con un regex sobre su texto — fallo tres veces y un revisor rompio las tres; leelos y clasifica con criterio declarado.
+Terminas cuando: haya un veredicto con numero (entra / no entra) y, si entra, el diseno de las tres senales de deteccion. Nada mas del plan en esa sesion.
+Antes de actuar, dime en 3 lineas donde quedamos.
 ```
 ````
 
@@ -461,8 +515,15 @@ Copia y pega esto al iniciar una nueva sesion de Claude Code:
 
 Retomamos: <contexto-1-linea>.
 Lee memory/sessions/DATE-SLUG.md para el contexto completo.
-Proximo paso: <next-step>. Antes de actuar, dime en 3 lineas donde quedamos.
+Proximo paso: <next-step>.
+No repitas: <callejones sin salida>.
+Terminas cuando: <done-bar>.
+Antes de actuar, dime en 3 lineas donde quedamos.
 ─────────────────────────────────────────────
 ```
+
+Imprime exactamente las mismas lineas que escribiste en 8a — si ahi omitiste una condicional, aqui
+tambien. El usuario copia de la terminal; un snippet que no coincide con el del session file crea
+dos versiones de la verdad.
 
 No agregues git commit aqui — el cambio al session file ya quedo dentro del flujo de Step 6, pero como Step 8 corre DESPUES, este `## Como retomar` no estara en el commit. Es aceptable: el snippet vive en disco y el commit es best-effort. Si el usuario quiere comitearlo, puede `git add memory/sessions/DATE-SLUG.md && git commit --amend --no-edit` manualmente o esperar al proximo checkpoint.
