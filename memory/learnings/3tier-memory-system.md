@@ -1,7 +1,7 @@
 ---
 type: learnings
 created: 2026-04-02
-updated: 2026-09-09
+updated: 2026-09-10
 status: active
 ---
 # 3-Tier Memory System — Learnings
@@ -162,6 +162,11 @@ status: active
 98. **`git filter-repo` borra el remote y reescribe TODAS las refs — una rama de respaldo no sobrevive.** Crear `backup-<fecha>` antes de filtrar no sirve: filter-repo la reescribe igual que main. El respaldo tiene que ser externo al repo: `git bundle create <ruta-fuera-del-repo>.bundle --all` + `git bundle verify`. Y despues del filtrado hay que volver a anadir el remote a mano (`git remote add origin ...`) porque filter-repo lo elimina por diseno.
 99. **Un riesgo irreversible descubierto a mitad de una accion terminal es un fork del usuario, no una decision propia.** Al detectar que `.goalspec/` iba a publicarse, se eligio en silencio la remediacion debil (quitarlo del arbol y publicar igual) en vez de parar y ofrecer "purgar el historial primero" frente a "publicar ya". El adversario lo marco como violacion de autonomia ademas de la accion insegura. Regla: cuando la remediacion tiene variantes con blast-radius distinto, se presentan; no se escoge la comoda y se reporta como resuelta.
 100. **Propagar templates a las copias congeladas a mano es innecesario: el auto-update lo hace al abrir sesion.** Medido con 2.12.2 el 2026-09-09: al abrir sesion en Will-Ops, el hook SessionStart dejo los 7 comandos de `.claude/commands/` byte-identicos al template del plugin. Las instalaciones que no se abren siguen con la version vieja — el refresco es por sesion, no remoto. Requisito: la instalacion debe tener `3-tier-memory-marketplace` en `known_marketplaces.json`; una cargada con `--plugin-dir` no recibe la version nueva.
+101. **Un mecanismo de cierre automatico no puede ser mas listo que el item que cierra.** Dos mediciones seguidas del plan v2.13.0 fallaron por lo mismo: M2 pedia que bastara el silencio (solo 7 de 98 items lo permiten) y M6 pedia un comando decidible (0 de 78 lo tienen). Lo que falta no esta en el mecanismo, esta en como nace el item — y no se puede anadir hacia atras. Antes de disenar un cierre automatico, medir cuantos items del corpus traen lo que ese cierre necesita.
+102. **La decidibilidad de un item tampoco se infiere con un regex.** Extiende la regla 89 (el criterio de cierre se declara, no se infiere). Midiendo M6, un regex sobre el texto daba 21 items con regla de decision; leyendolos a mano eran 10; aplicando la definicion estricta (decide sobre CUALQUIER salida) quedaron 0. El regex sobrecontaba al doble, y despues mi propia lectura sobrecontaba otra vez.
+103. **Al clasificar una regla de decision hay que revisar TODAS sus ramas, no solo la vacia.** Aprobe V082 y V083 como decidibles mirando que declaraban que hacer con 0 resultados; su criterio de exito era '>0 denials CON el guardian en el retry', y el grep que traen no puede ver el retry. Esos dos eran el 100% del resultado positivo de M6: al revisar la rama llena, la cobertura paso de 2 a 0.
+104. **Una regla de cierre necesita tres ramas: hay dato / no hay dato / error.** Los pendientes de hoy escriben dos, y por eso el tercer caso los deja abiertos para siempre. Ejemplo del corpus: 'Failure: 0 denials (regex demasiado estricto O el CEO ya esta aplicando la regla bien sin hook)' — cero significa las dos cosas a la vez, y el propio item lo sabe.
+105. **Cuando el instrumento de medicion es propio, sus defectos sesgan hacia la hipotesis propia — hay que auditarlo antes de reportar.** Nueve defectos en los dos instrumentos de esta sesion, los nueve halagando al mecanismo medido: '2>/dev/null' contado como escritura a archivo, trozos de URL contados como rutas de disco, y un 'TOKEN=\\b' que no puede casar nunca (\\b tras '=' es imposible) y perdio un comando entero. Ninguno aparecio solo: los encontro un revisor externo o una verificacion a mano.
 
 ## Related
 - [[_learnings|Learnings Index]]
