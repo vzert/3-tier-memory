@@ -1,7 +1,7 @@
 ---
 type: learnings
 created: 2026-04-02
-updated: 2026-09-10
+updated: 2026-09-11
 status: active
 ---
 # 3-Tier Memory System — Learnings
@@ -167,6 +167,13 @@ status: active
 103. **Al clasificar una regla de decision hay que revisar TODAS sus ramas, no solo la vacia.** Aprobe V082 y V083 como decidibles mirando que declaraban que hacer con 0 resultados; su criterio de exito era '>0 denials CON el guardian en el retry', y el grep que traen no puede ver el retry. Esos dos eran el 100% del resultado positivo de M6: al revisar la rama llena, la cobertura paso de 2 a 0.
 104. **Una regla de cierre necesita tres ramas: hay dato / no hay dato / error.** Los pendientes de hoy escriben dos, y por eso el tercer caso los deja abiertos para siempre. Ejemplo del corpus: 'Failure: 0 denials (regex demasiado estricto O el CEO ya esta aplicando la regla bien sin hook)' — cero significa las dos cosas a la vez, y el propio item lo sabe.
 105. **Cuando el instrumento de medicion es propio, sus defectos sesgan hacia la hipotesis propia — hay que auditarlo antes de reportar.** Nueve defectos en los dos instrumentos de esta sesion, los nueve halagando al mecanismo medido: '2>/dev/null' contado como escritura a archivo, trozos de URL contados como rutas de disco, y un 'TOKEN=\\b' que no puede casar nunca (\\b tras '=' es imposible) y perdio un comando entero. Ninguno aparecio solo: los encontro un revisor externo o una verificacion a mano.
+106. **El compactador es su propia frontera de confianza.** Validar en `journal-emit.py` no basta: un evento puede llegar de otro emisor o escrito a mano. Un `pendiente.add` con `creado: 2026-99-99` pasaba la validacion de FORMA (`DATE_RE`), se persistia en la linea y reventaba a los consumidores al parsearla. Validar calendario (`date.fromisoformat`) en los dos lados.
+107. **Un regla post-hoc no es una medicion preregistrada, aunque este declarada.** El techo "4 de 8" de M1 salio de una regla escrita en el veredicto, tres minutos despues de clasificar; el codigo `W` de la caducidad se anadio al encontrarlo y excluirlo del conteo cambiaba 29/30 por 19/30. Las dos se habian declarado — y aun asi el titular usaba la cifra favorable. Si la rubrica congelada da otro numero, **ese** es el titular.
+108. **Archivar no es cerrar, y esa es la unica pregunta automatizable.** M2 preguntaba "¿ya salio bien?" y necesitaba un dato que el item no trae (8.6% de precision). "¿sigue siendo un compromiso?" se contesta con la fecha. Pero la edad **tampoco** discrimina si el backlog es trabajo real sin priorizar: a N=90, 29 de 30 candidatos leidos seguian vivos. Solo sirve la ventana que el propio item declaro, y esa solo existe hacia adelante.
+109. **Escribe el destino antes de borrar el origen.** `apply_expire_index` borraba la linea de `_pendientes.md` y confirmaba antes de escribir `_caducados.md`: un fallo entre las dos escrituras perdia la unica copia. El peor caso de un traspaso debe ser "esta en los dos" — visible y reparable — nunca "en ninguno". Y el test tiene que **inyectar el fallo** (destino inescribible), no mirar solo el estado final feliz.
+110. **Un cursor de paginacion tiene que ser una clave estable, no una posicion.** Con `--offset` numerico, cerrar items de un lote acorta la lista y el siguiente se salta los que ocupan los huecos. Con solo la fecha e inclusivo, varios items del mismo dia repiten el lote para siempre. La clave correcta es `(fecha, id)` con corte estricto — ni repite ni salta — y los items sin fecha necesitan su propia clave para ser alcanzables.
+111. **Una verificacion que solo existe en la conversacion no existe.** Afirme "6 de 6 positivos verificados a mano" y el verificador externo lo marco como infundado: no habia fichero que re-derivar. Lo mismo con la sensibilidad de un instrumento medida sobrescribiendo su salida original — la comparacion deja de ser reproducible. Congelar cada variante como fichero propio, corridas en el mismo momento sobre el mismo corpus.
+112. **Un umbral por conteo dispara en el proyecto mas sano.** Medido 2026-09-11: paperclip tiene 576 pendientes abiertos y el **mejor** ratio de cierre (0.76 en 30 dias); Will-Ops tiene 91 y cierra 0.00. Un aviso de "tienes demasiados pendientes" por numero absoluto seria papel tapiz en 3 de 5 proyectos y se equivocaria de diana. La senal es **cierra/entra por ventana**, no el tamano de la lista.
 
 ## Related
 - [[_learnings|Learnings Index]]

@@ -228,8 +228,16 @@ For EACH new pendiente, emit one event:
 
 ```bash
 python3 "$JBIN/journal-emit.py" --type pendiente.add --text "<texto del pendiente>" \
-  --prioridad Alta|Media|Baja --origen "[[sessions/DATE-SLUG]]"
+  --prioridad Alta|Media|Baja --origen "[[sessions/DATE-SLUG]]" [--revisar YYYY-MM-DD]
 ```
+
+**`--revisar` cuando el pendiente nombra una fecha futura** (`revisar el 2026-09-22`, `target
+2026-10-01`, `T+7` resuelto a fecha). Escribe la fecha **como campo**, no solo en prosa: el
+compactador anade `— _revisar: YYYY-MM-DD_` a la linea de Tier 2. Sin el campo la fecha no la lee
+nadie — medido 2026-09-11: **395 de 996 pendientes abiertos llevan una fecha ya vencida escrita en
+prosa y ningun codigo la miro nunca**. Con el campo tiene dos consumidores: `expire-pendientes.py`
+(no toca un item cuya ventana no ha vencido; caduca el que si) y el Step 8c, que imprime el
+recordatorio de calendario. `--revisar` no cambia el `_id`: la ventana no es parte de la identidad.
 
 It prints the id. Do NOT also edit the files. The compactor (Step 3c) writes both tiers:
 **Tier 2** the line `- [ ] <texto> — _origen: [[sessions/DATE-SLUG]]_ — _creado: <today>_ — _id: p-…_`
@@ -483,6 +491,7 @@ Genera un prompt breve y autosuficiente que el usuario pueda copiar y pegar al i
 Retomamos: <contexto-1-linea>.
 Lee memory/sessions/DATE-SLUG.md para el contexto completo.
 Proximo paso: <next-step>.
+Sigue abierto: <pendientes de esta sesion>.               <- omitir si no quedo ninguno mas
 No repitas: <callejones sin salida>.                      <- omitir si no hubo
 Terminas cuando: <done-bar>.                              <- omitir si no aplica
 Antes de actuar, dime en 3 lineas donde quedamos.
@@ -497,6 +506,21 @@ Reglas para llenar los slots:
   3. Si tampoco aplica, escribir literalmente `revisar _pendientes.md y proponer siguiente prioridad`.
   Incluye aqui los umbrales o criterios que ya se acordaron en esta sesion (un numero, un limite,
   una condicion de exito), si los hay. Sin ellos la sesion siguiente los vuelve a negociar contigo.
+- `<pendientes de esta sesion>`: **los pendientes que esta sesion dejo abiertos, ademas del que
+  ya va en `Proximo paso`** — los que emitiste en Step 3b mas los que en Step 3a quedaron
+  `still-open` y tocan este trabajo. Nombra cada uno en media linea, con su `_id: p-…_`, separados
+  por ` · `. **Maximo 3**; si hay mas, cierra con `+N mas en _pendientes.md`. **Omite la linea
+  entera si el unico pendiente de la sesion es el que ya esta en `Proximo paso`** — repetirlo no
+  anade nada.
+
+  **Por que existe esta linea.** Medido sobre **491 pendientes de 176 sesiones** (2026-09-11,
+  salidas congeladas en `.goalspec/snippet-rows-empate-*.json`): los que el snippet mencionaba
+  cerraron el **35%**; los que solo quedaron en la lista, el **19%**. Son **16 puntos**, con umbral
+  fijado antes en 15. El emparejador de cierre es un proxy por solape de palabras, y su empate iba
+  a "cerrado": invertido da **31% vs 14% = 17 puntos**, asi que el sesgo no creaba el efecto. La medicion no puede separar el efecto del snippet del hecho de que el agente elige para
+  `Proximo paso` lo que ya juzgaba mas accionable — asi que acota el techo, no lo demuestra. Aun
+  asi, nombrarlos cuesta una linea y no nombrarlos es como se pierden.
+
 - `<callejones sin salida>`: **copia condensada de la seccion `## Callejones sin salida`** del
   session file, solo los que afectan al proximo paso. **Si el session file no tiene esa seccion**
   (lo escribio una version anterior a 2.12.2, o /backfill-3t lo reconstruyo desde JSONL), no la
@@ -531,6 +555,7 @@ Reemplaza el placeholder `<filled in Step 8>` de la seccion `## Como retomar` co
 Retomamos: <contexto-1-linea>.
 Lee memory/sessions/DATE-SLUG.md para el contexto completo.
 Proximo paso: <next-step>.
+Sigue abierto: <pendientes de esta sesion>.
 No repitas: <callejones sin salida>.
 Terminas cuando: <done-bar>.
 Antes de actuar, dime en 3 lineas donde quedamos.
@@ -544,6 +569,7 @@ Ejemplo real, con las 6 lineas:
 Retomamos: plan v2.13.0 ratificado para que los pendientes dejen de ser un cementerio.
 Lee memory/sessions/2026-09-09-pendientes-cementerio-plan.md para el contexto completo.
 Proximo paso: medir en seco la precision del cierre por silencio sobre los 98 vencidos (umbrales ya acordados: >=90% de aciertos, cero cierres de items que pedian consultar un dato).
+Sigue abierto: mover measure-pendientes-v2.13.0.py a bin/ si el plan se implementa _id: p-ea5dab51be_ · falsificar los dos claims negativos de §3 _id: p-77c1a0b3e2_.
 No repitas: clasificar los pendientes con un regex sobre su texto — fallo tres veces y un revisor rompio las tres; leelos y clasifica con criterio declarado.
 Terminas cuando: haya un veredicto con numero (entra / no entra) y, si entra, el diseno de las tres senales de deteccion. Nada mas del plan en esa sesion.
 Antes de actuar, dime en 3 lineas donde quedamos.
@@ -561,6 +587,7 @@ Copia y pega esto al iniciar una nueva sesion de Claude Code:
 Retomamos: <contexto-1-linea>.
 Lee memory/sessions/DATE-SLUG.md para el contexto completo.
 Proximo paso: <next-step>.
+Sigue abierto: <pendientes de esta sesion>.
 No repitas: <callejones sin salida>.
 Terminas cuando: <done-bar>.
 Antes de actuar, dime en 3 lineas donde quedamos.
@@ -570,5 +597,38 @@ Antes de actuar, dime en 3 lineas donde quedamos.
 Imprime exactamente las mismas lineas que escribiste en 8a — si ahi omitiste una condicional, aqui
 tambien. El usuario copia de la terminal; un snippet que no coincide con el del session file crea
 dos versiones de la verdad.
+
+**8c. Recordatorio de calendario para los pendientes con fecha futura**:
+
+Si algun pendiente de esta sesion (nuevo o reconciliado) **nombra una fecha posterior a hoy** —
+`revisar el 2026-09-22`, `target 2026-10-01`, `T+7`, `en 2 semanas` resuelto a fecha — imprime
+**un bloque aparte por cada uno, despues del snippet**. Maximo 2; si hay mas, di
+`+N con fecha futura en _pendientes.md`.
+
+**Va fuera del snippet, no dentro.** El snippet se pega al agente de la sesion siguiente; una
+instruccion de calendario pegada ahi es ruido para el agente y se pierde para ti. Este bloque se
+dirige a ti, y lo que lleva dentro es un prompt para que TU lo guardes en el evento.
+
+```
+─── Recordatorio para el <FECHA> ───
+Ponlo en tu calendario y pega esta nota dentro del evento:
+
+Retomamos: <pendiente en una linea> _id: p-…_
+Contexto: memory/sessions/DATE-SLUG.md
+Comprueba: <que hay que mirar ese dia, con el criterio si se acordo uno>
+Si ya no aplica, cierralo con /checkpoint-3t en vez de dejarlo abierto.
+────────────────────────────────────
+```
+
+**Ademas, el pendiente nace con la fecha como campo**, no solo en prosa:
+`journal-emit.py --type pendiente.add … --revisar YYYY-MM-DD`. El compactador escribe
+`— _revisar: YYYY-MM-DD_` en la linea de Tier 2. Ese campo tiene dos consumidores reales:
+`expire-pendientes.py` (no caduca un item cuya ventana aun no vence) y el propio barrido manual.
+
+**Por que este bloque.** Medido 2026-09-11: **11% de los pendientes nuevos traen una fecha
+posterior a su creacion** (28 en 30 dias sobre 5 instalaciones, ~1 al dia) y **395 de 996
+abiertos llevan una fecha ya vencida escrita en prosa que ningun codigo leyo nunca**. El
+calendario del usuario es el unico disparador que si dispara sin cron, sin servicio externo y sin
+depender de que alguien abra el proyecto ese dia.
 
 No agregues git commit aqui — el cambio al session file ya quedo dentro del flujo de Step 6, pero como Step 8 corre DESPUES, este `## Como retomar` no estara en el commit. Es aceptable: el snippet vive en disco y el commit es best-effort. Si el usuario quiere comitearlo, puede `git add memory/sessions/DATE-SLUG.md && git commit --amend --no-edit` manualmente o esperar al proximo checkpoint.

@@ -97,6 +97,7 @@ That's it. `/checkpoint` saves your session, extracts action items, captures lea
 - `/backfill-3t` — reconstruct memory from past JSONL conversation history
 - `/consolidate-3t` — dedup learnings (index-driven pre-filter + early-exit), resolve contradictions via supersede, reflect recent sessions into higher-level rules
 - `/enrich-3t` — one-time backfill of `importance:`/`_creado:` into a pre-existing corpus so recall and staleness work on legacy files
+- `/triage-3t` — dedicated sweep of the pendientes backlog: reads each item with evidence (age, origin, which *later* sessions mention the topic), proposes resolved/abandoned/still-open per item, and emits only what you approve. It never closes anything on its own — measured on this corpus, automatic closure by silence scored 8.6% precision and closure by age archived, under its own frozen rubric, 29 of 30 items that were still live (19 of 30 only if you accept a code added after seeing the results).
 
 ## The 3-Tier Architecture
 

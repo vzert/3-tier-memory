@@ -333,6 +333,7 @@ for idx, line in enumerate(_lines):
         text = re.sub(r"\s*—\s*_origen:[^—]*", "", text)
         text = re.sub(r"\s*—\s*_creado:[^—]*", "", text)
         text = re.sub(r"\s*—\s*_id:[^—]*", "", text)   # identidad del journal (v2.12.0), no es texto
+        text = re.sub(r"\s*—\s*_revisar:[^—]*", "", text)  # ventana declarada (v2.13.0), no es texto
         text = text.strip()
         buckets[current].append((created or "9999", text))
 
@@ -484,7 +485,7 @@ fi
 UPDATED=""
 INSTALLED=""
 
-for cmd in checkpoint-3t status-3t audit-3t backfill-3t save-learning consolidate-3t enrich-3t; do
+for cmd in checkpoint-3t status-3t audit-3t backfill-3t save-learning consolidate-3t enrich-3t triage-3t; do
   [ -n "${SKIP_CMD_INSTALL:-}" ] && break
   LOCAL_CMD="$CMDS_DIR/$cmd.md"
   PLUGIN_CMD="$TEMPLATES_DIR/$cmd.md"

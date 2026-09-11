@@ -142,6 +142,20 @@ def rmtree_with_retry(path):
 
 
 def atomic_write(path, lines):
+    """Escribe `lines` unidas por "\n", garantizando salto de linea final.
+
+    read_lines parte por "\n", asi que el ultimo elemento de un fichero bien formado es "" — el
+    centinela del salto final. Cuando un applier inserta AL FINAL (p. ej. apply_add_index sobre una
+    seccion vacia que es la ultima del fichero), ese centinela deja de ser el ultimo y el fichero
+    queda sin newline final: lo siguiente que se anada con `>>` se pega a la ultima linea. Medido
+    2026-09-11 con un item legacy anadido a mano tras un pendiente.add. Se normaliza aqui, en el
+    unico sitio por el que pasan todas las escrituras.
+
+    CONTRATO, y es un cambio de comportamiento: un fichero que llegue SIN salto final sale CON el.
+    Eso rompe el "byte a byte" para esa entrada concreta — a proposito: en `memory/` un fichero sin
+    newline final es el bug, no un formato a preservar. (Lo marco el adversario en su ronda 3.)"""
+    if lines and lines[-1] != "":
+        lines = list(lines) + [""]
     tmp = f"{path}.{os.getpid()}.tmp"
     with open(tmp, "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines))
@@ -282,7 +296,7 @@ def find_id_line(lines, pid):
 
 def line_text(line):
     s = line.strip()[5:].strip()
-    return normalize_text(re.sub(r"\s*—\s*_(origen|creado|id):[^—]*", "", s))
+    return normalize_text(re.sub(r"\s*—\s*_(origen|creado|id|revisar):[^—]*", "", s))
 
 
 def header_index(lines, prio):
@@ -306,8 +320,9 @@ def apply_add_index(mem, p):
     h = header_index(lines, p["prioridad"])
     if h is None:
         raise Quarantine(f"no-anchor: falta el header '{HEADERS.get(p['prioridad'].lower())}'")
+    rev = f" — _revisar: {p['revisar']}_" if p.get("revisar") else ""
     new = (f"- [ ] {p['text']} — _origen: {p['origen']}_ — _creado: {p['creado']}_ "
-           f"— _id: {p['id']}_")
+           f"— _id: {p['id']}_{rev}")
     # Insertar tras el header y su linea en blanco (si la hay): lo nuevo arriba.
     at = h + 1
     if at < len(lines) and lines[at].strip() == "":
@@ -333,7 +348,9 @@ def apply_resolve_index(mem, p):
         raise Quarantine(f"prefix-mismatch: la linea {p['id']} no empieza por '{prefix[:40]}'")
     del lines[i]
     # No dejar dos lineas en blanco seguidas donde estaba la borrada.
-    if 0 < i < len(lines) and lines[i].strip() == "" and lines[i - 1].strip() == "":
+    # `len(lines) - 1` y no `len(lines)`: read_lines parte por "\n", asi que el ultimo elemento
+    # es el centinela del salto final del archivo. Borrarlo deja el fichero sin newline final.
+    if 0 < i < len(lines) - 1 and lines[i].strip() == "" and lines[i - 1].strip() == "":
         del lines[i]
     atomic_write(path, lines)
     return True
@@ -408,7 +425,11 @@ def caducados_path(mem):
 
 
 def apply_expire_index(mem, p):
-    """Saca la linea de _pendientes.md y la archiva VERBATIM en pendientes/_caducados.md."""
+    """Archiva la linea VERBATIM en pendientes/_caducados.md y la saca de _pendientes.md.
+
+    ORDEN DELIBERADO: primero el destino, despues el origen. Al reves — como estaba — un fallo
+    entre las dos escrituras deja la linea en ningun sitio. Asi el peor caso es que quede en los
+    dos, que se ve y se repara. (Hallazgo del adversario, 2026-09-11.)"""
     path = os.path.join(mem, "_pendientes.md")
     if not os.path.isfile(path):
         raise Quarantine("no-index: _pendientes.md no existe")
@@ -421,10 +442,6 @@ def apply_expire_index(mem, p):
     # se avisa: el texto del archivo es el que el usuario recuperara con reopen.
     if p.get("line") and normalize_text(p["line"]) != normalize_text(verbatim):
         log(f"WARN expire: la linea {p['id']} cambio desde la emision — se archiva la del disco")
-    del lines[i]
-    if 0 < i < len(lines) and lines[i].strip() == "" and lines[i - 1].strip() == "":
-        del lines[i]
-    atomic_write(path, lines)
 
     cpath = caducados_path(mem)
     if os.path.isfile(cpath):
@@ -432,9 +449,20 @@ def apply_expire_index(mem, p):
     else:
         os.makedirs(os.path.dirname(cpath), exist_ok=True)
         clines = list(CADUCADOS_HEAD)
-    marca = f"_caducado: {p.get('fecha') or date.today().isoformat()}_ — _dias: {p.get('dias', '?')}_"
-    clines.append(f"{verbatim} — {marca}")
-    atomic_write(cpath, clines)
+    # La prioridad va en la marca: un item legacy no tiene fila mensual de donde deducirla, y sin
+    # esto reopen lo devolvia a la seccion equivocada (visto en la primera corrida real).
+    if not any(f"_id: {p['id']}_" in c for c in clines):
+        marca = (f"_caducado: {p.get('fecha') or date.today().isoformat()}_"
+                 f" — _dias: {p.get('dias', '?')}_ — _prio: {p.get('prioridad') or '?'}_")
+        clines.append(f"{verbatim} — {marca}")
+        atomic_write(cpath, clines)
+
+    del lines[i]
+    # `len(lines) - 1` y no `len(lines)`: read_lines parte por "\n", asi que el ultimo elemento
+    # es el centinela del salto final del archivo. Borrarlo deja el fichero sin newline final.
+    if 0 < i < len(lines) - 1 and lines[i].strip() == "" and lines[i - 1].strip() == "":
+        del lines[i]
+    atomic_write(path, lines)
     return True
 
 
@@ -455,6 +483,29 @@ def apply_expire_monthly(mem, p):
     return True
 
 
+def apply_window(mem, p):
+    """Pone o actualiza `_revisar: FECHA_` en la linea de Tier 2, sin tocar el resto.
+
+    Existe para que /triage-3t no tenga que editar `_pendientes.md` a mano: con
+    `journal_strict=1` esa edicion la deniega journal-guard.sh, asi que la instruccion manual
+    era inaplicable en la configuracion que el propio plugin recomienda. (Adversario 2026-09-11.)"""
+    path = os.path.join(mem, "_pendientes.md")
+    if not os.path.isfile(path):
+        raise Quarantine("no-index: _pendientes.md no existe")
+    lines = read_lines(path)
+    i = find_id_line(lines, p["id"])
+    if i is None:
+        log(f"WARN window: no hay linea abierta con id {p['id']}")
+        return False
+    nueva = re.sub(r"\s*—\s*_revisar: \d{4}-\d{2}-\d{2}_", "", lines[i].rstrip("\n"))
+    nueva = f"{nueva} — _revisar: {p['revisar']}_"
+    if nueva == lines[i]:
+        return False                      # idempotente: ya tiene esa ventana
+    lines[i] = nueva
+    atomic_write(path, lines)
+    return True
+
+
 def apply_reopen(mem, p):
     """Reversa exacta de expire: devuelve la linea VERBATIM y limpia la fila mensual."""
     cpath = caducados_path(mem)
@@ -470,14 +521,19 @@ def apply_reopen(mem, p):
         return False  # idempotente: ya reabierto
     archivado = clines[idx]
     # Quitar solo la marca que anadio expire; el resto de la linea vuelve intacto.
-    verbatim = re.sub(r"\s+—\s+_caducado: \d{4}-\d{2}-\d{2}_ — _dias: [^_]*_\s*$", "", archivado)
-    del clines[idx]
-    atomic_write(cpath, clines)
-
+    mprio = re.search(r"_prio: ([^_]*)_\s*$", archivado)
+    prio_archivada = (mprio.group(1).strip() if mprio else "")
+    verbatim = re.sub(
+        r"\s+—\s+_caducado: \d{4}-\d{2}-\d{2}_ — _dias: [^_]*_(?: — _prio: [^_]*_)?\s*$",
+        "", archivado)
+    # ORDEN, igual que expire pero al reves: primero devolver la linea viva y solo despues
+    # quitarla del archivo. El peor caso vuelve a ser "esta en los dos", nunca "en ninguno".
     path = os.path.join(mem, "_pendientes.md")
     lines = read_lines(path)
     if find_id_line(lines, p["id"]) is None:
-        prio = p.get("prioridad") or ""
+        prio = p.get("prioridad") or prio_archivada
+        if prio in ("", "?"):
+            prio = ""
         if not prio:
             found = find_monthly_row(mem, p["id"])
             prio = pad(split_cells(found[1][found[2]]), 7)[2] if found else ""
@@ -493,6 +549,13 @@ def apply_reopen(mem, p):
         if at + 1 < len(lines) and lines[at + 1].startswith("## "):
             lines.insert(at + 1, "")
         atomic_write(path, lines)
+
+    clines = read_lines(cpath)           # releer antes de borrar: entre medias pudo escribir otro
+    for k, line in enumerate(clines):
+        if line.lstrip().startswith("- [ ]") and f"_id: {p['id']}_" in line:
+            del clines[k]
+            atomic_write(cpath, clines)
+            break
 
     found = find_monthly_row(mem, p["id"])
     if found:
@@ -980,6 +1043,17 @@ def validate(ev):
                 raise Quarantine(f"malformed: pendiente.add sin '{k}'")
         if p["prioridad"].lower() not in HEADERS:
             raise Quarantine(f"malformed: prioridad '{p['prioridad']}' desconocida")
+        # El compactador es su propia frontera de confianza: un evento puede llegar de otro
+        # emisor, o escrito a mano. DATE_RE solo valida la forma y `2026-99-99` la pasa, se
+        # persiste en la linea y luego revienta a los consumidores. (Adversario, ronda 3.)
+        for campo in ("creado", "revisar"):
+            v = p.get(campo)
+            if not v:
+                continue
+            try:
+                date.fromisoformat(str(v))
+            except (ValueError, TypeError):
+                raise Quarantine(f"malformed: pendiente.add con '{campo}' irreal: {v!r}")
     elif t == "pendiente.resolve":
         for k in ("id", "estado"):
             if not p.get(k):
@@ -992,6 +1066,14 @@ def validate(ev):
     elif t == "pendiente.reopen":
         if not p.get("id"):
             raise Quarantine("malformed: pendiente.reopen sin 'id'")
+    elif t == "pendiente.window":
+        if not p.get("id"):
+            raise Quarantine("malformed: pendiente.window sin 'id'")
+        # DATE_RE solo valida la forma: `2026-99-99` la pasa y luego revienta a los consumidores.
+        try:
+            date.fromisoformat(str(p.get("revisar", "")))
+        except (ValueError, TypeError):
+            raise Quarantine("malformed: pendiente.window sin 'revisar' con fecha real")
     elif t == "session.add":
         for k in ("slug", "date"):
             if not p.get(k):
@@ -1049,6 +1131,8 @@ def apply_event(mem, ev):
         return a or b
     if t == "pendiente.reopen":
         return apply_reopen(mem, p)
+    if t == "pendiente.window":
+        return apply_window(mem, p)
     if t == "session.add":
         return apply_session_add(mem, p)
     if t == "learning.add":

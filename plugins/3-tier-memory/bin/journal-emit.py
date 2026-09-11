@@ -13,10 +13,12 @@ Ver memory/research/concurrent-memory-writes y plans/plan-journal-concurrencia-v
 
 Tipos de evento:
   pendiente.add     --text T --prioridad Alta|Media|Baja --origen O [--creado YYYY-MM-DD]
+                    [--revisar YYYY-MM-DD]   (ventana declarada; la lee expire-pendientes.py)
                     Imprime el id (p-<10 hex>) por stdout.                              (Fase 1)
   pendiente.resolve --id ID --estado resolved|superseded|abandoned [--sesion S] [--nota N]
   pendiente.expire  --id ID --dias N [--line "<linea verbatim>"]   (caducidad por edad)
   pendiente.reopen  --id ID [--prioridad P]                        (reversa de expire)
+  pendiente.window  --id ID --revisar YYYY-MM-DD                  (pone/actualiza la ventana)
                     [--text-prefix P]  (si no se da, se toma del archivo si la linea existe)
   session.add       --slug DATE-SLUG --date D --status ST --summary R [--commit C]      (Fase 2)
                     Fila en _session-index.md (arriba de la tabla). Si la fila del slug ya
@@ -208,8 +210,19 @@ def find_line_text(memory_dir, pid):
     return None
 
 
+def fecha_real(v):
+    """True solo si `v` es una fecha del calendario. `re` valida la FORMA: `2026-99-99` la pasa,
+    y los consumidores (`triage-scan.py`, `expire-pendientes.py`) revientan al parsearla.
+    (Hallazgo del adversario, ronda 2, 2026-09-11.)"""
+    try:
+        date.fromisoformat(str(v))
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
 def strip_meta(text):
-    text = re.sub(r"\s*—\s*_(origen|creado|id):[^—]*", "", text)
+    text = re.sub(r"\s*—\s*_(origen|creado|id|revisar):[^—]*", "", text)
     return text.strip()
 
 
@@ -218,7 +231,8 @@ def main():
     ap = argparse.ArgumentParser(description="Emite un evento al journal de memory/.")
     ap.add_argument("--type", required=True,
                     choices=["pendiente.add", "pendiente.resolve",
-                             "pendiente.expire", "pendiente.reopen", "session.add",
+                             "pendiente.expire", "pendiente.reopen", "pendiente.window",
+                             "session.add",
                              "learning.add", "plan.upsert", "research.upsert"])
     ap.add_argument("--memory-dir")
     ap.add_argument("--session")
@@ -227,6 +241,7 @@ def main():
     ap.add_argument("--prioridad")
     ap.add_argument("--origen")
     ap.add_argument("--creado")
+    ap.add_argument("--revisar")
     # pendiente.resolve
     ap.add_argument("--id")
     ap.add_argument("--estado")
@@ -281,11 +296,16 @@ def main():
         if not origen:
             sys.exit("journal-emit: pendiente.add necesita --origen (p. ej. [[sessions/...]])")
         creado = (a.creado or date.today().isoformat()).strip()
-        if not re.match(r"^\d{4}-\d{2}-\d{2}$", creado):
-            sys.exit("journal-emit: --creado debe ser YYYY-MM-DD")
+        if not fecha_real(creado):
+            sys.exit("journal-emit: --creado debe ser una fecha real YYYY-MM-DD")
+        revisar = (a.revisar or "").strip()
+        if revisar and not fecha_real(revisar):
+            sys.exit("journal-emit: --revisar debe ser una fecha real YYYY-MM-DD")
+        # `revisar` NO entra en el hash: es la ventana, no la identidad. Anadirla cambiaria el id
+        # de un pendiente que ya existe y el compactador lo veria como uno nuevo.
         pid = pendiente_id(text, creado, origen)
         base["payload"] = {"id": pid, "text": text, "prioridad": prio,
-                           "origen": origen, "creado": creado}
+                           "origen": origen, "creado": creado, "revisar": revisar}
         write_event(memory_dir, base)
         print(pid)
         return
@@ -361,6 +381,18 @@ def main():
         print(f"r-{slug}")
         return
 
+    if a.type == "pendiente.window":
+        pid = (a.id or "").strip()
+        if not ID_RE.match(pid):
+            sys.exit("journal-emit: --id debe tener la forma p-<10 hex>")
+        rev = (a.revisar or "").strip()
+        if not fecha_real(rev):
+            sys.exit("journal-emit: pendiente.window necesita --revisar con una fecha real")
+        base["payload"] = {"id": pid, "revisar": rev, "fecha": date.today().isoformat()}
+        write_event(memory_dir, base)
+        print(pid)
+        return
+
     if a.type in ("pendiente.expire", "pendiente.reopen"):
         pid = (a.id or "").strip()
         if not ID_RE.match(pid):
@@ -369,7 +401,10 @@ def main():
             dias = (a.dias or "").strip()
             if not dias.isdigit():
                 sys.exit("journal-emit: pendiente.expire necesita --dias <entero>")
-            base["payload"] = {"id": pid, "dias": int(dias),
+            prio = (a.prioridad or "").strip().capitalize()
+            if prio and prio not in PRIORIDADES:
+                sys.exit(f"journal-emit: --prioridad debe ser una de {PRIORIDADES}")
+            base["payload"] = {"id": pid, "dias": int(dias), "prioridad": prio,
                                "line": (a.line or "").rstrip("\n"),
                                "fecha": date.today().isoformat()}
         else:
