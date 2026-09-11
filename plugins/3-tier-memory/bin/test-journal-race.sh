@@ -111,7 +111,9 @@ def inject(n, exc):
     os.replace = fake; return state
 st = inject(4, PermissionError)
 pa = os.path.join(d, "retry-a.md")
-try: jc.atomic_write(pa, ["ok"]); ok = os.path.exists(pa) and open(pa).read() == "ok\n"   # atomic_write garantiza newline final (2026-09-11)
+# "rb": leer en modo texto traduce "\r\n" a "\n", asi que esta asercion pasaba aunque en disco
+# hubiera CRLF — era ciega justo a lo que dice comprobar. Se compara sobre los bytes.
+try: jc.atomic_write(pa, ["ok"]); ok = os.path.exists(pa) and open(pa, "rb").read() == b"ok\n"   # newline final garantizado, y LF (2026-09-11)
 except PermissionError: ok = False
 out.append(f"a={'ok' if ok and st['calls'] == 5 else 'FAIL'}({st['calls']})")
 st = inject(5, PermissionError)

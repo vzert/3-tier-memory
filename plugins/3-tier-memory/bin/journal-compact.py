@@ -74,6 +74,7 @@ if hasattr(sys.stdout, "reconfigure"):
 STALE_SECONDS = 60
 POLL_SECONDS = 0.05
 REPLACE_RETRIES = 5  # Windows: antivirus/indexador pueden tener el .md abierto un instante
+EOL_DEFAULT = "\n"   # fichero nuevo o sin CRLF: LF, en cualquier sistema operativo
 MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto",
          "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 ID_RE = re.compile(r"_id: (p-[0-9a-f]{10})_")
@@ -141,8 +142,21 @@ def rmtree_with_retry(path):
     return not os.path.exists(path)
 
 
+def detect_eol(path):
+    """Salto de linea que YA usa el fichero, para reescribirlo sin convertirlo.
+
+    Misma regla que normalize-pendientes.py (`"\r\n" in text`) y a proposito: los dos tocan los
+    mismos ficheros, y si discreparan cada pasada le daria la vuelta al fichero entero. Un fichero
+    nuevo, vacio o sin ningun CRLF sale en LF."""
+    try:
+        with open(path, "rb") as fh:
+            return "\r\n" if b"\r\n" in fh.read() else EOL_DEFAULT
+    except OSError:
+        return EOL_DEFAULT
+
+
 def atomic_write(path, lines):
-    """Escribe `lines` unidas por "\n", garantizando salto de linea final.
+    """Escribe `lines` unidas por el salto de linea del propio fichero, garantizando salto final.
 
     read_lines parte por "\n", asi que el ultimo elemento de un fichero bien formado es "" — el
     centinela del salto final. Cuando un applier inserta AL FINAL (p. ej. apply_add_index sobre una
@@ -151,14 +165,27 @@ def atomic_write(path, lines):
     2026-09-11 con un item legacy anadido a mano tras un pendiente.add. Se normaliza aqui, en el
     unico sitio por el que pasan todas las escrituras.
 
-    CONTRATO, y es un cambio de comportamiento: un fichero que llegue SIN salto final sale CON el.
-    Eso rompe el "byte a byte" para esa entrada concreta — a proposito: en `memory/` un fichero sin
-    newline final es el bug, no un formato a preservar. (Lo marco el adversario en su ronda 3.)"""
+    CONTRATO, en tres partes:
+
+    1. Un fichero que llegue SIN salto final sale CON el. Eso rompe el "byte a byte" para esa
+       entrada concreta — a proposito: en `memory/` un fichero sin newline final es el bug, no un
+       formato a preservar. (Lo marco el adversario en su ronda 3.)
+    2. El salto de linea es el que el fichero YA tenia, no el del sistema operativo. `newline=""`
+       apaga la traduccion de Python, que era la que mandaba antes: con el modo texto por defecto,
+       este mismo fichero salia LF en macOS y CRLF en Windows. Un CRLF sin salto final no recibia
+       "un \n pelado" — se convertia ENTERO a LF (medido 2026-09-11 sobre los bytes, no sobre una
+       lectura con universal newlines, que es ciega a esto). Un repositorio compartido entre las dos
+       plataformas le daba la vuelta al fichero entero en cada compactacion.
+    3. `[]` y `[""]` escriben un fichero de cero bytes. Es la representacion correcta del fichero
+       vacio y sobrevive el viaje de vuelta: read_lines("") devuelve [""].
+
+    Un fichero con saltos MEZCLADOS sale con uno solo, el que diga detect_eol."""
     if lines and lines[-1] != "":
         lines = list(lines) + [""]
+    eol = detect_eol(path)
     tmp = f"{path}.{os.getpid()}.tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(lines))
+    with open(tmp, "w", encoding="utf-8", newline="") as fh:
+        fh.write(eol.join(lines))
     replace_with_retry(tmp, path)
 
 

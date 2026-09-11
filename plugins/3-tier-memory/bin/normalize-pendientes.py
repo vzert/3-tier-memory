@@ -137,10 +137,15 @@ def main():
     try:
         # newline="" conserva los saltos tal cual (CRLF en archivos escritos en Windows); se
         # parte y se vuelve a unir con el mismo separador para no reescribir ninguna otra linea.
+        # La REGLA de deteccion es la misma que detect_eol() de journal-compact.py — si los dos
+        # discreparan, cada pasada le daria la vuelta al fichero entero. Se parte por `\r?\n` y no
+        # por `eol`: en un fichero de saltos MEZCLADOS, partir por "\r\n" dejaba el "\n" suelto
+        # dentro de la ultima celda y rompia esa fila. Al reunir con `eol`, el fichero mezclado
+        # sale con un solo salto, igual que lo dejaria atomic_write.
         with open(path, encoding="utf-8", newline="") as fh:
             text = fh.read()
         eol = "\r\n" if "\r\n" in text else "\n"
-        lines = text.split(eol)
+        lines = re.split(r"\r?\n", text)
         plan = plan_insertions(lines)
         if not plan:
             if not a.quiet:

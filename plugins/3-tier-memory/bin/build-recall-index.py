@@ -239,7 +239,10 @@ def main():
 
     tmp = out_path + ".tmp"
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    with open(tmp, "w", encoding="utf-8") as f:
+    # newline="\n": el indice es un artefacto generado, no un fichero del usuario. Sin esto el
+    # modo texto por defecto lo escribia con CRLF en Windows y LF en macOS, asi que el mismo
+    # `memory/` producia dos indices de bytes distintos segun donde corriera.
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         for u in units:
             f.write(json.dumps(u, ensure_ascii=False) + "\n")
     os.replace(tmp, out_path)

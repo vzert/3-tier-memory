@@ -256,6 +256,35 @@ python3 "$BIN/journal-emit.py" --memory-dir "$MEMC" --type pendiente.window --id
 python3 "$BIN/journal-compact.py" --memory-dir "$MEMC" --quiet >/dev/null 2>&1
 chk "tras escribir, termina CON newline"   "1" "$(tail -c 1 "$MEMC/_pendientes.md" | od -An -c | grep -c '\\n')"
 chk "y la linea sigue entera"              "1" "$(grep -c 'sin newline final' "$MEMC/_pendientes.md")"
+chk "y el fichero LF sigue en LF"          "0" "$(tr -dc '\r' < "$MEMC/_pendientes.md" | wc -c | tr -d ' ')"
+
+echo "== contrato: atomic_write NO convierte un fichero CRLF =="
+# El salto de linea lo manda el fichero, no el sistema operativo. Con el modo texto por defecto
+# esto salia LF en macOS y CRLF en Windows: el mismo memory/ compartido entre las dos plataformas
+# le daba la vuelta al fichero entero en cada compactacion. Se mide sobre los BYTES: `tail -c 1`
+# ve un "\n" igual en los dos casos, asi que contar \r es lo unico que lo distingue.
+MEMD="$T/memd"; mkdir -p "$MEMD/pendientes"
+printf '# Pendientes\r\n\r\n## Media prioridad\r\n\r\n- [ ] crlf sin newline final — _origen: [[sessions/2026-01-01-y]]_ — _creado: 2026-01-01_ — _id: p-7777777777_' > "$MEMD/_pendientes.md"
+CR_ANTES="$(tr -dc '\r' < "$MEMD/_pendientes.md" | wc -c | tr -d ' ')"
+chk "el fixture empieza en CRLF y sin newline final" "4" "$CR_ANTES"
+python3 "$BIN/journal-emit.py" --memory-dir "$MEMD" --type pendiente.window --id p-7777777777 --revisar 2026-12-01 >/dev/null
+python3 "$BIN/journal-compact.py" --memory-dir "$MEMD" --quiet >/dev/null 2>&1
+chk "sigue siendo CRLF, no se convirtio a LF" "5" "$(tr -dc '\r' < "$MEMD/_pendientes.md" | wc -c | tr -d ' ')"
+chk "y termina con CRLF, no con un \\n pelado" "1" "$(tail -c 2 "$MEMD/_pendientes.md" | od -An -c | grep -c '\\r  \\n')"
+chk "la linea sigue entera"                   "1" "$(grep -c 'crlf sin newline final' "$MEMD/_pendientes.md")"
+
+echo "== normalize-pendientes y journal-compact no discrepan en el salto =="
+# Si las dos herramientas detectaran el salto con reglas distintas, cada pasada le daria la vuelta
+# al fichero. Aqui normalize- escribe primero (le faltan cabeceras) y compact- despues.
+MEME="$T/meme"; mkdir -p "$MEME/pendientes"
+printf '# Pendientes\r\n\r\n## Alta prioridad\r\n\r\n- [ ] solo alta — _origen: [[sessions/2026-01-01-y]]_ — _creado: 2026-01-01_ — _id: p-8888888888_\r\n' > "$MEME/_pendientes.md"
+python3 "$BIN/normalize-pendientes.py" --memory-dir "$MEME" --apply --quiet >/dev/null 2>&1
+CR_TRAS_NORM="$(tr -dc '\r' < "$MEME/_pendientes.md" | wc -c | tr -d ' ')"
+python3 "$BIN/journal-emit.py" --memory-dir "$MEME" --type pendiente.window --id p-8888888888 --revisar 2026-12-01 >/dev/null
+python3 "$BIN/journal-compact.py" --memory-dir "$MEME" --quiet >/dev/null 2>&1
+CR_TRAS_COMPACT="$(tr -dc '\r' < "$MEME/_pendientes.md" | wc -c | tr -d ' ')"
+chk "normalize- conservo el CRLF"             "1" "$([ "$CR_TRAS_NORM" -gt 0 ] && echo 1 || echo 0)"
+chk "compact- no le dio la vuelta despues"    "$CR_TRAS_NORM" "$CR_TRAS_COMPACT"
 
 echo "RESULT pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
