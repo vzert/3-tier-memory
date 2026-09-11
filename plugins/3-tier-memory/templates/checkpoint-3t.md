@@ -86,8 +86,7 @@ importance: <0-10>
 <or "Ninguno">
 
 ## Pendientes
-- [ ] <items> — ver [[_pendientes]]
-<or "Ninguno">
+<filled in Step 3d — leave this placeholder for now>
 
 ## Commits
 <filled in Step 6>
@@ -131,6 +130,14 @@ most recent rows by date. The Commit cell is filled in Step 6c with a second `se
 
 **Fallback (no JBIN)**: add the row by hand, commit hash "filled in Step 6".
 
+**Do NOT write pendiente ids in this file yet.** A pendiente's id is
+`sha1(text + creado + origen)[:10]` — the journal computes it in Step 3 and prints it. Writing
+the `## Pendientes` section now means inventing ids that no event will ever match, and once an
+invented id is referenced here, re-emitting the pendiente correctly would produce a *different*
+id, so the natural next move is to hand-write Tier 2 as well — which is exactly what breaks the
+dual write. Measured 2026-09-10 in one project: 27 of 120 ids in `_pendientes.md` were invented,
+and 51 pendientes had no Tier 3 row at all. Leave the placeholder; Step 3d fills it.
+
 ## Step 3: Pendientes — DUAL WRITE via journal (always)
 
 Pendientes go through the journal too (`JBIN` and `MEMORY_DIR` from Step 0): `pendiente.add` /
@@ -144,7 +151,14 @@ This step runs in FOUR sub-phases, in order: 3-pre, 3a, 3b, 3c. Do not merge the
 ```bash
 python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"       # apply whatever other agents left pending
 python3 "$JBIN/enrich-memory.py" "$MEMORY_DIR" --apply --only creado,id   # legacy lines get `_creado` (if missing) and `_id: p-…_`; idempotent
+python3 "$JBIN/repair-dualwrite.py" "$MEMORY_DIR" --apply --fix-pipes    # Tier 2 lines with no Tier 3 row; rows a `|` made unclosable; idempotent
 ```
+
+`repair-dualwrite` prints `rows_added=N pipes_fixed=N missing_data=N`. **A non-zero `rows_added`
+means someone hand-wrote Tier 2 since the last checkpoint** — the dual write was bypassed, and
+without this repair those pendientes would lose their resolution date and closing session when
+they are eventually closed. Report both counts in Step 7; if `missing_data>0`, the listed lines
+lack `_creado` or a priority header and need a look by hand.
 
 THEN read `memory/_pendientes.md`. Every open line now ends with `_id: p-xxxxxxxxxx_`. That id is
 how you resolve it in 3a; never match a line by its text.
@@ -227,6 +241,23 @@ that change by hand, delete the `.json`/`.reason` pair, and report it in Step 7.
 `JOURNAL busy`, another agent holds the lock right now: run it again after a few seconds. This
 runs now so the reconciliation report is fresh; Steps 2, 4 and 5 emit more events, and Step 5a
 compacts everything again before the commit.
+
+### Step 3d — Rellenar `## Pendientes` del session log
+
+Only now do the ids exist. Replace the placeholder left in Step 2 with the pendientes this
+session touched, each with the id the journal actually assigned:
+
+```markdown
+## Pendientes
+- [ ] <texto corto> — `p-xxxxxxxxxx`
+- [x] <texto corto> — `p-yyyyyyyyyy` (resuelto)
+<or "Ninguno">
+```
+
+Take every id from the `journal-emit.py` stdout of Steps 3a/3b, or from the line the compactor
+wrote in `_pendientes.md` — **never type one from memory and never make one up**. If an id you
+wrote here does not appear in `memory/_pendientes.md` or in `memory/pendientes/YYYY-MM.md`, it is
+invented: drop it and re-read the file.
 
 ## Step 4: Learnings — DUAL WRITE (always)
 
