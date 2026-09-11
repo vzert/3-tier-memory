@@ -94,6 +94,9 @@ importance: <0-10>
 ## Como retomar
 <filled in Step 8>
 
+## Recordatorios de calendario
+<filled in Step 8c-2 — borra esta seccion si no hubo pendientes con fecha futura>
+
 ## Related
 - [[_session-index]]
 - [[_pendientes]]
@@ -602,33 +605,83 @@ dos versiones de la verdad.
 
 Si algun pendiente de esta sesion (nuevo o reconciliado) **nombra una fecha posterior a hoy** —
 `revisar el 2026-09-22`, `target 2026-10-01`, `T+7`, `en 2 semanas` resuelto a fecha — imprime
-**un bloque aparte por cada uno, despues del snippet**. Maximo 2; si hay mas, di
-`+N con fecha futura en _pendientes.md`.
+**un bloque aparte por cada uno, despues del snippet**. Imprime maximo 2; si hay mas, di
+`+N con fecha futura en _pendientes.md`. El tope es para no llenar la terminal: en el session
+file (8c-2) van **todos**, sin tope.
 
 **Va fuera del snippet, no dentro.** El snippet se pega al agente de la sesion siguiente; una
 instruccion de calendario pegada ahi es ruido para el agente y se pierde para ti. Este bloque se
-dirige a ti, y lo que lleva dentro es un prompt para que TU lo guardes en el evento.
+dirige a ti, y lo que lleva dentro del fence es un prompt para que TU lo guardes en el evento.
 
-```
+**La regla de division.** Una sola, y resuelve cualquier duda de donde va cada cosa:
+
+- **Dentro del fence** va todo lo que el AGENTE necesita para actuar: el `_id: p-…`, la ruta del
+  session file, las cifras y el criterio, y la clausula `Si ya no aplica, cierralo con /checkpoint-3t`.
+- **Fuera del fence** va solo lo que TU necesitas para decidir si vale la pena abrir el portatil:
+  Titulo y Descripcion.
+
+Nunca subas el id al Titulo, nunca saques la clausula de cierre del fence.
+
+````
 ─── Recordatorio para el <FECHA> ───
-Ponlo en tu calendario y pega esta nota dentro del evento:
+Ponlo en tu calendario:
 
+Título: <la pregunta que se responde ese dia, en una linea>
+
+Descripción:
+<2-4 lineas de prosa: que se construyo o decidio, por que, que se
+decide ese dia, y que pasa segun el resultado>
+
+Pega esto dentro del evento (es el prompt para el agente):
+```
 Retomamos: <pendiente en una linea> _id: p-…_
 Contexto: memory/sessions/DATE-SLUG.md
-Comprueba: <que hay que mirar ese dia, con el criterio si se acordo uno>
+Comprueba: <que hay que mirar ese dia, con las cifras y el criterio si se acordo uno>
 Si ya no aplica, cierralo con /checkpoint-3t en vez de dejarlo abierto.
-────────────────────────────────────
 ```
+────────────────────────────────────
+````
+
+- `Título`: tiene que ser legible en la vista de mes de un calendario, donde solo se ve esa linea.
+  Nombra **la cosa y la pregunta**, no el item: `¿La linea "Sigue abierto:" hizo que se cierren mas
+  pendientes?`, no `Medir p-cd965754ec`. Sin ids `p-…`, sin rutas de fichero, ~70 caracteres.
+- `Descripción`: prosa, 2-4 lineas, **sin cifras**. Baselines, umbrales y listas por proyecto van
+  solo en `Comprueba:`, dentro del fence — la descripcion la lees en el movil para decidir si vale
+  la pena abrir el portatil; las cifras son trabajo del agente. Tiene que contestar tres cosas:
+  **que era el pendiente**, **que se decide ese dia**, y **que pasa segun el resultado**.
+  **Si el pendiente no trae una decision detras** —se construyo algo y nunca se midio, sin criterio
+  acordado— dilo tal cual en vez de inventar uno: `Se construyo X en <mes> y nunca se probo contra
+  Y. No hay criterio acordado: ese dia hay que decidir uno antes de mirar nada.` Una descripcion
+  seca y honesta sirve; una inventada te hace llegar a la fecha creyendo que hubo un acuerdo que
+  nunca existio.
+
+**La prueba de que la descripcion sirve**: tapa el fence y lee solo Titulo + Descripcion. Si con
+eso no puedes decir de que iba el pendiente ni que vas a hacer ese dia, reescribela. Ese es
+exactamente el fallo que este bloque existe para evitar.
 
 **Ademas, el pendiente nace con la fecha como campo**, no solo en prosa:
 `journal-emit.py --type pendiente.add … --revisar YYYY-MM-DD`. El compactador escribe
 `— _revisar: YYYY-MM-DD_` en la linea de Tier 2. Ese campo tiene dos consumidores reales:
 `expire-pendientes.py` (no caduca un item cuya ventana aun no vence) y el propio barrido manual.
 
+**8c-2. Persistir los recordatorios en el session file**:
+
+Escribe los mismos bloques en el session file, en la seccion `## Recordatorios de calendario`,
+entre `## Como retomar` y `## Related`. Uno por pendiente con fecha futura, **todos, sin el tope
+de 2** que aplica a la terminal. Encabeza cada uno con `### <FECHA> — <Titulo>` y debajo el bloque
+completo. Si no hubo ninguno, borra la seccion entera en vez de dejarla vacia.
+
+Los bloques persistidos son **identicos** a los impresos — misma regla que en 8a/8b: el usuario
+copia de la terminal o del fichero indistintamente, y dos versiones del mismo recordatorio son dos
+versiones de la verdad. Si en la terminal dijiste `+N con fecha futura en _pendientes.md`, en el
+fichero estan los N.
+
 **Por que este bloque.** Medido 2026-09-11: **11% de los pendientes nuevos traen una fecha
 posterior a su creacion** (28 en 30 dias sobre 5 instalaciones, ~1 al dia) y **395 de 996
 abiertos llevan una fecha ya vencida escrita en prosa que ningun codigo leyo nunca**. El
 calendario del usuario es el unico disparador que si dispara sin cron, sin servicio externo y sin
-depender de que alguien abra el proyecto ese dia.
+depender de que alguien abra el proyecto ese dia. Titulo y Descripcion existen porque un evento
+que solo lleva el prompt llega a su fecha sin decirle al humano de que iba: el prompt esta escrito
+para el agente, y el que abre el calendario eres tu.
 
-No agregues git commit aqui — el cambio al session file ya quedo dentro del flujo de Step 6, pero como Step 8 corre DESPUES, este `## Como retomar` no estara en el commit. Es aceptable: el snippet vive en disco y el commit es best-effort. Si el usuario quiere comitearlo, puede `git add memory/sessions/DATE-SLUG.md && git commit --amend --no-edit` manualmente o esperar al proximo checkpoint.
+No agregues git commit aqui — el cambio al session file ya quedo dentro del flujo de Step 6, pero como Step 8 corre DESPUES, ni `## Como retomar` ni `## Recordatorios de calendario` estaran en el commit. Es aceptable: el snippet vive en disco y el commit es best-effort. Si el usuario quiere comitearlo, puede `git add memory/sessions/DATE-SLUG.md && git commit --amend --no-edit` manualmente o esperar al proximo checkpoint.

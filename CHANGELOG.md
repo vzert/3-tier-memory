@@ -1,5 +1,83 @@
 # Changelog
 
+## [2.15.0] - 2026-09-11
+El bloque de recordatorio de calendario (Step 8c de `/checkpoint-3t`) pasa a tener la forma de un
+evento de calendario: **Titulo**, **Descripcion** y, aparte, el prompt dentro de un fence. Hasta
+2.14.3 el bloque entero era prompt, escrito para el agente. El humano que abre el calendario un mes
+despues leia una instruccion dirigida a otro y no tenia forma de saber de que iba el pendiente.
+
+### Added
+- **Tres campos en vez de uno.** `Titulo:` (una linea, va al nombre del evento), `Descripcion:`
+  (2-4 lineas de prosa, para ti) y el prompt en un fence ```` ``` ````, que es lo unico que se pega
+  al agente.
+- **Una regla de division explicita**, para que no se re-decida en cada sesion donde va cada cosa:
+  dentro del fence va lo que el AGENTE necesita para actuar (`_id: p-…`, la ruta del session file,
+  las cifras, el criterio y la clausula `Si ya no aplica, cierralo con /checkpoint-3t`); fuera va
+  solo lo que TU necesitas para decidir si vale la pena abrir el portatil. Sin esa frase, la
+  siguiente sesion sube el id al Titulo o se deja la clausula de cierre fuera.
+- **`Descripcion` va sin cifras.** Baselines, umbrales y listas por proyecto viven solo en
+  `Comprueba:`, dentro del fence. La descripcion se lee en el movil para decidir si abrir el
+  portatil; las cifras son trabajo del agente y duplicarlas crea dos versiones del criterio.
+- **Regla de fallback para el pendiente sin decision detras.** Si se construyo algo y nunca se
+  midio, sin criterio acordado, la Descripcion lo dice tal cual (`No hay criterio acordado: ese dia
+  hay que decidir uno antes de mirar nada`) en vez de inventar un acuerdo. Una descripcion inventada
+  te hace llegar a la fecha creyendo que hubo un trato que nunca existio.
+- **Step 8c-2 — los recordatorios se persisten.** Nueva seccion `## Recordatorios de calendario` en
+  el session file, entre `## Como retomar` y `## Related`, con `### <FECHA> — <Titulo>` por bloque.
+  Hasta ahora el recordatorio solo se imprimia al terminal: si perdias el scrollback, se perdio.
+  El tope de 2 sigue aplicando **solo a la terminal** (esta para no llenarla); en el fichero van
+  todos. Los bloques persistidos son identicos a los impresos, misma regla que 8a/8b.
+- El esqueleto del session file incorpora la seccion con su placeholder, y la nota de cierre de
+  Step 8 ahora nombra las dos secciones que quedan fuera del commit de Step 6, no solo una.
+
+### Lo que NO esta medido
+A diferencia del resto de este CHANGELOG, **esta version no trae un numero detras**. La medicion de
+2.13.0 (11% de los pendientes nuevos traen fecha futura; 395 de 996 abiertos llevan una fecha
+vencida que ningun codigo leyo nunca) justifica que el bloque **exista**; no dice nada sobre si los
+tres campos ayudan. La evidencia aqui es un reporte de uso: el bloque se probo en una sesion real,
+funciono como mecanismo, y el usuario reporto que al llegar la fecha no sabria de que iba el
+pendiente. Se acepta sin medir porque el costo es prosa en una plantilla y el fallo que corrige se
+observa a un mes vista, cuando ya no hay como arreglarlo.
+
+### Notas de verificacion
+- **La prueba es tapar el fence.** Leyendo solo Titulo + Descripcion tiene que quedar claro que era
+  el pendiente, que se decide ese dia y que pasa segun el resultado. Renderizados dos casos reales:
+  `p-cd965754ec` (con decision, baseline y condicion de muerte) y `p-0e32d4f412` (delgado, sin
+  criterio acordado). El segundo es el que importa: el caso bonito pasa se escriba lo que se
+  escriba; la plantilla solo sirve si un pendiente sin decision detras produce una descripcion
+  honesta. Por eso existe la regla de fallback.
+- **Anidamiento de fences**: el bloque de ejemplo contiene un fence, asi que va con cuatro comillas
+  invertidas, como ya hacia el ejemplo de Step 8a. Comprobado que las cuatro aperturas/cierres
+  quedan en el orden correcto.
+- **Barrido antes de tocar el esqueleto**: anadir una seccion entre `## Como retomar` y `## Related`
+  romperia cualquier script que inserte "antes de `## Related`" o "al final del ultimo bloque" — un
+  wikilink aterrizaria dentro de un recordatorio. Los usos de `## Related` en `bin/` (excluyendo
+  `test-*`) son **siete**, y ninguno toca un session file:
+  `normalize-pendientes.py:19` (docstring, `_pendientes.md`); `session-start.sh:259` y `:456`
+  (**leen** `_learnings.md` para contar reglas); `journal-compact.py:31` (docstring de `--section`,
+  ficheros de tema), `:426` (crea el archivo mensual `memory/pendientes/YYYY-MM.md`), `:829`
+  (`body_region()`, ficheros de tema) y `:873` (crea un fichero de tema nuevo). Los session files
+  los escribe el agente, no el compactador. No hay colision.
+- **Correccion sobre la ronda adversarial de esta misma version**: la primera redaccion de esta nota
+  decia "los cinco usos" y "todos operan sobre `_pendientes.md` y ficheros de tema". Las dos mitades
+  eran falsas —son siete y dos de ellos leen `_learnings.md`— porque el barrido se hizo sobre tres
+  ficheros elegidos a mano en vez de sobre `bin/` entero. La conclusion aguanto la re-derivacion
+  independiente; la evidencia publicada no. Lo encontro el verificador externo.
+- **Un adversario que usa `rg` no ve `.claude/`**, porque `rg` respeta `.gitignore` y ahi esta
+  ignorado desde la linea 1. En esta ronda eso produjo un hallazgo falso ("el comando local sigue
+  desactualizado") sobre un fichero que si estaba sincronizado, comprobado con `diff`. En este repo,
+  "`rg` no lo encuentra" no es prueba de ausencia dentro de `.claude/`.
+- Ninguna otra plantilla lleva Step 8c ni el esqueleto del session file: `checkpoint-paperclip` no
+  tiene esa seccion, asi que no queda desincronizado.
+
+### Riesgos residuales, declarados
+- **El texto no es reproducible.** Titulo y Descripcion los redacta el agente en cada checkpoint, no
+  son campos del pendiente. Si otra sesion reimprime el recordatorio, la prosa sale distinta. Se
+  eligio a sabiendas: la alternativa era `--titulo`/`--descripcion` en `pendiente.add`, que obliga a
+  tocar emisor, compactador, esquema y a migrar los 996 abiertos que no los tienen.
+- Si el agente salta Step 8c-2, el session file se queda con el placeholder a la vista. Es la misma
+  clase de fallo que ya tienen `<filled in Step 6>` y los demas, no un mecanismo nuevo.
+
 ## [2.14.3] - 2026-09-11
 Los dos defectos de `bin/resolve-project-dir.sh`, el fichero que sourcean los **ocho** hooks del
 plugin. Los dos se ven igual desde fuera —"el hook no hizo nada"— y por eso los dos sobrevivieron
