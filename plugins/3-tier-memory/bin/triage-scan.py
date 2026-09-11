@@ -206,6 +206,7 @@ def main():
             "texto": texto,
         })
 
+    abiertos_totales = len(items)   # ANTES del filtro: distingue "no hay nada" de "el filtro no casa"
     if a.prioridad:
         items = [i for i in items if i["prio"] == a.prioridad]
     # Clave de orden = (creado, id). Los sin fecha van al final con date.max, y su id los ordena
@@ -264,7 +265,15 @@ def main():
         print(f"cursor --desde {a.desde}: {saltados} ya pasaron por un lote previo, "
               f"{len(items)} por revisar")
     if not items:
-        print("\nNo queda nada por revisar tras ese cursor.")
+        # Sin cursor, "tras ese cursor" no se refiere a nada: es lo primero que ve una instalacion
+        # nueva, cuyo _pendientes.md esta vacio.
+        if a.desde:
+            print("\nNo queda nada por revisar tras ese cursor.")
+        elif abiertos_totales == 0:
+            print("\nNo hay pendientes abiertos: nada que barrer.")
+        else:
+            print(f"\nNinguno de los {abiertos_totales} pendientes abiertos es de "
+                  f"prioridad {a.prioridad}.")
         return
     print(f"mostrando {len(sel)}, mas viejos primero")
     print()

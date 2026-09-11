@@ -340,5 +340,21 @@ CR1=$(tr -dc '\r' < "$MEMG/sessions/s.md" | wc -c | tr -d ' ')
 chk "el fixture nace en CRLF"                      "1" "$([ "$CR0" -gt 0 ] && echo 1 || echo 0)"
 chk "y sigue en CRLF tras las tres herramientas"   "1" "$([ "$CR1" -gt 0 ] && echo 1 || echo 0)"
 
+echo "== los tres mensajes de lista vacia dicen cual de los tres casos es =="
+# Una instalacion NUEVA tiene _pendientes.md vacio, y lo primero que veia era "No queda nada por
+# revisar tras ese cursor" — sin haber dado ningun cursor. Y el primer arreglo confundia "no hay
+# nada" con "el filtro no casa", porque contaba DESPUES de filtrar.
+MEMH="$T/memh"; mkdir -p "$MEMH/pendientes"
+printf -- '---\ntype: index\n---\n# Pendientes\n\n## Alta prioridad\n\n' > "$MEMH/_pendientes.md"
+chk "memoria vacia -> lo dice sin hablar de cursores" "1" "$(python3 "$BIN/triage-scan.py" --memory-dir "$MEMH" | grep -c 'No hay pendientes abiertos')"
+printf -- '- [ ] uno alta — _creado: 2026-01-01_ — _id: p-1111111111_\n' >> "$MEMH/_pendientes.md"
+chk "filtro sin resultados -> dice cuantos hay y de que prioridad" "1" "$(python3 "$BIN/triage-scan.py" --memory-dir "$MEMH" --prioridad Baja | grep -c 'Ninguno de los 1 pendientes abiertos es de prioridad Baja')"
+# El cursor del ULTIMO item: tras el no queda nada, que es el caso de "cursor agotado". Se
+# construye con dig() en vez de parsear la salida — el script solo imprime "Siguiente lote"
+# cuando QUEDA algo, asi que del ultimo lote no se puede copiar ninguno.
+printf -- '- [ ] dos alta — _creado: 2026-01-02_ — _id: p-2222222222_\n' >> "$MEMH/_pendientes.md"
+CUR_FIN="2026-01-02:p-2222222222:$(dig p-2222222222)"
+chk "cursor agotado -> ESE si habla del cursor" "1" "$(python3 "$BIN/triage-scan.py" --memory-dir "$MEMH" --desde "$CUR_FIN" 2>/dev/null | grep -c 'tras ese cursor')"
+
 echo "RESULT pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
