@@ -389,6 +389,125 @@ def last_table_line(lines):
     return last
 
 
+CADUCADOS = "_caducados.md"
+CADUCADOS_HEAD = [
+    "---",
+    "type: pendientes-caducados",
+    "---",
+    "",
+    "# Pendientes caducados",
+    "",
+    "Items archivados por edad (`expire-pendientes.py`). **No estan resueltos**: dejaron de ser un",
+    "compromiso. La linea se guarda verbatim para que `pendiente.reopen` la devuelva intacta.",
+    "",
+]
+
+
+def caducados_path(mem):
+    return os.path.join(mem, "pendientes", CADUCADOS)
+
+
+def apply_expire_index(mem, p):
+    """Saca la linea de _pendientes.md y la archiva VERBATIM en pendientes/_caducados.md."""
+    path = os.path.join(mem, "_pendientes.md")
+    if not os.path.isfile(path):
+        raise Quarantine("no-index: _pendientes.md no existe")
+    lines = read_lines(path)
+    i = find_id_line(lines, p["id"])
+    if i is None:
+        return False  # idempotente: ya caducada o cerrada a mano
+    verbatim = lines[i].rstrip("\n")
+    # El evento trae la linea que el emisor vio; si cambio desde entonces, gana el disco pero
+    # se avisa: el texto del archivo es el que el usuario recuperara con reopen.
+    if p.get("line") and normalize_text(p["line"]) != normalize_text(verbatim):
+        log(f"WARN expire: la linea {p['id']} cambio desde la emision — se archiva la del disco")
+    del lines[i]
+    if 0 < i < len(lines) and lines[i].strip() == "" and lines[i - 1].strip() == "":
+        del lines[i]
+    atomic_write(path, lines)
+
+    cpath = caducados_path(mem)
+    if os.path.isfile(cpath):
+        clines = read_lines(cpath)
+    else:
+        os.makedirs(os.path.dirname(cpath), exist_ok=True)
+        clines = list(CADUCADOS_HEAD)
+    marca = f"_caducado: {p.get('fecha') or date.today().isoformat()}_ — _dias: {p.get('dias', '?')}_"
+    clines.append(f"{verbatim} — {marca}")
+    atomic_write(cpath, clines)
+    return True
+
+
+def apply_expire_monthly(mem, p):
+    """Marca la fila mensual como expired. Misma columna que resolve: el ledger no se bifurca."""
+    found = find_monthly_row(mem, p["id"])
+    if not found:
+        log(f"WARN monthly: sin fila con id {p['id']} — caducado sin fila de Tier 3")
+        return False
+    path, lines, i = found
+    cells = pad(split_cells(lines[i]), 7)
+    if cells[5]:
+        return False  # ya cerrado (idempotente)
+    cells[5] = p.get("fecha") or date.today().isoformat()
+    cells[6] = f"expired — sin actividad en {p.get('dias', '?')} dias"
+    lines[i] = join_cells(cells)
+    atomic_write(path, lines)
+    return True
+
+
+def apply_reopen(mem, p):
+    """Reversa exacta de expire: devuelve la linea VERBATIM y limpia la fila mensual."""
+    cpath = caducados_path(mem)
+    if not os.path.isfile(cpath):
+        raise Quarantine("no-caducados: no hay pendientes/_caducados.md que revertir")
+    clines = read_lines(cpath)
+    idx = None
+    for k, line in enumerate(clines):
+        if line.lstrip().startswith("- [ ]") and f"_id: {p['id']}_" in line:
+            idx = k
+            break
+    if idx is None:
+        return False  # idempotente: ya reabierto
+    archivado = clines[idx]
+    # Quitar solo la marca que anadio expire; el resto de la linea vuelve intacto.
+    verbatim = re.sub(r"\s+—\s+_caducado: \d{4}-\d{2}-\d{2}_ — _dias: [^_]*_\s*$", "", archivado)
+    del clines[idx]
+    atomic_write(cpath, clines)
+
+    path = os.path.join(mem, "_pendientes.md")
+    lines = read_lines(path)
+    if find_id_line(lines, p["id"]) is None:
+        prio = p.get("prioridad") or ""
+        if not prio:
+            found = find_monthly_row(mem, p["id"])
+            prio = pad(split_cells(found[1][found[2]]), 7)[2] if found else ""
+        h = header_index(lines, prio) if prio else None
+        if h is None:
+            h = header_index(lines, "media")
+        if h is None:
+            raise Quarantine("no-anchor: _pendientes.md sin header de prioridad donde reinsertar")
+        at = h + 1
+        if at < len(lines) and lines[at].strip() == "":
+            at += 1
+        lines.insert(at, verbatim)
+        if at + 1 < len(lines) and lines[at + 1].startswith("## "):
+            lines.insert(at + 1, "")
+        atomic_write(path, lines)
+
+    found = find_monthly_row(mem, p["id"])
+    if found:
+        mpath, mlines, i = found
+        cells = pad(split_cells(mlines[i]), 7)
+        if cells[6].startswith("expired"):
+            cells[5] = ""
+            cells[6] = ""
+            # apply_add_monthly escribe las dos celdas vacias como "| | |"; join_cells daria
+            # "|  |  |" y la fila no volveria byte a byte a como nacio.
+            mlines[i] = re.sub(r"\|\s+\|\s+\|$", "| | |", join_cells(cells))
+            atomic_write(mpath, mlines)
+    return True
+
+
 def find_monthly_row(mem, pid):
     """Busca la fila con ese id en cualquier mensual. Devuelve (path, lines, idx) o None."""
     d = os.path.join(mem, "pendientes")
@@ -413,7 +532,7 @@ def apply_add_monthly(mem, p):
     lines = ensure_monthly(path, p["creado"][:7])
     nums = [int(c[0]) for _, c in table_rows(lines) if c and c[0].isdigit()]
     n = (max(nums) + 1) if nums else 1
-    # escape_cell(): un `|` crudo del texto partiria la fila y la haria irresoluble (ver apply_resolve_monthly).
+    # cell(): un `|` crudo del texto partiria la fila y la haria irresoluble (ver apply_resolve_monthly).
     row = (f"| {n} | {escape_cell(p['text'])} _id: {p['id']}_ | {p['prioridad']} | {p['creado']} "
            f"| {p['origen']} | | |")
     at = last_table_line(lines)
@@ -865,6 +984,14 @@ def validate(ev):
         for k in ("id", "estado"):
             if not p.get(k):
                 raise Quarantine(f"malformed: pendiente.resolve sin '{k}'")
+    elif t == "pendiente.expire":
+        if not p.get("id"):
+            raise Quarantine("malformed: pendiente.expire sin 'id'")
+        if not str(p.get("dias", "")).isdigit():
+            raise Quarantine("malformed: pendiente.expire sin 'dias' numerico")
+    elif t == "pendiente.reopen":
+        if not p.get("id"):
+            raise Quarantine("malformed: pendiente.reopen sin 'id'")
     elif t == "session.add":
         for k in ("slug", "date"):
             if not p.get(k):
@@ -916,6 +1043,12 @@ def apply_event(mem, ev):
         a = apply_resolve_index(mem, p)
         b = apply_resolve_monthly(mem, p)
         return a or b
+    if t == "pendiente.expire":
+        a = apply_expire_index(mem, p)
+        b = apply_expire_monthly(mem, p)
+        return a or b
+    if t == "pendiente.reopen":
+        return apply_reopen(mem, p)
     if t == "session.add":
         return apply_session_add(mem, p)
     if t == "learning.add":

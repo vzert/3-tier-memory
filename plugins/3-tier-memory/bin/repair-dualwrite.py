@@ -333,9 +333,9 @@ def main():
                 print(f"  AVISO {len(pipes)} filas con `|` crudo no se pueden cerrar "
                       f"(apply_resolve_monthly las lee como ya resueltas): usa --fix-pipes")
             if inventados:
-                print(f"  AVISO {len(inventados)} ids de Tier 2 no son el sha1 de su contenido "
-                      f"(se escribieron a mano). Si alguien reemite ese mismo pendiente por "
-                      f"journal saldra el id canonico y una fila duplicada: {inventados[0]} ...")
+                print(f"  AVISO {len(inventados)} ids de Tier 2 no coinciden con el sha1 de su "
+                      f"linea. Si alguien reemite ese mismo pendiente por journal saldra el id "
+                      f"canonico y una fila duplicada: {inventados[0]} ...")
             for pid, motivo in broken:
                 print(f"  NO REPARABLE {pid}: {motivo}")
         return 0

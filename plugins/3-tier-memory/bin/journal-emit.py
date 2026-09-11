@@ -15,6 +15,8 @@ Tipos de evento:
   pendiente.add     --text T --prioridad Alta|Media|Baja --origen O [--creado YYYY-MM-DD]
                     Imprime el id (p-<10 hex>) por stdout.                              (Fase 1)
   pendiente.resolve --id ID --estado resolved|superseded|abandoned [--sesion S] [--nota N]
+  pendiente.expire  --id ID --dias N [--line "<linea verbatim>"]   (caducidad por edad)
+  pendiente.reopen  --id ID [--prioridad P]                        (reversa de expire)
                     [--text-prefix P]  (si no se da, se toma del archivo si la linea existe)
   session.add       --slug DATE-SLUG --date D --status ST --summary R [--commit C]      (Fase 2)
                     Fila en _session-index.md (arriba de la tabla). Si la fila del slug ya
@@ -215,7 +217,8 @@ def strip_meta(text):
 def main():
     ap = argparse.ArgumentParser(description="Emite un evento al journal de memory/.")
     ap.add_argument("--type", required=True,
-                    choices=["pendiente.add", "pendiente.resolve", "session.add",
+                    choices=["pendiente.add", "pendiente.resolve",
+                             "pendiente.expire", "pendiente.reopen", "session.add",
                              "learning.add", "plan.upsert", "research.upsert"])
     ap.add_argument("--memory-dir")
     ap.add_argument("--session")
@@ -230,6 +233,9 @@ def main():
     ap.add_argument("--sesion", default="")
     ap.add_argument("--nota", default="")
     ap.add_argument("--text-prefix")
+    # pendiente.expire / pendiente.reopen
+    ap.add_argument("--dias")
+    ap.add_argument("--line")
     # session.add / plan.upsert / research.upsert
     ap.add_argument("--slug")
     ap.add_argument("--date")
@@ -353,6 +359,27 @@ def main():
         }
         write_event(memory_dir, base)
         print(f"r-{slug}")
+        return
+
+    if a.type in ("pendiente.expire", "pendiente.reopen"):
+        pid = (a.id or "").strip()
+        if not ID_RE.match(pid):
+            sys.exit("journal-emit: --id debe tener la forma p-<10 hex>")
+        if a.type == "pendiente.expire":
+            dias = (a.dias or "").strip()
+            if not dias.isdigit():
+                sys.exit("journal-emit: pendiente.expire necesita --dias <entero>")
+            base["payload"] = {"id": pid, "dias": int(dias),
+                               "line": (a.line or "").rstrip("\n"),
+                               "fecha": date.today().isoformat()}
+        else:
+            prio = (a.prioridad or "").strip().capitalize()
+            if prio and prio not in PRIORIDADES:
+                sys.exit(f"journal-emit: --prioridad debe ser una de {PRIORIDADES}")
+            base["payload"] = {"id": pid, "prioridad": prio,
+                               "fecha": date.today().isoformat()}
+        write_event(memory_dir, base)
+        print(pid)
         return
 
     # pendiente.resolve
