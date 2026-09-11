@@ -92,10 +92,21 @@ primer uso del adversario LOCAL en vez del externo.
 - [ ] ver [[_pendientes]] — los nuevos de esta sesion y 42 previos
 
 ## Commits
-<filled in Step 6>
+- `c797a9f` — checkpoint. En el repo solo entran el codigo del plugin y
+  `memory/learnings/3tier-memory-system.md`: el resto de `memory/` esta en el .gitignore.
+- Las 7 versiones de la sesion: `ea96c19` 2.13.2, `f873d18` 2.13.3, `bd7ecec` 2.13.4,
+  `906f085` 2.13.5, `77dbbe1` 2.14.0, `f57a031` 2.14.1, `8b09d14` 2.14.2.
 
 ## Como retomar
-<filled in Step 8>
+
+```
+Retomamos: las escrituras que se saltan el journal — medidas (96 por Bash, 43 ids sin evento), detectadas por huella y avisadas en Bash sin bloquear; 2.13.2 a 2.14.2 publicadas.
+Lee memory/sessions/2026-09-11-ronda6-7-bash-nudge.md para el contexto completo.
+Proximo paso: arreglar `bin/resolve-project-dir.sh`, que usa CLAUDE_PLUGIN_ROOT sin proteger y aborta cualquier hook con `set -u` _id: p-a4fcd4212a_. En el mismo fichero sigue abierto el bloqueo sin stdin _id: p-0e978674af_; miralos juntos.
+No repitas: atacar la ventana del sellado por el lado del lock — una escritura por Bash nunca pide `.journal/.lock`, asi que sincronizar mejor no cierra nada; ni detectar por analisis de texto quien escribe un indice — cuatro intentos cortos, la unica forma que no pierde nada es que TODOS declaren.
+Terminas cuando: los dos defectos de resolve-project-dir esten arreglados con una prueba que falle contra el codigo anterior, y las siete suites verdes. Nada mas del backlog en esa sesion.
+Antes de actuar, dime en 3 lineas donde quedamos.
+```
 
 ## Related
 - [[_session-index]]
