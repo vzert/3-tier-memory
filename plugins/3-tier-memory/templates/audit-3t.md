@@ -175,6 +175,8 @@ Prompt:
 Verify wikilink cross-references in the memory system at: <MEMORY_DIR>
 
 PART 1 — BROKEN LINKS (run the deterministic checker; do NOT read links by hand):
+15. Deriva fuera del journal: `python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR" --check-drift`. Silencio = ningun indice cambio fuera del compactador. Si imprime `⚠ FUERA DEL JOURNAL`, alguien escribio un indice a mano y ese cambio **no tiene evento que auditar**: se perdera en la siguiente pasada del compactador. Revisa `memory/.journal/out-of-band.log` para el historial — cada linea es una fecha y un fichero. Causa habitual: `journal_strict` es un hook `PreToolUse` sobre `Edit|Write|MultiEdit` y **Bash no esta en ese matcher**, asi que un `>>` o un `sed -i` escriben igual; en modo auto, donde la instruccion es preferir Bash, se salta siempre.
+
 Locate and run check-wikilinks.py — it extracts every [[target]] and reports those whose
 target file doesn't exist (scales to hundreds of links; archived files are skipped):
   if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/check-wikilinks.py" ]; then

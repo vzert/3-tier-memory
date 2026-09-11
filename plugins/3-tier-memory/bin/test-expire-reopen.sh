@@ -389,5 +389,37 @@ AV6=$(python3 "$BIN/journal-emit.py" --memory-dir "$MEMI" --type plan.upsert --s
       --status active --sesion "[[sessions/2026-01-01-si-existe]]" 2>&1 >/dev/null)
 chk "plan.upsert con sesion real -> callado"     "0" "$(printf '%s' "$AV6" | grep -c 'no existe todavia')"
 
+echo "== deteccion por huella: un indice escrito fuera del journal se delata =="
+# journal_strict es PreToolUse sobre Edit|Write|MultiEdit y Bash NO esta en su matcher, asi que
+# un `>>` escribe igual. Medido 2026-09-11: 96 escrituras a mano desde que el journal es
+# obligatorio. Esto no lo impide —parsear Bash es adivinar— sino que compara BYTES.
+MEMJ="$T/memj"; mkdir -p "$MEMJ/pendientes" "$MEMJ/sessions"
+printf -- '---\ntype: index\n---\n# Pendientes\n\n## Media prioridad\n\n' > "$MEMJ/_pendientes.md"
+printf -- '---\ntype: session\n---\n# s\n' > "$MEMJ/sessions/2026-01-01-x.md"
+D1=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMJ" --check-drift 2>&1)
+chk "primera pasada: sella en silencio"      "0" "$(printf '%s' "$D1" | grep -c 'FUERA DEL JOURNAL')"
+chk "y deja el fichero de huellas"           "1" "$([ -f "$MEMJ/.journal/fingerprints.json" ] && echo 1 || echo 0)"
+D2=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMJ" --check-drift 2>&1)
+chk "sin cambios: callado"                   "0" "$(printf '%s' "$D2" | grep -c 'FUERA DEL JOURNAL')"
+# el camino LEGITIMO no debe avisar: es lo que decide si esto sirve o es ruido
+python3 "$BIN/journal-emit.py" --memory-dir "$MEMJ" --type pendiente.add --text "por el journal" \
+  --prioridad Media --origen "[[sessions/2026-01-01-x]]" --creado 2026-01-01 >/dev/null 2>&1
+python3 "$BIN/journal-compact.py" --memory-dir "$MEMJ" --quiet >/dev/null 2>&1
+D3=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMJ" --check-drift 2>&1)
+chk "emit+compact (legitimo): NO avisa"      "0" "$(printf '%s' "$D3" | grep -c 'FUERA DEL JOURNAL')"
+# y ahora el bypass de verdad
+printf -- '- [ ] escrito a mano saltandose el journal\n' >> "$MEMJ/_pendientes.md"
+D4=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMJ" --check-drift 2>&1)
+chk "escritura por Bash: SI avisa"           "1" "$(printf '%s' "$D4" | grep -c 'FUERA DEL JOURNAL')"
+chk "y nombra el fichero"                    "1" "$(printf '%s' "$D4" | grep -c '_pendientes.md')"
+chk "y queda constancia con fecha"           "1" "$(grep -c '_pendientes.md' "$MEMJ/.journal/out-of-band.log")"
+D5=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMJ" --check-drift 2>&1)
+chk "el aviso no se repite (re-sellado)"     "0" "$(printf '%s' "$D5" | grep -c 'FUERA DEL JOURNAL')"
+# el mensual tambien esta vigilado, no solo los _*.md de la raiz
+chk "vigila tambien pendientes/YYYY-MM.md"   "1" "$(grep -c 'pendientes/2026-01.md' "$MEMJ/.journal/fingerprints.json")"
+printf -- '\n' >> "$MEMJ/pendientes/2026-01.md"
+D6=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMJ" --check-drift 2>&1)
+chk "y delata un cambio en el mensual"       "1" "$(printf '%s' "$D6" | grep -c 'pendientes/2026-01.md')"
+
 echo "RESULT pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

@@ -60,6 +60,32 @@ All index files must have:
 > header + separator row; an event whose anchor is missing goes to `memory/.journal/quarantine/` instead
 > of being applied. `.journal/` itself is created by the compactor on first use.
 
+## Step 3b: Write `memory/.memory-config` — `journal_strict=1` by default
+
+```bash
+cat > "$PROJECT_DIR/memory/.memory-config" <<'CFGEOF'
+# Config de memoria del proyecto.
+#
+# journal_strict=1: el hook PreToolUse del plugin DENIEGA Edit/Write/MultiEdit directo sobre los
+# indices compartidos (_pendientes.md, _learnings.md, _session-index.md, _plans-index.md,
+# _research-index.md, pendientes/YYYY-MM.md). Esos ficheros los escribe SOLO el compactador, a
+# partir de eventos emitidos con bin/journal-emit.py. Todo lo demas (MEMORY.md, sessions/, plans/,
+# research/, learnings/<topic>.md) se edita normal.
+#
+# ALCANCE REAL, y conviene saberlo: el hook es PreToolUse sobre Edit|Write|MultiEdit. **Bash NO
+# esta en ese matcher**, asi que un `>>`, un `sed -i` o un heredoc de Python escriben igual. En una
+# sesion en modo auto —donde la instruccion es preferir Bash sobre Edit/Write— el guard se salta
+# siempre, no a veces. Lo que si caza esos casos es la deteccion por huella: el compactador guarda
+# el sha256 de cada indice y avisa en el arranque si alguno cambio fuera del journal.
+journal_strict=1
+CFGEOF
+```
+
+Este fichero es nuevo desde 2.13.2. Antes el guard venia apagado por omision y **64 de 65
+proyectos con `memory/` no tenian config ninguna** (medido 2026-09-11), asi que la convencion
+vivia solo en el CLAUDE.md y nadie la hacia cumplir. Los proyectos ya existentes no se tocan:
+para encenderlo ahi, corre `/3-tier-memory:migrate` o escribe el fichero a mano.
+
 ## Step 4: Create Tier 3 starter files
 
 **learnings/<project-slug>.md** — One starter learnings file named after the project. Frontmatter + "Rules will be added as patterns are discovered."

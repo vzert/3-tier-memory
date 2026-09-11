@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.13.2] - 2026-09-11
+### Added
+- **Deteccion de escrituras fuera del journal, comparando bytes.** El compactador guarda el `sha256` de cada indice protegido en `memory/.journal/fingerprints.json` al escribirlo; si en la pasada siguiente no coincide, alguien lo escribio sin pasar por el journal. Se avisa en `SessionStart`, se anota con fecha en `memory/.journal/out-of-band.log`, y la linea base se re-sella para que **el aviso salga una vez, no en cada sesion**.
+  - Nuevo `journal-compact.py --check-drift`: solo comprueba, no aplica eventos, no toma el lock. Tiene entrada propia porque `session-start.sh` solo llamaba al compactador cuando `pending/` tenia algo — y la deriva que importa es justo la de una sesion que no dejo eventos.
+  - Nuevo check 15 en `/audit-3t`.
+  - **Por que detectar y no impedir**: `journal_strict` es un hook `PreToolUse` con matcher `Edit|Write|MultiEdit`, y **Bash no esta en esa lista**. Un `>>`, un `sed -i` o un heredoc escriben igual. No es descuido de quien lo hace: una sesion en **modo auto** recibe la instruccion explicita de preferir Bash sobre Edit/Write, asi que ahi el guard no se salta a veces — se salta siempre. Parsear Bash para bloquearlo seria adivinar, y un falso positivo bloquea trabajo bueno; comparar bytes es exacto.
+  - Medido sobre el historial JSONL (2026-09-11): **96 escrituras a mano a un indice protegido** desde que el journal es obligatorio (2026-09-02), en 9 proyectos, la ultima ese mismo dia. Separadas de 34 fixtures de prueba en directorios temporales y de 187 anteriores a esa fecha, cuando editar a mano era el metodo correcto.
+
+### Changed
+- **`journal_strict=1` pasa a ser el valor por defecto** en `/3-tier-memory:setup-memory` (nuevo Step 3b) y en `/3-tier-memory:migrate`, que lo escribe solo si el proyecto no tiene `.memory-config`. Una config existente **no se pisa**: si un proyecto eligio `journal_strict=0`, esa decision se respeta.
+  - Motivo, medido el 2026-09-11: **64 de 65 proyectos con `memory/` no tenian `.memory-config` ninguna**. El unico con el guard encendido era `claude-vzert` — que es justo donde mas escrituras a mano se registraron, porque es el unico sitio donde el agente se entera de que se lo salto y lo dice. En los otros 63 nadie lo notaba porque no habia nada que notar.
+  - Los proyectos ya existentes **no se tocan**. Para encenderlo ahi: `/3-tier-memory:migrate` o escribir el fichero a mano.
+
 ## [2.13.1] - 2026-09-11
 ### Fixed
 - **`journal-emit.py` avisa si el origen apunta a una sesion que no existe.** Un `pendiente.add --origen "[[sessions/SLUG]]"` con un slug inventado deja el enlace de Tier 2 colgando: el indice apunta a un fichero de Tier 3 que nadie escribio. El orden de `/checkpoint-3t` (Step 2 escribe el session file, Step 3 emite los pendientes) hace que en el flujo normal esto no dispare nunca; dispara cuando alguien emite a media sesion. **Avisa y NO bloquea** a proposito: emitir antes de escribir es legitimo si el checkpoint llega despues, y un `exit` perderia el evento.

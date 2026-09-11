@@ -58,6 +58,7 @@ pending_left=N [noop=N]` salvo --quiet (en ese caso solo imprime si applied>0 o 
 y cuenta en `noop`.
 """
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -1192,6 +1193,110 @@ def move_to(src, dest_dir, reason=None):
             fh.write(reason + "\n")
 
 
+# ------------------------------------------------------- huellas de los indices (v2.13.2)
+# journal_strict deniega Edit/Write/MultiEdit sobre los indices, pero el hook es PreToolUse y
+# **Bash no esta en su matcher**: un `>>`, un `sed -i` o un heredoc de Python escriben igual.
+# No es un descuido de quien lo hace: una sesion en modo auto recibe la instruccion explicita de
+# preferir Bash sobre Edit/Write, asi que ahi el guard no se salta a veces — se salta siempre.
+# Medido 2026-09-11 sobre el historial JSONL: 96 escrituras a mano a un indice protegido desde que
+# el journal es obligatorio (2026-09-02), en 9 proyectos, la ultima ese mismo dia.
+#
+# Esto NO intenta impedirlo — parsear Bash es adivinar, y un falso positivo bloquea trabajo bueno.
+# Compara BYTES: el compactador guarda el sha256 de cada indice al escribirlo, y si en la pasada
+# siguiente no coincide, alguien escribio fuera del journal. Exacto, sin falsos positivos, y
+# despues del hecho a proposito: el objetivo es que no se acumule en silencio, no bloquear.
+INDICES_FIJOS = ("_pendientes.md", "_learnings.md", "_session-index.md",
+                 "_plans-index.md", "_research-index.md")
+MENSUAL_RE = re.compile(r"^\d{4}-\d{2}\.md$")
+
+
+def indices_protegidos(mem):
+    """Los ficheros que pertenecen al compactador. Mismo conjunto que journal-guard.sh."""
+    out = [n for n in INDICES_FIJOS if os.path.isfile(os.path.join(mem, n))]
+    d = os.path.join(mem, "pendientes")
+    if os.path.isdir(d):
+        out += [f"pendientes/{n}" for n in sorted(os.listdir(d)) if MENSUAL_RE.match(n)]
+    return out
+
+
+def huella(path):
+    try:
+        with open(path, "rb") as fh:
+            return hashlib.sha256(fh.read()).hexdigest()
+    except OSError:
+        return None
+
+
+def _ruta_huellas(journal):
+    return os.path.join(journal, "fingerprints.json")
+
+
+def leer_huellas(journal):
+    try:
+        with open(_ruta_huellas(journal), encoding="utf-8") as fh:
+            d = json.load(fh)
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def guardar_huellas(mem, journal):
+    """Re-sella la linea base. Se llama DESPUES de aplicar, con el estado que deja el compactador."""
+    d = {rel: h for rel in indices_protegidos(mem)
+         if (h := huella(os.path.join(mem, rel))) is not None}
+    os.makedirs(journal, exist_ok=True)
+    tmp = f"{_ruta_huellas(journal)}.{os.getpid()}.tmp"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+        json.dump(d, fh, indent=1, sort_keys=True)
+    replace_with_retry(tmp, _ruta_huellas(journal))
+
+
+def detectar_fuera_de_banda(mem, journal):
+    """Indices cuyo contenido no es el que dejo el compactador la ultima vez.
+
+    Un indice sin huella previa no cuenta: es la primera pasada tras instalar esto, o un fichero
+    nuevo. Sellar sin avisar es lo correcto ahi — avisar seria ruido en cada instalacion."""
+    prev = leer_huellas(journal)
+    if not prev:
+        return []
+    fuera = []
+    for rel in indices_protegidos(mem):
+        p = prev.get(rel)
+        if not p:
+            continue
+        h = huella(os.path.join(mem, rel))
+        if h and h != p:
+            fuera.append(rel)
+    return fuera
+
+
+def anotar_fuera_de_banda(journal, fuera):
+    """Deja rastro con fecha. La linea base se re-sella despues, asi que el aviso sale UNA vez;
+    sin este log no quedaria constancia de que paso."""
+    if not fuera:
+        return
+    os.makedirs(journal, exist_ok=True)
+    ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    try:
+        with open(os.path.join(journal, "out-of-band.log"), "a",
+                  encoding="utf-8", newline="\n") as fh:
+            for rel in fuera:
+                fh.write(f"{ts}\t{rel}\n")
+    except OSError:
+        pass
+
+
+def avisar_fuera_de_banda(fuera):
+    if not fuera:
+        return
+    print(f"⚠ FUERA DEL JOURNAL: {len(fuera)} indice(s) cambiaron sin pasar por el compactador: "
+          + ", ".join(fuera))
+    print("  Los indices los escribe SOLO el compactador (journal_strict). Una edicion a mano "
+          "—con Edit/Write o con Bash, que el guard no cubre— se pierde en la siguiente pasada")
+    print("  y no deja evento que auditar. Usa bin/journal-emit.py. Queda anotado en "
+          ".journal/out-of-band.log; este aviso no se repite.")
+
+
 def compact(mem, budget, quiet):
     journal = os.path.join(mem, ".journal")
     pending = os.path.join(journal, "pending")
@@ -1208,6 +1313,16 @@ def compact(mem, budget, quiet):
             print(f"JOURNAL busy pending_left={len(names)}")
         return 0
     applied = quarantined = noop = 0
+    # Antes de aplicar nada: si un indice no es el que dejo la pasada anterior, alguien escribio
+    # fuera del journal. Tiene que ir AQUI — en cuanto el compactador escriba, su propio cambio
+    # tapa la diferencia y ya no se puede distinguir.
+    fuera = detectar_fuera_de_banda(mem, journal)
+    if fuera:
+        anotar_fuera_de_banda(journal, fuera)
+        for rel in fuera:
+            log(f"OUT-OF-BAND {rel}")
+        if not quiet:
+            avisar_fuera_de_banda(fuera)
     try:
         # Re-listar bajo lock: entre el listado y el mkdir pudieron entrar eventos.
         names = sorted(n for n in os.listdir(pending) if n.endswith(".json")) \
@@ -1238,6 +1353,7 @@ def compact(mem, budget, quiet):
                 noop += 1  # replay de un evento ya aplicado: se archiva, no cuenta como cambio
                 log(f"NOOP {n}")
             lock.refresh()
+        guardar_huellas(mem, journal)   # nueva linea base: lo que deja ESTE compactador
     finally:
         lock.release()
     left = len([n for n in os.listdir(pending) if n.endswith(".json")]) \
@@ -1258,11 +1374,26 @@ def main():
     ap.add_argument("--budget", type=float, default=10.0)
     ap.add_argument("--log")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--check-drift", action="store_true",
+                    help="solo comprueba si algun indice cambio fuera del journal; no aplica "
+                         "eventos, no toma el lock, no escribe nada salvo el log de constancia")
     a = ap.parse_args()
     LOG_FILE = a.log
     mem = resolve_memory_dir(a.memory_dir)
     if not os.path.isdir(mem):
         sys.exit(f"journal-compact: no existe el directorio de memoria: {mem}")
+    if a.check_drift:
+        # Entrada propia porque session-start.sh solo llama al compactador cuando pending/ tiene
+        # algo, y la deriva que interesa es justo la de una sesion que NO dejo eventos.
+        journal = os.path.join(mem, ".journal")
+        fuera = detectar_fuera_de_banda(mem, journal)
+        if fuera:
+            anotar_fuera_de_banda(journal, fuera)
+            avisar_fuera_de_banda(fuera)
+            guardar_huellas(mem, journal)   # re-sella: el aviso sale una vez, no en cada sesion
+        elif not leer_huellas(journal):
+            guardar_huellas(mem, journal)   # primera vez: sellar en silencio
+        sys.exit(0)
     sys.exit(compact(mem, a.budget, a.quiet))
 
 

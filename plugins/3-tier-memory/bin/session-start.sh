@@ -70,6 +70,19 @@ if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] && [ -d "$JOURNAL_PENDI
     echo ""
   fi
 fi
+# Deriva fuera del journal (v2.13.2): journal_strict solo cubre Edit/Write/MultiEdit — Bash no
+# esta en el matcher del hook, y una sesion en modo auto tiene instruccion de preferir Bash. Esto
+# no lo impide: compara el sha256 de cada indice con el que dejo el compactador. Va FUERA del
+# bloque de arriba a proposito: aquel solo corre si pending/ tiene algo, y la deriva que interesa
+# es justo la de una sesion que no dejo eventos. Barato: hashear media docena de ficheros cortos.
+if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] && [ -d "$MEMORY_DIR/.journal" ]; then
+  DRIFT_OUT=$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" --memory-dir "$MEMORY_DIR" --check-drift 2>/dev/null)
+  if [ -n "$DRIFT_OUT" ]; then
+    echo "$DRIFT_OUT"
+    echo ""
+  fi
+fi
+
 # Cuarentena: eventos que no se pudieron aplicar de forma segura (ancla borrada a mano,
 # colision de id, JSON roto). Nunca se borran solos; cada uno lleva un .reason al lado.
 JOURNAL_Q="$MEMORY_DIR/.journal/quarantine"

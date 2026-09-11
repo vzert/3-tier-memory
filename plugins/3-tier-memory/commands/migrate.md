@@ -315,6 +315,25 @@ JSONL_COUNT=$(ls "$JSONL_DIR"/*.jsonl 2>/dev/null | wc -l | tr -d ' ')
 
 Store `JSONL_COUNT` for inclusion in the report.
 
+## Encender `journal_strict` si el proyecto no tiene config
+
+```bash
+if [ ! -f "$PROJECT_DIR/memory/.memory-config" ]; then
+  printf '%s\n' '# Config de memoria del proyecto (ver /3-tier-memory:setup-memory Step 3b).' \
+                 '# journal_strict=1: los indices los escribe SOLO el compactador del journal.' \
+                 '# OJO: el hook es PreToolUse sobre Edit|Write|MultiEdit; Bash NO esta en el' \
+                 '# matcher, asi que un `>>` o un `sed -i` escriben igual. La deteccion por' \
+                 '# huella del compactador es lo que caza esos casos.' \
+                 'journal_strict=1' > "$PROJECT_DIR/memory/.memory-config"
+  echo "journal_strict=1 activado (no habia config)"
+else
+  echo "ya hay .memory-config; no se toca"
+fi
+```
+
+**No pisa una config existente.** Si el proyecto ya decidio `journal_strict=0`, esa decision se
+respeta: migrate solo rellena el hueco.
+
 ## Step 9: Report
 
 ```
