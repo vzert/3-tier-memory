@@ -23,8 +23,9 @@
 #   PostToolUse — compara BYTES contra la huella que dejo el compactador. Exacto, cero falsos
 #                 positivos, llega un turno tarde. Compuerta de mtime en shell para no pagar el
 #                 arranque de python (~30 ms) en cada Bash: sin cambios, no se llama a python.
-# Sin `set -u`: resolve-project-dir.sh referencia CLAUDE_PLUGIN_ROOT sin proteger y con -u
-# aborta antes de hacer nada. Los demas hooks del plugin tampoco lo usan.
+# Sin `set -u`, como los demas hooks del plugin. Ya NO es obligatorio: resolve-project-dir.sh
+# protege sus variables desde 2.14.3 y se puede sourcear con -u (bin/test-resolve-project-dir.sh).
+# Encenderlo aqui es otra revision — la del camino de ~10 ms — y no se ha hecho.
 
 source "$(dirname "$0")/resolve-project-dir.sh"
 

@@ -72,9 +72,9 @@ def parse_date(s):
 
 
 def resolve_memory_dir(explicit):
-    """Misma logica que journal-compact.py. NO llama a resolve-project-dir.sh: ese script hace
-    `$(cat)` para leer el stdin del hook, asi que ejecutado sin stdin se cuelga, y ademas no
-    imprime nada (esta hecho para `source`, no para `$(...)`)."""
+    """Misma logica que journal-compact.py. NO llama a resolve-project-dir.sh: ese script no
+    imprime nada — esta hecho para `source`, no para `$(...)`. (Hasta 2.14.2 ademas se colgaba
+    sin stdin; eso ya no pasa, pero la razon de arriba sigue en pie.)"""
     cand = explicit or os.environ.get("MEMORY_DIR")
     if cand:
         return os.path.abspath(cand)

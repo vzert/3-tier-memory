@@ -1,5 +1,39 @@
 # Changelog
 
+## [2.14.3] - 2026-09-11
+Los dos defectos de `bin/resolve-project-dir.sh`, el fichero que sourcean los **ocho** hooks del
+plugin. Los dos se ven igual desde fuera —"el hook no hizo nada"— y por eso los dos sobrevivieron
+tanto: un hook que muere en la primera linea es indistinguible de uno que decide callarse.
+
+### Fixed
+- **Referenciaba `$CLAUDE_PLUGIN_ROOT` y `$CLAUDE_PROJECT_DIR` sin proteger** (`p-a4fcd4212a`), asi que cualquier llamante con `set -u` moria en la linea 10 antes de hacer nada. No es teorico: mordio al escribir `bash-journal-nudge.sh`, que acabo **sin `set -u` por este motivo**. Ahora toda lectura usa `${VAR:-}` y —la mitad que faltaba— las dos variables quedan **ASIGNADAS al salir aunque no haya ruta que resolver**, porque los ocho llamantes las usan justo despues del `source` y tambien pueden llevar `-u`.
+- **`_HOOK_INPUT=$(cat)` esperaba EOF para siempre** (`p-0e978674af`), asi que sin stdin se colgaba. Claude Code siempre manda el JSON y lo cierra, o sea que en produccion no se vio; lo que colgaba era **toda prueba manual**, y dos veces se diagnostico como "el script no imprime nada". Ahora: con un terminal en stdin no lee nada y vuelve al instante; con una tuberia **espera al primer byte** como mucho `HOOK_STDIN_TIMEOUT` (5 s) y, si llega, lee hasta EOF **sin limite**.
+
+### Notas de verificacion
+- **El tope acota la espera inicial, NUNCA la lectura.** La primera version de este arreglo acotaba la lectura entera (`read -r -d '' -t 5`) y eso **truncaba**: medido con un productor que manda 300 bytes, para 4 s y manda el resto, con el tope en 2 s deja **0 bytes** y ademas rompe la tuberia del que escribe. Un JSON a medias es otra vez "el hook no hizo nada" — el fallo que este fichero existe para quitar — y `journal-guard.sh` es PreToolUse de `Write`, o sea que `tool_input.content` trae ficheros enteros que no llegan en un solo trozo. La forma final entrega los 619 bytes completos, igual que el `$(cat)` de antes.
+- La forma final es `read -r -d '' -n 1 -t T` (un byte, con `-d ''` para que un `\n` inicial se guarde en vez de desaparecer) y luego `$(cat)` **dentro del `if`**: llamar a `cat` despues de un tope agotado se cuelga exactamente igual que el codigo viejo — pasado por error en una prueba, y por eso queda escrito.
+- Un error de atribucion que estuvo a punto de colarse en este mismo CHANGELOG: se midio "leer todo con `read -r -d ''` tarda 118 s con 1 MB" y se atribuyo a que `read` va byte a byte. **Era falso.** Los 118 s los gastaba un bucle propio que quitaba los saltos de linea finales copiando 1 MB por vuelta. `read -r -d ''` pasa 5 MB en 1-2 s. El bucle se cayo solo al usar `$(cat)`, que ya recorta esos saltos.
+
+### Added
+- `bin/test-resolve-project-dir.sh` — 20 aserciones. **Discriminacion medida, no afirmada**:
+  - contra el fichero de 2.14.2: `pass=0 fail=13`. Ninguna pasa: D1 aborta el `source` antes de cualquier otra cosa, y las 7 aserciones que faltan hasta 20 van anidadas detras de una que ya fallo, asi que ni se ejecutan;
+  - contra una copia con **solo D1** arreglado: `pass=19 fail=1`, y la unica roja es el caso del fifo. Ese es el testigo de D2, uno y solo uno;
+  - contra una copia con la forma **descartada** (`read -r -d ''`): cae la asercion del productor lento, `bytes=0 (esperaba 619)`. Esa es la parte que se sostiene en cualquier maquina. El recuento total NO es portable y por eso ya no se afirma: aqui sale `pass=18 fail=2` de forma estable (3/3) porque el caso del terminal tambien cae, pero la ronda 8 midio `pass=19 fail=1` en otra maquina, donde `script` cierra el pty y manda EOF y la forma descartada vuelve al instante.
+  - La asercion del productor lento compara contra 619 bytes exactos (19 de JSON + 300 + 300). Se comprobo que **cae y dice el numero** si el productor manda un byte mas: `bytes=620 (esperaba 619)`.
+- El caso de `set -u` corre bajo `env -u CLAUDE_PLUGIN_ROOT -u CLAUDE_PROJECT_DIR`: con la variable puesta —lo normal en una sesion real— el codigo viejo nunca toca la expansion sin proteger y la prueba pasaria **sin probar nada**.
+- El caso sin stdin usa un **fifo abierto en lectura-escritura que nadie escribe**, con limite duro de 8 s: no necesita pty y por eso corre igual en macOS y en Linux. El caso del terminal usa `script`, se salta donde no haya pty, y **no cuenta como prueba de D2**: `script` cierra el pty al terminar, asi que manda EOF y `$(cat)` tambien volvia — medido. Ese `script` ademas hereda el stdin del llamante, y sin `</dev/null` la deteccion salia distinta segun quien corriera la suite (0/3 sin redirigir, 3/3 con `/dev/null`).
+
+### Ronda 8 — dos verificadores adversariales, los dos con contexto limpio
+- **Subagente local (Sonnet 5, modelo distinto al ejecutor)**: `ungrounded=1 unfalsified=1 incomplete=1 autonomy-violations=0 unsafe=0`. Reconstruyo los tres controles por su cuenta desde `git show HEAD:...` y **re-derivo**: 20/0 (3 corridas), 0/13 con la causa leida en el arnes (las 13 que corren mueren en `line 10: CLAUDE_PLUGIN_ROOT: unbound variable`, las 7 restantes van anidadas detras de una que ya fallo), 19/1 contra solo-D1, las siete suites, `scanned=23 undeclared=0`, el productor lento fuera del arnes (619 vs 0 bytes + `BrokenPipeError` real en el escritor), y el off-by-one del 619. Ademas probo la propiedad (b) de D1 bajo `env -i`, mas estricto que el `env -u` del arnes.
+- **Externo (`codex exec`, otro proveedor)**: `ungrounded=8 unfalsified=0 incomplete=2 autonomy-violations=0 unsafe=0`. Las 8 de grounding son **una sola causa declarada por el propio verificador**: su sandbox le denego `mktemp` (`Operation not permitted`), no pudo correr la suite, y marco como no re-derivada cada cifra. Es la misma limitacion que tuvieron las rondas 4 y 6. Lo que si pudo hacer —inspeccion estatica y busqueda global— refuto por su cuenta D1 completo, la ausencia de un `cat` fuera de la rama, la no dependencia de `export` en los ocho llamantes, y la aritmetica del 619.
+- **Lo que encontraron y se arreglo**: los dos docstrings de `triage-scan.py` y `expire-pendientes.py` (los dos verificadores, por separado); la frase de la cabecera sobre el tope; y la cifra `18/2`, que el local no pudo reproducir.
+- **Riesgo residual revelado, no oculto**: si el productor manda el primer byte y luego se estanca sin cerrar, el `source` espera sin limite. El local lo reprodujo (vivo a los 6 s). Es deliberado — la alternativa es truncar — y la cabecera lo dice.
+- **Sin verificar**: Git Bash en Windows. Ninguno de los dos tiene esa plataforma. El codigo evita `read -N` (bash 4.1) a proposito, pero eso no sustituye una corrida real.
+
+### Changed
+- El comentario de `bash-journal-nudge.sh` que afirmaba el defecto ("Sin `set -u`: resolve-project-dir.sh referencia CLAUDE_PLUGIN_ROOT sin proteger") ya no es cierto y lo dice. El hook sigue sin `set -u`: encenderlo es otra revision, la del camino de ~10 ms, y no se ha hecho.
+- `templates/triage-3t.md` decia que no se invocara el script porque "sin stdin se cuelga". El consejo sigue valiendo —no imprime nada, solo deja variables puestas— pero la razon cambio.
+
 ## [2.14.2] - 2026-09-11
 ### Fixed
 - **El lock no cerraba la ventana, y tomarlo mejor tampoco.** Tercer intento sobre el mismo defecto. 2.14.0 arreglo "`--check-drift` sin lock" tomandolo; 2.14.1 arreglo "dos locks" fundiendolos en uno. El adversario de la ronda 7 re-probo y mostro que **ninguno de los dos era el problema**: una escritura por Bash —el caso que este mecanismo existe para cazar— **nunca pide `.journal/.lock`**, asi que tomar el lock no la bloquea ni la hace esperar. La ventana real estaba entre las **dos lecturas de bytes**: la de `detectar_fuera_de_banda()` y la de `guardar_huellas()`. Lo que se escribiera entre ambas quedaba fuera del aviso y del log, pero dentro de la linea base — absorbido en silencio.

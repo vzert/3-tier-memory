@@ -24,9 +24,9 @@ priorizar, no basura.
 
 ## Step 1 — Contexto y lote
 
-**No invoques `bin/resolve-project-dir.sh`**: hace `$(cat)` para leer el stdin del hook, asi que
-sin stdin se cuelga, y no imprime nada. Los dos scripts resuelven la ruta solos si omites
-`--memory-dir`.
+**No invoques `bin/resolve-project-dir.sh`**: no imprime nada — solo deja variables puestas para
+el hook que lo sourcea. (Desde 2.14.3 ya no se cuelga sin stdin, pero sigue sin servirte de nada
+aqui.) Los dos scripts resuelven la ruta solos si omites `--memory-dir`.
 
 ```bash
 JBIN="${CLAUDE_PLUGIN_ROOT}/bin"
