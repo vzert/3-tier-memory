@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.13.5] - 2026-09-11
+### Fixed
+- **`enrich-memory.py --apply` tampoco re-sellaba, y es la herramienta que `/triage-3t` manda correr antes del barrido.** Tercera con el mismo fallo tras `repair-dualwrite` y `normalize-pendientes` (2.13.3): seguir la propia instruccion del plugin producia un aviso de "escritura fuera del journal". Arreglar las dos que encontre no fue enumerarlas — que es literalmente la **regla 114** de este repo, escrita dos versiones antes.
+- La suite no comprueba ya un caso: **recorre todos los `.py` de `bin/`** y exige que cualquiera que escriba un indice directamente re-selle. Verificado que discrimina: contra el `enrich-memory.py` anterior fallan 2 aserciones.
+
 ## [2.13.4] - 2026-09-11
 ### Added
 - **El plugin avisa cuando Bash escribe un indice, sin bloquear.** Nuevo `bin/bash-journal-nudge.sh`, enganchado a `PreToolUse` y `PostToolUse` con matcher `Bash`.

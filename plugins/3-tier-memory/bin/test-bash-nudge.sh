@@ -73,5 +73,32 @@ R=$(python3 "$BIN/journal-compact.py" --memory-dir "$P/memory" --reseal 2>&1)
 chk "reseal acepta el cambio"  "1" "$(printf '%s' "$R" | grep -c 'aceptados como linea base')"
 chk "y despues no hay deriva"  callado "$(post)"
 
+echo "== ENUMERAR los escritores legitimos, no arreglar los que uno encuentra =="
+# La regla 114 de este repo: revisar los llamantes no prueba que sean todos. 2.13.3 arreglo
+# repair-dualwrite y normalize-pendientes; enrich-memory se quedo fuera y lo encontre preparando
+# la ronda 6 — justo la herramienta que /triage-3t manda correr antes del barrido. Esta prueba
+# recorre TODOS los .py de bin/ y exige que el que escriba un indice re-selle.
+FALTAN=""
+for f in "$BIN"/*.py; do
+  n=$(basename "$f" .py)
+  case "$n" in journal-compact) continue ;; esac
+  # escribe un indice protegido de forma directa?
+  if grep -qE 'atomic_write\(|escribir_preservando\(' "$f" &&      grep -qE '_pendientes\.md|_learnings\.md|_session-index\.md|_plans-index\.md|_research-index\.md' "$f"; then
+    grep -q 'guardar_huellas' "$f" || FALTAN="$FALTAN $n"
+  fi
+done
+chk "todo escritor directo de un indice re-sella" "" "$FALTAN"
+
+echo "== y el comportamiento, no solo la forma: enrich-memory no dispara el aviso =="
+E="$T/enr"; mkdir -p "$E/pendientes" "$E/sessions"
+printf -- '---\ntype: index\n---\n# Pendientes\n\n## Media prioridad\n\n- [ ] sin id ni creado\n' > "$E/_pendientes.md"
+python3 "$BIN/journal-compact.py" --memory-dir "$E" --check-drift >/dev/null 2>&1
+python3 "$BIN/enrich-memory.py" "$E" --apply >/dev/null 2>&1
+O1=$(python3 "$BIN/journal-compact.py" --memory-dir "$E" --check-drift 2>&1)
+chk "enrich-memory --apply NO dispara"  "0" "$(printf '%s' "$O1" | grep -c 'FUERA DEL JOURNAL')"
+printf -- '- [ ] a mano\n' >> "$E/_pendientes.md"
+O2=$(python3 "$BIN/journal-compact.py" --memory-dir "$E" --check-drift 2>&1)
+chk "control negativo: a mano SI dispara" "1" "$(printf '%s' "$O2" | grep -c 'FUERA DEL JOURNAL')"
+
 echo "RESULT pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
