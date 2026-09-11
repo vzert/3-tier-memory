@@ -76,6 +76,7 @@ STALE_SECONDS = 60
 POLL_SECONDS = 0.05
 REPLACE_RETRIES = 5  # Windows: antivirus/indexador pueden tener el .md abierto un instante
 EOL_DEFAULT = "\n"   # fichero nuevo o sin CRLF: LF, en cualquier sistema operativo
+_ESCRITO = {}         # ruta absoluta -> sha256 de lo que atomic_write dejo en ella
 MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto",
          "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 ID_RE = re.compile(r"_id: (p-[0-9a-f]{10})_")
@@ -187,9 +188,14 @@ def atomic_write(path, lines):
         lines = list(lines) + [""]
     eol = detect_eol(path)
     tmp = f"{path}.{os.getpid()}.tmp"
+    datos = eol.join(lines)
     with open(tmp, "w", encoding="utf-8", newline="") as fh:
-        fh.write(eol.join(lines))
+        fh.write(datos)
     replace_with_retry(tmp, path)
+    # Se apunta el hash de lo que ACABAMOS de escribir. El sellado usa esto en vez de releer el
+    # disco, para que una escritura ajena entre la ultima escritura del compactador y su sellado
+    # no se cuele en la linea base. Misma razon que el `estado` de --check-drift. (Ronda 7.)
+    _ESCRITO[os.path.abspath(path)] = hashlib.sha256(datos.encode("utf-8")).hexdigest()
 
 
 def resolve_memory_dir(explicit):
@@ -1242,10 +1248,30 @@ def leer_huellas(journal):
         return {}
 
 
-def guardar_huellas(mem, journal):
-    """Re-sella la linea base. Se llama DESPUES de aplicar, con el estado que deja el compactador."""
-    d = {rel: h for rel in indices_protegidos(mem)
-         if (h := huella(os.path.join(mem, rel))) is not None}
+def leer_estado(mem):
+    """Hash de cada indice protegido, en UNA lectura. La unidad que se compara Y se sella."""
+    return {rel: h for rel in indices_protegidos(mem)
+            if (h := huella(os.path.join(mem, rel))) is not None}
+
+
+def guardar_huellas(mem, journal, estado=None):
+    """Re-sella la linea base con `estado`, o releyendo el disco si no se da.
+
+    PASAR `estado` ES LO QUE CIERRA LA VENTANA, y costo dos intentos. La ronda 6 marco que
+    --check-drift no tomaba el lock; lo arregle tomandolo. La ronda 7 mostro que no bastaba:
+    **una escritura por Bash nunca pide `.journal/.lock`**, asi que tomar el lock no la bloquea ni
+    la hace esperar. La ventana real no estaba entre dos `acquire`, sino entre las DOS LECTURAS DE
+    BYTES — la de detectar y la de sellar — estuviera el lock libre o tomado. Lo que se sella tiene
+    que ser exactamente lo que se comparo: una sola lectura, reusada. Si algo se escribe despues,
+    queda FUERA de la linea base y la comprobacion siguiente lo ve."""
+    d = leer_estado(mem) if estado is None else dict(estado)
+    # Para los ficheros que ESTE proceso escribio, vale mas lo que escribio que lo que hay en
+    # disco: si alguien los toco despues, esa escritura debe quedar FUERA de la linea base para
+    # que la comprobacion siguiente la vea.
+    for rel in list(d):
+        h = _ESCRITO.get(os.path.abspath(os.path.join(mem, rel)))
+        if h:
+            d[rel] = h
     os.makedirs(journal, exist_ok=True)
     tmp = f"{_ruta_huellas(journal)}.{os.getpid()}.tmp"
     with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
@@ -1253,15 +1279,17 @@ def guardar_huellas(mem, journal):
     replace_with_retry(tmp, _ruta_huellas(journal))
 
 
-def detectar_fuera_de_banda(mem, journal):
+def detectar_fuera_de_banda(mem, journal, estado=None):
     """Indices cuyo contenido no es el que dejo el compactador la ultima vez.
 
     Un indice sin huella previa no cuenta: es la primera pasada tras instalar esto, o un fichero
     nuevo. Sellar sin avisar es lo correcto ahi — avisar seria ruido en cada instalacion."""
     prev = leer_huellas(journal)
+    if estado is None:
+        estado = leer_estado(mem)
     if not prev:
         return []
-    ahora = indices_protegidos(mem)
+    ahora = list(estado)
     fuera = []
     for rel in ahora:
         p = prev.get(rel)
@@ -1270,7 +1298,7 @@ def detectar_fuera_de_banda(mem, journal):
             # sella al terminar, asi que verlo aqui significa que lo puso otro. (Ronda 6.)
             fuera.append(f"{rel} (nuevo, no lo creo el compactador)")
             continue
-        h = huella(os.path.join(mem, rel))
+        h = estado.get(rel)
         if h and h != p:
             fuera.append(rel)
     # Y los que DESAPARECIERON. Era el hueco mas grave: borrar _pendientes.md entero no disparaba
@@ -1408,8 +1436,9 @@ def main():
         if not lock.acquire():
             sys.exit("journal-compact: el journal esta ocupado; reintenta el --reseal en un momento")
         try:
-            antes = detectar_fuera_de_banda(mem, journal)
-            guardar_huellas(mem, journal)
+            estado = leer_estado(mem)
+            antes = detectar_fuera_de_banda(mem, journal, estado)
+            guardar_huellas(mem, journal, estado)
         finally:
             lock.release()
         if antes:
@@ -1438,12 +1467,15 @@ def main():
         if not lock.acquire():
             sys.exit(0)
         try:
-            fuera = detectar_fuera_de_banda(mem, journal)
+            estado = leer_estado(mem)                      # UNA lectura de bytes
+            fuera = detectar_fuera_de_banda(mem, journal, estado)
             if fuera:
                 anotar_fuera_de_banda(journal, fuera)
                 avisar_fuera_de_banda(fuera)
             if fuera or not leer_huellas(journal):
-                guardar_huellas(mem, journal)   # el aviso sale una vez, no en cada sesion
+                # ...y se sella ESE MISMO estado, no lo que haya en disco ahora. Lo que se
+                # escriba despues queda fuera de la linea base y lo ve la comprobacion siguiente.
+                guardar_huellas(mem, journal, estado)
         finally:
             lock.release()
         sys.exit(0)

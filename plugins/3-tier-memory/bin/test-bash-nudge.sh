@@ -204,6 +204,44 @@ chk "y lo anota"                                       "1" "$(grep -c '_pendient
 chk "y lo sellado coincide con lo avisado (queda limpio)" "0" "$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMX" --check-drift 2>&1 | grep -c 'FUERA')"
 chk "una sola adquisicion de lock en la rama check-drift" "1" "$(grep -c 'UNA sola adquisicion para detectar, anotar y re-sellar' "$BIN/journal-compact.py")"
 
+# Y LO QUE DE VERDAD CIERRA LA VENTANA (ronda 7, segunda pasada): el lock NO basta, porque una
+# escritura por Bash nunca pide `.journal/.lock`. La ventana estaba entre las dos LECTURAS DE
+# BYTES. Se sella el mismo estado que se comparo.
+NOABS=$(MEMW="$T/memz" BIN="$BIN" python3 - <<'PY'
+import importlib.util, os
+os.makedirs(os.path.join(os.environ["MEMW"], "pendientes"), exist_ok=True)
+sp = importlib.util.spec_from_file_location("jc", os.path.join(os.environ["BIN"], "journal-compact.py"))
+jc = importlib.util.module_from_spec(sp); sp.loader.exec_module(jc)
+mem = os.environ["MEMW"]; j = os.path.join(mem, ".journal"); p = os.path.join(mem, "_pendientes.md")
+open(p, "w").write("---\ntype: index\n---\n# Pendientes\n")
+jc.guardar_huellas(mem, j)
+open(p, "a").write("- [ ] X\n")
+estado = jc.leer_estado(mem)
+fuera = jc.detectar_fuera_de_banda(mem, j, estado)
+open(p, "a").write("- [ ] Y\n")          # se cuela entre comparar y sellar
+jc.anotar_fuera_de_banda(j, fuera)
+jc.guardar_huellas(mem, j, estado)
+print("1" if jc.detectar_fuera_de_banda(mem, j) else "0")   # Y tiene que seguir viendose
+PY
+)
+chk "Y entre comparar y sellar NO se absorbe"  "1" "$NOABS"
+# y la misma propiedad en el compactador: lo que atomic_write escribio manda sobre el disco
+NOABS2=$(MEMW="$T/memz2" BIN="$BIN" python3 - <<'PY'
+import importlib.util, os
+os.makedirs(os.path.join(os.environ["MEMW"], "pendientes"), exist_ok=True)
+sp = importlib.util.spec_from_file_location("jc", os.path.join(os.environ["BIN"], "journal-compact.py"))
+jc = importlib.util.module_from_spec(sp); sp.loader.exec_module(jc)
+mem = os.environ["MEMW"]; j = os.path.join(mem, ".journal"); p = os.path.join(mem, "_pendientes.md")
+open(p, "w").write("---\ntype: index\n---\n# Pendientes\n")
+jc.guardar_huellas(mem, j)
+jc.atomic_write(p, jc.read_lines(p) [:-1] + ["- [ ] del compactador", ""])
+open(p, "a").write("- [ ] Y ajena\n")     # entre la escritura y el sellado
+jc.guardar_huellas(mem, j)
+print("1" if jc.detectar_fuera_de_banda(mem, j) else "0")
+PY
+)
+chk "y en compact: lo escrito manda sobre el disco" "1" "$NOABS2"
+
 echo "== ronda 7: scan-secrets re-sella (redactar es escritura legitima de un indice) =="
 MEMY="$T/memy"; mkdir -p "$MEMY/pendientes"
 printf -- '---\ntype: index\n---\n# Pendientes\n\n- [ ] rotar AKIAIOSFODNN7EXAMPLE\n' > "$MEMY/_pendientes.md"

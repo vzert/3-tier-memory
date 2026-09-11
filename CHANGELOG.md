@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.14.2] - 2026-09-11
+### Fixed
+- **El lock no cerraba la ventana, y tomarlo mejor tampoco.** Tercer intento sobre el mismo defecto. 2.14.0 arreglo "`--check-drift` sin lock" tomandolo; 2.14.1 arreglo "dos locks" fundiendolos en uno. El adversario de la ronda 7 re-probo y mostro que **ninguno de los dos era el problema**: una escritura por Bash —el caso que este mecanismo existe para cazar— **nunca pide `.journal/.lock`**, asi que tomar el lock no la bloquea ni la hace esperar. La ventana real estaba entre las **dos lecturas de bytes**: la de `detectar_fuera_de_banda()` y la de `guardar_huellas()`. Lo que se escribiera entre ambas quedaba fuera del aviso y del log, pero dentro de la linea base — absorbido en silencio.
+  - Arreglo: **una sola lectura, reusada**. `leer_estado()` hashea una vez; ese mismo estado se compara y se sella. Lo que se escriba despues queda FUERA de la linea base, asi que la comprobacion siguiente lo ve.
+  - La misma ventana existia en `compact()`, entre su ultima escritura y su sellado. `atomic_write()` apunta ahora el hash de lo que deja en cada fichero y el sellado lo prefiere sobre releer el disco.
+- Las pruebas nuevas comprueban primero que **la version rota SI absorbe** una edicion, y solo entonces que la actual no. Sin esa primera mitad serian pruebas que pasan por construccion.
+
 ## [2.14.1] - 2026-09-11
 Hallazgos de la **ronda 7**, la primera con el adversario LOCAL (subagente en Sonnet 5, modelo
 distinto al ejecutor y con id acreditable — el partner externo de las rondas 4 y 6 se auto-reportaba
