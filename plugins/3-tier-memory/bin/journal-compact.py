@@ -551,7 +551,7 @@ def apply_resolve_monthly(mem, p):
     path, lines, i = found
     # split_cells, no split("|"): un `|` dentro del texto (`sort \\| uniq -c`) partia la fila en
     # mas de 7 celdas, cells[5] caia sobre la prioridad ("Alta"), se leia como "ya resuelto" y el
-    # pendiente no se podia cerrar nunca — en silencio. Medido 2026-09-10: 9 filas en claude-vzert.
+    # pendiente no se podia cerrar nunca — en silencio. Medido 2026-09-10: 7 filas en claude-vzert.
     cells = split_cells(lines[i])
     while len(cells) < 7:
         cells.append("")

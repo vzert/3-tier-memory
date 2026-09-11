@@ -118,6 +118,31 @@ echo "7. delata los ids que no son el sha1 de su contenido"
 check "ids_invented" \
   "$(python3 "$BIN/repair-dualwrite.py" "$TMP/m1" | grep -o 'ids_invented=[0-9]*')" "ids_invented=2"
 
+echo "8. una fila con | en la NOTA no se desplaza al repararla (bug del 2026-09-11)"
+M6="$TMP/m6"; nuevo_memory "$M6"
+sed -i.bak 's#^|---|---|---|---|---|---|---|#|---|---|---|---|---|---|---|\
+| 1 | texto normal _id: p-eeeeeeeeee_ | Media | 2026-09-11 | [[sessions/z]] | 2026-09-11 | [[sessions/c]] — resolved — 7 filas con | reparadas |#' \
+  "$M6/pendientes/2026-09.md"
+python3 "$BIN/repair-dualwrite.py" "$M6" --apply --fix-pipes --quiet
+ROW=$(grep 'p-eeeeeeeeee' "$M6/pendientes/2026-09.md")
+check "sigue con 7 celdas" "$(echo "$ROW" | python3 "$TMP/cuenta.py")" "7"
+cat > "$TMP/celda.py" <<'PYEOF'
+import re, sys
+cells = re.split(r"(?<!\\)\|", sys.stdin.read().strip().strip("|"))
+print(cells[int(sys.argv[1])].strip())
+PYEOF
+check "la prioridad NO se desplazo" "$(echo "$ROW" | python3 "$TMP/celda.py" 2)" "Media"
+
+echo "9. una fila con una COLUMNA de mas no se toca, pero se reporta"
+M7="$TMP/m7"; nuevo_memory "$M7"
+sed -i.bak 's#^|---|---|---|---|---|---|---|#|---|---|---|---|---|---|---|\
+| 1 | texto `a | b` _id: p-ffffffffff_ | Media | 2026-09-11 | [[sessions/z]] | | 2026-09-12 | [[sessions/c]] |#' \
+  "$M7/pendientes/2026-09.md"
+ANTES=$(grep 'p-ffffffffff' "$M7/pendientes/2026-09.md")
+OUT=$(python3 "$BIN/repair-dualwrite.py" "$M7" --apply --fix-pipes)
+check "la reporta como no reparable" "$(echo "$OUT" | grep -o 'unrepairable=[0-9]*')" "unrepairable=1"
+check "y NO la toco" "$(grep 'p-ffffffffff' "$M7/pendientes/2026-09.md")" "$ANTES"
+
 echo
 [ $FAIL -eq 0 ] && echo "TODO VERDE" || echo "HAY FALLOS"
 exit $FAIL

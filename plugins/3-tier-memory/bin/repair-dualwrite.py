@@ -149,20 +149,47 @@ def monthly_files(mem):
             if re.match(r"^\d{4}-\d{2}\.md$", fn)]
 
 
-def row_cells(jc, line):
-    """Celdas de una fila de la tabla mensual, colapsando el exceso en la celda de texto.
+PRIO_CELL = re.compile(r"^(Alta|Media|Baja)$", re.I)
+FECHA_CELL = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
-    Dos capas, porque hay filas rotas de dos maneras distintas:
-      - `jc.split_cells` respeta `\\|`, asi que una fila escrita con el texto escapado sale ya
-        con sus 7 celdas;
-      - una fila antigua con el `|` CRUDO (las escribio `apply_add_monthly` antes de escapar)
-        sale con mas de 7. El formato es fijo — `| # | texto | prio | creado | origen |
-        resuelto | sesion |` — asi que el exceso esta por fuerza dentro del texto: se vuelve a
-        unir todo lo que sobra entre la celda 1 y las ultimas 5.
+
+def row_cells(jc, line):
+    """Celdas de una fila mensual, colapsando el exceso DONDE DE VERDAD ESTA.
+
+    `jc.split_cells` respeta `\\|`, asi que una fila bien escrita sale con sus 7 celdas. Una con
+    el `|` CRUDO sale con mas, y el exceso puede estar en DOS sitios: el texto del pendiente
+    (celda 1) o la nota de cierre (celda 6, la ultima). Colapsar siempre contra el texto —como
+    hacia la primera version— desplaza las columnas de una fila cuyo pipe estaba en la nota, y
+    el resultado tiene 7 celdas, asi que ya nadie lo detecta. Paso exactamente eso el
+    2026-09-11 con la fila 149 de claude-vzert.
+
+    Se ancla por FORMA, que es verificable: prioridad es Alta|Media|Baja y creado es una fecha,
+    siempre en las celdas 2 y 3. Se busca esa pareja; lo que va antes es el texto y lo que va
+    despues son origen/resuelto/sesion. Si no aparece, se devuelve la fila tal cual y quien
+    llame decide: nunca se adivina.
     """
     cells = jc.split_cells(line)
-    if len(cells) > 7:
-        cells = [cells[0], " | ".join(cells[1:len(cells) - 5])] + cells[-5:]
+    if len(cells) <= 7:
+        return cells
+    for i in range(1, len(cells) - 1):
+        if PRIO_CELL.match(cells[i]) and FECHA_CELL.match(cells[i + 1]):
+            resto = cells[i:]
+            if len(resto) == 5:
+                # El exceso estaba entero en el texto: prioridad, creado, origen, resuelto y
+                # sesion quedan uno a uno y la fila se reconstruye sin adivinar nada.
+                return [cells[0], " | ".join(cells[1:i])] + resto
+            if (len(resto) > 5 and i == 2
+                    and not any(FECHA_CELL.match(x) for x in cells[6:])):
+                # El texto estaba entero y el exceso esta en la nota de cierre, que es la
+                # ultima celda: se reune solo ella. La condicion de la fecha distingue este
+                # caso del de una fila con una COLUMNA de mas: ahi la fecha de resolucion
+                # aparece suelta despues de la celda 5, y reunirla la enterraria en la celda
+                # de la sesion. Preservar el texto no basta si la columna deja de significar
+                # lo que dice su cabecera.
+                return cells[:6] + [" | ".join(cells[6:])]
+            # Exceso a los dos lados: no hay forma de saber que celda de la cola es cual.
+            # Se devuelve tal cual y quien llama lo reporta sin tocarlo.
+            return cells
     return cells
 
 
@@ -201,7 +228,7 @@ def broken_pipe_rows(jc, mem):
     fecha de resolucion, concluye "ya resuelto" y no escribe nada: el pendiente no se puede
     cerrar nunca, en silencio. Reescribirlas con el `|` escapado las devuelve a 7 celdas.
     """
-    out = []
+    out, unrep = [], []
     for path in monthly_files(mem):
         lines = jc.read_lines(path)
         for i, line in enumerate(lines):
@@ -210,8 +237,38 @@ def broken_pipe_rows(jc, mem):
             if len(jc.split_cells(line)) <= 7:
                 continue
             cells = row_cells(jc, line)
+            if len(cells) != 7 or not PRIO_CELL.match(cells[2]):
+                # No se pudo anclar por forma. NO se toca, pero tampoco se calla: una fila que
+                # no cae en ningun contador es justo el fallo que este script existe para
+                # cerrar. Va a `unrepairable`.
+                m = ID_RE.findall(line)
+                unrep.append((os.path.basename(path), i + 1, m[-1] if m else "?"))
+                continue
             cells[1] = jc.escape_cell(cells[1])
+            cells[6] = jc.escape_cell(cells[6])
             out.append((path, i, jc.join_cells(cells)))
+    return out, unrep
+
+
+def shifted_rows(jc, mem):
+    """Filas de 7 celdas cuyas columnas NO son lo que dicen ser: prioridad o creado invalidos.
+
+    Una fila asi ya no se puede reparar desde aqui, porque el dato original se perdio al
+    colapsar mal las celdas: hay que reconstruirla de un respaldo o de la linea de Tier 2. Se
+    reportan para que no pasen inadvertidas, que es justo lo que hacen: tienen el numero de
+    celdas correcto, asi que ningun contador de estructura las ve.
+    """
+    out = []
+    for path in monthly_files(mem):
+        for i, line in enumerate(jc.read_lines(path)):
+            if not re.match(r"^\|\s*\d+\s*\|", line.strip()):
+                continue
+            c = jc.split_cells(line)
+            if len(c) != 7:
+                continue
+            if not PRIO_CELL.match(c[2]) or not FECHA_CELL.match(c[3]):
+                m = ID_RE.findall(c[1])
+                out.append((os.path.basename(path), i + 1, m[-1] if m else "?"))
     return out
 
 
@@ -265,12 +322,12 @@ def main():
         lock = jc.Lock(os.path.join(mem, ".journal"), a.budget)
         if not lock.acquire():
             if not a.quiet:
-                print("rows_added=0 pipes_broken=0 pipes_fixed=0 (journal busy; reintenta luego)")
+                print("rows_added=0 pipes_broken=0 pipes_fixed=0 shifted_rows=0 unrepairable=0 (busy)")
             return 0
     try:
         # Primero las filas con `|` crudo: hasta que se reescriben, su `_id:` cae fuera de la
         # celda de texto y `existing_ids` las contaria como ausentes, duplicandolas.
-        pipes = broken_pipe_rows(jc, mem)
+        pipes, unrepairable = broken_pipe_rows(jc, mem)
         if pipes and a.fix_pipes and a.apply:
             por_path = {}
             for path, i, nueva in pipes:
@@ -283,6 +340,7 @@ def main():
 
         have = existing_ids(jc, mem)
         inventados = ids_invented(idx)
+        desplazadas = shifted_rows(jc, mem)
         added = 0
         broken = []
         pending = []
@@ -328,10 +386,20 @@ def main():
             # siempre 0 y daria por sana una memoria con filas irresolubles.
             fixed = len(pipes) if (a.fix_pipes and a.apply) else 0
             print(f"rows_added={added} pipes_broken={len(pipes)} pipes_fixed={fixed} "
-                  f"ids_invented={len(inventados)} missing_data={len(broken)}{sufijo}")
+                  f"shifted_rows={len(desplazadas)} unrepairable={len(unrepairable)} "
+                  f"ids_invented={len(inventados)} "
+                  f"missing_data={len(broken)}{sufijo}")
             if pipes and not fixed:
                 print(f"  AVISO {len(pipes)} filas con `|` crudo no se pueden cerrar "
                       f"(apply_resolve_monthly las lee como ya resueltas): usa --fix-pipes")
+            for fn, ln, pid in unrepairable:
+                print(f"  GRAVE {fn}:{ln} ({pid}) tiene celdas de mas que no se pueden anclar "
+                      f"por forma: no se toca, porque cualquier reparacion automatica moveria "
+                      f"datos de columna. Revisala a mano.")
+            for fn, ln, pid in desplazadas:
+                print(f"  GRAVE {fn}:{ln} ({pid}) tiene 7 celdas pero sus columnas estan "
+                      f"desplazadas: la prioridad o la fecha no son validas. El dato original "
+                      f"se perdio; reconstruyela de un respaldo o de su linea de Tier 2.")
             if inventados:
                 print(f"  AVISO {len(inventados)} ids de Tier 2 no coinciden con el sha1 de su "
                       f"linea. Si alguien reemite ese mismo pendiente por journal saldra el id "
