@@ -356,5 +356,38 @@ printf -- '- [ ] dos alta — _creado: 2026-01-02_ — _id: p-2222222222_\n' >> 
 CUR_FIN="2026-01-02:p-2222222222:$(dig p-2222222222)"
 chk "cursor agotado -> ESE si habla del cursor" "1" "$(python3 "$BIN/triage-scan.py" --memory-dir "$MEMH" --desde "$CUR_FIN" 2>/dev/null | grep -c 'tras ese cursor')"
 
+echo "== el emisor avisa si --origen apunta a un session file que no existe =="
+# Lo encontro OTRO agente leyendo el indice, no una prueba: se emitieron 5 pendientes con dos
+# slugs inventados distintos y los enlaces de Tier 2 quedaron colgando. El orden de la plantilla
+# (Step 2 escribe la sesion, Step 3 emite) hace que en el flujo normal esto no dispare nunca.
+# Avisa y NO bloquea: un exit aqui perderia el evento, y emitir antes de escribir es legitimo si
+# el checkpoint llega despues.
+MEMI="$T/memi"; mkdir -p "$MEMI/sessions" "$MEMI/pendientes"
+printf -- '---\ntype: index\n---\n# Pendientes\n\n## Media prioridad\n\n' > "$MEMI/_pendientes.md"
+AV=$(python3 "$BIN/journal-emit.py" --memory-dir "$MEMI" --type pendiente.add --text "colgante" \
+      --prioridad Media --origen "[[sessions/2026-01-01-no-existe]]" --creado 2026-01-01 2>&1 >/dev/null)
+chk "origen inventado -> avisa"           "1" "$(printf '%s' "$AV" | grep -c 'no existe todavia')"
+python3 "$BIN/journal-emit.py" --memory-dir "$MEMI" --type pendiente.add --text "colgante2" \
+      --prioridad Media --origen "[[sessions/2026-01-01-no-existe]]" --creado 2026-01-02 >/dev/null 2>&1
+chk "y NO bloquea: el evento se emite" "0" "$?"
+printf -- '---\ntype: session\n---\n# x\n' > "$MEMI/sessions/2026-01-01-si-existe.md"
+AV2=$(python3 "$BIN/journal-emit.py" --memory-dir "$MEMI" --type pendiente.add --text "buena" \
+      --prioridad Media --origen "[[sessions/2026-01-01-si-existe]]" --creado 2026-01-01 2>&1 >/dev/null)
+chk "origen que existe -> callado"        "0" "$(printf '%s' "$AV2" | grep -c 'no existe todavia')"
+AV3=$(python3 "$BIN/journal-emit.py" --memory-dir "$MEMI" --type pendiente.add --text "alias" \
+      --prioridad Media --origen "[[sessions/2026-01-01-si-existe|Un titulo]]" --creado 2026-01-01 2>&1 >/dev/null)
+chk "alias [[sessions/x|Titulo]] -> callado" "0" "$(printf '%s' "$AV3" | grep -c 'no existe todavia')"
+# Los tres enlaces rotos mas viejos del repo son de PLANES, no de pendientes: el aviso tiene que
+# cubrir tambien plan.upsert (donde el campo se llama --sesion) y research.upsert.
+AV4=$(python3 "$BIN/journal-emit.py" --memory-dir "$MEMI" --type plan.upsert --slug pp --title T \
+      --status active --sesion "[[sessions/2026-01-01-no-existe]]" 2>&1 >/dev/null)
+chk "plan.upsert --sesion colgante -> avisa"     "1" "$(printf '%s' "$AV4" | grep -c 'no existe todavia')"
+AV5=$(python3 "$BIN/journal-emit.py" --memory-dir "$MEMI" --type research.upsert --slug rr --tema T \
+      --status active --origen "[[sessions/2026-01-01-no-existe]]" 2>&1 >/dev/null)
+chk "research.upsert --origen colgante -> avisa" "1" "$(printf '%s' "$AV5" | grep -c 'no existe todavia')"
+AV6=$(python3 "$BIN/journal-emit.py" --memory-dir "$MEMI" --type plan.upsert --slug pq --title T \
+      --status active --sesion "[[sessions/2026-01-01-si-existe]]" 2>&1 >/dev/null)
+chk "plan.upsert con sesion real -> callado"     "0" "$(printf '%s' "$AV6" | grep -c 'no existe todavia')"
+
 echo "RESULT pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

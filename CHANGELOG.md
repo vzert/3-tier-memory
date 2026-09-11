@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.13.1] - 2026-09-11
+### Fixed
+- **`journal-emit.py` avisa si el origen apunta a una sesion que no existe.** Un `pendiente.add --origen "[[sessions/SLUG]]"` con un slug inventado deja el enlace de Tier 2 colgando: el indice apunta a un fichero de Tier 3 que nadie escribio. El orden de `/checkpoint-3t` (Step 2 escribe el session file, Step 3 emite los pendientes) hace que en el flujo normal esto no dispare nunca; dispara cuando alguien emite a media sesion. **Avisa y NO bloquea** a proposito: emitir antes de escribir es legitimo si el checkpoint llega despues, y un `exit` perderia el evento.
+  - Cubre los tres sitios donde se nombra una sesion: `pendiente.add --origen`, `research.upsert --origen` y `plan.upsert --sesion`. Los tres porque los enlaces rotos mas viejos de este repo son de **planes** apuntando a sesiones que nunca se escribieron, no de pendientes.
+  - `check-wikilinks.py` (que `/audit-3t` ya corre) detectaba esto desde siempre. Lo que faltaba no era el detector, era avisar en el momento de crear el enlace en vez de en una auditoria posterior que nadie corre a tiempo.
+
 ## [2.13.0] - 2026-09-11
 ### Added
 - **`/triage-3t` — barrido manual de pendientes por lotes.** `templates/triage-3t.md` + `bin/triage-scan.py`. Reune la evidencia de cada item (edad, origen, ventana `_revisar:`, y que sesiones POSTERIORES hablan del mismo tema) y **no clasifica**: la decision es del usuario. Su senal util ("¿alguna sesion posterior toco el tema?") dispara en el 14-26% de los items medidos. Pagina con un cursor `(fecha, id)` de corte estricto, nunca con un `--offset` numerico: al cerrar items del lote la lista se acorta y el offset se saltaria a los que ocupan los huecos.

@@ -229,6 +229,39 @@ def strip_meta(text):
 
 
 # ----------------------------------------------------------------------------- main
+def memory_dir_de(a):
+    """El memory/ que este proceso va a usar, para poder mirar si el origen existe."""
+    try:
+        return resolve_memory_dir(a.memory_dir)
+    except Exception:
+        return None
+
+
+def avisar_origen_colgante(origen, mem):
+    """Avisa —no bloquea— si --origen apunta a un session file que no existe todavia.
+
+    El orden de /checkpoint-3t es Step 2 (escribir el session file) y DESPUES Step 3 (emitir los
+    pendientes), asi que en el flujo normal el fichero ya esta y esto no dispara nunca. Dispara
+    cuando alguien emite un pendiente a media sesion con un slug inventado: el enlace de Tier 2
+    queda colgando y `check-wikilinks.py` lo delata despues, si alguien lo corre.
+
+    Paso en esta sesion, dos veces con dos slugs distintos, y lo encontro otro agente leyendo el
+    indice — no una prueba. Avisa y NO bloquea a proposito: emitir antes de escribir es raro pero
+    legitimo si el checkpoint llega luego, y un exit aqui perderia el evento.
+
+    Cubre los tres sitios donde se nombra una sesion: `pendiente.add --origen`,
+    `research.upsert --origen` y `plan.upsert --sesion`. Los tres, porque los tres enlaces rotos
+    mas viejos de este repo son de PLANES apuntando a sesiones que nunca se escribieron.
+    """
+    m = re.match(r"^\[\[sessions/([^\]|]+?)(\|[^\]]*)?\]\]$", (origen or "").strip())
+    if not m or not mem:
+        return
+    if not os.path.isfile(os.path.join(mem, "sessions", m.group(1) + ".md")):
+        print(f"journal-emit: AVISO — el origen [[sessions/{m.group(1)}]] no existe todavia en "
+              f"{os.path.join(mem, 'sessions')}. Si no lo escribes en el checkpoint, el enlace de "
+              f"Tier 2 queda roto.", file=sys.stderr)
+
+
 def main():
     ap = argparse.ArgumentParser(description="Emite un evento al journal de memory/.")
     ap.add_argument("--type", required=True,
@@ -297,6 +330,7 @@ def main():
         origen = normalize_text(a.origen or "")
         if not origen:
             sys.exit("journal-emit: pendiente.add necesita --origen (p. ej. [[sessions/...]])")
+        avisar_origen_colgante(origen, memory_dir_de(a))
         creado = (a.creado or date.today().isoformat()).strip()
         if not fecha_real(creado):
             sys.exit("journal-emit: --creado debe ser una fecha real YYYY-MM-DD")
@@ -360,6 +394,7 @@ def main():
             "learnings": cell(a.learnings),
             "inline": bool(a.inline),
         }
+        avisar_origen_colgante(a.sesion, memory_dir)   # en plan.upsert el campo se llama --sesion
         write_event(memory_dir, base)
         print(f"pl-{slug}")
         return
@@ -379,6 +414,7 @@ def main():
             "origen": cell(a.origen or ""),
             "inline": bool(a.inline),
         }
+        avisar_origen_colgante(a.origen, memory_dir)
         write_event(memory_dir, base)
         print(f"r-{slug}")
         return
