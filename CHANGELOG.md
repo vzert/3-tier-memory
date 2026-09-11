@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.13.4] - 2026-09-11
+### Added
+- **El plugin avisa cuando Bash escribe un indice, sin bloquear.** Nuevo `bin/bash-journal-nudge.sh`, enganchado a `PreToolUse` y `PostToolUse` con matcher `Bash`.
+  - **Por que avisar y no bloquear, ahora que si se puede**: la asimetria decide. Un falso positivo al DENEGAR cuesta trabajo bueno tirado; al AVISAR cuesta una linea de texto. Eso permite un detector aproximado sobre el texto del comando, que es justo lo que no se podia permitir al bloquear. Nunca deniega, ni siquiera con `journal_strict=1`.
+  - `PreToolUse` mira el **texto del comando** (`>`, `>>`, `sed -i`, `tee`, `cp`/`mv`, `open(...,"w")`). Aproximado —no ve una ruta en variable ni un `eval`— pero llega **antes**, que es cuando sirve. Excluye las herramientas del propio plugin.
+  - `PostToolUse` compara **bytes** contra la huella del compactador: exacto, cero falsos positivos, un turno tarde. Compuerta de mtime en shell para no pagar el arranque de python en cada Bash.
+  - **NO depende de `.memory-config`.** Solo mira que exista `.journal/`. Medido: 64 de 65 proyectos con `memory/` no tienen config, asi que condicionarlo a `journal_strict` lo dejaria inerte justo donde mas falta hace. Un proyecto sin journal no ve nada.
+  - Coste medido: ~10 ms por llamada a Bash cuando no hay nada que decir (arranque de bash); antes de la criba en shell eran 40 ms.
+- **`journal-compact.py --reseal`**: acepta el estado actual de los indices como linea base nueva. Es el **unico camino sancionado** para una edicion manual. Existe porque `/audit-3t` te dice "rehaz esa fila a mano" de una que no se puede anclar por forma — y el sistema se contradecia: te mandaba editar a mano un fichero cuyo contrato es que no se edita a mano, y luego te denunciaba por haberlo hecho. Documentado en `/audit-3t` junto a esa instruccion.
+- Suite nueva `bin/test-bash-nudge.sh` (23 aserciones) con los seis casos que deben avisar y los nueve que no.
+
 ## [2.13.3] - 2026-09-11
 ### Fixed
 - **El detector de deriva de 2.13.2 gritaba en falso sobre las herramientas del propio plugin.** `repair-dualwrite.py --apply` (que `/checkpoint-3t` corre en su Step 3-pre) y `normalize-pendientes.py --apply` escriben los indices de forma sancionada, y ninguna re-sellaba la linea base: cada reparacion se denunciaba a si misma como "escritura fuera del journal". Un aviso que grita en su propio camino feliz deja de leerse a la tercera vez. Las dos re-sellan ahora, y la suite lo fija con **control negativo** — una escritura a mano en el mismo directorio sigue disparando.

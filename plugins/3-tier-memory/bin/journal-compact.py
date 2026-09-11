@@ -1374,6 +1374,11 @@ def main():
     ap.add_argument("--budget", type=float, default=10.0)
     ap.add_argument("--log")
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--reseal", action="store_true",
+                    help="acepta el estado actual de los indices como la nueva linea base. Para "
+                         "DESPUES de una reparacion manual deliberada — p. ej. una fila que "
+                         "repair-dualwrite marco 'unrepairable' y hay que rehacer a mano. Sin "
+                         "esto, esa reparacion legitima se reportaria como deriva")
     ap.add_argument("--check-drift", action="store_true",
                     help="solo comprueba si algun indice cambio fuera del journal; no aplica "
                          "eventos, no toma el lock, no escribe nada salvo el log de constancia")
@@ -1382,6 +1387,20 @@ def main():
     mem = resolve_memory_dir(a.memory_dir)
     if not os.path.isdir(mem):
         sys.exit(f"journal-compact: no existe el directorio de memoria: {mem}")
+    if a.reseal:
+        # El unico camino sancionado para una edicion manual. Existe porque /audit-3t dice
+        # "rehazla a mano" de una fila que no se puede anclar por forma, y sin esto el sistema se
+        # contradecia: te manda editar a mano un fichero cuyo contrato es que no se edita a mano,
+        # y luego te denuncia por haberlo hecho.
+        journal = os.path.join(mem, ".journal")
+        antes = detectar_fuera_de_banda(mem, journal)
+        guardar_huellas(mem, journal)
+        if antes:
+            print(f"resellado: {len(antes)} indice(s) aceptados como linea base nueva: "
+                  + ", ".join(antes))
+        else:
+            print("resellado: ningun indice habia cambiado; la linea base ya estaba al dia")
+        sys.exit(0)
     if a.check_drift:
         # Entrada propia porque session-start.sh solo llama al compactador cuando pending/ tiene
         # algo, y la deriva que interesa es justo la de una sesion que NO dejo eventos.
