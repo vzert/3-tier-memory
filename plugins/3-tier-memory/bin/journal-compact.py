@@ -340,6 +340,16 @@ def apply_resolve_index(mem, p):
 
 
 # ----------------------------------------------------------------------------- pendientes/YYYY-MM.md
+def escape_cell(text):
+    """Texto apto para una celda de tabla: una linea, `|` suelto escapado (`\\|` ya escrito se respeta).
+
+    Inversa de split_cells/CELL_SPLIT. Sin esto, un `|` del texto parte la fila y la deja
+    irresoluble (ver apply_resolve_monthly).
+    """
+    t = re.sub(r"\s+", " ", normalize_text(text))
+    return re.sub(r"(?<!\\)\|", r"\\|", t)
+
+
 def monthly_path(mem, creado):
     return os.path.join(mem, "pendientes", creado[:7] + ".md")
 
@@ -366,7 +376,7 @@ def table_rows(lines):
     for i, line in enumerate(lines):
         s = line.strip()
         if s.startswith("|") and re.match(r"^\|\s*\d+\s*\|", s):
-            cells = [c.strip() for c in s.strip().strip("|").split("|")]
+            cells = split_cells(line)
             out.append((i, cells))
     return out
 
@@ -403,7 +413,8 @@ def apply_add_monthly(mem, p):
     lines = ensure_monthly(path, p["creado"][:7])
     nums = [int(c[0]) for _, c in table_rows(lines) if c and c[0].isdigit()]
     n = (max(nums) + 1) if nums else 1
-    row = (f"| {n} | {p['text']} _id: {p['id']}_ | {p['prioridad']} | {p['creado']} "
+    # escape_cell(): un `|` crudo del texto partiria la fila y la haria irresoluble (ver apply_resolve_monthly).
+    row = (f"| {n} | {escape_cell(p['text'])} _id: {p['id']}_ | {p['prioridad']} | {p['creado']} "
            f"| {p['origen']} | | |")
     at = last_table_line(lines)
     if at is None:
@@ -419,7 +430,10 @@ def apply_resolve_monthly(mem, p):
         log(f"WARN monthly: sin fila con id {p['id']} — llenar Resuelto a mano si aplica")
         return False
     path, lines, i = found
-    cells = [c.strip() for c in lines[i].strip().strip("|").split("|")]
+    # split_cells, no split("|"): un `|` dentro del texto (`sort \\| uniq -c`) partia la fila en
+    # mas de 7 celdas, cells[5] caia sobre la prioridad ("Alta"), se leia como "ya resuelto" y el
+    # pendiente no se podia cerrar nunca — en silencio. Medido 2026-09-10: 9 filas en claude-vzert.
+    cells = split_cells(lines[i])
     while len(cells) < 7:
         cells.append("")
     if cells[5]:
