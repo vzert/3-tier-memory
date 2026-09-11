@@ -161,11 +161,15 @@ python3 "$JBIN/enrich-memory.py" "$MEMORY_DIR" --apply --only creado,id   # lega
 python3 "$JBIN/repair-dualwrite.py" "$MEMORY_DIR" --apply --fix-pipes    # Tier 2 lines with no Tier 3 row; rows a `|` made unclosable; idempotent
 ```
 
-`repair-dualwrite` prints `rows_added=N pipes_broken=N pipes_fixed=N ids_invented=N missing_data=N`.
+`repair-dualwrite` prints `rows_added=N pipes_broken=N pipes_fixed=N shifted_rows=N unrepairable=N ids_invented=N missing_data=N`.
 **A non-zero `rows_added` or `ids_invented` means someone wrote Tier 2 outside the journal since the
 last checkpoint** — the dual write was bypassed. Without this repair those pendientes lose their
 resolution date and closing session when they are eventually closed. Report the counts in Step 7;
 if `missing_data>0`, the listed lines lack `_creado` or a priority header and need a look by hand.
+**`shifted_rows` or `unrepairable` above 0 is the serious one**: a Tier 3 row whose columns no
+longer mean what their header says, or that the repair refuses to touch because fixing it
+automatically would move data between columns. Neither is repaired for you — report the file and
+line in Step 7 and rebuild the row by hand from a backup or from its Tier 2 line.
 
 THEN read `memory/_pendientes.md`. Every open line now ends with `_id: p-xxxxxxxxxx_`. That id is
 how you resolve it in 3a; never match a line by its text.
