@@ -32,6 +32,7 @@ Output: a human-readable preview/report to stdout, ending with a one-line machin
 import os
 import re
 import sys
+import time
 from datetime import date
 
 # Windows consoles often default to a legacy codepage (e.g. cp1252) that can't
@@ -62,11 +63,55 @@ def is_excluded(path):
     return bool(EXCLUDE_NAME_RE.search(os.path.basename(path)))
 
 
+REPLACE_RETRIES = 5   # Windows: antivirus/indexador pueden tener el .md abierto un instante
+EOL_DEFAULT = "\n"    # fichero nuevo o sin CRLF: LF, en cualquier sistema operativo
+
+
+def detect_eol(path):
+    """Salto de linea que YA usa el fichero, para reescribirlo sin convertirlo.
+
+    Misma regla que journal-compact.detect_eol y normalize-pendientes: `"\r\n" in text`. Las tres
+    tocan los mismos ficheros; si discreparan, cada pasada le daria la vuelta al fichero entero."""
+    try:
+        with open(path, "rb") as fh:
+            return "\r\n" if b"\r\n" in fh.read() else EOL_DEFAULT
+    except OSError:
+        return EOL_DEFAULT
+
+
 def atomic_write(path, content):
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
+    """Escribe `content` con el salto de linea del propio fichero y salto final garantizado.
+
+    Segunda implementacion de atomic_write en este plugin, y arrastraba los CUATRO defectos que
+    la de journal-compact.py ya tenia arreglados. La ronda 4 del adversario reviso los llamantes
+    de AQUELLA y nunca busco una segunda copia; la ronda 5 la encontro. Los cuatro:
+
+    1. Sin salto de linea final: lo siguiente que se anadiera se pegaba a la ultima linea.
+    2. Modo texto por defecto: el fichero salia LF en macOS y CRLF en Windows, asi que un
+       `memory/` compartido entre plataformas se convertia entero en cada pasada.
+    3. `path + ".tmp"` fijo: dos enriquecedores a la vez escribian el MISMO temporal y uno
+       pisaba al otro. El pid lo separa.
+    4. `os.replace` pelado: en Windows un PermissionError transitorio (antivirus, indexador)
+       tiraba la pasada entera en vez de reintentar.
+
+    Toma una cadena, no una lista — por eso no importa la de journal-compact.py, que toma lineas.
+    """
+    if content and not content.endswith("\n"):
+        content += "\n"
+    eol = detect_eol(path)
+    if eol != "\n":
+        content = content.replace("\n", eol)
+    tmp = f"{path}.{os.getpid()}.tmp"
+    with open(tmp, "w", encoding="utf-8", newline="") as f:
         f.write(content)
-    os.replace(tmp, path)
+    for intento in range(REPLACE_RETRIES):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if intento == REPLACE_RETRIES - 1:
+                raise
+            time.sleep(0.05 * (intento + 1))
 
 
 def mtime_date(path):

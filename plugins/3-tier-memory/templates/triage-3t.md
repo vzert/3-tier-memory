@@ -127,11 +127,26 @@ antes de seguir con el lote siguiente.
 **Copialo tal cual, entero, incluido el digito.** Lo que el script hace exactamente, ni mas ni menos:
 
 - **Rechaza** un id con forma invalida.
-- **Rechaza** un cursor cuyo digito no cuadre con su id — es decir, uno escrito de memoria en vez
-  de copiado. Sin esa comprobacion, un id inventado se saltaba en silencio todo lo de esa fecha
-  con id menor.
+- **Rechaza** un cursor cuyo digito no cuadre con su id — es decir, una cadena **manglada** al
+  copiarla. Eso es todo lo que el digito detecta.
 - **NO rechaza** un id que ya no este abierto, y es deliberado: cerrarlo es justo lo que hace el
   barrido. Solo avisa. El corte `(fecha, id)` es exacto aunque ese item ya no exista.
+- **NO rechaza** un id inventado con el digito bien calculado. El digito es una sha1 publica del
+  propio id, asi que no demuestra procedencia. La ronda 4 afirmo que si, y la 5 lo rompio
+  fabricando `2026-01-01:p-deadbeef00:8ae6`.
+
+**Lo unico que protege de verdad contra un id inventado es que los items tengan `_id`
+persistente.** Con `_id` no hay id sintetico, no hay renumeracion, y un `p-...` fabricado cae
+sobre una clave de orden real o no cae. Si este proyecto tiene items sin `_id`, corre antes:
+
+```bash
+python3 "$JBIN/enrich-memory.py" "$MEMORY_DIR"            # dry-run: cuantos recibirian id
+python3 "$JBIN/enrich-memory.py" "$MEMORY_DIR" --apply    # escribe
+```
+
+Los items sin `_creado` se saltan: el id se deriva de (texto, creado, origen) y sin fecha no hay
+identidad. El propio enriquecedor rellena `_creado` en la misma pasada, asi que con `--apply`
+suele bastar una.
 
 Nunca un `--offset` numerico: al cerrar items del lote la lista se acorta y el offset se saltaria
 los que ocupan los huecos. El corte del cursor es **estricto**, asi que ni repite ni salta, tambien

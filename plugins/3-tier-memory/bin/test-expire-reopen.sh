@@ -236,10 +236,16 @@ chk "cursor sin digito -> error"      "1" "$?"
 # siendo exacto sobre un id que ya no existe. Solo avisa. Pero su digito TIENE que cuadrar.
 python3 "$BIN/triage-scan.py" --memory-dir "$MEMA" --desde "2026-01-01:p-0000000000:$(dig p-0000000000)" >/dev/null 2>&1
 chk "id ya cerrado, digito bueno -> NO es error" "0" "$?"
-# Ronda 4: un id INVENTADO (forma valida, nunca lo imprimio un lote) se tragaba en silencio todo
-# lo de esa fecha con id menor. El digito es lo unico que lo separa de un id cerrado legitimo.
 python3 "$BIN/triage-scan.py" --memory-dir "$MEMA" --desde "2026-01-01:p-0000000000:beef" >/dev/null 2>&1
-chk "id inventado (digito malo) -> error"        "1" "$?"
+chk "cursor manglado (digito malo) -> error"     "1" "$?"
+# Ronda 5: la ronda 4 afirmo que el digito distinguia un cursor copiado de uno inventado, y solo
+# probaba el caso facil (digito deliberadamente MAL). El adversario fabrico un id inventado con el
+# digito BIEN calculado — sha1 publica — y paso. La afirmacion se retiro; esta asercion fija el
+# comportamiento real, que es ACEPTARLO con aviso. No es un error: contra un id inventado lo que
+# protege es que el item tenga `_id` persistente, no el digito.
+python3 "$BIN/triage-scan.py" --memory-dir "$MEMA" --desde "2026-01-01:p-deadbeef00:$(dig p-deadbeef00)" >/dev/null 2>&1
+chk "id inventado con digito BIEN -> NO es error, se acepta" "0" "$?"
+chk "y avisa de que ese id no esta abierto" "1" "$(python3 "$BIN/triage-scan.py" --memory-dir "$MEMA" --desde "2026-01-01:p-deadbeef00:$(dig p-deadbeef00)" 2>&1 >/dev/null | grep -c 'ya no esta abierto')"
 VAL=$(python3 "$BIN/triage-scan.py" --memory-dir "$MEMA" --limit 1 | sed -n 's/^Siguiente lote:  --desde \([^ ]*\) .*/\1/p')
 chk "el cursor que imprime trae 3 partes" "3" "$(printf '%s' "$VAL" | awk -F: '{print NF}')"
 python3 "$BIN/triage-scan.py" --memory-dir "$MEMA" --desde "$VAL" --limit 5 >/dev/null 2>&1

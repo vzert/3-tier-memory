@@ -24,9 +24,10 @@ PAGINACION POR CURSOR ESTABLE, NO POR POSICION
     El cursor es `--desde <fecha>:<id>:<digito>` — la clave de orden del ultimo item mostrado, mas
     un digito de control. Ni la fecha de creacion ni el id cambian porque otros items se cierren,
     y el par es unico, asi que el lote siguiente empieza EXACTAMENTE despues del ultimo visto: ni
-    repite ni salta. El digito distingue un cursor COPIADO de uno TECLEADO: no se puede exigir que
-    el id siga abierto (cerrarlo es justo lo que hace el barrido), pero un id que nunca existio se
-    saltaria en silencio todo lo de esa fecha con id menor. (Ronda 4 del adversario.)
+    repite ni salta. El digito solo detecta que la cadena llegue manglada; **no** demuestra
+    procedencia — es una sha1 publica del id, y el adversario de la ronda 5 fabrico un cursor
+    valido con ella. Contra un id inventado lo que protege es que el item tenga `_id` persistente,
+    que es lo que pone `enrich-memory.py`. (Rondas 4 y 5 del adversario.)
 
     Una primera version usaba solo la fecha y era **inclusiva**: con mas items del mismo dia que
     `--limit`, y si el usuario los dejaba abiertos, el mismo lote se repetia para siempre y los
@@ -116,15 +117,21 @@ def sintetico(texto):
 
 
 def digito(cid):
-    """Digito de control del cursor: ata el id al lote que lo imprimio.
+    """Digito de control del cursor. Detecta que la cadena venga MANGLADA, y nada mas.
 
-    Existe por un hallazgo de la ronda 4. NO se puede exigir que el id del cursor siga abierto —
-    cerrarlo es justo lo que hace el barrido, y la ronda 3 ya descarto esa via — pero tampoco se
-    podia distinguir un id CERRADO (legitimo) de uno INVENTADO (que se salta en silencio todo lo
-    de esa fecha con id menor). El digito los separa: un cursor copiado lo trae aunque su item ya
-    no exista, y uno tecleado de memoria no. El modelo de amenaza es la fabricacion ACCIDENTAL
-    — Claude escribiendo un id plausible en vez de copiarlo, que ya paso en este sistema
-    (commit e90c87a) — no la falsificacion deliberada, contra la que un digito no protege.
+    Lo que hace: si copias el cursor y se pierde un caracter, o lo escribes mal, el digito deja
+    de cuadrar y el script lo dice en vez de cortar por un id que no querias.
+
+    Lo que NO hace, y esto se afirmo mal en la ronda 4: **no demuestra procedencia**. Se calcula
+    con una sha1 publica sobre el propio id, asi que cualquiera que la corra fabrica un cursor
+    valido. El adversario de la ronda 5 construyo `2026-01-01:p-deadbeef00:8ae6` — id inventado,
+    digito correcto — y el script salio con codigo 0. La afirmacion "distingue un cursor copiado
+    de uno tecleado" era falsa y esta retirada.
+
+    Lo que SI da procedencia es que el item tenga un `_id` persistente: entonces no hay id
+    sintetico, no hay renumeracion, y un `p-...` inventado cae sobre una clave de orden real o no
+    cae. Eso ya existe — `enrich-memory.py` (`enrich_ids`) se lo pone a los items que tienen
+    `_creado`. Ver la regla 114 de learnings/3tier-memory-system.
     """
     return hashlib.sha1(f"triage-cursor:{cid}".encode("utf-8")).hexdigest()[:4]
 
@@ -135,9 +142,8 @@ def main():
     ap.add_argument("--memory-dir")
     ap.add_argument("--desde", metavar="FECHA:ID:DIGITO",
                     help="cursor estable que imprime el lote previo, copiado TAL CUAL "
-                         "(p.ej. 2026-04-02:p-ab12cd34ef:9f3c). El digito del final ata el cursor "
-                         "al lote que lo imprimio; sin el, un id tecleado de memoria se saltaria "
-                         "items en silencio")
+                         "(p.ej. 2026-04-02:p-ab12cd34ef:9f3c). El digito del final detecta que la "
+                         "cadena llegue manglada; no demuestra que venga de un lote")
     ap.add_argument("--limit", type=int, default=25)
     ap.add_argument("--prioridad", choices=("Alta", "Media", "Baja"))
     ap.add_argument("--tsv", action="store_true", help="salida completa en TSV, sin paginar")
@@ -227,13 +233,14 @@ def main():
         if not re.match(r"^(p-[0-9a-f]{10}|sin-id-[0-9a-f]{10}(-\d+)?)$", cid):
             sys.exit(f"triage-scan: '{cid}' no es un id valido; copia el cursor tal cual lo "
                      f"imprime el lote previo")
-        # El digito distingue un cursor COPIADO de uno TECLEADO. Un id inventado se saltaria en
-        # silencio todo lo de esa fecha con id menor, que es la clase de fallo que estas tres
-        # rondas han estado persiguiendo. Ver digito().
+        # El digito solo detecta una cadena manglada. NO demuestra procedencia: es una sha1
+        # publica del propio id (roto por el adversario en la ronda 5). Contra un id inventado lo
+        # que protege de verdad es que el item tenga `_id` persistente. Ver digito().
         if dig != digito(cid):
-            sys.exit(f"triage-scan: el digito de control de '{a.desde}' no cuadra con '{cid}'. "
-                     f"Ese cursor no lo imprimio ningun lote: copialo tal cual, no lo escribas "
-                     f"de memoria.")
+            sys.exit(f"triage-scan: el digito de control de '{a.desde}' no cuadra con '{cid}'; la "
+                     f"cadena llego manglada. Copia el cursor entero, tal cual lo imprime el lote "
+                     f"previo. (El digito solo detecta eso: NO demuestra que el cursor venga de "
+                     f"un lote.)")
         # NO se exige que el cursor siga abierto: cerrarlo es justo lo que hace el barrido, y el
         # corte (fecha, id) funciona igual sobre un id que ya no existe — para eso es estable.
         if not any(i["id"] == cid for i in items):
