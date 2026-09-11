@@ -1,5 +1,39 @@
 # Changelog
 
+## [2.13.0] - 2026-09-11
+### Added
+- **`/triage-3t` — barrido manual de pendientes por lotes.** `templates/triage-3t.md` + `bin/triage-scan.py`. Reune la evidencia de cada item (edad, origen, ventana `_revisar:`, y que sesiones POSTERIORES hablan del mismo tema) y **no clasifica**: la decision es del usuario. Su senal util ("¿alguna sesion posterior toco el tema?") dispara en el 14-26% de los items medidos. Pagina con un cursor `(fecha, id)` de corte estricto, nunca con un `--offset` numerico: al cerrar items del lote la lista se acorta y el offset se saltaria a los que ocupan los huecos.
+- **`bin/expire-pendientes.py` + eventos `pendiente.expire` / `pendiente.reopen` / `pendiente.window`.** El modo por defecto es `--modo revisar`: caduca un item cuya **ventana declarada** (`_revisar: YYYY-MM-DD`) ya vencio. `--modo edad` queda solo para inspeccion y avisa al correr. La caducidad por edad se implemento y **se descarto con su propia medicion**: de 30 candidatos leidos a N=90 dias, **29 seguian vivos** — la edad no discrimina cuando el backlog es trabajo real sin priorizar. Solo sirve la ventana que el propio item declaro, y esa solo existe hacia adelante.
+- **`bin/repair-dualwrite.py`** — recupera los pendientes que estan en `_pendientes.md` (Tier 2) pero no tienen fila en `pendientes/YYYY-MM.md` (Tier 3), reescribe con `|` escapado las filas que un pipe crudo dejaba imposibles de cerrar, y detecta filas desplazadas, ids inventados y datos ausentes. Idempotente.
+- **Campo `_revisar: YYYY-MM-DD` en pendientes**, en emisor, compactador y hook de arranque.
+- **`Sigue abierto:` en el snippet de continuidad** (`/checkpoint-3t` Step 8) y bloque de calendario para fechas futuras (Step 8c). Medido: los pendientes mencionados en el snippet cierran al **35%** frente al **19%** de los no mencionados.
+
+### Fixed — integridad de los ficheros de `memory/`
+- **El salto de linea lo manda el fichero, no el sistema operativo.** Todas las escrituras usaban el modo texto por defecto de Python, que traduce `"\n"` al salto del sistema. El mismo `memory/` salia LF en macOS y CRLF en Windows, asi que un repositorio compartido entre las dos plataformas le daba la vuelta al fichero **entero** en cada pasada. Ahora cada escritura mira el fichero en binario y conserva el salto que ya usaba; uno nuevo sale en LF en cualquier sistema.
+  - Habia **seis** rutas de escritura distintas en `bin/`, cada una con su propia copia del patron: `journal-compact.py`, `enrich-memory.py`, `normalize-pendientes.py`, `build-recall-index.py`, `ensure-frontmatter.py` y `scan-secrets.py`. Tres seguian en modo texto — incluida la del redactor de secretos, cuyo docstring afirmaba "body is otherwise byte-identical", falso para un fichero CRLF. Los artefactos generados (indice de recall, eventos del journal, marcador del lock, ficheros `.reason`, el log) van con LF explicito: sus bytes ya no dependen de donde se corrio.
+  - Una prueba nueva **enumera** las escrituras del codigo y exige `newline=` en todas (`w`, `a`, `fdopen`, `write_text`), para que una septima copia no pueda entrar en silencio.
+- **`atomic_write` dejaba el fichero sin salto de linea final** al insertar al final (en produccion desde 2.12.0): lo siguiente que se anadiera se pegaba a la ultima linea. Y `apply_resolve_index` borraba el centinela de ese salto en su dedup de lineas en blanco (tambien desde 2.12.0).
+- **Dos temporales con el mismo nombre.** `path + ".tmp"` en tres scripts: dos procesos a la vez escribian el MISMO temporal y uno pisaba al otro. Ahora llevan el pid. Y `os.replace` sin reintento tiraba la pasada entera ante un `PermissionError` transitorio de Windows.
+- **`apply_expire_index` / `apply_reopen` no eran atomicos**: borraban el origen antes de escribir el destino, asi que un fallo entre las dos escrituras perdia la unica copia.
+- **Una fila con `|` en el texto no se podia cerrar nunca**, y la nota de cierre con `|` volvia a partirla. `--fix-pipes` las reescribe; antes desplazaba las columnas de una fila cuyo pipe estaba en la nota.
+- **Fechas validadas por forma y no por calendario**: `2026-99-99` pasaba emisor y compactador, se persistia y reventaba a los consumidores. Ahora se valida el calendario en los dos lados.
+- **`reopen` perdia la prioridad** de un item legacy sin fila mensual (los mandaba todos a Media). Y las celdas vacias volvian como `|  |  |` en vez de `| | |`.
+
+### Fixed — paginacion de `/triage-3t`
+- **El cursor de un item sin `_id` era posicional.** Se numeraban `sin-id-0001`, `sin-id-0002`… en orden de fichero: unico dentro de una pasada, inestable entre pasadas. Al cerrar un item anterior, el siguiente se renumeraba, el corte estricto daba falso sobre su propio cursor y ese item **no volvia a salir nunca**. Ahora el id sale del texto del item, no de lo que haya alrededor. No es un caso raro: en seis `_pendientes.md` reales, 125 de 125 items no tenian `_id`.
+- **El cursor solo validaba la forma del id.** Lleva ahora un digito de control que detecta una cadena manglada al copiarla. **No demuestra procedencia** — es una sha1 publica del propio id — y lo que protege de verdad contra un id inventado es que los items tengan `_id` persistente, que es lo que pone `enrich-memory.py --apply` (medido: 125 de 125 en una sola pasada).
+- Antes: el cursor era por posicion (se saltaba items), luego por fecha inclusiva (se repetia para siempre con varios items del mismo dia). Ahora `(fecha, id)` estricto.
+- **Una instalacion nueva veia "No queda nada por revisar tras ese cursor"** sin haber dado ningun cursor. Los tres casos se distinguen ahora: no hay pendientes, el filtro de prioridad no casa, o el cursor se agoto.
+
+### Changed — CONTRATO
+- **El cursor de `/triage-3t` pasa de `--desde FECHA:ID` a `--desde FECHA:ID:DIGITO`.** Un cursor de dos partes es ahora un error duro con mensaje explicito. No rompe estado guardado: ningun cursor se persiste en disco, viven dentro de una sesion.
+- **Un fichero de `memory/` sin salto de linea final sale CON el.** Rompe el "byte a byte" para esa entrada concreta, a proposito: en `memory/` un fichero sin salto final es el bug, no un formato a preservar.
+
+### Notas de verificacion
+- Seis suites: `test-expire-reopen.sh` 64/64 (eran 45), `test-journal-guard.sh` 19/19, `test-journal-race.sh` PASS, `test-normalize-pendientes.sh` 19/19, `test-parser.sh` 26/26, `test-repair-dualwrite.sh` verde. Mas dos suites nuevas en el camino (`test-expire-reopen.sh`, `test-repair-dualwrite.sh`).
+- **Cinco rondas de un verificador adversarial externo** (Codex/GPT-5, vendedor distinto). Las cinco cerraron en `break`. La ronda 5 rompio una afirmacion que la ronda 4 habia dado por buena — que el digito del cursor demostraba procedencia — fabricando un cursor valido, y encontro que "revisar los llamantes de una funcion" no habia probado que fuera la unica implementacion.
+- **Sin medir**: `triage-scan.py` no se ha corrido sobre el corpus grande de paperclip.
+
 ## [2.12.2] - 2026-09-09
 ### Changed
 - **El snippet de continuidad ahora transmite lo que fallo, no solo lo que salio.** Las tres lineas fijas de `/checkpoint-3t` Step 8 (`Retomamos` / `Lee` / `Proximo paso`) solo llevaban resultados, asi que la sesion siguiente volvia a intentar el enfoque que ya se habia descartado y se expandia sin final acordado. Dos cambios acoplados:
