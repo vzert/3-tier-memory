@@ -940,6 +940,14 @@ def apply_plan_upsert(mem, p):
         for idx, k in ((1, "status"), (3, "sesion"), (4, "pendientes"), (5, "learnings")):
             if p.get(k):
                 new[idx] = p[k]
+        # La celda 0 tambien: `--title` se aceptaba y se ignoraba en silencio al actualizar, asi
+        # que el indice conservaba el titulo con el que nacio el plan aunque su contenido ya dijera
+        # otra cosa. Campo sin lector. Se reconstruye respetando la forma que tenia la celda
+        # (enlace o `(inline)`), nunca inventando una nueva. Medido 2026-09-11 sobre
+        # plan-pendientes-diferidos-v2.13.0, cuyo titulo nombraba dos mecanismos ya descartados.
+        if p.get("title"):
+            new[0] = (f"{p['title']} (inline)" if cells[0].rstrip().endswith("(inline)")
+                      else f"[[plans/plan-{slug}\\|{p['title']}]]")
         if new == cells:
             return False
         lines[hit] = join_cells(new)
