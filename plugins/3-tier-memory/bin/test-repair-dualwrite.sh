@@ -78,6 +78,21 @@ python3 "$BIN/journal-compact.py" --memory-dir "$M3" --quiet >/dev/null
 check "la celda Resuelto quedo llena" \
   "$(grep -o 'p-aaaaaaaaaa_.*' "$M3/pendientes/2026-09.md" | grep -c '2026-')" "1"
 
+echo "4b. una nota de cierre con | tampoco parte la fila"
+M3b="$TMP/m3b"; nuevo_memory "$M3b"
+python3 "$BIN/repair-dualwrite.py" "$M3b" --apply --quiet
+python3 "$BIN/journal-emit.py" --memory-dir "$M3b" --type pendiente.resolve \
+  --id p-bbbbbbbbbb --estado resolved --sesion "[[sessions/cierre]]" \
+  --nota "7 filas con | reparadas" >/dev/null
+python3 "$BIN/journal-compact.py" --memory-dir "$M3b" --quiet >/dev/null
+cat > "$TMP/cuenta.py" <<'PYEOF'
+import re, sys
+s = sys.stdin.read().strip()
+print(len(re.split(r"(?<!\\)\|", s.strip("|"))))
+PYEOF
+check "la fila sigue con 7 celdas" \
+  "$(grep 'p-bbbbbbbbbb' "$M3b/pendientes/2026-08.md" | python3 "$TMP/cuenta.py")" "7"
+
 echo "5. --fix-pipes repara una fila vieja con | CRUDO"
 M4="$TMP/m4"; nuevo_memory "$M4"
 # Fila escrita por apply_add_monthly antes de escapar: 9 celdas en vez de 7.
@@ -86,13 +101,8 @@ sed -i.bak 's#^|---|---|---|---|---|---|---|#|---|---|---|---|---|---|---|\
   "$M4/pendientes/2026-09.md"
 OUT=$(python3 "$BIN/repair-dualwrite.py" "$M4" --apply --fix-pipes)
 check "reporta la fila reparada" "$(echo "$OUT" | grep -o 'pipes_fixed=[0-9]*')" "pipes_fixed=1"
-# El conteo va en su propio archivo: un regex con `\|` dentro de `python3 -c` en un `$( )`
-# pasa por dos capas de escape de shell y llega corrupto (mide `\\` en vez de `\`).
-cat > "$TMP/cuenta.py" <<'PYEOF'
-import re, sys
-s = sys.stdin.read().strip()
-print(len(re.split(r"(?<!\\)\|", s.strip("|"))))
-PYEOF
+# cuenta.py (creado arriba): un regex con `\|` dentro de `python3 -c` en un `$( )` pasa por dos
+# capas de escape de shell y llega corrupto (mide `\\` en vez de `\`).
 check "la fila quedo con 7 celdas" \
   "$(grep 'p-cccccccccc' "$M4/pendientes/2026-09.md" | python3 "$TMP/cuenta.py")" "7"
 check "sin --fix-pipes solo avisa" \

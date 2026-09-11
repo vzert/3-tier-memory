@@ -440,7 +440,9 @@ def apply_resolve_monthly(mem, p):
         return False  # ya resuelto (idempotente)
     parts = [x for x in (p.get("sesion", ""), p["estado"], p.get("nota", "")) if x]
     cells[5] = p.get("fecha") or date.today().isoformat()
-    cells[6] = " — ".join(parts)
+    # escape_cell tambien aqui: una nota de cierre con un `|` (`7 filas con | reparadas`) volvia
+    # a partir la fila en mas de 7 celdas, justo el defecto que este arreglo cierra del otro lado.
+    cells[6] = escape_cell(" — ".join(parts))
     lines[i] = "| " + " | ".join(cells) + " |"
     atomic_write(path, lines)
     return True
