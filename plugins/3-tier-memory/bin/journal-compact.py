@@ -93,7 +93,9 @@ LOG_FILE = None
 
 def log(msg):
     if LOG_FILE:
-        with open(LOG_FILE, "a", encoding="utf-8") as fh:
+        # newline="\n" tambien en el append: en modo texto, Windows escribiria CRLF y el log
+        # quedaria MEZCLADO segun donde corriera cada pasada que le anade lineas.
+        with open(LOG_FILE, "a", encoding="utf-8", newline="\n") as fh:
             fh.write(msg + "\n")
     if msg.startswith("WARN"):
         print(msg)  # el agente que corre el checkpoint tiene que verlo, con o sin --log

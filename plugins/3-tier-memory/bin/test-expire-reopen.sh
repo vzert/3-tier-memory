@@ -321,9 +321,13 @@ echo "== ronda 5: ninguna ruta de escritura del plugin convierte el salto de lin
 # cumplido. Habia SEIS rutas de escritura en bin/, y tres seguian en modo texto. Esta prueba no
 # revisa llamantes: enumera las escrituras del codigo y exige `newline=` en todas, para que una
 # septima copia no pueda entrar en silencio.
-ESCRITURAS=$(grep -n 'open([^)]*"w"' "$BIN"/*.py | grep -v '/test-' || true)
-SIN_NEWLINE=$(printf '%s\n' "$ESCRITURAS" | grep -v 'newline=' | grep -c 'open(' || true)
-chk "toda open(...,\"w\") declara newline=" "0" "$SIN_NEWLINE"
+# El patron cubre las CUATRO formas de abrir para escribir que usa este plugin: open(...,"w"),
+# open(...,"a"), os.fdopen(...) y Path.write_text. La primera version solo miraba la primera y se
+# le escapaban dos — el mismo defecto de "la prueba afirma menos que su nombre" que la ronda 5
+# confirmo contra otra prueba de este mismo fichero.
+ESCRITURAS=$(grep -nE 'open\([^)]*"[wa]"|fdopen\(|write_text\(' "$BIN"/*.py | grep -v '/test-' || true)
+SIN_NEWLINE=$(printf '%s\n' "$ESCRITURAS" | grep -v 'newline=' | grep -cE 'open\(|write_text\(' || true)
+chk "toda escritura (w/a/fdopen/write_text) declara newline=" "0" "$SIN_NEWLINE"
 if [ "$SIN_NEWLINE" != "0" ]; then printf '%s\n' "$ESCRITURAS" | grep -v 'newline=' | sed 's/^/     /'; fi
 # Y el comportamiento, no solo la forma: un fichero CRLF sobrevive a cada herramienta.
 MEMG="$T/memg"; mkdir -p "$MEMG/sessions"
