@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.14.0] - 2026-09-11
+Los ocho hallazgos confirmados de la **ronda 6** del verificador adversarial externo
+(`break ungrounded=2 unfalsified=1 incomplete=4 autonomy-violations=1 unsafe=0`).
+
+### Fixed
+- **"Exacto, cero falsos positivos" era falso.** `--check-drift` no tomaba el lock, asi que podia leer un indice que el compactador acababa de reescribir **legitimamente** pero aun no habia sellado (`compact()` sella al final, dentro del lock). Eso producia un `FUERA DEL JOURNAL` falso y una linea falsa en `out-of-band.log`. Ahora `--check-drift` y `--reseal` toman el lock; si esta ocupado, no comprueban nada (hay un compactador trabajando y el sellara). Prueba nueva **con control negativo**: con el lock ajeno tomado no inventa deriva, y liberado si la ve.
+- **La huella no veia un indice BORRADO ni un mensual creado a mano.** `indices_protegidos()` solo devolvia ficheros existentes y `detectar_fuera_de_banda()` saltaba las rutas sin huella previa — asi que borrar `_pendientes.md` entero, la escritura destructiva mas grave que hay, no disparaba nada. Ahora se reportan como `(BORRADO)` y `(nuevo, no lo creo el compactador)`.
+- **Borrar `_pendientes.md` dejaba al plugin ciego**: diez scripts lo usan como centinela para localizar `memory/`. La deteccion mira ahora tambien `.journal/`, en `bash-journal-nudge.sh` y en `resolve_memory_dir()` del compactador. Los otros ocho scripts siguen con el criterio viejo.
+- **La compuerta de mtime perdia escrituras del mismo segundo.** `find -newer` exige marca estrictamente posterior; en un sistema con resolucion de 1 s una escritura empatada con el sellado no se veia. Se compara `>=` con `stat`, y un indice borrado (sin mtime que comparar) se detecta por el numero de ficheros frente al de huellas.
+- **`enrich-memory.py` tampoco re-sellaba** (ya en 2.13.5), y es el que `/triage-3t` manda correr antes del barrido.
+
+### Changed
+- **El detector de escritores dejo de adivinar.** Cuatro intentos de deducir por analisis de texto quien escribe un indice salieron cortos; el ultimo no veia `normalize-pendientes.py`, que hace `(jc.replace_with_retry if jc is not None else os.replace)(tmp, path)` — una forma que ninguna regex razonable iba a cazar. Ahora cada script que nombre un indice **declara** `# sella-huellas: si` o `# sella-huellas: no (razon)`, y `bin/check-index-writers.py` lo exige. Un falso positivo cuesta una linea de comentario; un script nuevo que lo olvide falla la prueba. Cuando dice `si`, se comprueba ademas que la llamada exista fuera de comentarios y docstrings — un marcador sin consumidor seria la no-evidencia que este repo lleva seis rondas persiguiendo. 18 scripts declarados.
+
+### Added
+- Regresion para `6912ce4` (commit de otra sesion que entro sin prueba propia): `plan.upsert --title` actualiza la celda 0 y **respeta su forma** — wikilink sigue wikilink, `(inline)` sigue `(inline)`. Verificado que discrimina: desactivando solo ese bloque fallan 2 aserciones.
+- `bin/check-index-writers.py`. Suite `test-bash-nudge.sh` de 23 a **40** aserciones.
+
+### Notas
+- La ronda 6 **no pudo correr las suites**: `mktemp` fallo con `Operation not permitted` en su sandbox, igual que en la ronda 4. Los numeros de `.goalspec/ronda6-suites.out` los produjo el ejecutor, no una ejecucion independiente. Queda declarado, no resuelto.
+- **Primera violacion de autonomia en seis rondas**, y es correcta: el modal que se le presento al humano ofrecia huella / bloqueo en Bash / ambos / documentar, y **omitia el aviso no bloqueante en Bash** — que es la opcion que el humano acabo pidiendo por su cuenta. La decision se le asigno, pero su respuesta no estaba en el menu.
+
 ## [2.13.5] - 2026-09-11
 ### Fixed
 - **`enrich-memory.py --apply` tampoco re-sellaba, y es la herramienta que `/triage-3t` manda correr antes del barrido.** Tercera con el mismo fallo tras `repair-dualwrite` y `normalize-pendientes` (2.13.3): seguir la propia instruccion del plugin producia un aviso de "escritura fuera del journal". Arreglar las dos que encontre no fue enumerarlas — que es literalmente la **regla 114** de este repo, escrita dos versiones antes.

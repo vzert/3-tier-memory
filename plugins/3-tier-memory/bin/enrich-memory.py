@@ -29,6 +29,7 @@ Usage:
 Output: a human-readable preview/report to stdout, ending with a one-line machine summary
 (`SUMMARY creado_added=.. importance_added=.. skipped_no_frontmatter=..`).
 """
+# sella-huellas: si
 import os
 import re
 import sys

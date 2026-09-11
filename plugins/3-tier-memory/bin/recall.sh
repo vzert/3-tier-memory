@@ -1,4 +1,5 @@
 #!/bin/bash
+# sella-huellas: no (hook de solo lectura: inyecta contexto)
 # 3-tier-memory plugin: UserPromptSubmit hook — relevance recall.
 # Surfaces the memory units most relevant to the user's prompt, scored by
 # lexical overlap (BM25-lite) × recency decay × importance. Silent when nothing

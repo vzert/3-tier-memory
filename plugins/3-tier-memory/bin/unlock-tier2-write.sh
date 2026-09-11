@@ -1,4 +1,5 @@
 #!/bin/bash
+# sella-huellas: no (solo borra el directorio del lock)
 # 3-tier-memory plugin: PostToolUse + PostToolUseFailure hook (Write|Edit)
 # Releases the lock acquired by lock-tier2-write.sh (PreToolUse) for the same file.
 # Registered under BOTH events: PostToolUse fires only on tool success, so a failed

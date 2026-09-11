@@ -1,4 +1,5 @@
 #!/bin/bash
+# sella-huellas: no (hook de solo lectura)
 # 3-tier-memory plugin: SessionEnd hook
 # Reminds to checkpoint if no checkpoint was saved this session
 

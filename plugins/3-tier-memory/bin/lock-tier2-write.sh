@@ -1,4 +1,5 @@
 #!/bin/bash
+# sella-huellas: no (solo escribe los marcadores del propio lock en .lock/)
 # 3-tier-memory plugin: PreToolUse hook (Write|Edit)
 # Mutual-exclusion lock for the 5 Tier-2 index files, so concurrent agents/sessions
 # on the same project don't corrupt a shared file with an interleaved read-modify-write.

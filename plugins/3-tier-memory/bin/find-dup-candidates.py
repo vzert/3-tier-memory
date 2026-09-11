@@ -29,6 +29,7 @@ Output (stdout): a single JSON object
     }
 Exit 0 always (empty arrays when index missing/empty) so callers never crash.
 """
+# sella-huellas: no (solo lee y reporta candidatos a duplicado)
 import json
 import os
 import sys

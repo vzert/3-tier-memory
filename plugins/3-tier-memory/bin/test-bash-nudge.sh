@@ -7,7 +7,7 @@
 # `printf '%s'`. (Me mordio al escribir esto, 2026-09-11.)
 set -e
 BIN="$(cd "$(dirname "$0")" && pwd)"
-T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+T=$(mktemp -d); trap 'rm -rf "$T"; rm -f "$BIN/tmp-test-escritor.py"' EXIT
 pass=0; fail=0
 chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: esperaba '$2', salio '$3'"; fi; }
 
@@ -73,22 +73,6 @@ R=$(python3 "$BIN/journal-compact.py" --memory-dir "$P/memory" --reseal 2>&1)
 chk "reseal acepta el cambio"  "1" "$(printf '%s' "$R" | grep -c 'aceptados como linea base')"
 chk "y despues no hay deriva"  callado "$(post)"
 
-echo "== ENUMERAR los escritores legitimos, no arreglar los que uno encuentra =="
-# La regla 114 de este repo: revisar los llamantes no prueba que sean todos. 2.13.3 arreglo
-# repair-dualwrite y normalize-pendientes; enrich-memory se quedo fuera y lo encontre preparando
-# la ronda 6 — justo la herramienta que /triage-3t manda correr antes del barrido. Esta prueba
-# recorre TODOS los .py de bin/ y exige que el que escriba un indice re-selle.
-FALTAN=""
-for f in "$BIN"/*.py; do
-  n=$(basename "$f" .py)
-  case "$n" in journal-compact) continue ;; esac
-  # escribe un indice protegido de forma directa?
-  if grep -qE 'atomic_write\(|escribir_preservando\(' "$f" &&      grep -qE '_pendientes\.md|_learnings\.md|_session-index\.md|_plans-index\.md|_research-index\.md' "$f"; then
-    grep -q 'guardar_huellas' "$f" || FALTAN="$FALTAN $n"
-  fi
-done
-chk "todo escritor directo de un indice re-sella" "" "$FALTAN"
-
 echo "== y el comportamiento, no solo la forma: enrich-memory no dispara el aviso =="
 E="$T/enr"; mkdir -p "$E/pendientes" "$E/sessions"
 printf -- '---\ntype: index\n---\n# Pendientes\n\n## Media prioridad\n\n- [ ] sin id ni creado\n' > "$E/_pendientes.md"
@@ -99,6 +83,88 @@ chk "enrich-memory --apply NO dispara"  "0" "$(printf '%s' "$O1" | grep -c 'FUER
 printf -- '- [ ] a mano\n' >> "$E/_pendientes.md"
 O2=$(python3 "$BIN/journal-compact.py" --memory-dir "$E" --check-drift 2>&1)
 chk "control negativo: a mano SI dispara" "1" "$(printf '%s' "$O2" | grep -c 'FUERA DEL JOURNAL')"
+
+echo "== todo script que nombre un indice declara si re-sella (no lo adivinamos) =="
+# Cuatro intentos de detectar la escritura por analisis de texto salieron cortos (el ultimo no
+# veia normalize-pendientes, que hace `(jc.replace_with_retry if ... else os.replace)(tmp, path)`).
+# El detector dejo de adivinar: cada script lo DECLARA, y uno nuevo que lo olvide falla.
+#
+# Todo esto corre sobre una COPIA de bin/ en el temporal. La primera version mutaba
+# enrich-memory.py en su sitio y lo restauraba despues: al abortar `set -e` a mitad, dejo el
+# fichero VERSIONADO roto. Un test no toca el arbol de trabajo.
+CBIN="$T/bin"; cp -R "$BIN" "$CBIN"
+rc=0; python3 "$BIN/check-index-writers.py" "$CBIN" >/dev/null 2>&1 || rc=$?
+chk "ningun script sin declarar ni mal etiquetado" "0" "$rc"
+
+cat > "$CBIN/nuevo-escritor.py" <<'TMPEOF'
+#!/usr/bin/env python3
+"""fixture: escribe _pendientes.md y no declara nada"""
+def w(mem):
+    atomic_write(mem + "/_pendientes.md", ["x"])
+TMPEOF
+rc=0; python3 "$BIN/check-index-writers.py" "$CBIN" >/dev/null 2>&1 || rc=$?
+chk "escritor nuevo sin marcador -> falla"        "1" "$rc"
+rm -f "$CBIN/nuevo-escritor.py"
+
+python3 - "$CBIN/enrich-memory.py" <<'TMPEOF'
+import io, re, sys
+p = sys.argv[1]; s = io.open(p, encoding="utf-8").read()
+io.open(p, "w", encoding="utf-8").write(re.sub(r'guardar_huellas\s*\(', 'NADA(', s))
+TMPEOF
+OUT=$(python3 "$BIN/check-index-writers.py" "$CBIN" 2>&1 || true)
+chk "marcador 'si' sin la llamada -> lo delata"   "1" "$(printf '%s' "$OUT" | grep -c 'MARCADOR FALSO')"
+
+echo "== carrera: --check-drift con el lock tomado no inventa deriva =="
+# La ronda 6 rompio "exacto, cero falsos positivos": sin lock, --check-drift podia leer un indice
+# que el compactador acababa de reescribir y aun no habia sellado.
+MEMR="$T/memr"; mkdir -p "$MEMR/pendientes" "$MEMR/.journal"
+printf -- '---\ntype: index\n---\n# Pendientes\n\n## Media prioridad\n\n' > "$MEMR/_pendientes.md"
+python3 "$BIN/journal-compact.py" --memory-dir "$MEMR" --check-drift >/dev/null 2>&1
+# simular un compactador a mitad: lock tomado + indice ya reescrito, sin sellar todavia
+mkdir -p "$MEMR/.journal/.lock"; date +%s > "$MEMR/.journal/.lock/acquired_at"; echo otro > "$MEMR/.journal/.lock/owner"
+printf -- '- [ ] lo escribio el compactador, aun sin sellar\n' >> "$MEMR/_pendientes.md"
+D=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMR" --check-drift --budget 1 2>&1)
+chk "con el lock ajeno tomado -> NO inventa deriva" "0" "$(printf '%s' "$D" | grep -c 'FUERA DEL JOURNAL')"
+chk "y no escribio nada en out-of-band.log"         "0" "$([ -f "$MEMR/.journal/out-of-band.log" ] && grep -c . "$MEMR/.journal/out-of-band.log" || echo 0)"
+rm -rf "$MEMR/.journal/.lock"
+D2=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMR" --check-drift 2>&1)
+chk "liberado el lock, SI lo ve (control negativo)" "1" "$(printf '%s' "$D2" | grep -c 'FUERA DEL JOURNAL')"
+
+echo "== indices borrados y mensuales creados a mano =="
+MEMS="$T/mems"; mkdir -p "$MEMS/pendientes"
+printf -- '# Pendientes\n' > "$MEMS/_pendientes.md"; printf -- '# L\n' > "$MEMS/_learnings.md"
+python3 "$BIN/journal-compact.py" --memory-dir "$MEMS" --check-drift >/dev/null 2>&1
+rm "$MEMS/_learnings.md"
+D3=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMS" --check-drift 2>&1)
+chk "un indice BORRADO se delata"                   "1" "$(printf '%s' "$D3" | grep -c 'BORRADO')"
+printf -- '# L\n' > "$MEMS/_learnings.md"; python3 "$BIN/journal-compact.py" --memory-dir "$MEMS" --reseal >/dev/null 2>&1
+printf -- '# nuevo a mano\n' > "$MEMS/pendientes/2030-01.md"
+D4=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMS" --check-drift 2>&1)
+chk "un mensual creado a mano se delata"            "1" "$(printf '%s' "$D4" | grep -c 'nuevo, no lo creo el compactador')"
+
+echo "== plan.upsert --title actualiza la celda 0 y respeta su forma (6912ce4) =="
+# Commit de otra sesion que entro en main sin regresion propia; lo marco el adversario en la
+# ronda 6. `--title` se aceptaba y se ignoraba al actualizar: el indice conservaba el titulo con
+# el que nacio el plan. Un campo sin lector, que es lo que este repo lleva seis rondas cazando.
+MEMP="$T/memp"; mkdir -p "$MEMP/plans" "$MEMP/pendientes"
+printf -- '---\ntype: index\n---\n# Plans\n\n## Plans\n\n| Plan | Status | Fecha | Sesion | Pendientes | Learnings |\n|---|---|---|---|---|---|\n' > "$MEMP/_plans-index.md"
+printf -- '---\ntype: index\n---\n# Pendientes\n\n## Media prioridad\n\n' > "$MEMP/_pendientes.md"
+python3 "$BIN/journal-emit.py" --memory-dir "$MEMP" --type plan.upsert --slug xy --title "Titulo viejo" --status active >/dev/null 2>&1
+python3 "$BIN/journal-compact.py" --memory-dir "$MEMP" --quiet >/dev/null 2>&1
+chk "el titulo inicial entra"          "1" "$(grep -c 'Titulo viejo' "$MEMP/_plans-index.md")"
+python3 "$BIN/journal-emit.py" --memory-dir "$MEMP" --type plan.upsert --slug xy --title "Titulo nuevo" --status completed >/dev/null 2>&1
+python3 "$BIN/journal-compact.py" --memory-dir "$MEMP" --quiet >/dev/null 2>&1
+chk "al actualizar, el titulo CAMBIA"  "1" "$(grep -c 'Titulo nuevo' "$MEMP/_plans-index.md")"
+chk "y el viejo desaparece"            "0" "$(grep -c 'Titulo viejo' "$MEMP/_plans-index.md")"
+chk "conserva la forma de wikilink"    "1" "$(grep -c 'plans/plan-xy' "$MEMP/_plans-index.md")"
+chk "y no duplica la fila"             "1" "$(grep -c '| xy\|plan-xy' "$MEMP/_plans-index.md")"
+# la variante (inline) tiene que conservar SU forma, no convertirse en enlace
+python3 "$BIN/journal-emit.py" --memory-dir "$MEMP" --type plan.upsert --slug zz --title "Inline viejo" --status active --inline >/dev/null 2>&1
+python3 "$BIN/journal-compact.py" --memory-dir "$MEMP" --quiet >/dev/null 2>&1
+python3 "$BIN/journal-emit.py" --memory-dir "$MEMP" --type plan.upsert --slug zz --title "Inline nuevo" --status active --inline >/dev/null 2>&1
+python3 "$BIN/journal-compact.py" --memory-dir "$MEMP" --quiet >/dev/null 2>&1
+chk "inline: el titulo cambia"         "1" "$(grep -c 'Inline nuevo' "$MEMP/_plans-index.md")"
+chk "inline: sigue siendo (inline), no un enlace" "1" "$(grep -c 'Inline nuevo (inline)' "$MEMP/_plans-index.md")"
 
 echo "RESULT pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

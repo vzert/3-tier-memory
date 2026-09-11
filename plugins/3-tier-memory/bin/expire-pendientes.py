@@ -51,6 +51,7 @@ EXCLUSIONES (se cuentan y se imprimen; no se archivan)
     - `_revisar:` en el futuro  -> el item declara su propia ventana y aun no vence
     - `_no-caduca_`             -> marca explicita del usuario
 """
+# sella-huellas: no (emite eventos con journal-emit; el compactador escribe y sella)
 import argparse
 import os
 import re

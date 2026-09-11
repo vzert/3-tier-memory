@@ -15,6 +15,7 @@ Output: one JSON object per line, each with:
 
 Zero third-party dependencies. Tolerant of legacy files missing new fields.
 """
+# sella-huellas: no (escribe recall-index.jsonl, un artefacto generado, no un indice)
 import json
 import os
 import re

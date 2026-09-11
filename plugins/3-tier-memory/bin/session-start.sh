@@ -1,4 +1,5 @@
 #!/bin/bash
+# sella-huellas: no (lee e invoca a otros; los indices los escribe el compactador)
 # 3-tier-memory plugin: SessionStart hook
 # Injects open pendientes AND learnings at session start
 

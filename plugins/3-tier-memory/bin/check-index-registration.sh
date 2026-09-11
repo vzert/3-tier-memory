@@ -1,4 +1,5 @@
 #!/bin/bash
+# sella-huellas: no (hook de solo lectura: compara y avisa)
 # 3-tier-memory plugin: PostToolUse hook (Write|Edit)
 # Detects files written to memory/ subdirectories that aren't registered in their index
 

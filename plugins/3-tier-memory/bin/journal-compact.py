@@ -198,11 +198,13 @@ def resolve_memory_dir(explicit):
         return os.path.abspath(cand)
     proj = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
     local = os.path.join(proj, "memory")
-    if os.path.isfile(os.path.join(local, "_pendientes.md")):
+    # .journal/ tambien vale como centinela: si alguien borro _pendientes.md, este es justo el
+    # momento en que hay que poder decirlo, no el momento de quedarse ciego. (Ronda 6.)
+    if os.path.isfile(os.path.join(local, "_pendientes.md")) or os.path.isdir(os.path.join(local, ".journal")):
         return local
     encoded = re.sub(r"[^A-Za-z0-9]", "-", os.path.abspath(proj))
     auto = os.path.join(os.path.expanduser("~"), ".claude", "projects", encoded, "memory")
-    if os.path.isfile(os.path.join(auto, "_pendientes.md")):
+    if os.path.isfile(os.path.join(auto, "_pendientes.md")) or os.path.isdir(os.path.join(auto, ".journal")):
         return auto
     return local
 
@@ -1259,14 +1261,23 @@ def detectar_fuera_de_banda(mem, journal):
     prev = leer_huellas(journal)
     if not prev:
         return []
+    ahora = indices_protegidos(mem)
     fuera = []
-    for rel in indices_protegidos(mem):
+    for rel in ahora:
         p = prev.get(rel)
-        if not p:
+        if p is None:
+            # Fichero que existe y no estaba sellado. Un mensual NUEVO lo crea el compactador y
+            # sella al terminar, asi que verlo aqui significa que lo puso otro. (Ronda 6.)
+            fuera.append(f"{rel} (nuevo, no lo creo el compactador)")
             continue
         h = huella(os.path.join(mem, rel))
         if h and h != p:
             fuera.append(rel)
+    # Y los que DESAPARECIERON. Era el hueco mas grave: borrar _pendientes.md entero no disparaba
+    # nada, porque indices_protegidos() solo devuelve los que existen. (Ronda 6.)
+    for rel in prev:
+        if rel not in ahora:
+            fuera.append(f"{rel} (BORRADO)")
     return fuera
 
 
@@ -1393,8 +1404,14 @@ def main():
         # contradecia: te manda editar a mano un fichero cuyo contrato es que no se edita a mano,
         # y luego te denuncia por haberlo hecho.
         journal = os.path.join(mem, ".journal")
-        antes = detectar_fuera_de_banda(mem, journal)
-        guardar_huellas(mem, journal)
+        lock = Lock(journal, min(a.budget, 5.0))
+        if not lock.acquire():
+            sys.exit("journal-compact: el journal esta ocupado; reintenta el --reseal en un momento")
+        try:
+            antes = detectar_fuera_de_banda(mem, journal)
+            guardar_huellas(mem, journal)
+        finally:
+            lock.release()
         if antes:
             print(f"resellado: {len(antes)} indice(s) aceptados como linea base nueva: "
                   + ", ".join(antes))
@@ -1405,13 +1422,29 @@ def main():
         # Entrada propia porque session-start.sh solo llama al compactador cuando pending/ tiene
         # algo, y la deriva que interesa es justo la de una sesion que NO dejo eventos.
         journal = os.path.join(mem, ".journal")
-        fuera = detectar_fuera_de_banda(mem, journal)
-        if fuera:
-            anotar_fuera_de_banda(journal, fuera)
-            avisar_fuera_de_banda(fuera)
-            guardar_huellas(mem, journal)   # re-sella: el aviso sale una vez, no en cada sesion
-        elif not leer_huellas(journal):
-            guardar_huellas(mem, journal)   # primera vez: sellar en silencio
+        # SI toma el lock, y lo dijo el adversario en la ronda 6: sin el, esta comprobacion puede
+        # leer un indice que un compactador concurrente ACABA de reescribir legitimamente pero
+        # todavia no ha sellado (compact() sella al final, dentro del lock). Eso producia un
+        # "FUERA DEL JOURNAL" falso y una linea falsa en out-of-band.log — es decir, la afirmacion
+        # "exacto, cero falsos positivos" era falsa. Si el lock esta ocupado no se comprueba nada:
+        # hay un compactador trabajando y el sellara al terminar.
+        lock = Lock(journal, min(a.budget, 2.0))
+        if not lock.acquire():
+            sys.exit(0)
+        try:
+            fuera = detectar_fuera_de_banda(mem, journal)
+        finally:
+            lock.release()
+        if fuera or not leer_huellas(journal):
+            lock2 = Lock(journal, min(a.budget, 2.0))
+            if lock2.acquire():
+                try:
+                    if fuera:
+                        anotar_fuera_de_banda(journal, fuera)
+                        avisar_fuera_de_banda(fuera)
+                    guardar_huellas(mem, journal)   # el aviso sale una vez, no en cada sesion
+                finally:
+                    lock2.release()
         sys.exit(0)
     sys.exit(compact(mem, a.budget, a.quiet))
 

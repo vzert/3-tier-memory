@@ -49,6 +49,7 @@ Nunca descarta un evento en silencio.
 Variables: MEMORY_DIR (o --memory-dir) apunta al directorio memory/. Si no se da, se busca
 ./memory y luego el auto-memory de Claude Code para el cwd.
 """
+# sella-huellas: no (escribe eventos en .journal/pending, nunca un indice)
 import argparse
 import hashlib
 import json

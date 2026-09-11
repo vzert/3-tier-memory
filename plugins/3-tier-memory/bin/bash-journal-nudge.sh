@@ -1,4 +1,5 @@
 #!/bin/bash
+# sella-huellas: no (hook de solo lectura: avisa, no escribe)
 # 3-tier-memory: aviso (NUNCA bloqueo) cuando Bash escribe un indice del journal. v2.13.4
 #
 # POR QUE EXISTE. journal_strict es un hook PreToolUse con matcher Edit|Write|MultiEdit, y Bash no
@@ -27,11 +28,15 @@
 
 source "$(dirname "$0")/resolve-project-dir.sh"
 
-if [ -f "$CLAUDE_PROJECT_DIR/memory/_pendientes.md" ]; then
+# La deteccion mira tambien .journal/, no solo _pendientes.md. Diez scripts del plugin usan ese
+# fichero como centinela para localizar memory/, asi que BORRARLO deja al plugin entero ciego —
+# justo la escritura fuera del journal mas destructiva que hay. Aqui no. (Ronda 6.)
+if [ -f "$CLAUDE_PROJECT_DIR/memory/_pendientes.md" ] || [ -d "$CLAUDE_PROJECT_DIR/memory/.journal" ]; then
   MEMORY_DIR="$CLAUDE_PROJECT_DIR/memory"
 elif [ -d "$HOME/.claude/projects" ]; then
   ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
-  [ -f "$HOME/.claude/projects/$ENCODED/memory/_pendientes.md" ] && MEMORY_DIR="$HOME/.claude/projects/$ENCODED/memory"
+  A="$HOME/.claude/projects/$ENCODED/memory"
+  { [ -f "$A/_pendientes.md" ] || [ -d "$A/.journal" ]; } && MEMORY_DIR="$A"
 fi
 [ -z "${MEMORY_DIR:-}" ] && exit 0
 [ -d "$MEMORY_DIR/.journal" ] || exit 0     # el proyecto no usa el journal: nada que decir
@@ -49,9 +54,27 @@ if [ "$EVENT" = "PostToolUse" ]; then
   # Compuerta barata: solo llamar a python si algun indice es mas nuevo que la huella.
   FP="$MEMORY_DIR/.journal/fingerprints.json"
   [ -f "$FP" ] || exit 0
-  NEWER=$(find "$MEMORY_DIR" -maxdepth 2 \( -name '_*.md' -o -path '*/pendientes/2*.md' \) \
-          -newer "$FP" -print -quit 2>/dev/null)
-  [ -z "$NEWER" ] && exit 0
+  # `find -newer` exige marca ESTRICTAMENTE posterior, asi que en un sistema con mtime de 1 s una
+  # escritura en el mismo segundo que el sellado empata y no se ve. Se compara `>=` con stat.
+  # (Ronda 6.) Peor caso si stat no esta: se llama a python siempre, que es correcto y solo cuesta.
+  _mt() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null; }
+  FPM=$(_mt "$FP")
+  if [ -n "$FPM" ]; then
+    NEWER=""
+    for f in "$MEMORY_DIR"/_*.md "$MEMORY_DIR"/pendientes/2*.md; do
+      [ -f "$f" ] || continue
+      m=$(_mt "$f"); [ -n "$m" ] || continue
+      [ "$m" -ge "$FPM" ] && { NEWER=1; break; }
+    done
+    # Un indice BORRADO no tiene mtime que comparar: si el numero de ficheros no cuadra con el de
+    # huellas selladas, hay que mirar igual.
+    if [ -z "$NEWER" ]; then
+      NF=$(ls "$MEMORY_DIR"/_*.md "$MEMORY_DIR"/pendientes/2*.md 2>/dev/null | wc -l | tr -d ' ')
+      NH=$(grep -c '": "' "$FP" 2>/dev/null || echo 0)
+      [ "$NF" != "$NH" ] && NEWER=1
+    fi
+    [ -z "$NEWER" ] && exit 0
+  fi
   python3 "$(dirname "$0")/journal-compact.py" --memory-dir "$MEMORY_DIR" --check-drift 2>/dev/null
   exit 0
 fi

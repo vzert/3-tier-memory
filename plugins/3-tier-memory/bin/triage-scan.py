@@ -42,6 +42,7 @@ USO
 SALIDA POR ITEM
     id · prioridad · edad · origen · ventana(_revisar:) · sesiones posteriores que mencionan el tema
 """
+# sella-huellas: no (solo lee _pendientes.md y reporta; el barrido cierra por eventos)
 import argparse
 import glob
 import hashlib

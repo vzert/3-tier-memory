@@ -31,6 +31,7 @@ Uso: normalize-pendientes.py MEMORY_DIR [--apply] [--quiet] [--budget SEG]
   Sin --apply solo informa. Salida: `headers_added=N (Alta prioridad, ...)` o nada con --quiet
   si N=0. Exit 0 siempre que el archivo exista o no (fail-open: es un hook de SessionStart).
 """
+# sella-huellas: si
 import argparse
 import importlib.util
 import os

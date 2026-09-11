@@ -1,4 +1,5 @@
 #!/bin/bash
+# sella-huellas: no (hook de solo lectura)
 # 3-tier-memory plugin: PreCompact hook
 # Injects urgent checkpoint reminder before context compaction
 

@@ -1,4 +1,5 @@
 #!/bin/bash
+# sella-huellas: no (hook de solo lectura: decide un deny, no escribe)
 # 3-tier-memory plugin: PreToolUse hook (Edit|Write|MultiEdit) — guardia estricta del journal (v2.12.0)
 #
 # OFF por defecto. Solo actua si memory/.memory-config contiene `journal_strict=1`. En ese caso

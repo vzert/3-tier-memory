@@ -60,6 +60,7 @@ Uso: repair-dualwrite.py MEMORY_DIR [--apply] [--fix-pipes] [--quiet] [--budget 
 
 Pruebas: test-repair-dualwrite.sh (cubre las dos perdidas, la idempotencia y el id conservado).
 """
+# sella-huellas: si
 import argparse
 import hashlib
 import importlib.util

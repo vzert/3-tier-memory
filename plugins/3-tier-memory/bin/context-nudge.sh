@@ -1,4 +1,5 @@
 #!/bin/bash
+# sella-huellas: no (solo escribe su propio fichero de estado del aviso)
 # 3-tier-memory plugin: UserPromptSubmit hook — context-aware checkpoint nudge.
 #
 # Suggests /checkpoint-3t when the conversation crosses a configurable fraction of the
