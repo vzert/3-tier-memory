@@ -43,7 +43,7 @@ lo ha tocado"*. Dispara en el **14-26%** de los items (medido en 4 instalaciones
 aparece, vale la pena abrir ese session file. **No es un veredicto**: es un puntero a que leer.
 
 Si el usuario pidio una prioridad o un lote concreto, pasa `--prioridad Alta` o
-`--desde FECHA:ID --limit N`. Sin argumentos: los 25 mas viejos.
+`--desde FECHA:ID:DIGITO --limit N`. Sin argumentos: los 25 mas viejos.
 
 ## Step 2 — Leer cada item y clasificar
 
@@ -121,9 +121,17 @@ antes de seguir con el lote siguiente.
 
 ## Step 5 — Siguiente lote o cierre
 
-`triage-scan.py` imprime el cursor del lote siguiente: **`--desde FECHA:ID`** — el par
-`(_creado, _id)` del ultimo item mostrado, no una posicion. **Copialo tal cual**; el script rechaza
-un id inventado o uno que ya no este abierto, en vez de saltarse items en silencio.
+`triage-scan.py` imprime el cursor del lote siguiente: **`--desde FECHA:ID:DIGITO`** — el par
+`(_creado, _id)` del ultimo item mostrado, no una posicion, mas un digito de control.
+
+**Copialo tal cual, entero, incluido el digito.** Lo que el script hace exactamente, ni mas ni menos:
+
+- **Rechaza** un id con forma invalida.
+- **Rechaza** un cursor cuyo digito no cuadre con su id — es decir, uno escrito de memoria en vez
+  de copiado. Sin esa comprobacion, un id inventado se saltaba en silencio todo lo de esa fecha
+  con id menor.
+- **NO rechaza** un id que ya no este abierto, y es deliberado: cerrarlo es justo lo que hace el
+  barrido. Solo avisa. El corte `(fecha, id)` es exacto aunque ese item ya no exista.
 
 Nunca un `--offset` numerico: al cerrar items del lote la lista se acorta y el offset se saltaria
 los que ocupan los huecos. El corte del cursor es **estricto**, asi que ni repite ni salta, tambien

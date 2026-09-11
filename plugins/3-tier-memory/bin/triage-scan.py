@@ -21,9 +21,12 @@ PAGINACION POR CURSOR ESTABLE, NO POR POSICION
     Un `--offset` numerico se rompe en cuanto el lote anterior cierra items: la lista se acorta,
     todo se corre hacia adelante y el lote siguiente **se salta** los que ocuparon los huecos.
 
-    El cursor es `--desde <fecha>:<id>` — la clave de orden del ultimo item mostrado. Ni la fecha
-    de creacion ni el id cambian porque otros items se cierren, y el par es unico, asi que el lote
-    siguiente empieza EXACTAMENTE despues del ultimo visto: ni repite ni salta.
+    El cursor es `--desde <fecha>:<id>:<digito>` — la clave de orden del ultimo item mostrado, mas
+    un digito de control. Ni la fecha de creacion ni el id cambian porque otros items se cierren,
+    y el par es unico, asi que el lote siguiente empieza EXACTAMENTE despues del ultimo visto: ni
+    repite ni salta. El digito distingue un cursor COPIADO de uno TECLEADO: no se puede exigir que
+    el id siga abierto (cerrarlo es justo lo que hace el barrido), pero un id que nunca existio se
+    saltaria en silencio todo lo de esa fecha con id menor. (Ronda 4 del adversario.)
 
     Una primera version usaba solo la fecha y era **inclusiva**: con mas items del mismo dia que
     `--limit`, y si el usuario los dejaba abiertos, el mismo lote se repetia para siempre y los
@@ -32,7 +35,7 @@ PAGINACION POR CURSOR ESTABLE, NO POR POSICION
     id, y los items sin fecha van al final con la clave `SIN`, alcanzables como cualquier otro.
 
 USO
-    triage-scan.py [--memory-dir DIR] [--desde FECHA:ID] [--limit 25] [--prioridad Alta]
+    triage-scan.py [--memory-dir DIR] [--desde FECHA:ID:DIGITO] [--limit 25] [--prioridad Alta]
     triage-scan.py --tsv > barrido.tsv
 
 SALIDA POR ITEM
@@ -40,6 +43,7 @@ SALIDA POR ITEM
 """
 import argparse
 import glob
+import hashlib
 import os
 import re
 import sys
@@ -102,12 +106,38 @@ def cargar_sesiones(mem):
     return out
 
 
+def sintetico(texto):
+    """Id sintetico de un item sin `_id`, derivado de su texto y no de su posicion en el fichero."""
+    # Solo se colapsan los espacios: `norm()` quita acentos y puntuacion, y eso haria colisionar
+    # items realmente distintos. Aqui hace falta identidad, no parecido.
+    base = re.sub(r"\s+", " ", unicodedata.normalize("NFC", texto)).strip()
+    h = hashlib.sha1(base.encode("utf-8")).hexdigest()[:10]
+    return f"sin-id-{h}"
+
+
+def digito(cid):
+    """Digito de control del cursor: ata el id al lote que lo imprimio.
+
+    Existe por un hallazgo de la ronda 4. NO se puede exigir que el id del cursor siga abierto —
+    cerrarlo es justo lo que hace el barrido, y la ronda 3 ya descarto esa via — pero tampoco se
+    podia distinguir un id CERRADO (legitimo) de uno INVENTADO (que se salta en silencio todo lo
+    de esa fecha con id menor). El digito los separa: un cursor copiado lo trae aunque su item ya
+    no exista, y uno tecleado de memoria no. El modelo de amenaza es la fabricacion ACCIDENTAL
+    — Claude escribiendo un id plausible en vez de copiarlo, que ya paso en este sistema
+    (commit e90c87a) — no la falsificacion deliberada, contra la que un digito no protege.
+    """
+    return hashlib.sha1(f"triage-cursor:{cid}".encode("utf-8")).hexdigest()[:4]
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--memory-dir")
-    ap.add_argument("--desde", metavar="FECHA:ID",
-                    help="cursor estable que imprime el lote previo (p.ej. 2026-04-02:p-ab12cd34ef)")
+    ap.add_argument("--desde", metavar="FECHA:ID:DIGITO",
+                    help="cursor estable que imprime el lote previo, copiado TAL CUAL "
+                         "(p.ej. 2026-04-02:p-ab12cd34ef:9f3c). El digito del final ata el cursor "
+                         "al lote que lo imprimio; sin el, un id tecleado de memoria se saltaria "
+                         "items en silencio")
     ap.add_argument("--limit", type=int, default=25)
     ap.add_argument("--prioridad", choices=("Alta", "Media", "Baja"))
     ap.add_argument("--tsv", action="store_true", help="salida completa en TSV, sin paginar")
@@ -120,7 +150,7 @@ def main():
     hoy = date.today()
     sesiones = cargar_sesiones(mem)
 
-    items, prio, sin_id = [], "?", 0
+    items, prio, sin_id = [], "?", {}
     for raw in open(path, encoding="utf-8", errors="replace"):
         h = re.match(r"^##+\s*(.+)", raw)
         if h:
@@ -149,11 +179,18 @@ def main():
                 if fecha > creado and len(w & palabras) / len(w) >= 0.5:
                     posteriores.append(slug)
         if not mi:
-            # Sin `_id` no hay desempate estable: se les da uno sintetico y unico por posicion,
-            # para que el cursor no los confunda entre si. (Adversario, ronda 3.)
-            sin_id += 1
+            # Sin `_id` no hay desempate estable. La ronda 3 les dio uno sintetico por POSICION,
+            # y la ronda 4 lo rompio: la posicion cambia cuando se cierra un item anterior, asi
+            # que `sin-id-0002` pasaba a ser `sin-id-0001` y el corte estricto se lo saltaba para
+            # siempre. Ahora sale del TEXTO del item, que no depende de que haya alrededor.
+            # Dos items de texto identico colisionan a proposito: son indistinguibles para el
+            # cursor de todas formas, y el sufijo los separa de forma estable mientras ellos lo sean.
+            clave_txt = sintetico(texto)
+            sin_id[clave_txt] = sin_id.get(clave_txt, 0) + 1
+            n_rep = sin_id[clave_txt]
+            sid = clave_txt if n_rep == 1 else f"{clave_txt}-{n_rep}"
         items.append({
-            "id": mi.group(1) if mi else f"sin-id-{sin_id:04d}",
+            "id": mi.group(1) if mi else sid,
             "prio": prio,
             "edad": (hoy - creado).days if creado else None,
             "creado": creado,
@@ -172,27 +209,33 @@ def main():
 
     def cursor_de(i):
         c = i["creado"].isoformat() if i["creado"] else "SIN"
-        return f"{c}:{i['id']}"
+        return f"{c}:{i['id']}:{digito(i['id'])}"
 
     items.sort(key=clave)
     total = len(items)
     saltados = 0
     if a.desde:
-        try:
-            cf, cid = a.desde.rsplit(":", 1)
-        except ValueError:
-            sys.exit("triage-scan: --desde debe ser FECHA:ID (o SIN:ID), tal como lo imprime el lote previo")
+        partes = a.desde.split(":")
+        if len(partes) != 3:
+            sys.exit("triage-scan: --desde debe ser FECHA:ID:DIGITO (o SIN:ID:DIGITO), tal como lo "
+                     "imprime el lote previo. Copialo entero, incluido el digito del final.")
+        cf, cid, dig = partes
         try:
             corte = (date.max if cf == "SIN" else date.fromisoformat(cf), cid)
         except ValueError:
             sys.exit(f"triage-scan: '{cf}' no es una fecha real ni 'SIN'")
-        # Un id inventado en el cursor se saltaria en silencio todo lo de esa fecha.
-        if not re.match(r"^(p-[0-9a-f]{10}|sin-id-\d{4})$", cid):
+        if not re.match(r"^(p-[0-9a-f]{10}|sin-id-[0-9a-f]{10}(-\d+)?)$", cid):
             sys.exit(f"triage-scan: '{cid}' no es un id valido; copia el cursor tal cual lo "
                      f"imprime el lote previo")
+        # El digito distingue un cursor COPIADO de uno TECLEADO. Un id inventado se saltaria en
+        # silencio todo lo de esa fecha con id menor, que es la clase de fallo que estas tres
+        # rondas han estado persiguiendo. Ver digito().
+        if dig != digito(cid):
+            sys.exit(f"triage-scan: el digito de control de '{a.desde}' no cuadra con '{cid}'. "
+                     f"Ese cursor no lo imprimio ningun lote: copialo tal cual, no lo escribas "
+                     f"de memoria.")
         # NO se exige que el cursor siga abierto: cerrarlo es justo lo que hace el barrido, y el
         # corte (fecha, id) funciona igual sobre un id que ya no existe — para eso es estable.
-        # Solo se avisa, porque un cursor a un id que nunca existio se saltaria esa fecha.
         if not any(i["id"] == cid for i in items):
             print(f"  aviso: {cid} ya no esta abierto (normal si lo cerraste en el lote previo); "
                   f"el corte sigue siendo exacto", file=sys.stderr)

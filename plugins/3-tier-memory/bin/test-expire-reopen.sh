@@ -226,15 +226,38 @@ for n in 1 2 3; do
     --prioridad Media --origen "[[sessions/2026-01-01-y]]" --creado 2026-01-01 >/dev/null
 done
 python3 "$BIN/journal-compact.py" --memory-dir "$MEMA" --quiet >/dev/null 2>&1
-python3 "$BIN/triage-scan.py" --memory-dir "$MEMA" --desde "2026-01-01:zzz" >/dev/null 2>&1
+dig() { python3 -c "import hashlib,sys; print(hashlib.sha1(('triage-cursor:'+sys.argv[1]).encode()).hexdigest()[:4])" "$1"; }
+
+python3 "$BIN/triage-scan.py" --memory-dir "$MEMA" --desde "2026-01-01:zzz:0000" >/dev/null 2>&1
 chk "id con forma invalida -> error"  "1" "$?"
-# Un id ya cerrado NO es error: cerrarlo es lo que hace el barrido, y el corte (fecha,id) sigue
-# siendo exacto sobre un id que ya no existe. Solo avisa.
 python3 "$BIN/triage-scan.py" --memory-dir "$MEMA" --desde "2026-01-01:p-0000000000" >/dev/null 2>&1
-chk "id ya cerrado -> NO es error"    "0" "$?"
+chk "cursor sin digito -> error"      "1" "$?"
+# Un id ya cerrado NO es error: cerrarlo es lo que hace el barrido, y el corte (fecha,id) sigue
+# siendo exacto sobre un id que ya no existe. Solo avisa. Pero su digito TIENE que cuadrar.
+python3 "$BIN/triage-scan.py" --memory-dir "$MEMA" --desde "2026-01-01:p-0000000000:$(dig p-0000000000)" >/dev/null 2>&1
+chk "id ya cerrado, digito bueno -> NO es error" "0" "$?"
+# Ronda 4: un id INVENTADO (forma valida, nunca lo imprimio un lote) se tragaba en silencio todo
+# lo de esa fecha con id menor. El digito es lo unico que lo separa de un id cerrado legitimo.
+python3 "$BIN/triage-scan.py" --memory-dir "$MEMA" --desde "2026-01-01:p-0000000000:beef" >/dev/null 2>&1
+chk "id inventado (digito malo) -> error"        "1" "$?"
 VAL=$(python3 "$BIN/triage-scan.py" --memory-dir "$MEMA" --limit 1 | sed -n 's/^Siguiente lote:  --desde \([^ ]*\) .*/\1/p')
+chk "el cursor que imprime trae 3 partes" "3" "$(printf '%s' "$VAL" | awk -F: '{print NF}')"
 python3 "$BIN/triage-scan.py" --memory-dir "$MEMA" --desde "$VAL" --limit 5 >/dev/null 2>&1
 chk "el cursor que el imprime si vale" "0" "$?"
+
+echo "== ronda 4: el id sintetico de un item sin _id no depende de la posicion =="
+# La ronda 3 los numeraba por posicion. Al cerrar el primero, el segundo pasaba de sin-id-0002 a
+# sin-id-0001 y el corte estricto se lo saltaba PARA SIEMPRE. Ahora sale del texto del item.
+MEMF="$T/memf"; mkdir -p "$MEMF/pendientes"
+printf '# Pendientes\n\n## Media prioridad\n\n' > "$MEMF/_pendientes.md"
+printf -- '- [ ] primero sin id\n- [ ] segundo sin id\n' >> "$MEMF/_pendientes.md"
+ID_ANTES=$(python3 "$BIN/triage-scan.py" --memory-dir "$MEMF" --tsv | grep 'segundo sin id' | cut -f1)
+# se cierra el PRIMERO: en la version por posicion, esto renumeraba al segundo
+printf '# Pendientes\n\n## Media prioridad\n\n' > "$MEMF/_pendientes.md"
+printf -- '- [ ] segundo sin id\n' >> "$MEMF/_pendientes.md"
+ID_DESPUES=$(python3 "$BIN/triage-scan.py" --memory-dir "$MEMF" --tsv | grep 'segundo sin id' | cut -f1)
+chk "el id del segundo no cambia al cerrar el primero" "$ID_ANTES" "$ID_DESPUES"
+chk "y no es un contador posicional" "0" "$(printf '%s' "$ID_DESPUES" | grep -c '^sin-id-0*[0-9]\{1,4\}$')"
 
 echo "== el compactador rechaza una fecha irreal aunque el emisor no la vea =="
 MEMB="$T/memb"; mkdir -p "$MEMB/pendientes/" "$MEMB/.journal/pending"
