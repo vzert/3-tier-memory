@@ -10,6 +10,7 @@ user/assistant text, tools used, files touched, and signal detection.
 
 --metadata-only: Skip full text extraction, only output counts and dates.
 """
+# sella-huellas: no (solo lee y extrae; no escribe)
 
 import json
 import os

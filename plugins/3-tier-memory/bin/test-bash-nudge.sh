@@ -166,5 +166,54 @@ python3 "$BIN/journal-compact.py" --memory-dir "$MEMP" --quiet >/dev/null 2>&1
 chk "inline: el titulo cambia"         "1" "$(grep -c 'Inline nuevo' "$MEMP/_plans-index.md")"
 chk "inline: sigue siendo (inline), no un enlace" "1" "$(grep -c 'Inline nuevo (inline)' "$MEMP/_plans-index.md")"
 
+echo "== ronda 7: detectar, anotar y sellar son UNA seccion critica =="
+# La ronda 6 arreglo "sin lock" partiendolo en DOS locks, y el adversario local reprodujo la
+# ventana: una edicion Y en el hueco entre ambos se absorbia en silencio — no salia en el aviso
+# ni en out-of-band.log, pero el sellado la fijaba como linea base. Esta prueba mide sobre el
+# MODULO, llamando a las funciones en el orden del codigo, que es como el adversario lo rompio.
+MEMW="$T/memw"; mkdir -p "$MEMW/pendientes" "$MEMW/.journal"
+printf -- '---\ntype: index\n---\n# Pendientes\n\n## Media prioridad\n\n' > "$MEMW/_pendientes.md"
+python3 "$BIN/journal-compact.py" --memory-dir "$MEMW" --check-drift >/dev/null 2>&1
+ABS=$(MEMW="$MEMW" BIN="$BIN" python3 - <<'PY'
+import importlib.util, os
+sp = importlib.util.spec_from_file_location("jc", os.path.join(os.environ["BIN"], "journal-compact.py"))
+jc = importlib.util.module_from_spec(sp); sp.loader.exec_module(jc)
+mem = os.environ["MEMW"]; j = os.path.join(mem, ".journal")
+p = os.path.join(mem, "_pendientes.md")
+open(p, "a").write("- [ ] edicion X\n")
+fuera = jc.detectar_fuera_de_banda(mem, j)          # X detectada
+open(p, "a").write("- [ ] edicion Y\n")            # Y cae en el hueco
+jc.anotar_fuera_de_banda(j, fuera)
+jc.guardar_huellas(mem, j)                           # sella X+Y
+log = open(os.path.join(j, "out-of-band.log")).read() if os.path.isfile(os.path.join(j, "out-of-band.log")) else ""
+# Y quedo absorbida si: no hay rastro de ella y una comprobacion posterior no ve nada
+print("1" if (not jc.detectar_fuera_de_banda(mem, j) and len(log.strip().splitlines()) == 1) else "0")
+PY
+)
+chk "la secuencia partida SI absorbe una edicion (asi lo rompio)" "1" "$ABS"
+# Y ahora el binario real, que hace las tres cosas bajo un solo lock: Y no se puede colar,
+# porque no hay hueco donde meterla. Se comprueba que el aviso y el log cubren TODO lo que
+# el sellado fija: tras avisar, una comprobacion inmediata queda limpia y el log tiene la linea.
+MEMX="$T/memx"; mkdir -p "$MEMX/pendientes" "$MEMX/.journal"
+printf -- '---\ntype: index\n---\n# Pendientes\n\n## Media prioridad\n\n' > "$MEMX/_pendientes.md"
+python3 "$BIN/journal-compact.py" --memory-dir "$MEMX" --check-drift >/dev/null 2>&1
+printf -- '- [ ] X\n- [ ] Y\n' >> "$MEMX/_pendientes.md"
+D=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMX" --check-drift 2>&1)
+chk "el binario avisa"                                 "1" "$(printf '%s' "$D" | grep -c 'FUERA DEL JOURNAL')"
+chk "y lo anota"                                       "1" "$(grep -c '_pendientes.md' "$MEMX/.journal/out-of-band.log")"
+chk "y lo sellado coincide con lo avisado (queda limpio)" "0" "$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMX" --check-drift 2>&1 | grep -c 'FUERA')"
+chk "una sola adquisicion de lock en la rama check-drift" "1" "$(grep -c 'UNA sola adquisicion para detectar, anotar y re-sellar' "$BIN/journal-compact.py")"
+
+echo "== ronda 7: scan-secrets re-sella (redactar es escritura legitima de un indice) =="
+MEMY="$T/memy"; mkdir -p "$MEMY/pendientes"
+printf -- '---\ntype: index\n---\n# Pendientes\n\n- [ ] rotar AKIAIOSFODNN7EXAMPLE\n' > "$MEMY/_pendientes.md"
+python3 "$BIN/journal-compact.py" --memory-dir "$MEMY" --check-drift >/dev/null 2>&1
+python3 "$BIN/scan-secrets.py" "$MEMY" --apply >/dev/null 2>&1
+D2=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMY" --check-drift 2>&1)
+chk "tras redactar un indice, NO acusa"       "0" "$(printf '%s' "$D2" | grep -c 'FUERA DEL JOURNAL')"
+printf -- '- [ ] a mano\n' >> "$MEMY/_pendientes.md"
+D3=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMY" --check-drift 2>&1)
+chk "control negativo: a mano SI acusa"       "1" "$(printf '%s' "$D3" | grep -c 'FUERA DEL JOURNAL')"
+
 echo "RESULT pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

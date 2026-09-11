@@ -1428,23 +1428,24 @@ def main():
         # "FUERA DEL JOURNAL" falso y una linea falsa en out-of-band.log — es decir, la afirmacion
         # "exacto, cero falsos positivos" era falsa. Si el lock esta ocupado no se comprueba nada:
         # hay un compactador trabajando y el sellara al terminar.
+        # UNA sola adquisicion para detectar, anotar y re-sellar. La primera version lo partia en
+        # dos locks y el adversario local (ronda 7) lo reprodujo: una edicion Y que cayera en el
+        # hueco entre ambos se ABSORBIA en silencio — `fuera` ya estaba calculado y no la incluia,
+        # asi que no salia en el aviso ni en out-of-band.log, pero `guardar_huellas()` hashea el
+        # disco en ESE instante y la sellaba como linea base. Sin log, sin aviso, sin evento.
+        # Ventana mas angosta que la original, misma clase de perdida.
         lock = Lock(journal, min(a.budget, 2.0))
         if not lock.acquire():
             sys.exit(0)
         try:
             fuera = detectar_fuera_de_banda(mem, journal)
+            if fuera:
+                anotar_fuera_de_banda(journal, fuera)
+                avisar_fuera_de_banda(fuera)
+            if fuera or not leer_huellas(journal):
+                guardar_huellas(mem, journal)   # el aviso sale una vez, no en cada sesion
         finally:
             lock.release()
-        if fuera or not leer_huellas(journal):
-            lock2 = Lock(journal, min(a.budget, 2.0))
-            if lock2.acquire():
-                try:
-                    if fuera:
-                        anotar_fuera_de_banda(journal, fuera)
-                        avisar_fuera_de_banda(fuera)
-                    guardar_huellas(mem, journal)   # el aviso sale una vez, no en cada sesion
-                finally:
-                    lock2.release()
         sys.exit(0)
     sys.exit(compact(mem, a.budget, a.quiet))
 

@@ -29,6 +29,7 @@ Usage:
 
 Output: per-file lines (dry-run/apply) + a SUMMARY line; or just an integer with --count.
 """
+# sella-huellas: no (escribe .md de sessions/ learnings/ plans/ research/ reference/, nunca un indice: verificado 2026-09-11 corriendolo sobre un _pendientes.md sin frontmatter -> frontmatter_sealed=0. A diferencia de scan-secrets.py, que si recorria todo)
 import os
 import re
 import sys

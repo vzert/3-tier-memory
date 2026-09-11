@@ -1,4 +1,5 @@
 #!/bin/bash
+# sella-huellas: no (solo resuelve CLAUDE_PROJECT_DIR y bufferiza stdin)
 # Resolve CLAUDE_PROJECT_DIR from hook stdin if not set in environment
 # Sourced by: all hook scripts in bin/
 # Buffers stdin into $_HOOK_INPUT for downstream use

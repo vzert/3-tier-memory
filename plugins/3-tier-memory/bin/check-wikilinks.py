@@ -21,6 +21,7 @@ Usage:
 Output: one `BROKEN <source> -> [[target]]` line per broken link, then a SUMMARY line.
 Exit 0 always.
 """
+# sella-huellas: no (solo lee y reporta enlaces rotos)
 import os
 import re
 import sys

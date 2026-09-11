@@ -39,6 +39,7 @@ Usage:
 Output: per-finding masked lines + a SUMMARY line; or just an integer with --count.
 Exit code 0 always (detection is advisory; the gate reads the SUMMARY/count).
 """
+# sella-huellas: si
 import os
 import re
 import sys
@@ -236,6 +237,23 @@ def main():
         if apply and changed:
             escribir_preservando(p, "".join(lines))
 
+    if apply and total:
+        # Re-sellar la huella. iter_files() recorre TODO el arbol de memory/ filtrando solo por
+        # extension .md, asi que con --apply puede reescribir `_pendientes.md` o un mensual —
+        # legitimamente, porque este script es el gate de /checkpoint-3t Step 6 (redact-then-commit).
+        # Sin sellar, el detector de deriva acusaba a la herramienta del propio plugin de una
+        # edicion manual no auditada, y ademas le decia "usa journal-emit.py", que para una
+        # redaccion es un consejo imposible. Lo encontro el adversario local en la ronda 7; era
+        # invisible para check-index-writers.py porque nunca nombra un indice como literal.
+        try:
+            import importlib.util as _ilu
+            _sp = _ilu.spec_from_file_location(
+                "jc", os.path.join(os.path.dirname(os.path.abspath(__file__)), "journal-compact.py"))
+            _jc = _ilu.module_from_spec(_sp)
+            _sp.loader.exec_module(_jc)
+            _jc.guardar_huellas(memory_dir, os.path.join(memory_dir, ".journal"))
+        except Exception:
+            pass
     if count_only:
         print(total)
         return

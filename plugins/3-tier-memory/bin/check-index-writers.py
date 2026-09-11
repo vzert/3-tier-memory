@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exige que todo script de bin/ que nombre un indice protegido DECLARE si re-sella la huella.
+"""Exige que TODO script de bin/ declare si re-sella la huella de los indices.
 
 POR QUE ASI, Y NO ADIVINANDO. 2.13.3 arreglo los dos escritores que su autor encontro y dejo fuera
 enrich-memory (regla 114: revisar los llamantes no prueba que sean todos). El adversario de la
@@ -28,8 +28,6 @@ import os
 import re
 import sys
 
-IDX = re.compile(r'(?:_pendientes|_learnings|_session-index|_plans-index|_research-index)\.md'
-                 r'|pendientes/[^\s"\']{0,40}\.md')
 MARCA = re.compile(r'^\s*#\s*sella-huellas:\s*(si|no)\b(.*)$', re.M | re.I)
 SELLA = re.compile(r'guardar_huellas\s*\(')
 EXENTOS = {"journal-compact", "check-index-writers"}
@@ -56,8 +54,12 @@ def main():
             src = open(os.path.join(bin_dir, n), encoding="utf-8", errors="replace").read()
         except OSError:
             continue
-        if not IDX.search(src):
-            continue
+        # SIN filtro por "nombra un indice". Esa criba era el agujero: `scan-secrets.py` recorre
+        # todo memory/ con os.walk y reescribe cualquier .md —incluido `_pendientes.md`— sin
+        # nombrarlo nunca como literal, asi que no se escaneaba, no estaba en `si` ni en `no`, y
+        # era invisible justo al detector instalado para "dejar de adivinar". Lo encontro el
+        # adversario local en la ronda 7. Ahora declara TODO script de bin/: la unica version que
+        # no puede perderse nada es la que no decide a quien mirar.
         scanned += 1
         m = MARCA.search(src)
         if not m:

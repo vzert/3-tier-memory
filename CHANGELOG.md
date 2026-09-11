@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.14.1] - 2026-09-11
+Hallazgos de la **ronda 7**, la primera con el adversario LOCAL (subagente en Sonnet 5, modelo
+distinto al ejecutor y con id acreditable — el partner externo de las rondas 4 y 6 se auto-reportaba
+`UNKNOWN`, asi que nunca pudo respaldar `model=different`). Tambien fue la primera que **pudo correr
+las suites**: las rondas 4 y 6 tenian `mktemp` denegado en su sandbox.
+
+### Fixed
+- **`scan-secrets.py` escribia indices protegidos y era INVISIBLE al detector.** `iter_files()` recorre todo `memory/` con `os.walk` filtrando solo por extension `.md`, asi que con `--apply` reescribe `_pendientes.md` o un mensual si contienen un secreto — legitimamente, porque es el gate de `/checkpoint-3t` Step 6 (redact-then-commit). No re-sellaba, asi que el detector de deriva **acusaba a una herramienta del propio plugin** de una edicion manual no auditada, y encima le decia "usa journal-emit.py", que para una redaccion es un consejo imposible. Reproducido de punta a punta. Ahora re-sella.
+  - Y el detector no lo veia: **`check-index-writers.py` solo escaneaba los scripts que NOMBRAN un indice como literal**, y este construye la ruta con `os.walk` + `os.path.join`. No aparecia en `scanned`, ni en `si`, ni en `no`. Esa criba era el agujero: ahora **se declara TODO script de `bin/`**, 23 en total. La unica version que no puede perderse nada es la que no decide a quien mirar.
+- **Partir la seccion critica en dos locks reabria una version angosta del mismo hueco.** 2.14.0 arreglo "`--check-drift` sin lock" tomando el lock para detectar, soltandolo, y tomando otro para anotar y sellar. El adversario reprodujo la ventana: una edicion que caiga entre ambos **se absorbe en silencio** — `fuera` ya esta calculado y no la incluye, asi que no sale en el aviso ni en `out-of-band.log`, pero `guardar_huellas()` hashea el disco en ese instante y la fija como linea base. Sin log, sin aviso, sin evento. Ahora detectar, anotar y sellar ocurren bajo **una sola adquisicion**.
+
+### Notas de verificacion
+- El adversario **re-derivo las siete suites y `check-index-writers.py` por su cuenta** y coincidio con lo afirmado (40/40, 84/84, `RESULT: PASS`, `TODO VERDE`, 19/19, 19/19, 26 ok, `scanned=18 undeclared=0`). Tambien re-derivo la discriminacion de D6 comentando solo el bloque del titulo: 40/0 → 38/2 con las dos fallas exactas. Es la primera re-derivacion independiente de estas cifras en toda la serie.
+- La suite `test-bash-nudge.sh` pasa de 40 a **47** aserciones. La del hueco entre locks mide sobre el MODULO, llamando a las funciones en el orden del codigo — que es como el adversario lo rompio — y comprueba primero que la secuencia partida SI absorbe una edicion, antes de comprobar que el binario real no.
+
 ## [2.14.0] - 2026-09-11
 Los ocho hallazgos confirmados de la **ronda 6** del verificador adversarial externo
 (`break ungrounded=2 unfalsified=1 incomplete=4 autonomy-violations=1 unsafe=0`).
