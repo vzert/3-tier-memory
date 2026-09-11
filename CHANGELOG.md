@@ -1,5 +1,98 @@
 # Changelog
 
+## [2.15.2] - 2026-09-11
+El aviso `BACKFILL PENDIENTE` del hook de arranque contaba mal, y contaba mal en la direccion que
+no se apaga sola: **toda instalacion que salte sesiones legitimamente se queda con el aviso
+encendido para siempre**. En esta instalacion decia 12 donde lo correcto son 6.
+
+### Fixed
+- **El contador de backfill de `bin/session-start.sh` cuenta ficheros, no totales.** Hacia
+  `ls *.jsonl | wc -l` - `len(processed)` - 1, y se equivocaba por tres lados a la vez:
+  1. **Ignoraba `skipped[]`**, que para `/backfill-3t` vale lo mismo que `processed[]` — su propia
+     regla de Step 2 dice *"Already processed: filename appears in processed **or skipped** arrays
+     -> skip"*. Una sesion trivial o ya presente en memoria se salta a proposito, pero seguia
+     contando como pendiente. Aqui son 17 entradas.
+  2. **Restaba UUIDs que ya no estan en disco.** Claude Code borra `.jsonl` viejos; cada uno que
+     desaparece sigue ocupando su sitio en el progreso y desplaza el numero. Aqui el progreso
+     tiene 18 entradas (1 en `processed` + 17 en `skipped`) y **11 son fantasmas**: la unica de
+     `processed` y 10 de las 17 de `skipped`.
+  3. **Restaba 1 a ciegas "por la sesion actual"**, que sobra si ese `.jsonl` todavia no existe o
+     si ya esta en `processed`. Ahora se excluye **por nombre**, con `transcript_path`/`session_id`
+     del payload del hook (`$_HOOK_INPUT`, que ya bufferiza `resolve-project-dir.sh`).
+
+  **Sin payload no se resta nada, a proposito.** Hubo una version intermedia con heuristica de
+  mtime (descartar el `.jsonl` escrito en los ultimos 5 minutos) y la ronda adversarial la tumbo:
+  no es una prueba de identidad, asi que puede descartar un fichero historico recien tocado y
+  **silenciar** una sesion pendiente de verdad. De los dos fallos posibles, contar 1 de mas se ve
+  y se corrige en cuanto llega un payload; silenciar no se ve nunca. Lo **medido** es que en esta
+  instalacion el payload de `SessionStart` trae `session_id` y `transcript_path`; lo que **no** se
+  ha auditado es si algun otro host, modo o version invoca el hook sin stdin. Si ocurriera, el
+  aviso se queda 1 por encima mientras dure — visible y acotado, no el 12 permanente de antes.
+
+  `totalFound` y `skippedReason` se evaluaron como fuente y **se descartaron con evidencia**:
+  `totalFound` es una foto del ultimo run (decia 8 con 14 ficheros en disco) y `skippedReason` solo
+  cubre el ultimo run (7 de 17 entradas). La unica fuente de verdad es cruzar
+  `processed ∪ skipped` **contra el disco**.
+
+  Paridad con el glob anterior: se saltan los dotfiles (para no contar `.recall-index.jsonl`) y se
+  exige `isfile`, porque un **directorio** llamado `algo.jsonl` lo enumeraba `ls` por su contenido
+  y `os.listdir` lo contaba como una sesion.
+
+  Reparto de fallos explicito: progreso ausente, ilegible **o con tipos que no son los del
+  contrato** = nada resuelto, y avisa (es el caso de instalacion nueva); fallo del propio `python3`
+  = no avisa, antes que publicar una cifra inventada. La validacion del progreso tiene **dos
+  niveles distintos a proposito**: una *clave* que no sea una lista (un numero, un string, `null`)
+  vale vacia **entera**, para que un JSON valido con tipos raros no pueble la lista de resueltos a
+  medias antes de fallar; dentro de una lista, un *elemento* que no sea cadena no vacia se ignora
+  **uno a uno** y los demas se honran, porque tirar la lista entera por un elemento basura
+  descartaria trabajo real ya hecho. Los dos niveles fallan hacia contar de mas. El `test` se
+  protege de la cadena vacia con `[ -n "$REMAINING" ]`.
+
+### Verificado
+Banco de 15 casos que **re-extrae el bloque del fichero real en cada ejecucion** (una version
+anterior del banco cargaba una copia congelada: habria seguido pasando en verde con el hook ya
+cambiado). La columna "vieja" tampoco es un proxy escrito a mano: es **el bloque de 2.15.1 sacado
+de `git show HEAD:` y ejecutado igual que el nuevo**, porque un proxy en Python diverge justo donde
+importa — `ls dir/*.jsonl` sobre un *directorio* enumera su contenido y suma lineas, `os.listdir`
+lo cuenta una vez. Diez casos **discriminan** —lo que el usuario habria visto con 2.15.1 es otro
+numero— y cinco son controles donde vieja y nueva coinciden a proposito:
+
+| caso | vieja | nueva |
+|---|---|---|
+| repro de esta instalacion (skipped>0 + fantasmas + dotfile) | 12 | **6** |
+| la sesion actual ya esta en `processed` (la vieja resta de mas) | 2 | **3** |
+| todo en `skipped` — el aviso se apaga; antes no se apagaba nunca | 2 | **0** |
+| progreso con nombres **sin** extension (`"a1"` en vez de `"a1.jsonl"`) | 2 | **1** |
+| un **directorio** llamado `x.jsonl` no es una sesion | 6 | **3** |
+| `skipped` no es lista (`7`): esa clave vale vacia, `processed` se honra | 2 | 2 *(control)* |
+| `processed` es string en vez de lista: se ignora entera | 0 | **3** |
+| elementos no-string dentro de la lista: se ignoran uno a uno (los validos se honran) | 0 | **2** |
+| el progreso entero no es un objeto (es una lista) | 3 | 3 *(control)* |
+| **sin** payload: no se resta nada (nunca silencia) | 3 | **4** |
+| payload que no es JSON | 3 | **4** |
+| payload sin `session_id` ni `transcript_path` | 3 | **4** |
+| sin `.backfill-progress.json` (instalacion nueva) | 3 | 3 *(control)* |
+| progreso corrupto — nada resuelto, avisa igual | 3 | 3 *(control)* |
+| solo el `.jsonl` de la sesion actual | 0 | 0 *(control)* |
+
+Forma del fixture del primer caso, para reconstruirlo sin re-derivarlo: 14 `.jsonl` visibles mas
+`.recall-index.jsonl`; `processed` = 1 UUID que ya no esta en disco; `skipped` = 17, de los que 7
+siguen en disco; el `.jsonl` de la sesion en curso presente y en ninguna de las dos listas.
+
+Y ejecutado end-to-end, el hook entero con el payload de la sesion en curso por stdin, contra la
+instalacion real: **6**. Esa ejecucion tambien demuestra que `$_HOOK_INPUT` sobrevive las ~470
+lineas que separan el `source` del contador.
+
+Este arreglo paso por `/goalspec:adversary` (backend externo, GPT-5) **dos veces**. La primera
+ronda devolvio `break` con nueve hallazgos confirmados: la heuristica de mtime, el filtro `isfile`,
+los tipos del progreso, el banco que cargaba una copia congelada, la regla 34 stale y una decision
+narrada en prosa en vez de preguntada. La segunda, tras arreglarlos, bajo a tres, todos de la misma
+clase —afirmaciones mias mas fuertes que la evidencia— y los tres estan corregidos arriba: la
+descripcion de la validacion por tipos, el "siempre llega" sobre el payload, y dos celdas de esta
+tabla que estaban derivadas de un proxy en vez del bloque viejo real (el caso del directorio decia
+4 y son 6; el de `processed` string decia -5 y es 0, porque con un numero negativo el aviso no se
+imprime).
+
 ## [2.15.1] - 2026-09-11
 La divergencia que destapo la ronda adversarial de 2.15.0: **dos plantillas construyen session files
 y no construian el mismo**. `/checkpoint-3t` y `/backfill-3t` llevaban esqueletos distintos, y la

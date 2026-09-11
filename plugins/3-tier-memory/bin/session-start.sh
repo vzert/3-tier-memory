@@ -526,17 +526,100 @@ if [ -n "$UPDATED" ]; then
 fi
 
 # Notify if JSONL backfill is pending
+#
+# El contador cuenta FICHEROS QUE SIGUEN EN DISCO Y NO ESTAN RESUELTOS. No es una resta de totales.
+# La version anterior hacia `ls *.jsonl | wc -l` - len(processed) - 1, y se equivocaba por tres
+# lados a la vez (medido en esta instalacion: decia 12 donde lo correcto son 6):
+#   1. Ignoraba `skipped[]`, que para /backfill-3t vale lo mismo que `processed[]` — su propia
+#      regla dice "Already processed: filename appears in processed **or skipped** arrays -> skip".
+#      Toda instalacion que salte sesiones legitimamente (triviales, ya en memoria) se quedaba con
+#      el aviso BACKFILL PENDIENTE encendido para siempre. Aqui son 17 entradas.
+#   2. Restaba UUIDs que ya no estan en disco. Claude Code borra .jsonl viejos; cada uno que
+#      desaparece sigue ocupando su sitio en `processed`/`skipped` y desplaza el numero. Aqui 11
+#      de las 18 entradas del progreso son fantasmas.
+#   3. Restaba 1 a ciegas "por la sesion actual", que sobra si ese .jsonl aun no existe o si ya
+#      esta en processed. Ahora se excluye POR NOMBRE, con `transcript_path`/`session_id` del
+#      payload del hook ($_HOOK_INPUT, que bufferiza resolve-project-dir.sh).
+#
+# SIN PAYLOAD NO SE RESTA NADA, a proposito. Hubo una version con heuristica de mtime (descartar
+# el .jsonl escrito en los ultimos 5 minutos) y el adversario la tumbo: no es una prueba de
+# identidad, asi que puede descartar un fichero historico recien tocado y SILENCIAR una sesion
+# pendiente de verdad. Entre los dos fallos posibles, contar 1 de mas es visible y se corrige solo
+# en cuanto llega un payload; silenciar no se ve nunca.
+# Lo que esta MEDIDO: en esta instalacion el payload de SessionStart trae `session_id` y
+# `transcript_path`, y el contador da el numero exacto. Lo que NO esta auditado: si algun otro
+# host, modo o version invoca este hook sin stdin. Si eso pasa, el aviso se queda 1 por encima
+# mientras dure — visible y acotado, no el aviso permanente de 12 que este arreglo quita.
+#
+# Paridad con el glob de antes: se saltan los dotfiles (`.recall-index.jsonl`) y se exige
+# `isfile`, porque un DIRECTORIO llamado `algo.jsonl` lo listaba `ls` por su contenido y
+# `os.listdir` lo contaba como una sesion.
+# Fallos: progreso ausente, ilegible o con tipos que no son los del contrato = nada resuelto, y
+# avisa (es el caso de instalacion nueva); fallo del propio python = REMAINING vacio y NO avisa,
+# antes que publicar una cifra inventada.
 ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
 JSONL_DIR="$HOME/.claude/projects/$ENCODED"
 if [ -d "$JSONL_DIR" ]; then
-  JSONL_COUNT=$(ls "$JSONL_DIR"/*.jsonl 2>/dev/null | wc -l | tr -d ' ')
-  PROCESSED=0
-  PROGRESS_FILE="$JSONL_DIR/.backfill-progress.json"
-  if [ -f "$PROGRESS_FILE" ]; then
-    PROCESSED=$(python3 -c "import json; print(len(json.load(open('$PROGRESS_FILE')).get('processed',[])))" 2>/dev/null || echo 0)
-  fi
-  REMAINING=$((JSONL_COUNT - PROCESSED - 1))  # -1 for current session
-  if [ "$REMAINING" -gt 0 ]; then
+  REMAINING=$(_HOOK_INPUT="${_HOOK_INPUT:-}" python3 - "$JSONL_DIR" <<'PYEOF' 2>/dev/null
+import json, os, sys
+
+d = sys.argv[1]
+
+
+def stem(name):
+    name = os.path.basename(str(name or ""))
+    return name[:-6] if name.endswith(".jsonl") else name
+
+
+def is_session_file(name):
+    if not name.endswith(".jsonl") or name.startswith("."):
+        return False
+    return os.path.isfile(os.path.join(d, name))
+
+
+pending = {stem(f) for f in os.listdir(d) if is_session_file(f)}
+
+# `processed` y `skipped` valen lo mismo: los dos significan "resuelto, no volver a tocarlo".
+# Validacion en dos niveles, distintos a proposito:
+#   - la CLAVE que no sea una lista (un numero, un string, null) vale VACIA entera — asi un JSON
+#     valido con tipos raros no puebla `done` a medias antes de fallar;
+#   - dentro de una lista, el ELEMENTO que no sea una cadena no vacia se ignora uno a uno, y los
+#     demas se honran. Tirar la lista entera por un elemento basura descartaria trabajo real ya
+#     hecho; un elemento-cadena basura solo puede descontar si coincide con un fichero en disco,
+#     que es justo lo que significa estar en la lista.
+# Los dos niveles fallan hacia contar de mas, que es la direccion visible.
+done = set()
+try:
+    with open(os.path.join(d, ".backfill-progress.json")) as fh:
+        prog = json.load(fh)
+    if isinstance(prog, dict):
+        for key in ("processed", "skipped"):
+            entries = prog.get(key)
+            if not isinstance(entries, list):
+                continue
+            for name in entries:
+                if isinstance(name, str) and name.strip():
+                    done.add(stem(name))
+except Exception:
+    done = set()  # sin progreso utilizable: nada resuelto
+
+pending -= done
+
+current = ""
+try:
+    payload = json.loads(os.environ.get("_HOOK_INPUT") or "{}")
+    if isinstance(payload, dict):
+        current = stem(payload.get("transcript_path")) or stem(payload.get("session_id"))
+except Exception:
+    current = ""
+
+if current:
+    pending.discard(current)
+
+print(len(pending))
+PYEOF
+)
+  if [ -n "$REMAINING" ] && [ "$REMAINING" -gt 0 ]; then
     echo "BACKFILL PENDIENTE: $REMAINING sesiones sin procesar. Run /backfill-3t to import past sessions."
     echo ""
   fi
