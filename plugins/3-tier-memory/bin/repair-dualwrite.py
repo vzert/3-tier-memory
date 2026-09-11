@@ -8,10 +8,12 @@ las dos a la vez. Una linea escrita a mano en Tier 2 no genera la fila de Tier 3
 es silencioso hasta que se cierra el pendiente: `apply_resolve_monthly` no encuentra la fila,
 deja un WARN, y se pierden la fecha de resolucion y la sesion que lo cerro.
 
-Medido el 2026-09-10 en claude-vzert: 51 de 120 pendientes abiertos (42%) sin fila en Tier 3;
-ninguno tenia evento propio en `.journal/applied/`, o sea que los 51 se escribieron a mano.
+Medido el 2026-09-10 en claude-vzert: 49 de 118 pendientes abiertos (42%) sin fila en Tier 3;
+ninguno tenia evento propio en `.journal/applied/`, o sea que los 49 se escribieron a mano.
 La mayoria es anterior al despliegue del journal (2026-09-03), pero 14 son posteriores: la
 fuga seguia abierta con el journal ya en marcha, porque nada impedia escribir Tier 2 a mano.
+(La corrida real escribio 51 filas: esos 49 mas 2 pendientes que otra sesion anadio a mano
+mientras se reparaba — la fuga en directo.)
 
 Hay una SEGUNDA perdida del mismo historial, independiente de la anterior: una fila cuyo
 texto lleva un `|` (`sort | uniq -c`) se parte en mas de 7 celdas, `apply_resolve_monthly`
@@ -30,14 +32,15 @@ de Tier 2, `Resuelto` y `Sesion resolucion` en blanco. No inventa datos: un pend
 Que NO hace:
   - no toca `_pendientes.md` (Tier 2 es la entrada; aqui solo se lee);
   - no recalcula ids. El id de un pendiente emitido por journal es sha1(texto+creado+origen),
-    pero una linea escrita a mano puede llevar un id inventado (27 de 119 en claude-vzert).
+    pero una linea escrita a mano puede llevar un id inventado (27 de 118 en claude-vzert).
     Recalcularlos obligaria a reescribir las citas de ese id en los session logs, que son
     registro historico. El id vale por ser estable, no por ser reproducible, asi que se
     conserva tal cual. Reemitir ese mismo texto por journal generaria el id canonico y una
     fila duplicada; lo que cierra ese riesgo es no volver a escribir Tier 2 a mano
     (`journal_strict=1` en `memory/.memory-config`).
-  - no reordena ni borra filas. Solo agrega al final de la tabla del mes, y con `--fix-pipes`
-    reescribe en su sitio las filas con `|` crudo (mismo contenido, `|` escapado).
+  - no borra ni reordena filas, y nunca cambia una celda ya escrita. Agrega al final de la
+    tabla del mes. La UNICA excepcion es `--fix-pipes`, que si reescribe filas existentes:
+    escapa su `|` para devolverlas a 7 celdas, sin tocar el contenido.
 
 Idempotente: una segunda corrida no encuentra nada que reparar y no escribe.
 
@@ -50,16 +53,20 @@ concurrente, igual que `normalize-pendientes.py`. Si no lo consigue, no hace nad
 
 Uso: repair-dualwrite.py MEMORY_DIR [--apply] [--fix-pipes] [--quiet] [--budget SEG]
   Sin --apply solo informa (dry-run): lista los ids con el mes donde iria cada fila y avisa
-  de las filas con `|` crudo. Salida: `rows_added=N pipes_fixed=N missing_data=N`.
+  de las filas con `|` crudo y de los ids que no son el sha1 de su contenido. Salida:
+  `rows_added=N pipes_broken=N pipes_fixed=N ids_invented=N missing_data=N`. En dry-run
+  `pipes_fixed` es 0 por construccion: lo que hay que leer es `pipes_broken`.
   Codigos: 0 ok (o lock ocupado); 1 error de entorno (sin _pendientes.md o sin journal-compact).
 
 Pruebas: test-repair-dualwrite.sh (cubre las dos perdidas, la idempotencia y el id conservado).
 """
 import argparse
+import hashlib
 import importlib.util
 import os
 import re
 import sys
+import unicodedata
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -208,6 +215,28 @@ def broken_pipe_rows(jc, mem):
     return out
 
 
+def ids_invented(idx_path):
+    """Ids de Tier 2 que NO son el sha1 de su propio contenido: los escribio alguien a mano.
+
+    El id canonico es `sha1(texto + creado + origen)[:10]` (journal-emit.pendiente_id). Un id
+    inventado no rompe nada por si mismo — es solo una etiqueta — pero si mas adelante alguien
+    reemite ESE MISMO pendiente por journal, el emisor calcula el id canonico, no lo encuentra
+    en el archivo y escribe una segunda linea y una segunda fila para el mismo pendiente. Se
+    reportan para que se vea venir; no se recalculan, porque ya estan citados en session logs.
+    """
+    out = []
+    prio_ignorada = None  # parse_tier2 ya valida los campos; aqui solo interesa el hash
+    for pid, text, _p, creado, origen, motivo in parse_tier2(idx_path):
+        if motivo:
+            continue
+        raw = "\n".join([re.sub(r"\s+", " ", unicodedata.normalize("NFC", text)).strip(),
+                          creado,
+                          re.sub(r"\s+", " ", unicodedata.normalize("NFC", origen)).strip()])
+        if "p-" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10] != pid:
+            out.append(pid)
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("memory_dir")
@@ -234,7 +263,7 @@ def main():
         lock = jc.Lock(os.path.join(mem, ".journal"), a.budget)
         if not lock.acquire():
             if not a.quiet:
-                print("rows_added=0 pipes_fixed=0 (journal busy; reintenta luego)")
+                print("rows_added=0 pipes_broken=0 pipes_fixed=0 (journal busy; reintenta luego)")
             return 0
     try:
         # Primero las filas con `|` crudo: hasta que se reescriben, su `_id:` cae fuera de la
@@ -251,6 +280,7 @@ def main():
                 jc.atomic_write(path, lines)
 
         have = existing_ids(jc, mem)
+        inventados = ids_invented(idx)
         added = 0
         broken = []
         pending = []
@@ -291,11 +321,19 @@ def main():
 
         if not a.quiet:
             sufijo = "" if a.apply else " [dry-run: usa --apply]"
+            # pipes_broken cuenta lo ENCONTRADO y se imprime siempre; pipes_fixed cuenta lo
+            # REPARADO. Al reves, un consumidor en dry-run (el check 14 de /audit-3t) leeria
+            # siempre 0 y daria por sana una memoria con filas irresolubles.
             fixed = len(pipes) if (a.fix_pipes and a.apply) else 0
-            print(f"rows_added={added} pipes_fixed={fixed} missing_data={len(broken)}{sufijo}")
-            if pipes and not (a.fix_pipes and a.apply):
+            print(f"rows_added={added} pipes_broken={len(pipes)} pipes_fixed={fixed} "
+                  f"ids_invented={len(inventados)} missing_data={len(broken)}{sufijo}")
+            if pipes and not fixed:
                 print(f"  AVISO {len(pipes)} filas con `|` crudo no se pueden cerrar "
                       f"(apply_resolve_monthly las lee como ya resueltas): usa --fix-pipes")
+            if inventados:
+                print(f"  AVISO {len(inventados)} ids de Tier 2 no son el sha1 de su contenido "
+                      f"(se escribieron a mano). Si alguien reemite ese mismo pendiente por "
+                      f"journal saldra el id canonico y una fila duplicada: {inventados[0]} ...")
             for pid, motivo in broken:
                 print(f"  NO REPARABLE {pid}: {motivo}")
         return 0

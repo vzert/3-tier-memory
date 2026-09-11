@@ -67,9 +67,10 @@ Run exactly this (do NOT use `find`: under some shell proxies it fails silently)
 12. `applied` (informational: events applied so far, all months) and `strict` (`on` = the PreToolUse guard denies direct `Edit`/`Write` on `_*.md` and `pendientes/YYYY-MM.md`; `off` = default). Report both as-is; neither is a warning.
 13. Priority anchors: `python3 "$JBIN/normalize-pendientes.py" <MEMORY_DIR>` (dry-run; locate `JBIN` as in /checkpoint-3t Step 0). `headers_added=0` is the expected result. Anything else is a WARNING: `_pendientes.md` lacks a header the compactor can anchor `pendiente.add` under (`## Alta/Media/Baja prioridad`, case-insensitive prefix), so new pendientes would land in `quarantine/`. The SessionStart hook adds the missing headers automatically on the next session (2.12.1); report which are missing, do not edit the file here.
 
-14. Dual write of pendientes: `python3 "$JBIN/repair-dualwrite.py" <MEMORY_DIR>` (dry-run). `rows_added=0 pipes_fixed=0` is the expected result. Anything else is a WARNING, and each count is a distinct silent loss of history:
+14. Dual write of pendientes: `python3 "$JBIN/repair-dualwrite.py" <MEMORY_DIR>` (dry-run). `rows_added=0 pipes_broken=0 ids_invented=0 missing_data=0` is the expected result. Read `pipes_broken` (rows found), NOT `pipes_fixed` — in a dry-run nothing is repaired, so `pipes_fixed` is 0 by construction and reporting it would call a broken memory healthy. Anything else is a WARNING, and each count is a distinct silent loss of history:
     - `rows_added>0`: those pendientes exist in `_pendientes.md` but have no row in `pendientes/YYYY-MM.md`, so closing them loses the resolution date and the session that closed them — `apply_resolve_monthly` only logs a WARN. They were hand-written into Tier 2, bypassing the journal.
-    - `pipes_fixed>0`: those rows carry a raw `|` in the text, which splits them into more than 7 cells; the compactor reads the priority cell as the resolution date, concludes "already resolved" and writes nothing while still reporting `applied=1`. Those pendientes cannot be closed at all.
+    - `pipes_broken>0`: those rows carry a raw `|` in the text, which splits them into more than 7 cells; the compactor reads the priority cell as the resolution date, concludes "already resolved" and writes nothing while still reporting `applied=1`. Those pendientes cannot be closed at all.
+    - `ids_invented>0`: those Tier 2 ids are not the `sha1(text+creado+origen)` of their own line, so someone typed them by hand. Harmless on their own, but if that same pendiente is ever re-emitted through the journal the emitter computes the canonical id, does not find it, and writes a SECOND line and row for the same pendiente. The repair reports them and never recalculates: they are already cited in session logs.
     - `missing_data>0`: lines without `_creado` or outside the three priority headers. They need a look by hand; the repair skips them rather than guessing.
     /checkpoint-3t Step 3-pre repairs all three automatically; report the counts here, do not edit anything from the audit.
 
@@ -105,7 +106,8 @@ Return a JSON object with results:
     {"check": "Applied events (all months)", "count": N},
     {"check": "journal_strict guard", "status": "on | off"},
     {"check": "Pendientes without a Tier 3 row", "count": N},
-    {"check": "Rows unclosable due to a raw |", "count": N}
+    {"check": "Rows unclosable due to a raw |", "count": N},
+    {"check": "Tier 2 ids not matching their own hash", "count": N}
   ]
 }
 ```

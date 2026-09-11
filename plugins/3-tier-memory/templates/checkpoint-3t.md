@@ -138,6 +138,12 @@ id, so the natural next move is to hand-write Tier 2 as well — which is exactl
 dual write. Measured 2026-09-10 in one project: 27 of 120 ids in `_pendientes.md` were invented,
 and 51 pendientes had no Tier 3 row at all. Leave the placeholder; Step 3d fills it.
 
+This is an instruction, not a gate, and you should know where the gate stops: `journal_strict=1`
+denies the `Edit`/`Write`/`MultiEdit` tools on the shared indexes, but it is a PreToolUse hook and
+does **not** see a shell redirect, so `sed -i` or a heredoc through `Bash` still writes them. What
+catches a bypass is Step 3-pre's `repair-dualwrite.py`, after the fact: `rows_added>0` or
+`ids_invented>0` means someone wrote Tier 2 outside the journal, whichever tool they used.
+
 ## Step 3: Pendientes — DUAL WRITE via journal (always)
 
 Pendientes go through the journal too (`JBIN` and `MEMORY_DIR` from Step 0): `pendiente.add` /
@@ -154,11 +160,11 @@ python3 "$JBIN/enrich-memory.py" "$MEMORY_DIR" --apply --only creado,id   # lega
 python3 "$JBIN/repair-dualwrite.py" "$MEMORY_DIR" --apply --fix-pipes    # Tier 2 lines with no Tier 3 row; rows a `|` made unclosable; idempotent
 ```
 
-`repair-dualwrite` prints `rows_added=N pipes_fixed=N missing_data=N`. **A non-zero `rows_added`
-means someone hand-wrote Tier 2 since the last checkpoint** — the dual write was bypassed, and
-without this repair those pendientes would lose their resolution date and closing session when
-they are eventually closed. Report both counts in Step 7; if `missing_data>0`, the listed lines
-lack `_creado` or a priority header and need a look by hand.
+`repair-dualwrite` prints `rows_added=N pipes_broken=N pipes_fixed=N ids_invented=N missing_data=N`.
+**A non-zero `rows_added` or `ids_invented` means someone wrote Tier 2 outside the journal since the
+last checkpoint** — the dual write was bypassed. Without this repair those pendientes lose their
+resolution date and closing session when they are eventually closed. Report the counts in Step 7;
+if `missing_data>0`, the listed lines lack `_creado` or a priority header and need a look by hand.
 
 THEN read `memory/_pendientes.md`. Every open line now ends with `_id: p-xxxxxxxxxx_`. That id is
 how you resolve it in 3a; never match a line by its text.

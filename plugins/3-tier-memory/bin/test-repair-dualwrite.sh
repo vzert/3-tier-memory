@@ -107,7 +107,16 @@ check "la fila quedo con 7 celdas" \
   "$(grep 'p-cccccccccc' "$M4/pendientes/2026-09.md" | python3 "$TMP/cuenta.py")" "7"
 check "sin --fix-pipes solo avisa" \
   "$(nuevo_memory "$TMP/m5"; sed -i.bak 's#^|---|---|---|---|---|---|---|#|---|---|---|---|---|---|---|\
-| 1 | x `a | b` _id: p-dddddddddd_ | Alta | 2026-09-11 | [[sessions/z]] | | |#' "$TMP/m5/pendientes/2026-09.md"; python3 "$BIN/repair-dualwrite.py" "$TMP/m5" | grep -c 'AVISO')" "1"
+| 1 | x `a | b` _id: p-dddddddddd_ | Alta | 2026-09-11 | [[sessions/z]] | | |#' "$TMP/m5/pendientes/2026-09.md"; python3 "$BIN/repair-dualwrite.py" "$TMP/m5" | grep -c 'no se pueden cerrar')" "1"
+
+echo "6. en dry-run el contador delata la fila rota (lo lee el check 14 de /audit-3t)"
+OUT=$(python3 "$BIN/repair-dualwrite.py" "$TMP/m5")
+check "pipes_broken cuenta lo encontrado" "$(echo "$OUT" | grep -o 'pipes_broken=[0-9]*')" "pipes_broken=1"
+check "pipes_fixed cuenta lo reparado" "$(echo "$OUT" | grep -o 'pipes_fixed=[0-9]*')" "pipes_fixed=0"
+
+echo "7. delata los ids que no son el sha1 de su contenido"
+check "ids_invented" \
+  "$(python3 "$BIN/repair-dualwrite.py" "$TMP/m1" | grep -o 'ids_invented=[0-9]*')" "ids_invented=2"
 
 echo
 [ $FAIL -eq 0 ] && echo "TODO VERDE" || echo "HAY FALLOS"
