@@ -233,12 +233,22 @@ status: backfilled
 - [[learnings/topic]] — description (only if learnings extracted)
 - OR "Ninguno"
 
+## Callejones sin salida
+- <enfoque abandonado> no funciona porque <razon> — usa <alternativa>
+- OR "Ninguno"
+
 ## Pendientes
 - [ ] <item> — ver [[_pendientes]] (only if pendientes extracted)
 - OR "Ninguno"
 
 ## Commits
 - Backfilled from JSONL — no commit hash available
+
+## Recordatorios de calendario
+### YYYY-MM-DD — <Titulo>
+<bloque completo, formato de /checkpoint-3t Step 8c>
+(only if a pendiente names a date STILL in the future at backfill time; omit the
+ whole section otherwise)
 
 ## Related
 - [[_session-index]]
@@ -247,6 +257,24 @@ status: backfilled
 - [[_plans-index]] (if plans registered)
 - [[_research-index]] (if research registered)
 ```
+
+**Las tres secciones que NO se rellenan igual que en un checkpoint en vivo:**
+
+- **`## Callejones sin salida`** (desde 2.15.1): solo lo que el transcript DICE que se abandono —
+  un enfoque que se probo y se dejo, con la razon escrita en la conversacion. **Nunca lo infieras.**
+  Si el transcript no lo dice, `Ninguno`. Un callejon inventado es peor que ninguno: la linea
+  `No repitas:` del snippet lo transmite a la sesion siguiente como si fuera un acuerdo tuyo, y
+  cierra un camino que nadie descarto.
+- **`## Como retomar` no se escribe, a proposito.** El snippet dice donde quedamos y cual es el
+  proximo paso; en una sesion reconstruida meses despues eso ya es falso por construccion. Un
+  snippet obsoleto es peor que ninguno porque se pega tal cual. Esta es la UNICA seccion en la que
+  el esqueleto del backfill diverge del de `/checkpoint-3t` a proposito. `/checkpoint-3t` lo
+  contempla: si el fichero no trae `## Callejones sin salida`, omite la linea `No repitas:` en vez
+  de crearla.
+- **`## Recordatorios de calendario`**: solo para fechas que **siguen siendo futuras en el momento
+  de correr el backfill**. Una fecha ya pasada no genera recordatorio — el evento de calendario
+  llegaria vencido. Mismo formato que Step 8c de `/checkpoint-3t` (Titulo, Descripcion, prompt en
+  fence). Si ninguna fecha sigue viva, borra la seccion entera.
 
 ### 3c. Update session index (Tier 2) — via journal
 
@@ -274,6 +302,19 @@ If the draft has pendientes AND this session is within the 5 most recent:
    python3 "$JBIN/journal-emit.py" --type pendiente.add --text "<texto>" --prioridad Media \
      --origen "[[sessions/YYYY-MM-DD-slug]] (backfill)" --creado YYYY-MM-DD   # dateFirst, NOT today
    ```
+   **Si el pendiente nombra una fecha posterior a HOY** (no a `--creado`), anade
+   `--revisar YYYY-MM-DD` con esa fecha. **Una expresion relativa se resuelve contra la fecha de la
+   SESION, no contra hoy**: `en 2 semanas` dicho el 2026-09-10 es el 2026-09-24, porque eso es lo
+   que significaba cuando se escribio. Resuelve primero, y solo entonces compara el resultado con
+   hoy para decidir si sigue viva. Formas que cuentan, las mismas que enumera `/checkpoint-3t`
+   Step 8c: `revisar el 2026-09-22`, `target 2026-10-01`, `T+7`, `en 2 semanas`. **Si la expresion
+   es demasiado vaga para dar una fecha** (`mas adelante`, `cuando se pueda`), no inventes una: no
+   emitas `--revisar`. Una ventana inventada es peor que ninguna, porque `expire-pendientes.py`
+   la trata como un compromiso declarado por ti. Es el mismo campo que emite `/checkpoint-3t`, y tiene dos
+   consumidores reales: `expire-pendientes.py` (no caduca un item cuya ventana aun no vence) y el
+   barrido manual de `/triage-3t`. Sin el, un pendiente reconstruido con ventana declarada queda
+   indistinguible de uno sin ventana. **Compara contra hoy, no contra `--creado`**: lo que decide
+   es si la fecha sigue viva ahora, no si era futura cuando se escribio.
    **Tier 2**: `- [ ] <texto> — _origen: [[sessions/YYYY-MM-DD-slug]] (backfill)_ — _creado: YYYY-MM-DD_ — _id: p-…_`
    under Media prioridad of `memory/_pendientes.md`. **Tier 3**: a row in `memory/pendientes/YYYY-MM.md`
    (the month of `--creado`; the file is created if needed).

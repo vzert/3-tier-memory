@@ -1,5 +1,105 @@
 # Changelog
 
+## [2.15.1] - 2026-09-11
+La divergencia que destapo la ronda adversarial de 2.15.0: **dos plantillas construyen session files
+y no construian el mismo**. `/checkpoint-3t` y `/backfill-3t` llevaban esqueletos distintos, y la
+diferencia no era solo cosmetica — se llevaba por delante un campo con dos consumidores reales.
+
+### Fixed
+- **`/backfill-3t` nunca emitia `--revisar`** (el hueco de verdad, por encima del esqueleto). Un
+  pendiente reconstruido que nombra una fecha futura nacia sin la ventana declarada, asi que
+  `expire-pendientes.py` no podia protegerlo de caducar y el barrido de `/triage-3t` no lo veia.
+  **El hueco esta vivo, no es historico**: hay JSONL sin procesar fechados hoy y ayer (comprobado
+  por fecha de fichero), y hoy mismo nacio un pendiente con fecha 2026-10-11. Un backfill hoy lo
+  habria perdido. La regla compara **contra hoy, no contra `--creado`**: lo que decide es si la
+  fecha sigue viva ahora.
+  **No se publica un numero de sesiones pendientes a proposito.** La primera version de esta entrada
+  decia "10 sesiones sin procesar", copiado del aviso del hook de arranque. Ese contador no sirve:
+  `session-start.sh:538` calcula `JSONL_COUNT - PROCESSED - 1` e **ignora `skipped[]` por completo**,
+  que en esta instalacion tiene 17 entradas; ademas el unico UUID en `processed` ya no existe en
+  disco. Es un defecto del contador, no un dato. Lo encontro el verificador externo.
+- **`## Callejones sin salida` faltaba en el esqueleto del backfill**, asi que toda sesion
+  reconstruida nacia sin la seccion que alimenta la linea `No repitas:` del snippet de continuidad.
+  Se rellena **solo con lo que el transcript dice que se abandono**, nunca por inferencia: un
+  callejon inventado viaja a la sesion siguiente como si fuera un acuerdo del usuario y cierra un
+  camino que nadie descarto. Si el transcript no lo dice, `Ninguno`.
+- **`## Recordatorios de calendario` faltaba**, y ahora se escribe con la misma regla condicional
+  que en `/checkpoint-3t`, gateada por "la fecha sigue siendo futura en el momento de correr el
+  backfill". Una fecha ya pasada no genera recordatorio: el evento llegaria vencido.
+- **La nota de acomodo de `/checkpoint-3t` acotada.** Decia que un fichero sin `## Callejones sin
+  salida` viene de "una version anterior a 2.12.2, o /backfill-3t"; desde 2.15.1 el backfill si la
+  escribe, asi que ahora dice "un /backfill-3t anterior a 2.15.1". Una excepcion sin fecha de
+  caducidad se convierte en permanente.
+
+### Added
+- **`## Como retomar` sigue sin escribirse en el backfill, pero ahora es una omision DECLARADA**
+  con su razon en la plantilla, no un hueco silencioso. El snippet dice donde quedamos y cual es el
+  proximo paso; en una sesion reconstruida meses despues eso es falso por construccion, y se pega
+  tal cual. **Es la unica divergencia que queda entre los dos esqueletos**, y ahora esta escrita
+  donde se lee.
+- README: el bloque de recordatorio de calendario llevaba sin documentar desde 2.13.0. Una linea.
+- **Regla para las fechas relativas** en Step 3d, que faltaba: `en 2 semanas` se resuelve contra la
+  fecha de la SESION, no contra hoy, porque eso es lo que significaba cuando se escribio; solo
+  despues se compara el resultado con hoy. Y si la expresion es demasiado vaga para dar una fecha
+  (`mas adelante`, `cuando se pueda`), **no se emite `--revisar`**: una ventana inventada es peor
+  que ninguna, porque `expire-pendientes.py` la trata como un compromiso declarado por el usuario.
+
+### Notas de verificacion
+- **Habia un TERCER constructor, y el primer barrido no lo vio.** `commands/backfill.md` construia
+  su propio esqueleto completo de session file: sin `## Callejones sin salida`, sin
+  `## Recordatorios de calendario` y **sin `--revisar`**. Era el fichero detras del comando nativo
+  `/3-tier-memory:backfill`, sin tocar desde el 2026-09-02. O sea que el defecto que esta version
+  dice cerrar seguia vivo en una de las dos vias de invocacion. **Borrado**, no sincronizado: el
+  README ya documenta el backfill como `/backfill-3t` (el local) y solo trata `setup-memory` y
+  `migrate` como comandos nativos, y la regla de distribucion de este proyecto prohibe enviar
+  comandos duplicados. La capacidad no se pierde — `/backfill-3t` la sigue dando y el hook lo
+  instala solo; lo que desaparece es un segundo nombre que servia instrucciones viejas.
+- **Superficie barrida, ahora con dos sondas y sin puntos ciegos.** Constructores de session file en
+  todo el repo: `checkpoint-3t` y `backfill-3t`, y ya no hay un tercero. `consolidate-3t` solo LEE
+  dos secciones (`## Cambios realizados`, `## Learnings generados`); `enrich-3t` lee secciones
+  nombradas; `audit-3t` solo comprueba que `## Related` exista y contenga sus wikilinks — **por eso
+  la divergencia era invisible**: ninguna comprobacion automatica mira el conjunto de secciones.
+  `triage-3t` usa `## Related` para su propia documentacion. `checkpoint-paperclip` no vive aqui.
+- **Por que el primer barrido fallo, que es lo que hay que recordar.** Dos causas independientes:
+  (a) se busco en `templates/` y `.claude/commands/` y **no en `commands/`**, que es la superficie
+  nativa del plugin;
+  (b) el `grep` de una sesion de Claude Code **no es `/usr/bin/grep`**: es una funcion de shell
+  instalada por el snapshot de la sesion, que ejecuta el ugrep incluido con `--ignore-files`, o sea
+  que **salta lo que esta en `.gitignore`**. Medido en este repo, `grep -rl "## Cambios realizados" .`
+  desde la raiz devuelve 4 ficheros; `/usr/bin/grep -rl` sobre lo mismo devuelve 50, incluidos todos
+  los de `.claude/`, `memory/` y `.goalspec/`. Nombrar el directorio de forma explicita
+  (`grep -r ... .claude/`) si lo encuentra — el punto ciego es solo al recursar desde la raiz.
+  La primera redaccion de esta nota decia "grep en esta maquina es ugrep", y el verificador externo
+  la refuto enseñando que el binario del PATH es BSD grep; las dos mitades eran imprecisas y la
+  medicion de arriba es lo que queda. **"`grep -r` no lo encuentra" no es prueba de ausencia en este
+  repo.** El barrido bueno usa dos sondas distintas (`## Cambios realizados` y
+  `## Learnings generados`), enumera `commands/` a mano, y contrasta con `/usr/bin/grep`.
+- **Una cuarta divergencia, encontrada al commitear**: de los ocho comandos que el plugin instala
+  en `.claude/commands/`, **exactamente uno estaba trackeado en git** (`backfill-3t.md`) pese a que
+  `.gitignore` ignora `.claude/` desde su linea 1 — un `.gitignore` no destrackea lo que ya estaba
+  dentro. La copia commiteada llevaba tiempo desincronizada de su plantilla, asi que quien clonara
+  el repo se llevaba la version vieja del comando. Destrackeado con `git rm --cached`: el fichero
+  **sigue en disco**, y el hook `session-start.sh` lo regenera desde la plantilla como a los otros
+  siete. Era un accidente, no un diseno: ninguno de los otros siete estaba trackeado.
+- **La cadena de `--revisar`, probada sobre una memoria temporal** (no sobre la real). Emitido
+  `pendiente.add` con `--creado 2026-09-10` (pasado) y `--revisar 2026-10-11` (futuro), que es
+  exactamente la combinacion que produce un backfill, y compactado: la linea de Tier 2 sale con
+  `— _revisar: 2026-10-11_` y la fila de Tier 3 aterriza en el mes de `--creado` (2026-09), que es
+  lo correcto. O sea que el comando que la plantilla manda escribir funciona tal cual esta escrito.
+- **`expire-pendientes.py` SI discrimina por la ventana, medido.** El primer control no separo las
+  dos ramas y se publico como "no demostrado"; el fallo era el parametro, no el mecanismo:
+  con `--days 1` el item tenia `edad=1 <= days=1`, asi que no era candidato por ninguna via. Repetido
+  con `--days 0`: el item **sin** `--revisar` sale `candidatos: 1`; el item **con** `--revisar`
+  futuro sale `candidatos: 0` y `excluidos: _revisar futuro 1`. Las dos ramas separadas. Lo corrigio
+  el verificador local, en la direccion de reforzar el resultado, no de tumbarlo.
+- **Lo unico que sigue SIN probar**: que un agente leyendo Step 3d emita el flag. Eso es un prompt,
+  no codigo, y no hay forma de probarlo sin correr el backfill — que sigue bloqueado por su propio
+  defecto ALTA de Step 1: el dedup "already in memory" se apoya en `customTitle`, `null` en todos
+  los JSONL actuales, y una ejecucion literal creaba 7 sesiones duplicadas (`p-ccd3261a60`).
+  Encadenado a ese pendiente.
+- El defecto del contador de backfill del hook **ya estaba anotado** como `p-6ebc35ab3d`; esta
+  entrada no abre uno nuevo, solo explica por que no se publica su numero.
+
 ## [2.15.0] - 2026-09-11
 El bloque de recordatorio de calendario (Step 8c de `/checkpoint-3t`) pasa a tener la forma de un
 evento de calendario: **Titulo**, **Descripcion** y, aparte, el prompt dentro de un fence. Hasta
