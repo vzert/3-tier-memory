@@ -158,6 +158,14 @@ def main():
             with open(tmp, "w", encoding="utf-8", newline="") as fh:
                 fh.write(new)
             (jc.replace_with_retry if jc is not None else os.replace)(tmp, path)
+            # Re-sellar: anadir una cabecera que falta es una escritura LEGITIMA del plugin. Sin
+            # esto, el detector de deriva de journal-compact (2.13.2) la denunciaria como
+            # "fuera del journal" y el aviso perderia todo su valor por cansancio.
+            if jc is not None:
+                try:
+                    jc.guardar_huellas(a.memory_dir, os.path.join(a.memory_dir, ".journal"))
+                except AttributeError:
+                    pass   # compactador anterior a 2.13.2
             print(f"headers_added={len(plan)} ({names})")
         else:
             print(f"headers_added={len(plan)} ({names}) [dry-run: usa --apply]")

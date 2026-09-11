@@ -421,5 +421,33 @@ printf -- '\n' >> "$MEMJ/pendientes/2026-01.md"
 D6=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMJ" --check-drift 2>&1)
 chk "y delata un cambio en el mensual"       "1" "$(printf '%s' "$D6" | grep -c 'pendientes/2026-01.md')"
 
+echo "== las herramientas LEGITIMAS del plugin no disparan el aviso de deriva =="
+# El aviso solo vale si no grita en falso. repair-dualwrite.py lo corre /checkpoint-3t en su
+# Step 3-pre y normalize-pendientes.py anade cabeceras que faltan: las dos escriben indices de
+# forma sancionada. Sin re-sellar, cada checkpoint denunciaria su propia reparacion.
+MEMK="$T/memk"; mkdir -p "$MEMK/pendientes" "$MEMK/sessions"
+printf -- '---\ntype: index\n---\n# Pendientes\n\n## Media prioridad\n\n' > "$MEMK/_pendientes.md"
+printf -- '---\ntype: session\n---\n# s\n' > "$MEMK/sessions/2026-01-01-x.md"
+python3 "$BIN/journal-emit.py" --memory-dir "$MEMK" --type pendiente.add --text "uno" --prioridad Media \
+  --origen "[[sessions/2026-01-01-x]]" --creado 2026-01-01 >/dev/null 2>&1
+python3 "$BIN/journal-compact.py" --memory-dir "$MEMK" --quiet >/dev/null 2>&1
+python3 "$BIN/journal-compact.py" --memory-dir "$MEMK" --check-drift >/dev/null 2>&1
+# se borra la fila de Tier 3 para darle a repair-dualwrite algo legitimo que reconstruir
+grep -v '^| 1 |' "$MEMK/pendientes/2026-01.md" > "$MEMK/p.tmp" && mv "$MEMK/p.tmp" "$MEMK/pendientes/2026-01.md"
+python3 "$BIN/journal-compact.py" --memory-dir "$MEMK" --check-drift >/dev/null 2>&1   # re-sella el borrado
+python3 "$BIN/repair-dualwrite.py" "$MEMK" --apply >/dev/null 2>&1
+D=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMK" --check-drift 2>&1)
+chk "repair-dualwrite --apply NO dispara el aviso" "0" "$(printf '%s' "$D" | grep -c 'FUERA DEL JOURNAL')"
+# normalize-pendientes: se le quita una cabecera para que tenga algo que anadir
+printf -- '---\ntype: index\n---\n# Pendientes\n\n## Alta prioridad\n\n- [ ] x — _origen: [[sessions/2026-01-01-x]]_ — _creado: 2026-01-01_ — _id: p-5555555555_\n' > "$MEMK/_pendientes.md"
+python3 "$BIN/journal-compact.py" --memory-dir "$MEMK" --check-drift >/dev/null 2>&1   # re-sella
+python3 "$BIN/normalize-pendientes.py" "$MEMK" --apply >/dev/null 2>&1
+D2=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMK" --check-drift 2>&1)
+chk "normalize-pendientes --apply NO dispara"      "0" "$(printf '%s' "$D2" | grep -c 'FUERA DEL JOURNAL')"
+# y el control negativo: una escritura de verdad a mano SI dispara, en el mismo directorio
+printf -- '- [ ] a mano\n' >> "$MEMK/_pendientes.md"
+D3=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMK" --check-drift 2>&1)
+chk "control negativo: la escritura a mano SI dispara" "1" "$(printf '%s' "$D3" | grep -c 'FUERA DEL JOURNAL')"
+
 echo "RESULT pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

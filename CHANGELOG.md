@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.13.3] - 2026-09-11
+### Fixed
+- **El detector de deriva de 2.13.2 gritaba en falso sobre las herramientas del propio plugin.** `repair-dualwrite.py --apply` (que `/checkpoint-3t` corre en su Step 3-pre) y `normalize-pendientes.py --apply` escriben los indices de forma sancionada, y ninguna re-sellaba la linea base: cada reparacion se denunciaba a si misma como "escritura fuera del journal". Un aviso que grita en su propio camino feliz deja de leerse a la tercera vez. Las dos re-sellan ahora, y la suite lo fija con **control negativo** — una escritura a mano en el mismo directorio sigue disparando.
+
+### Notas sobre el alcance real de `journal_strict`
+- Medido 2026-09-11 cruzando `_pendientes.md` con los eventos de `.journal/applied/`: **5 proyectos con ids discrepantes, 50 ids en total, 43 de ellos sin NINGUN evento** — es decir, escritos a mano, nunca emitidos. Los otros 7 tienen evento: su texto se edito despues de asignarles el id. `ids_invented` mide discrepancia, **no origen**; cruzar con los eventos es lo que distingue una cosa de la otra.
+- **El proyecto con `journal_strict=1` es el que mas ids escritos a mano tiene (25 de 43).** Encender el guard no lo impide, porque el hook no cubre Bash. Quien dependa de `journal_strict` para que no le editen los indices esta confiando en algo que no hace eso.
+- Lo que si llega a todos sin `migrate`: **`--check-drift` no consulta `.memory-config`**. Corre en cualquier proyecto con `.journal/`, tenga o no el guard encendido.
+
 ## [2.13.2] - 2026-09-11
 ### Added
 - **Deteccion de escrituras fuera del journal, comparando bytes.** El compactador guarda el `sha256` de cada indice protegido en `memory/.journal/fingerprints.json` al escribirlo; si en la pasada siguiente no coincide, alguien lo escribio sin pasar por el journal. Se avisa en `SessionStart`, se anota con fecha en `memory/.journal/out-of-band.log`, y la linea base se re-sella para que **el aviso salga una vez, no en cada sesion**.

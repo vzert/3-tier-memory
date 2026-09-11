@@ -379,6 +379,16 @@ def main():
                 for pid, *_ in por_mes[ym]:
                     print(f"  {pid} -> pendientes/{ym}.md")
 
+        # Re-sellar la linea base de huellas antes de reportar: esta herramienta escribe los
+        # indices de forma LEGITIMA y /checkpoint-3t la corre en su Step 3-pre. Sin esto, el
+        # detector de deriva de journal-compact avisaria de "escritura fuera del journal" en
+        # cada reparacion: un falso positivo en un camino sancionado, que es justo lo que
+        # haria que nadie volviera a hacer caso del aviso.
+        if a.apply:
+            try:
+                jc.guardar_huellas(mem, os.path.join(mem, ".journal"))
+            except AttributeError:
+                pass   # compactador anterior a 2.13.2: no tiene huellas que sellar
         if not a.quiet:
             sufijo = "" if a.apply else " [dry-run: usa --apply]"
             # pipes_broken cuenta lo ENCONTRADO y se imprime siempre; pipes_fixed cuenta lo
