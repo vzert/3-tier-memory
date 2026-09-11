@@ -26,7 +26,10 @@ also makes the script idempotent: re-running --apply is a no-op.
 Guarantees:
   - DRY-RUN by default; writes only with --apply. `--count` prints just the number found.
   - Idempotent: <REDACTED> / $VAR / placeholder values are skipped, so re-runs are no-ops.
-  - Atomic per-file writes (tmp + os.replace). Body is otherwise byte-identical.
+  - Atomic per-file writes (tmp + pid + os.replace with retry), preserving the file's own
+    line endings (`newline=""`). Body is otherwise byte-identical EXCEPT the redacted
+    fragment. Until 2026-09-11 the write used text mode, so on Windows every line ending was
+    rewritten and "byte-identical" was false.
   - Never prints a secret value — only its type, line number, and a masked fragment.
   - Skips archived content (archive/, *.bak, *.zip, *.archived.md, *-archived-*.md).
 
@@ -39,6 +42,7 @@ Exit code 0 always (detection is advisory; the gate reads the SUMMARY/count).
 import os
 import re
 import sys
+import time
 
 # Windows consoles often default to a legacy codepage (e.g. cp1252) that can't
 # encode the —/… characters this script prints, raising UnicodeEncodeError.
@@ -154,6 +158,49 @@ def iter_files(memory_dir):
             yield p
 
 
+REPLACE_RETRIES = 5   # Windows: antivirus/indexador pueden tener el .md abierto un instante
+
+
+def escribir_preservando(path, content):
+    """Escribe `content` con tmp+replace, sin convertir el salto de linea del fichero.
+
+    Cuarta y quinta copias de este patron en el plugin (journal-compact.py, enrich-memory.py y
+    normalize-pendientes.py son las otras). Las tres arrastraban los mismos defectos y la ronda 5
+    del adversario encontro que este barrido nunca las habia buscado todas:
+
+    1. `path + ".tmp"` fijo: dos procesos a la vez escriben el MISMO temporal y uno pisa al otro.
+       El pid los separa.
+    2. Modo texto por defecto: Python traduce "\n" al salto del sistema, asi que el fichero salia
+       LF en macOS y CRLF en Windows. `newline=""` lo apaga; el contenido manda.
+    3. `os.replace` pelado: en Windows un PermissionError transitorio tiraba la pasada entera.
+
+    Y `newline=""` solo no basta: la lectura universal ya se llevo el "\r" antes. Hay que mirar el
+    fichero en binario para saber que salto usaba. (Mismo error cometido y corregido aqui mismo.)
+    """
+    # El sniff va ANTES de escribir, sobre el fichero que todavia tiene el contenido viejo.
+    # Hace falta porque la LECTURA es universal (`open(p, encoding="utf-8")` traduce "\r\n" a
+    # "\n"), asi que para cuando el contenido llega aqui ya no queda ningun "\r" que respetar:
+    # `newline=""` solo evita anadir traduccion, no devuelve la que la lectura se llevo.
+    try:
+        with open(path, "rb") as f:
+            eol = "\r\n" if b"\r\n" in f.read() else "\n"
+    except OSError:
+        eol = "\n"
+    if eol != "\n":
+        content = content.replace("\r\n", "\n").replace("\n", eol)
+    tmp = f"{path}.{os.getpid()}.tmp"
+    with open(tmp, "w", encoding="utf-8", newline="") as f:
+        f.write(content)
+    for intento in range(REPLACE_RETRIES):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if intento == REPLACE_RETRIES - 1:
+                raise
+            time.sleep(0.05 * (intento + 1))
+
+
 def main():
     args = sys.argv[1:]
     if not args:
@@ -187,10 +234,7 @@ def main():
         for lineno, lbl, mk in file_findings:
             report.append(f"   ! {rel}:{lineno}  {lbl} — {mk}")
         if apply and changed:
-            tmp = p + ".tmp"
-            with open(tmp, "w", encoding="utf-8") as f:
-                f.writelines(lines)
-            os.replace(tmp, p)
+            escribir_preservando(p, "".join(lines))
 
     if count_only:
         print(total)

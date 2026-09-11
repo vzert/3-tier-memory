@@ -315,5 +315,26 @@ CR_TRAS_COMPACT="$(tr -dc '\r' < "$MEME/_pendientes.md" | wc -c | tr -d ' ')"
 chk "normalize- conservo el CRLF"             "1" "$([ "$CR_TRAS_NORM" -gt 0 ] && echo 1 || echo 0)"
 chk "compact- no le dio la vuelta despues"    "$CR_TRAS_NORM" "$CR_TRAS_COMPACT"
 
+
+echo "== ronda 5: ninguna ruta de escritura del plugin convierte el salto de linea =="
+# La ronda 4 reviso los llamantes de UNA implementacion de atomic_write y declaro el contrato
+# cumplido. Habia SEIS rutas de escritura en bin/, y tres seguian en modo texto. Esta prueba no
+# revisa llamantes: enumera las escrituras del codigo y exige `newline=` en todas, para que una
+# septima copia no pueda entrar en silencio.
+ESCRITURAS=$(grep -n 'open([^)]*"w"' "$BIN"/*.py | grep -v '/test-' || true)
+SIN_NEWLINE=$(printf '%s\n' "$ESCRITURAS" | grep -v 'newline=' | grep -c 'open(' || true)
+chk "toda open(...,\"w\") declara newline=" "0" "$SIN_NEWLINE"
+if [ "$SIN_NEWLINE" != "0" ]; then printf '%s\n' "$ESCRITURAS" | grep -v 'newline=' | sed 's/^/     /'; fi
+# Y el comportamiento, no solo la forma: un fichero CRLF sobrevive a cada herramienta.
+MEMG="$T/memg"; mkdir -p "$MEMG/sessions"
+printf -- '---\ntype: session\n---\n# t\r\ncuerpo\r\n' > "$MEMG/sessions/s.md"
+CR0=$(tr -dc '\r' < "$MEMG/sessions/s.md" | wc -c | tr -d ' ')
+python3 "$BIN/ensure-frontmatter.py" "$MEMG" --apply >/dev/null 2>&1
+python3 "$BIN/scan-secrets.py" "$MEMG" --apply >/dev/null 2>&1
+python3 "$BIN/enrich-memory.py" "$MEMG" --apply >/dev/null 2>&1
+CR1=$(tr -dc '\r' < "$MEMG/sessions/s.md" | wc -c | tr -d ' ')
+chk "el fixture nace en CRLF"                      "1" "$([ "$CR0" -gt 0 ] && echo 1 || echo 0)"
+chk "y sigue en CRLF tras las tres herramientas"   "1" "$([ "$CR1" -gt 0 ] && echo 1 || echo 0)"
+
 echo "RESULT pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

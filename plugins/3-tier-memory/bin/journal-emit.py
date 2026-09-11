@@ -181,13 +181,15 @@ def write_event(memory_dir, event):
         except FileExistsError as e:
             last_err = e
             continue
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        # newline="\n": un evento del journal es un artefacto generado; sus bytes son los mismos
+        # en cualquier sistema, y asi el hash de un evento no depende de donde se emitio.
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
             fh.write(payload)
         return path
     failed = os.path.join(journal, "failed")
     os.makedirs(failed, exist_ok=True)
     fpath = os.path.join(failed, f"{ts_ns}-{sid}-{pid}.json.err")
-    with open(fpath, "w", encoding="utf-8") as fh:
+    with open(fpath, "w", encoding="utf-8", newline="\n") as fh:
         fh.write(payload)
         fh.write(f"\n# error: {last_err}\n")
     sys.stderr.write(f"journal-emit: no se pudo crear el evento tras {MAX_EXCL_RETRIES} "

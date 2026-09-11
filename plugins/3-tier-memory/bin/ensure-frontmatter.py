@@ -20,7 +20,8 @@ Guarantees:
   - DRY-RUN by default; writes only with --apply. `--count` prints just the number missing.
   - Idempotent: only files that LACK a leading `---` block are touched. Re-runs are no-ops.
   - Never reorders or edits the body — the block is PREPENDED, the original content untouched.
-  - Atomic per-file writes (tmp + os.replace).
+  - Atomic per-file writes (tmp + pid + os.replace with retry), preserving the file's own
+    line endings (`newline=""`).
   - Skips archived content (archive/, *.bak, *.zip, *.archived.md, *-archived-*.md).
 
 Usage:
@@ -32,6 +33,7 @@ import os
 import re
 import sys
 from datetime import date
+import time
 
 # Windows consoles often default to a legacy codepage (e.g. cp1252) that can't
 # encode the → character this script prints, raising UnicodeEncodeError.
@@ -107,6 +109,49 @@ def build_block(tipo, fecha):
     return f"---\ntype: {tipo}\ndate: {fecha}\nstatus: active\n---\n\n"
 
 
+REPLACE_RETRIES = 5   # Windows: antivirus/indexador pueden tener el .md abierto un instante
+
+
+def escribir_preservando(path, content):
+    """Escribe `content` con tmp+replace, sin convertir el salto de linea del fichero.
+
+    Cuarta y quinta copias de este patron en el plugin (journal-compact.py, enrich-memory.py y
+    normalize-pendientes.py son las otras). Las tres arrastraban los mismos defectos y la ronda 5
+    del adversario encontro que este barrido nunca las habia buscado todas:
+
+    1. `path + ".tmp"` fijo: dos procesos a la vez escriben el MISMO temporal y uno pisa al otro.
+       El pid los separa.
+    2. Modo texto por defecto: Python traduce "\n" al salto del sistema, asi que el fichero salia
+       LF en macOS y CRLF en Windows. `newline=""` lo apaga; el contenido manda.
+    3. `os.replace` pelado: en Windows un PermissionError transitorio tiraba la pasada entera.
+
+    Y `newline=""` solo no basta: la lectura universal ya se llevo el "\r" antes. Hay que mirar el
+    fichero en binario para saber que salto usaba. (Mismo error cometido y corregido aqui mismo.)
+    """
+    # El sniff va ANTES de escribir, sobre el fichero que todavia tiene el contenido viejo.
+    # Hace falta porque la LECTURA es universal (`open(p, encoding="utf-8")` traduce "\r\n" a
+    # "\n"), asi que para cuando el contenido llega aqui ya no queda ningun "\r" que respetar:
+    # `newline=""` solo evita anadir traduccion, no devuelve la que la lectura se llevo.
+    try:
+        with open(path, "rb") as f:
+            eol = "\r\n" if b"\r\n" in f.read() else "\n"
+    except OSError:
+        eol = "\n"
+    if eol != "\n":
+        content = content.replace("\r\n", "\n").replace("\n", eol)
+    tmp = f"{path}.{os.getpid()}.tmp"
+    with open(tmp, "w", encoding="utf-8", newline="") as f:
+        f.write(content)
+    for intento in range(REPLACE_RETRIES):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if intento == REPLACE_RETRIES - 1:
+                raise
+            time.sleep(0.05 * (intento + 1))
+
+
 def main():
     args = sys.argv[1:]
     if not args:
@@ -142,10 +187,7 @@ def main():
             if len(samples) < 10:
                 samples.append((os.path.join(sub, fn), tipo, fecha))
             if apply:
-                tmp = p + ".tmp"
-                with open(tmp, "w", encoding="utf-8") as f:
-                    f.write(build_block(tipo, fecha) + content)
-                os.replace(tmp, p)
+                escribir_preservando(p, build_block(tipo, fecha) + content)
 
     if count_only:
         print(sealed)

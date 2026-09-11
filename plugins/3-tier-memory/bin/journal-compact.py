@@ -217,7 +217,9 @@ class Lock:
         # tmp + replace: un lector concurrente nunca ve el marcador a medio escribir
         # (un acquired_at vacio se leeria como 0 = vencido y provocaria un robo falso).
         tmp = os.path.join(self.dir, f".{name}.{self.owner}.tmp")
-        with open(tmp, "w") as fh:
+        # newline="\n" y encoding explicitos: es un marcador interno, sus bytes no deben depender
+        # del sistema operativo ni de la configuracion regional del proceso.
+        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
             fh.write(value)
         replace_with_retry(tmp, os.path.join(self.dir, name))
 
@@ -1176,7 +1178,7 @@ def move_to(src, dest_dir, reason=None):
         dest += f".{uuid.uuid4().hex[:6]}"
     replace_with_retry(src, dest)
     if reason:
-        with open(dest + ".reason", "w", encoding="utf-8") as fh:
+        with open(dest + ".reason", "w", encoding="utf-8", newline="\n") as fh:
             fh.write(reason + "\n")
 
 
