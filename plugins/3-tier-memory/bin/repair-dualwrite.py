@@ -32,7 +32,7 @@ de Tier 2, `Resuelto` y `Sesion resolucion` en blanco. No inventa datos: un pend
 Que NO hace:
   - no toca `_pendientes.md` (Tier 2 es la entrada; aqui solo se lee);
   - no recalcula ids. El id de un pendiente emitido por journal es sha1(texto+creado+origen),
-    pero una linea escrita a mano puede llevar un id inventado (27 de 118 en claude-vzert).
+    pero una linea escrita a mano puede llevar un id inventado (31 de 118 en claude-vzert).
     Recalcularlos obligaria a reescribir las citas de ese id en los session logs, que son
     registro historico. El id vale por ser estable, no por ser reproducible, asi que se
     conserva tal cual. Reemitir ese mismo texto por journal generaria el id canonico y una
@@ -216,13 +216,15 @@ def broken_pipe_rows(jc, mem):
 
 
 def ids_invented(idx_path):
-    """Ids de Tier 2 que NO son el sha1 de su propio contenido: los escribio alguien a mano.
+    """Ids de Tier 2 que NO coinciden con `sha1(texto+creado+origen)[:10]` de su propia linea.
 
-    El id canonico es `sha1(texto + creado + origen)[:10]` (journal-emit.pendiente_id). Un id
-    inventado no rompe nada por si mismo — es solo una etiqueta — pero si mas adelante alguien
+    Mide una DISCREPANCIA, no un origen: lo mas comun es un id escrito a mano, pero tambien la
+    produce una linea cuyo texto se edito despues de asignarle el id, o un id que emitio una
+    version anterior del algoritmo. La consecuencia es la misma en los tres casos: si alguien
     reemite ESE MISMO pendiente por journal, el emisor calcula el id canonico, no lo encuentra
-    en el archivo y escribe una segunda linea y una segunda fila para el mismo pendiente. Se
-    reportan para que se vea venir; no se recalculan, porque ya estan citados en session logs.
+    en el archivo y escribe una segunda linea y una segunda fila para el mismo pendiente.
+
+    Se reportan para que se vea venir; no se recalculan, porque ya estan citados en session logs.
     """
     out = []
     prio_ignorada = None  # parse_tier2 ya valida los campos; aqui solo interesa el hash

@@ -135,8 +135,9 @@ most recent rows by date. The Commit cell is filled in Step 6c with a second `se
 the `## Pendientes` section now means inventing ids that no event will ever match, and once an
 invented id is referenced here, re-emitting the pendiente correctly would produce a *different*
 id, so the natural next move is to hand-write Tier 2 as well — which is exactly what breaks the
-dual write. Measured 2026-09-10 in one project: 27 of 120 ids in `_pendientes.md` were invented,
-and 51 pendientes had no Tier 3 row at all. Leave the placeholder; Step 3d fills it.
+dual write. Measured 2026-09-10 in one project: 31 of 118 ids in `_pendientes.md` did not match
+the hash of their own line, and 49 pendientes had no Tier 3 row at all. Leave the placeholder;
+Step 3d fills it.
 
 This is an instruction, not a gate, and you should know where the gate stops: `journal_strict=1`
 denies the `Edit`/`Write`/`MultiEdit` tools on the shared indexes, but it is a PreToolUse hook and
