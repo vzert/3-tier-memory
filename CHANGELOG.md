@@ -36,9 +36,14 @@ advierte dos lineas mas abajo: *"Getting this wrong deletes context the user nev
   already injects this` y ofreciendo *"Trim to the custom line only?"*, que borra la linea entera del
   volcado — la misma que ahora contiene contenido duplicado Y custom. Lo encontro el verificador
   externo. Ahora esa linea se marca `[PARTIAL]`, nunca se borra, y la accion por defecto es la que no
-  pierde nada: quitar solo las lineas enteramente redundantes. Estrechar el volcado es la opcion 2 y
-  solo con la condicion declarada (25 o menos items de Alta/sin clasificar y cuerpos cortos);
-  borrarlo entero es la 3 y solo si no queda nada `[CUSTOM]` ni `[PARTIAL]`.
+  pierde nada: quitar solo las lineas enteramente redundantes. Borrar el script entero es la
+  opcion 2, y solo si no queda nada `[CUSTOM]` ni `[PARTIAL]`.
+- **No hay opcion de estrechar el volcado, y es deliberado.** Una version intermedia la ofrecia con
+  una condicion escrita (25 o menos items de Alta/sin clasificar, cuerpos cortos) y el verificador
+  mostro que la condicion no basta: estrechar "al `## Media prioridad` en adelante" supone que ese
+  encabezado existe, que va despues de Alta y que no hay secciones custom encima. `/migrate` reporta
+  los dos numeros y el usuario estrecha a mano si quiere; reescribir su script no vale una suposicion
+  sobre su entrada. Misma razon por la que el conteo se lee del plugin en vez de recalcularlo.
 - **Salida para el caso en que la linea del plugin no esta en contexto.** El texto mandaba abrir una
   sesion nueva, que en un agente de Paperclip no sirve: esa rama del hook no inyecta pendientes por
   diseno. Ahora se nombran los tres casos, y en Paperclip la respuesta es que **nada** del volcado
