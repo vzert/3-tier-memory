@@ -57,8 +57,9 @@ from datetime import date
 # UnicodeEncodeError al imprimir sus guiones largos; no los degrada, se lleva el proceso. Los otros
 # cinco scripts de bin/ que imprimen no-ASCII ya lo hacian y estos dos se quedaron fuera.
 # Comprobado 2026-09-12 en los dos sentidos: con la guarda sobrevive, sin ella truena.
-if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")
+for _flujo in (sys.stdout, sys.stderr):
+    if hasattr(_flujo, "reconfigure"):
+        _flujo.reconfigure(encoding="utf-8")
 
 BIN = os.path.dirname(os.path.abspath(__file__))
 CREADO = re.compile(r"_creado: (\d{4}-\d{2}-\d{2})")

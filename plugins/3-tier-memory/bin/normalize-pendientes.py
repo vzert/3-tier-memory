@@ -38,8 +38,9 @@ import os
 import re
 import sys
 
-if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")
+for _flujo in (sys.stdout, sys.stderr):
+    if hasattr(_flujo, "reconfigure"):
+        _flujo.reconfigure(encoding="utf-8")
 
 CANON = [("alta", "## Alta prioridad"), ("media", "## Media prioridad"), ("baja", "## Baja prioridad")]
 HEADER_RE = re.compile(r"^##\s+", re.I)

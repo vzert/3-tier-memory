@@ -62,8 +62,9 @@ import unicodedata
 import uuid
 from datetime import date
 
-if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")
+for _flujo in (sys.stdout, sys.stderr):
+    if hasattr(_flujo, "reconfigure"):
+        _flujo.reconfigure(encoding="utf-8")
 
 SCHEMA_VERSION = 1
 PRIORIDADES = ("Alta", "Media", "Baja")

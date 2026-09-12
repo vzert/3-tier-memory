@@ -1,5 +1,34 @@
 # Changelog
 
+## [2.19.1] - 2026-09-12
+**La entrada de 2.19.0 afirmaba que el barrido de UTF-8 estaba completo. No lo estaba.** Lo rompio
+un adversario externo y se reprodujo aqui: la guarda cubria `stdout` y no `stderr`, asi que
+`triage-scan.py` —que 2.19.0 daba por arreglado— seguia escupiendo
+`no existe /…/memoria\u2014x/_pendientes.md` cuando el directorio llevaba un guion largo en el
+nombre.
+
+Los dos modos de fallo no son el mismo: por `stdout` con una pagina OEM el proceso **muere**; por
+`stderr` **degrada** a la forma escapada. Menos grave, igual de falso, y mas dificil de ver porque
+nada peta.
+
+La causa de fondo no fue olvidar un flujo: fue el **criterio** de la prueba. `test-utf8-stdout.sh`
+decidia quien necesitaba guarda leyendo el fuente en busca de no-ASCII literal en la misma linea
+que un `print(`. Eso no se puede decidir leyendo el fuente — no ve una variable, un f-string armado
+antes, una RUTA que elige el usuario, ni el mensaje de una excepcion. El caso que lo rompio es
+justo de los que esa prueba no podia ver ni en principio.
+
+### Fixed
+- Los **14** `.py` de `bin/` reconfiguran ahora `stdout` **y** `stderr`. Se pone en todos, no en los
+  que "parecen" imprimir no-ASCII: exigirlo siempre no necesita adivinar y no puede quedarse corto.
+
+### Changed
+- `bin/test-utf8-stdout.sh` -> `bin/test-utf8-streams.sh`, con el criterio invertido: ya no intenta
+  deducir quien imprime no-ASCII, exige la guarda en todos. Anade dos casos EN VIVO bajo
+  `PYTHONIOENCODING=cp437` —una ruta no-ASCII por stderr y un texto por stdout— y dos CONTROLES que
+  comprueban que sin guarda cp437 si rompe los dos flujos, porque un caso cuyo control no falla no
+  mide nada. Verificado ademas por mutacion: quitandole stderr a `triage-scan.py` en una copia,
+  fallan los casos 1 y 3.
+
 ## [2.19.0] - 2026-09-12
 **`expire-pendientes.py` y `triage-scan.py` MUEREN en una consola de Windows con pagina OEM.** No
 degradan el texto: se llevan el proceso con `UnicodeEncodeError` al imprimir un guion largo.

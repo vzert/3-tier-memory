@@ -69,8 +69,9 @@ import unicodedata
 import uuid
 from datetime import date
 
-if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")
+for _flujo in (sys.stdout, sys.stderr):
+    if hasattr(_flujo, "reconfigure"):
+        _flujo.reconfigure(encoding="utf-8")
 
 STALE_SECONDS = 60
 POLL_SECONDS = 0.05

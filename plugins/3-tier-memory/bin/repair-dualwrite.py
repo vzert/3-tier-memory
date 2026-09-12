@@ -70,8 +70,9 @@ import re
 import sys
 import unicodedata
 
-if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")
+for _flujo in (sys.stdout, sys.stderr):
+    if hasattr(_flujo, "reconfigure"):
+        _flujo.reconfigure(encoding="utf-8")
 
 PRIOS = (("alta", "Alta"), ("media", "Media"), ("baja", "Baja"))
 HEADER_RE = re.compile(r"^##\s+", re.I)

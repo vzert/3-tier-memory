@@ -28,6 +28,19 @@ import os
 import re
 import sys
 
+# UTF-8 en stdout Y EN STDERR. La guarda anterior solo cubria stdout, asi que un mensaje de error
+# con un caracter no-ASCII —el nombre de un directorio, por ejemplo— seguia saliendo mutilado:
+# `no existe /…/memoria\u2014x/_pendientes.md`. Por stdout con una pagina OEM el proceso MUERE;
+# por stderr DEGRADA a la forma escapada. Menos grave, igual de falso. Lo encontro un adversario
+# externo el 2026-09-12 y se reprodujo aqui.
+#
+# Se pone en TODOS los .py de bin/, no solo en los que "parecen" imprimir no-ASCII: eso ultimo no
+# se puede decidir leyendo el fuente —una variable, un f-string armado antes, una ruta, el mensaje
+# de una excepcion— y el detector que lo intentaba fue justo lo que dejo pasar este hueco.
+for _flujo in (sys.stdout, sys.stderr):
+    if hasattr(_flujo, "reconfigure"):
+        _flujo.reconfigure(encoding="utf-8")
+
 MARCA = re.compile(r'^\s*#\s*sella-huellas:\s*(si|no)\b(.*)$', re.M | re.I)
 SELLA = re.compile(r'guardar_huellas\s*\(')
 EXENTOS = {"journal-compact", "check-index-writers"}
