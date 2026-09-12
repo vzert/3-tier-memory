@@ -92,13 +92,35 @@ echo "5. source=resume si habla con la persona"
 correr "$P" resume > "$TMP/o3"
 check "systemMessage presente" "$(python3 "$TMP/leer.py" "$TMP/o3" claves)" "hookSpecificOutput,systemMessage"
 
-echo "6. si la serializacion falla, texto plano y exit 0 (nunca JSON a medias)"
-STUB="$TMP/stub"; mkdir -p "$STUB"; printf '#!/bin/sh\nexit 1\n' > "$STUB/python3"; chmod +x "$STUB/python3"
-PATH="$STUB:$PATH" CLAUDE_PROJECT_DIR="$P" CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" \
+echo "6. si falla SOLO la serializacion, el bloque del agente sale INTACTO en texto plano"
+# El stub falla unicamente en la llamada que construye el JSON (la reconoce por
+# `hookSpecificOutput`) y deja pasar todas las demas. Un stub que tumbe python3 entero
+# tampoco construye el bloque de pendientes: probaria que sobrevive el PROTOCOLO, no que
+# sobrevive lo que el fallback existe para salvar. (Hallazgo del adversario, 2026-09-11.)
+REAL_PY="$(command -v python3)"
+STUB="$TMP/stub"; mkdir -p "$STUB"
+cat > "$STUB/python3" <<'STUBEOF'
+#!/bin/sh
+for a in "$@"; do
+  case "$a" in *hookSpecificOutput*) exit 1 ;; esac
+done
+exec "$REAL_PYTHON3" "$@"
+STUBEOF
+chmod +x "$STUB/python3"
+REAL_PYTHON3="$REAL_PY" PATH="$STUB:$PATH" CLAUDE_PROJECT_DIR="$P" CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" \
   bash "$BIN/session-start.sh" </dev/null > "$TMP/o4" 2>/dev/null
 check "exit 0" "$?" "0"
 check "NO es JSON" "$(python3 -c "import json;json.load(open('$TMP/o4'));print('si')" 2>/dev/null || echo no)" "no"
-check "el bloque del agente sobrevive" "$(grep -c 'PROTOCOLO' "$TMP/o4")" "1"
+check "los pendientes siguen ahi" "$(grep -c 'PENDIENTES ABIERTOS (3)' "$TMP/o4")" "1"
+check "la ALTA sigue inline" "$(grep -c 'Item de alta que lleva abierto' "$TMP/o4")" "1"
+check "y el protocolo tambien" "$(grep -c 'PROTOCOLO' "$TMP/o4")" "1"
+
+echo "6b. sin python3 en absoluto tampoco se emite JSON roto"
+STUB2="$TMP/stub2"; mkdir -p "$STUB2"; printf '#!/bin/sh\nexit 1\n' > "$STUB2/python3"; chmod +x "$STUB2/python3"
+PATH="$STUB2:$PATH" CLAUDE_PROJECT_DIR="$P" CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" \
+  bash "$BIN/session-start.sh" </dev/null > "$TMP/o4b" 2>/dev/null
+check "exit 0" "$?" "0"
+check "NO es JSON" "$(python3 -c "import json;json.load(open('$TMP/o4b'));print('si')" 2>/dev/null || echo no)" "no"
 
 echo "7. la cuarentena del journal llega a la persona"
 P2="$TMP/p2"; nuevo_proyecto "$P2"
@@ -118,6 +140,43 @@ check "exit 0" "$?" "0"
 check "no deja basura en stdout" \
   "$([ ! -s "$TMP/o6" ] && echo vacio || (python3 -c "import json;json.load(open('$TMP/o6'))" 2>/dev/null && echo json || echo basura))" \
   "vacio"
+
+echo "9. un pendiente con la vieja sentinela en su texto no contamina el canal de la persona"
+# La primera version separaba los dos bloques con `---3T-HUMANO---` dentro de la misma
+# salida: un pendiente que la llevara en el texto partia el mensaje por ahi. Ahora el
+# resumen de la persona se escribe en otro fichero, asi que la cadena es texto y ya esta.
+P4="$TMP/p4"; nuevo_proyecto "$P4"
+# Va bajo Alta prioridad, no al final del fichero: despues de `## Related` el parser lo
+# saltaria por seccion cerrada y la prueba no probaria nada.
+python3 - "$P4/memory/_pendientes.md" <<'INYEOF'
+import sys
+p = sys.argv[1]
+s = open(p, encoding="utf-8").read()
+item = "- [ ] Item con ---3T-HUMANO--- dentro del texto — _origen: [[sessions/x]]_ — _creado: 2026-02-01_\n"
+s = s.replace("## Alta prioridad\n\n", "## Alta prioridad\n\n" + item, 1)
+open(p, "w", encoding="utf-8").write(s)
+INYEOF
+correr "$P4" startup > "$TMP/o7"
+check "sigue siendo JSON valido" "$(python3 -c "import json;json.load(open('$TMP/o7'));print('si')" 2>/dev/null)" "si"
+check "el item con la cadena SI se parseo" \
+  "$(python3 "$TMP/leer.py" "$TMP/o7" additionalContext | grep -c 'PENDIENTES ABIERTOS (4)')" "1"
+check "y aparece entero en el bloque del agente" \
+  "$(python3 "$TMP/leer.py" "$TMP/o7" additionalContext | grep -c 'Item con ---3T-HUMANO--- dentro del texto')" "1"
+check "el mensaje de la persona empieza donde debe" \
+  "$(python3 "$TMP/leer.py" "$TMP/o7" systemMessage | head -1 | grep -c '^MEMORIA 3T —')" "1"
+check "el texto del pendiente no se cuela en el canal de la persona" \
+  "$(python3 "$TMP/leer.py" "$TMP/o7" systemMessage | grep -c 'dentro del texto —$')" "0"
+
+echo "10. un agente de Paperclip no recibe systemMessage aunque haya avisos"
+P5="$TMP/p5"; nuevo_proyecto "$P5"
+mkdir -p "$P5/memory/.journal/quarantine"
+echo '{"roto":true}' > "$P5/memory/.journal/quarantine/ev.json"
+OUT5=$(printf '%s' "{\"cwd\":\"$P5\",\"source\":\"startup\",\"hook_event_name\":\"SessionStart\"}" \
+  | PAPERCLIP_RUN_ID=run-123 CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$BIN/session-start.sh" 2>/dev/null)
+printf '%s' "$OUT5" > "$TMP/o8"
+check "sin systemMessage" "$(python3 "$TMP/leer.py" "$TMP/o8" claves)" "hookSpecificOutput"
+check "el aviso si llega al agente" \
+  "$(python3 "$TMP/leer.py" "$TMP/o8" additionalContext | grep -c 'cuarentena')" "1"
 
 echo
 [ $FAIL -eq 0 ] && echo "TODO VERDE" || echo "HAY FALLOS"

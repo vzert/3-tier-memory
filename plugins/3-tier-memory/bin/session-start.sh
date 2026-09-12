@@ -9,7 +9,7 @@ source "$(dirname "$0")/resolve-project-dir.sh"
 # Este hook habla con DOS lectores y hasta 2.17.0 solo alcanzaba a uno:
 #   - `additionalContext` -> el agente. Ahi iba TODO, via stdout plano.
 #   - `systemMessage`     -> la persona. No existia. Por eso los pendientes se acumulaban
-#     (2026-09-11: 54 abiertos, 22 de mas de un mes). El agente los veia en cada sesion y
+#     (2026-09-11: 54 abiertos, 14 con mas de 30 dias). El agente los veia en cada sesion y
 #     aun asi no bajaban: cerrarlos es una decision de la persona, y a la persona nunca le
 #     llegaban.
 # Los dos viajan en UN SOLO objeto JSON impreso al final. Por eso NADA en este script puede
@@ -42,6 +42,10 @@ except Exception:
 # persona se queda sin mensaje esa sesion; el agente no se queda sin memoria.
 emit_output() {
   [ -z "$_AGENT_BUF" ] && [ -z "$_HUMAN_BUF" ] && return 0
+  # Un agente de Paperclip corre sin nadie delante: los avisos de secretos y cuarentena
+  # ya estan en el buffer cuando se llega aqui, y sin esta linea saldrian por systemMessage
+  # a una pantalla que no existe.
+  [ -n "${PAPERCLIP_RUN_ID:-}" ] && _HUMAN_BUF=""
   case "$(hook_source)" in
     startup|resume) ;;
     *) _HUMAN_BUF="" ;;
@@ -324,7 +328,10 @@ if [ "$IS_PAPERCLIP_AGENT" = true ]; then
 else
   # CLI: inject pendientes (as directive with inline list) + learnings
   if [ -f "$MEMORY_DIR/_pendientes.md" ]; then
-    PENDIENTES_OUTPUT=$(PENDIENTES_FILE="$MEMORY_DIR/_pendientes.md" python3 <<'PYEOF' 2>/dev/null
+    # El resumen para la persona no vuelve por stdout: se escribe aqui. Ver el bloque
+    # "BLOQUE DE LA PERSONA" mas abajo para por que no se usa una sentinela.
+    PEND_HUMANO=$(mktemp 2>/dev/null || echo "")
+    PENDIENTES_OUTPUT=$(PENDIENTES_FILE="$MEMORY_DIR/_pendientes.md" HUMANO_FILE="$PEND_HUMANO" python3 <<'PYEOF' 2>/dev/null
 import os, re, sys
 from datetime import date
 
@@ -470,7 +477,7 @@ def shorten(text):
 # --- BLOQUE DEL AGENTE: conteo + ALTA inline + instruccion.
 # Hasta 2.17.0 listaba tambien MEDIA/BAJA hasta un cap de 10 y cerraba con "[+N mas]".
 # Lo medido: el agente veia el inventario entero en CADA sesion y los pendientes seguian
-# subiendo igual (2026-09-11: 54 abiertos, 22 de mas de un mes). Cerrar un pendiente es una
+# subiendo igual (2026-09-11: 54 abiertos, 14 con mas de 30 dias). Cerrar un pendiente es una
 # decision de la persona, y hasta esta version el inventario no llegaba a ninguna persona.
 # La relevancia por peticion ya la cubre recall.sh (UserPromptSubmit, v2.8.0) — es lo que de
 # verdad hace que el agente cruce peticion vs memoria, y llega en el momento que importa.
@@ -515,37 +522,39 @@ if notes:
     print()
     print("ESTRUCTURA de _pendientes.md: " + "; ".join(notes) + ".")
 
-# --- BLOQUE DE LA PERSONA, detras de la sentinela. Lo separa el shell y lo manda por
-# `systemMessage`. Es corto a proposito: un aviso que ocupa media pantalla en cada arranque
-# se aprende a ignorar, y entonces vuelve a no existir.
-print("---3T-HUMANO---")
-viejos = sorted([(c, t) for _p, (c, t) in selected if c != "9999"], key=lambda x: x[0])
-stale_n = sum(1 for c, _t in viejos if (days_old(c) or 0) > STALE_DAYS)
-cab = f"MEMORIA 3T — {total} pendientes abiertos"
-cab += f", {stale_n} sin cerrar desde hace mas de {STALE_DAYS} dias." if stale_n else "."
-print(cab)
-if viejos[:3]:
-    print("Los mas antiguos:")
-    for c, t in viejos[:3]:
-        print(f"  · {shorten(t)}  ({c}, {days_old(c)} dias)")
-print("Cierra o descarta con /triage-3t. Para reconciliarlos uno a uno: /checkpoint-3t Step 3a.")
+# --- BLOQUE DE LA PERSONA. Va a un fichero aparte, NO a stdout: la primera version lo
+# separaba con una sentinela en la misma salida, y un pendiente cuyo texto contuviera esa
+# sentinela partia el mensaje por donde no debia — mandando texto del pendiente al canal de
+# la persona y perdiendo el resto. Con dos destinos distintos esa clase de fallo no existe.
+# Es corto a proposito: un aviso que ocupa media pantalla en cada arranque se aprende a
+# ignorar, y entonces vuelve a no existir.
+hpath = os.environ.get("HUMANO_FILE", "")
+if hpath:
+    viejos = sorted([(c, t) for _p, (c, t) in selected if c != "9999"], key=lambda x: x[0])
+    stale_n = sum(1 for c, _t in viejos if (days_old(c) or 0) > STALE_DAYS)
+    cab = f"MEMORIA 3T — {total} pendientes abiertos"
+    cab += f", {stale_n} sin cerrar desde hace mas de {STALE_DAYS} dias." if stale_n else "."
+    lineas = [cab]
+    if viejos[:3]:
+        lineas.append("Los mas antiguos:")
+        for c, t in viejos[:3]:
+            lineas.append(f"  · {shorten(t)}  ({c}, {days_old(c)} dias)")
+    lineas.append("Cierra o descarta con /triage-3t. Para reconciliarlos uno a uno: /checkpoint-3t Step 3a.")
+    try:
+        with open(hpath, "w", encoding="utf-8") as fh:
+            fh.write("\n".join(lineas) + "\n")
+    except Exception:
+        pass   # sin canal a la persona esta sesion; el del agente no depende de esto
 PYEOF
 )
 
-    # El bloque de arriba imprime las dos mitades separadas por la sentinela: lo de antes
-    # para el agente, el resumen corto para la persona. Sin sentinela (por ejemplo cuando
-    # solo salen notas de ESTRUCTURA) todo es del agente.
     if [ -n "$PENDIENTES_OUTPUT" ]; then
-      case "$PENDIENTES_OUTPUT" in
-        *---3T-HUMANO---*)
-          out "${PENDIENTES_OUTPUT%%---3T-HUMANO---*}"
-          human "${PENDIENTES_OUTPUT#*---3T-HUMANO---}"
-          ;;
-        *)
-          out "$PENDIENTES_OUTPUT"
-          out ""
-          ;;
-      esac
+      out "$PENDIENTES_OUTPUT"
+      out ""
+    fi
+    if [ -n "$PEND_HUMANO" ]; then
+      [ -s "$PEND_HUMANO" ] && human "$(cat "$PEND_HUMANO")"
+      rm -f "$PEND_HUMANO"
     fi
   fi
 
