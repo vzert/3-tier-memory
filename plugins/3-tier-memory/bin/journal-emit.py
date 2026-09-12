@@ -225,6 +225,9 @@ def fecha_real(v):
 
 
 def strip_meta(text):
+    # Las mismas claves que `META_RE` en repair-dualwrite.py, que re-deriva este hash para
+    # detectar ids inventados. Si divergen, todo pendiente con la clave que falte se reporta
+    # como id inventado. Si anades una clave aqui, anadela alli.
     text = re.sub(r"\s*—\s*_(origen|creado|id|revisar):[^—]*", "", text)
     return text.strip()
 

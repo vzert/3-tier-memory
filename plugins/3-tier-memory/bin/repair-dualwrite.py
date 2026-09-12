@@ -80,7 +80,11 @@ ITEM_RE = re.compile(r"^\s*-\s*\[[ xX]\]\s")
 ID_RE = re.compile(r"_id:\s*(p-[0-9a-f]{10})_")
 CREADO_RE = re.compile(r"_creado:\s*(\d{4}-\d{2}-\d{2})_")
 ORIGEN_RE = re.compile(r"_origen:\s*(\[\[[^\]]+\]\])_")
-META_RE = re.compile(r"\s*—\s*_(?:origen|creado|id):[^—]*")
+# Tiene que borrar EXACTAMENTE las mismas claves que `journal-emit.strip_meta` (journal-emit.py),
+# que es quien las quita antes de hashear: una clave de menos aqui cambia el texto, cambia el
+# sha1 y el pendiente sale como `ids_invented` con un aviso falso de fila duplicada. Paso con
+# `revisar` (2026-09-11). Si anades una clave alli, anadela aqui.
+META_RE = re.compile(r"\s*—\s*_(?:origen|creado|id|revisar):[^—]*")
 
 
 def load_compactor(bin_dir):

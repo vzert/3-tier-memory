@@ -143,6 +143,31 @@ OUT=$(python3 "$BIN/repair-dualwrite.py" "$M7" --apply --fix-pipes)
 check "la reporta como no reparable" "$(echo "$OUT" | grep -o 'unrepairable=[0-9]*')" "unrepairable=1"
 check "y NO la toco" "$(grep 'p-ffffffffff' "$M7/pendientes/2026-09.md")" "$ANTES"
 
+echo "10. un pendiente con ventana (_revisar_) NO se reporta como id inventado"
+# El id lo calcula journal-emit sobre el texto SIN metadatos; repair-dualwrite lo re-deriva.
+# Mientras su META_RE no borraba `_revisar:`, el texto que hasheaba llevaba la ventana pegada,
+# el sha1 salia distinto y TODO pendiente con ventana se reportaba como inventado (2026-09-11).
+M8="$TMP/m8"; nuevo_memory "$M8"
+rm -f "$M8/_pendientes.md"
+cat > "$M8/_pendientes.md" <<'EOF'
+# Pendientes
+
+## Alta prioridad
+
+## Media prioridad
+
+## Baja prioridad
+
+## Related
+EOF
+python3 "$BIN/journal-emit.py" --memory-dir "$M8" --type pendiente.add \
+  --text "Medir el ratio cierra/entra dentro de un mes" --prioridad media \
+  --origen "[[sessions/ventana]]" --creado 2026-09-11 --revisar 2026-10-11 >/dev/null
+python3 "$BIN/journal-compact.py" --memory-dir "$M8" --quiet >/dev/null
+check "la linea llego con su ventana" "$(grep -c '_revisar: 2026-10-11_' "$M8/_pendientes.md")" "1"
+check "ids_invented=0" \
+  "$(python3 "$BIN/repair-dualwrite.py" "$M8" | grep -o 'ids_invented=[0-9]*')" "ids_invented=0"
+
 echo
 [ $FAIL -eq 0 ] && echo "TODO VERDE" || echo "HAY FALLOS"
 exit $FAIL
