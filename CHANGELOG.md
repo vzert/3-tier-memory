@@ -18,7 +18,7 @@ bajaba: cerrar un pendiente es una decision de la persona.
 - **Los avisos que solo puede resolver una persona viajan tambien por `systemMessage`**: secretos en
   texto plano en `memory/` y eventos en cuarentena. Rotar una key que ya se pusheo no lo puede hacer
   un agente.
-- **`bin/test-session-start-json.sh`** — 29 comprobaciones sobre la salida del hook. Entre ellas: que
+- **`bin/test-session-start-json.sh`** — 32 comprobaciones sobre la salida del hook. Entre ellas: que
   con `source=clear` la persona no recibe nada **pero el agente si**; que si falla la serializacion
   el bloque del agente sale intacto en texto plano con exit 0; que un agente de Paperclip no recibe
   `systemMessage` aunque haya avisos; y que un pendiente cuyo texto contiene la cadena que se uso
@@ -64,10 +64,12 @@ bajaba: cerrar un pendiente es una decision de la persona.
   `python3` entero tampoco construiria el bloque de pendientes, y probaria otra cosa.
 - **Sin stdin utilizable no hay `systemMessage`.** `source` se lee del payload del hook; sin payload
   el mensaje a la persona no sale. Es el lado seguro: repetirlo en cada `compact` lo vuelve ruido.
-- **Limite conocido: modo no interactivo.** La unica deteccion de "agente sin persona delante" es
-  `PAPERCLIP_RUN_ID`. Una corrida headless (`claude -p`) con `source=startup` produce el mismo
-  `systemMessage` que una interactiva; el payload del hook no trae nada que distinga las dos. No hay
-  dano —el mensaje no llega a ninguna pantalla— pero queda declarado, no descubierto.
+- **Una corrida no interactiva tampoco recibe `systemMessage`.** Son dos senales, no una:
+  `PAPERCLIP_RUN_ID` definida, y `CLAUDE_CODE_SESSION_ATTENDED=0`. Medido el 2026-09-11 con un hook
+  de registro: `claude -p` deja `CLAUDE_CODE_SESSION_ATTENDED=0` y `CLAUDE_CODE_ENTRYPOINT=sdk-cli`,
+  donde una sesion interactiva deja `1` y `cli`. El canal se apaga solo con el `0` explicito: si la
+  variable no existe —un CLI mas viejo— se deja pasar, que es el comportamiento anterior. Casos 11 y
+  11b del test.
 - **Coste medido**: por debajo de 0,3 s por arranque sobre la memoria de este repo (`/usr/bin/time
   -p`, tres corridas: 0,24 s aqui, 0,27-0,29 s en la verificacion independiente). El timeout del
   hook en `hooks.json` es de 10 s.

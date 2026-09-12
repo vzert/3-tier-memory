@@ -42,10 +42,16 @@ except Exception:
 # persona se queda sin mensaje esa sesion; el agente no se queda sin memoria.
 emit_output() {
   [ -z "$_AGENT_BUF" ] && [ -z "$_HUMAN_BUF" ] && return 0
-  # Un agente de Paperclip corre sin nadie delante: los avisos de secretos y cuarentena
-  # ya estan en el buffer cuando se llega aqui, y sin esta linea saldrian por systemMessage
-  # a una pantalla que no existe.
+  # Nadie delante = nada que decirle. Dos senales, las dos medidas el 2026-09-11:
+  #   - `PAPERCLIP_RUN_ID` definida: agente de Paperclip. Sus avisos de secretos y cuarentena
+  #     ya estan en el buffer cuando se llega aqui, y sin esto saldrian a una pantalla que no
+  #     existe.
+  #   - `CLAUDE_CODE_SESSION_ATTENDED=0`: corrida no interactiva. Medido con un hook de
+  #     registro: `claude -p` da ATTENDED=0 y ENTRYPOINT=sdk-cli; una sesion interactiva da
+  #     ATTENDED=1 y ENTRYPOINT=cli. Solo se apaga con el "0" explicito: si la variable no
+  #     existe (CLI mas viejo) se deja pasar, que es el comportamiento de antes.
   [ -n "${PAPERCLIP_RUN_ID:-}" ] && _HUMAN_BUF=""
+  [ "${CLAUDE_CODE_SESSION_ATTENDED:-}" = "0" ] && _HUMAN_BUF=""
   case "$(hook_source)" in
     startup|resume) ;;
     *) _HUMAN_BUF="" ;;

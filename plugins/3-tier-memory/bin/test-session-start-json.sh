@@ -178,6 +178,23 @@ check "sin systemMessage" "$(python3 "$TMP/leer.py" "$TMP/o8" claves)" "hookSpec
 check "el aviso si llega al agente" \
   "$(python3 "$TMP/leer.py" "$TMP/o8" additionalContext | grep -c 'cuarentena')" "1"
 
+echo "11. una corrida no interactiva no recibe systemMessage"
+# Medido el 2026-09-11 con un hook de registro: `claude -p` deja
+# CLAUDE_CODE_SESSION_ATTENDED=0 y CLAUDE_CODE_ENTRYPOINT=sdk-cli; la sesion interactiva
+# deja 1 y cli. El canal se apaga solo con el "0" explicito.
+OUT6=$(printf '%s' "{\"cwd\":\"$P\",\"source\":\"startup\",\"hook_event_name\":\"SessionStart\"}" \
+  | CLAUDE_CODE_SESSION_ATTENDED=0 CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$BIN/session-start.sh" 2>/dev/null)
+printf '%s' "$OUT6" > "$TMP/o9"
+check "sin systemMessage" "$(python3 "$TMP/leer.py" "$TMP/o9" claves)" "hookSpecificOutput"
+check "el agente si recibe lo suyo" \
+  "$(python3 "$TMP/leer.py" "$TMP/o9" additionalContext | grep -c 'PENDIENTES ABIERTOS (3)')" "1"
+
+echo "11b. sin la variable (CLI viejo) el canal sigue abierto"
+OUT7=$(printf '%s' "{\"cwd\":\"$P\",\"source\":\"startup\",\"hook_event_name\":\"SessionStart\"}" \
+  | env -u CLAUDE_CODE_SESSION_ATTENDED CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$BIN/session-start.sh" 2>/dev/null)
+printf '%s' "$OUT7" > "$TMP/o10"
+check "systemMessage presente" "$(python3 "$TMP/leer.py" "$TMP/o10" claves)" "hookSpecificOutput,systemMessage"
+
 echo
 [ $FAIL -eq 0 ] && echo "TODO VERDE" || echo "HAY FALLOS"
 exit $FAIL
