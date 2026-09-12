@@ -1,5 +1,61 @@
 # Changelog
 
+## [2.16.0] - 2026-09-11
+El recordatorio de calendario no decia **en que proyecto** correr su propio prompt. Quien usa el
+plugin en varios proyectos acumula recordatorios de todos en un mismo calendario: llegada la fecha,
+tres campos escritos para un proyecto sin nombrar cual dejan un prompt que no se sabe desde donde
+correr — y su linea `Contexto: memory/sessions/…` es una ruta **relativa** que no resuelve contra
+nada.
+
+### Added
+- **El proyecto, en los dos lados del fence.** `Titulo` abre con `[<proyecto>]` y el fence abre con
+  `Proyecto: <basename> — <ruta absoluta>`. No es redundancia: son dos preguntas distintas en dos
+  momentos distintos. Fuera contesta *cual de mis recordatorios es este* al mirar el mes; dentro
+  contesta *desde donde se corre esto* al pegar el prompt.
+- **El prefijo va primero y cuenta dentro de los ~70 caracteres** del Titulo, asi que el que se
+  acorta es el texto de la pregunta. El calendario corta por la derecha en vista de mes: lo unico
+  que sobrevive siempre es lo que va primero, y el proyecto es justo el dato que distingue un
+  recordatorio de otro.
+- **La ruta va absoluta y tal cual**, sin `~` y sin variables. El agente que recibe el prompt puede
+  estar arrancado en cualquier sitio, y `~` depende de que lo expanda el shell — en Git Bash/Windows
+  no siempre apunta a lo mismo.
+- **El basename del directorio raiz es el nombre**, no un nombre "bonito" ni el del repo remoto si
+  difiere. Dos nombres para el mismo proyecto son dos versiones de la verdad.
+- **Segunda prueba del bloque**, mas dura que la de 2.15.0: tapa el fence **y** la Descripcion. Si
+  con el Titulo solo no sabes en que proyecto cae el recordatorio, el prefijo esta mal puesto.
+
+### Changed
+- **La regla de division deja de ser una particion.** Decia que fuera del fence va "solo Titulo y
+  Descripcion"; el proyecto es el primer dato que va en ambos lados, y ahora la regla lo declara
+  como excepcion explicita en vez de dejarlo a interpretacion de cada sesion.
+- `/backfill-3t` hereda el mismo formato en su `## Recordatorios de calendario`, con una nota de
+  que el proyecto es el del backfill que se corre, no el de la sesion reconstruida — son el mismo.
+- **Step 8c-2 exige ahora que el encabezado `### <FECHA> — <Titulo>` reproduzca el `Título:` del
+  bloque caracter por caracter**, con prefijo y con tildes. La regla ya lo decia; el unico bloque
+  persistido que existe la incumplia (`linea/mas` en el encabezado, `línea/más` en el `Título:`)
+  porque el resto de estos ficheros va sin tildes por convencion y la costumbre se cuela ahi. Dos
+  versiones del mismo titulo dentro del mismo bloque.
+
+### Notas
+- **No medido, y es n=1 de uso.** El gap salio de un reporte de uso, no de una medicion: con el
+  formato de 2.15.0, dos recordatorios generados en proyectos distintos son indistinguibles una vez
+  que estan en el calendario. La medicion de 2.13.0 justifica que el bloque exista; el reporte
+  justifica el campo. No hay dato que diga cuanto ayuda.
+- El snippet de continuidad (Step 8a/8b) **no** emite la linea `Proyecto:`, y es deliberado: entre
+  el encabezado de Step 8a y el de Step 8c no hay ninguna ocurrencia de `Proyecto:` en la plantilla.
+  Los dos bloques tienen momentos de uso distintos y el formato lo refleja.
+- Portadores enumerados antes de tocar nada (regla #130). `templates/checkpoint-3t.md` **define el
+  formato** del bloque y `templates/backfill-3t.md` lo **referencia** con reglas propias de backfill;
+  cada uno tiene ademas su copia en `.claude/commands/`, que se sincronizo.
+  `plugins/3-tier-memory/commands/` solo tiene `migrate.md` y `setup-memory.md`, ninguno con el
+  bloque, desde que 2.15.1 borro el tercer constructor. Aparte estan las **instancias ya generadas**
+  por Step 8c-2 dentro de los session files, que tambien hay que reescribir: el bloque persistido es
+  una copia literal del impreso, asi que editar la plantilla no cambia ninguno de los ya escritos.
+  En este repo habia uno y quedo en el formato nuevo. La primera version de esta nota confundia
+  "fichero que define el bloque" con "fichero que lo contiene"; lo encontro el adversario externo.
+- Ningun script de `bin/` ni de `hooks/` lee la seccion `## Recordatorios de calendario`: su
+  consumidor es humano.
+
 ## [2.15.2] - 2026-09-11
 El aviso `BACKFILL PENDIENTE` del hook de arranque contaba mal, y contaba mal en la direccion que
 no se apaga sola: **toda instalacion que salte sesiones legitimamente se queda con el aviso

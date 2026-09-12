@@ -615,18 +615,25 @@ dirige a ti, y lo que lleva dentro del fence es un prompt para que TU lo guardes
 
 **La regla de division.** Una sola, y resuelve cualquier duda de donde va cada cosa:
 
-- **Dentro del fence** va todo lo que el AGENTE necesita para actuar: el `_id: p-…`, la ruta del
-  session file, las cifras y el criterio, y la clausula `Si ya no aplica, cierralo con /checkpoint-3t`.
+- **Dentro del fence** va todo lo que el AGENTE necesita para actuar: el `Proyecto:`, el `_id: p-…`,
+  la ruta del session file, las cifras y el criterio, y la clausula `Si ya no aplica, cierralo con
+  /checkpoint-3t`.
 - **Fuera del fence** va solo lo que TU necesitas para decidir si vale la pena abrir el portatil:
-  Titulo y Descripcion.
+  Titulo —con el proyecto delante— y Descripcion.
 
 Nunca subas el id al Titulo, nunca saques la clausula de cierre del fence.
+
+**El proyecto es el unico dato que va en los dos lados, y no es redundancia.** Responde dos
+preguntas distintas en dos momentos distintos: fuera del fence contesta *cual de mis recordatorios
+es este* cuando miras el mes con recordatorios de varios proyectos encima; dentro contesta *desde
+donde se corre esto* cuando pegas el prompt. Sin la linea de dentro, `Contexto:` es una ruta
+relativa que no resuelve contra nada.
 
 ````
 ─── Recordatorio para el <FECHA> ───
 Ponlo en tu calendario:
 
-Título: <la pregunta que se responde ese dia, en una linea>
+Título: [<proyecto>] <la pregunta que se responde ese dia, en una linea>
 
 Descripción:
 <2-4 lineas de prosa: que se construyo o decidio, por que, que se
@@ -634,6 +641,7 @@ decide ese dia, y que pasa segun el resultado>
 
 Pega esto dentro del evento (es el prompt para el agente):
 ```
+Proyecto: <proyecto> — <ruta absoluta del proyecto>
 Retomamos: <pendiente en una linea> _id: p-…_
 Contexto: memory/sessions/DATE-SLUG.md
 Comprueba: <que hay que mirar ese dia, con las cifras y el criterio si se acordo uno>
@@ -642,9 +650,21 @@ Si ya no aplica, cierralo con /checkpoint-3t en vez de dejarlo abierto.
 ────────────────────────────────────
 ````
 
-- `Título`: tiene que ser legible en la vista de mes de un calendario, donde solo se ve esa linea.
-  Nombra **la cosa y la pregunta**, no el item: `¿La linea "Sigue abierto:" hizo que se cierren mas
-  pendientes?`, no `Medir p-cd965754ec`. Sin ids `p-…`, sin rutas de fichero, ~70 caracteres.
+- `Título`: abre con `[<proyecto>]` y sigue con la pregunta. Tiene que ser legible en la vista de
+  mes de un calendario, donde solo se ve esa linea. Nombra **la cosa y la pregunta**, no el item:
+  `[3-tier-memory] ¿La linea "Sigue abierto:" cierra mas pendientes?`, no `Medir p-cd965754ec`.
+  Sin ids `p-…`, sin rutas de fichero, **~70 caracteres contando el prefijo** — el que se acorta es
+  el texto de la pregunta, nunca el prefijo. El calendario corta por la derecha en vista de mes, asi
+  que lo unico que sobrevive siempre es lo que va primero, y con recordatorios de varios proyectos
+  encima el proyecto es justo el dato que los distingue.
+- `[<proyecto>]`: el **basename del directorio raiz del proyecto**, tal cual, entre corchetes —
+  `[3-tier-memory]`, `[tienda-web]`. No inventes un nombre "bonito" ni uses el del repo remoto si
+  difiere: el basename es lo que veras en la ruta y en el prompt, y dos nombres para el mismo
+  proyecto son dos versiones de la verdad.
+- `Proyecto:` (primera linea del fence): `<basename> — <ruta absoluta>`, con la ruta **tal cual**,
+  sin `~` y sin variables. `Proyecto: tienda-web — /Users/ana/Projects/tienda-web`. El
+  agente que recibe este prompt puede estar arrancado en cualquier sitio; `~` depende de que el
+  shell lo expanda y en Git Bash/Windows no siempre apunta a lo mismo.
 - `Descripción`: prosa, 2-4 lineas, **sin cifras**. Baselines, umbrales y listas por proyecto van
   solo en `Comprueba:`, dentro del fence — la descripcion la lees en el movil para decidir si vale
   la pena abrir el portatil; las cifras son trabajo del agente. Tiene que contestar tres cosas:
@@ -657,7 +677,9 @@ Si ya no aplica, cierralo con /checkpoint-3t en vez de dejarlo abierto.
 
 **La prueba de que la descripcion sirve**: tapa el fence y lee solo Titulo + Descripcion. Si con
 eso no puedes decir de que iba el pendiente ni que vas a hacer ese dia, reescribela. Ese es
-exactamente el fallo que este bloque existe para evitar.
+exactamente el fallo que este bloque existe para evitar. **Y la prueba del Titulo, mas dura
+todavia**: tapa tambien la Descripcion. Si con esa sola linea no sabes **en que proyecto** cae el
+recordatorio, el prefijo esta mal puesto o se perdio.
 
 **Ademas, el pendiente nace con la fecha como campo**, no solo en prosa:
 `journal-emit.py --type pendiente.add … --revisar YYYY-MM-DD`. El compactador escribe
@@ -671,6 +693,12 @@ entre `## Como retomar` y `## Related`. Uno por pendiente con fecha futura, **to
 de 2** que aplica a la terminal. Encabeza cada uno con `### <FECHA> — <Titulo>` y debajo el bloque
 completo. Si no hubo ninguno, borra la seccion entera en vez de dejarla vacia.
 
+`<Titulo>` del encabezado es **el mismo texto que la linea `Título:` del bloque, caracter por
+caracter** — con su prefijo `[<proyecto>]` y con sus tildes. El resto de este fichero va sin tildes
+por convencion, y esa costumbre se cuela justo aqui: en 2.15.0 el encabezado quedo con `linea/mas`
+y el `Título:` con `línea/más`, dos versiones del mismo titulo en el mismo bloque. Lo encontro un
+verificador externo, no la vista.
+
 Los bloques persistidos son **identicos** a los impresos — misma regla que en 8a/8b: el usuario
 copia de la terminal o del fichero indistintamente, y dos versiones del mismo recordatorio son dos
 versiones de la verdad. Si en la terminal dijiste `+N con fecha futura en _pendientes.md`, en el
@@ -682,6 +710,10 @@ abiertos llevan una fecha ya vencida escrita en prosa que ningun codigo leyo nun
 calendario del usuario es el unico disparador que si dispara sin cron, sin servicio externo y sin
 depender de que alguien abra el proyecto ese dia. Titulo y Descripcion existen porque un evento
 que solo lleva el prompt llega a su fecha sin decirle al humano de que iba: el prompt esta escrito
-para el agente, y el que abre el calendario eres tu.
+para el agente, y el que abre el calendario eres tu. **El proyecto se anadio por lo mismo, un nivel
+mas arriba** (2.16.0): quien corre el plugin en varios proyectos acumula recordatorios de todos en
+un mismo calendario, y tres campos que no dicen *donde* dejan un prompt que no se sabe desde donde
+correr. El snippet de 8a/8b no tiene este problema porque se pega en el acto, sabiendo donde estas;
+este se pega dentro de un mes.
 
 No agregues git commit aqui — el cambio al session file ya quedo dentro del flujo de Step 6, pero como Step 8 corre DESPUES, ni `## Como retomar` ni `## Recordatorios de calendario` estaran en el commit. Es aceptable: el snippet vive en disco y el commit es best-effort. Si el usuario quiere comitearlo, puede `git add memory/sessions/DATE-SLUG.md && git commit --amend --no-edit` manualmente o esperar al proximo checkpoint.

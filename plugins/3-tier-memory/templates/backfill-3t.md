@@ -273,8 +273,11 @@ status: backfilled
   de crearla.
 - **`## Recordatorios de calendario`**: solo para fechas que **siguen siendo futuras en el momento
   de correr el backfill**. Una fecha ya pasada no genera recordatorio — el evento de calendario
-  llegaria vencido. Mismo formato que Step 8c de `/checkpoint-3t` (Titulo, Descripcion, prompt en
-  fence). Si ninguna fecha sigue viva, borra la seccion entera.
+  llegaria vencido. Mismo formato que Step 8c de `/checkpoint-3t`: `Titulo` abierto por
+  `[<proyecto>]` (~70 caracteres contando el prefijo), `Descripcion`, y el fence encabezado por
+  `Proyecto: <basename> — <ruta absoluta>`. El proyecto es el del backfill que estas corriendo, no
+  el de la sesion reconstruida — son el mismo. Si ninguna fecha sigue viva, borra la seccion
+  entera.
 
 ### 3c. Update session index (Tier 2) — via journal
 
