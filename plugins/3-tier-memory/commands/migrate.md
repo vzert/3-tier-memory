@@ -121,20 +121,21 @@ Behavior rules:
     [CUSTOM]    "ANTES de SSH/remote ops: leer memory/_learnings.md"
 
   1) Keep the dump, drop only the fully duplicated lines   (nothing is lost)
-  2) Narrow the dump to what the plugin does NOT re-emit   (see the condition below)
-  3) Delete the whole script                               (only if nothing is [CUSTOM]/[PARTIAL])
+  2) Delete the whole script                               (only if nothing is [CUSTOM]/[PARTIAL])
   ```
 
   - **Never delete a `[PARTIAL]` line.** It carries duplicated and non-duplicated content in the
     same command, so "trim to the custom lines only" would throw away the part the plugin never
     shows. Option 1 is the default: it removes the lines that are wholly redundant and leaves
     everything else exactly as it was.
-  - **Option 2 only when you can state the condition holds**: the project has 25 or fewer Alta +
-    unclassified items AND their bodies are short enough not to be cut. Then, and only then, is the
-    Alta part of the dump genuinely redundant, and narrowing the legacy command to the `## Media
-    prioridad` section onward loses nothing. Above the cap, or with long bodies, narrowing deletes
-    content — take option 1.
-  - **Option 3 only when nothing is `[CUSTOM]` or `[PARTIAL]`**: then offer to delete the script and
+  - **Do not offer to narrow the dump, and do not write a filter for it.** It looks like the obvious
+    third option — keep only the priorities the plugin skips — and every form of it smuggles an
+    assumption about the user's file back in: that `## Media prioridad` exists, that it comes after
+    Alta, that nothing custom sits above it, that no item falls past the 25 cap. Report the two
+    numbers and let the user narrow it by hand if they want to; a rewrite of their script is not
+    worth a guess about its input. Same reason the count is read from the plugin instead of
+    recomputed.
+  - **Option 2 only when nothing is `[CUSTOM]` or `[PARTIAL]`**: then offer to delete the script and
     its settings entry together.
   - If the script contains logic you cannot classify with confidence, do not rewrite it — fall back
     to warning the user with the byte measurement, so the decision is at least informed.
