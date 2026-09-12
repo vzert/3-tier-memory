@@ -1,5 +1,52 @@
 # Changelog
 
+## [2.21.4] - 2026-09-12
+Cuarta ronda adversarial. Rompio el arreglo de la tercera, que habia roto el de la segunda, que
+habia roto el de la primera. Eso ya no es converger, es parchear — asi que esta entrada **no
+arregla los cinco hallazgos: quita el mecanismo que los producia**.
+
+### Removed
+- **Fuera el diferimiento de avisos (`.journal/human-pending.txt`), introducido en 2.21.2.** El
+  problema real era este: `--check-drift` RE-SELLA la linea base al detectar, para que el aviso
+  salga una vez; cuando no hay persona delante el mensaje se descarta, asi que el re-sellado lo
+  borraba para siempre. La solucion de 2.21.2 fue **guardar** el aviso en un fichero para el
+  proximo arranque. Dos rondas despues ese fichero necesitaba tope, deduplicado, escritura sin
+  carrera, su propia linea de `.gitignore` y una migracion para quien ya hubiera actualizado — y
+  cada capa traia un defecto nuevo. La ronda 4 encontro cinco a la vez: el tope no era un tope
+  (comprobar-y-apendar sin lock), al alcanzarlo se descartaba el unico aviso, el consumidor
+  borraba el fichero aunque `awk` fallara, la linea de `.gitignore` no llegaba a instalaciones ya
+  actualizadas, y dos de los tres asertos nuevos **reimplementaban en el test lo que decian
+  medir**.
+
+### Changed
+- **No se mira si no hay quien lo lea.** `session-start.sh` ya no llama a `--check-drift` cuando
+  no hay persona a la que dirigirse. **La deriva ya es persistente** — es un hash que no coincide,
+  y sigue ahi hasta que alguien re-selle. No hace falta guardar nada; basta con no consumirla.
+  Una guarda en la condicion, en vez de un subsistema.
+- **`hay_persona()`, una sola definicion.** Las tres condiciones (agente de Paperclip, corrida no
+  atendida, `source` que no es `startup`/`resume`) estaban repetidas en `emit_output`. Ahora hay
+  una funcion y la usan los dos sitios: dos copias de esta regla se separan y una se queda rancia.
+- **Las pruebas pasan por `session-start.sh` de verdad** y miden la huella del sellado, no un
+  fichero. Cubren los dos modos de "no hay persona". La mutacion se reapunto a la guarda nueva:
+  quitarla hace caer «la linea base NO se toca».
+
+### Lo que se pierde, dicho claro
+En una sesion sin persona el AGENTE tampoco ve el aviso de deriva en su contexto. Es el precio del
+rediseno y es barato: en esas sesiones no hay nadie que pueda correr `--reseal` de todos modos.
+
+### Sin resolver
+Sigue abierto desde la ronda 1: `quarantine/` viaja pero solo se escanea `pending/`; `applied/` no
+tiene poda; `memory/.locks/` queda fuera del reparto. **Nuevo, y anterior a todo esto**:
+`test-journal-race.sh` es intermitente — 1 fallo de 20 corridas, **la misma tasa en `1ed9400`**,
+antes de que empezara esta linea de releases. No lo introdujo este trabajo y no se arregla aqui.
+
+### Nota de metodo
+Cuatro rondas, y el patron no fue "quedaban bugs": cada arreglo introducia el siguiente. Lo que
+por fin lo corto no fue arreglar mejor, sino **borrar el mecanismo**. Y de los cinco asertos de
+no-evidencia que se encontraron en estas cuatro releases, cuatro eran mios y todos tenian la misma
+forma: comprobar que el canal trae ALGO en vez de comprobar que trae ESTO, o medir una
+reimplementacion del codigo en vez del codigo.
+
 ## [2.21.3] - 2026-09-12
 Tercera ronda adversarial, esta vez en otro verificador (el metodo obliga a cambiar de backend
 tras dos roturas seguidas del mismo). Refuto siete angulos **corriendo las pruebas el mismo** —la

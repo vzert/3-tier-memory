@@ -633,12 +633,8 @@ if command -v git >/dev/null 2>&1; then
   chk "git NO ignora applied/ (viaja)"        "0" "$(gi "${APL#"$T/gitrepo/"}")"
   chk "git NO ignora pending/ (viaja)"        "0" "$(gi memory/.journal/pending/x.json)"
   chk "git NO ignora quarantine/ (viaja)"     "0" "$(gi memory/.journal/quarantine/x.json)"
-  # El aviso diferido es estado de ESTA maquina, como la linea base: en otra no significa nada, y
-  # a diferencia de pending/ no se puede re-aplicar sin efecto — es texto, y dos maquinas
-  # apendando dan conflicto. /checkpoint-3t hace `git add memory/`, asi que sin esta regla viaja.
-  chk "git IGNORA human-pending.txt"          "1" "$(gi memory/.journal/human-pending.txt)"
 else
-  skip=$((skip+8)); echo "  skip sin git: 8 asertos de check-ignore"
+  skip=$((skip+7)); echo "  skip sin git: 7 asertos de check-ignore"
 fi
 
 # No se pisa lo que el usuario haya puesto
@@ -714,11 +710,18 @@ jc = importlib.util.module_from_spec(spec); spec.loader.exec_module(jc)
 jc.escribir_gitignore_journal('$MEMR/.journal')" 2>/dev/null
 chk "no pisa el del usuario"                   "mio del usuario" "$(cat "$MEMR/.journal/.gitignore")"
 
-echo "== una deriva vista sin nadie delante no se consume: se guarda para el proximo arranque =="
+echo "== una deriva vista sin nadie delante NO SE CONSUME: reaparece cuando hay quien la lea =="
 # --check-drift RE-SELLA al detectar, para que el aviso salga una vez. Correcto cuando el aviso
 # llega. En un `clear`/`compact` —o con un agente de Paperclip, o una corrida no atendida— el
 # mensaje a la persona se descarta, asi que el re-sellado lo borraba PARA SIEMPRE: visto una vez,
-# a nadie, y no vuelve. Lo encontro el adversario sobre el arreglo parcial de 2.21.1.
+# a nadie, y no vuelve.
+#
+# La solucion NO es guardar el aviso en un fichero (2.21.2 lo intento; costo tres rondas y cada
+# capa traia un defecto). Es no MIRAR si no hay quien lea: la deriva ya es persistente —un hash
+# que no coincide— y sigue ahi hasta que alguien re-selle.
+#
+# Todo lo de aqui pasa por session-start.sh de verdad. Un aserto que reimplementa en el test lo
+# que dice medir no mide el producto: ya me lo encontro un adversario, dos veces.
 MEMH="$T/defer"; mkdir -p "$MEMH/sessions"
 cat > "$MEMH/_pendientes.md" <<'EOF'
 ---
@@ -734,37 +737,37 @@ type: index
 EOF
 printf -- '---\ntype: session\n---\n# s\n' > "$MEMH/sessions/2026-01-01-x.md"
 PR="$(cd "$BIN/.." && pwd)"
-arranque(){ CLAUDE_PLUGIN_ROOT="$PR" CLAUDE_PROJECT_DIR="$T/defer_proj" bash "$BIN/session-start.sh" 2>/dev/null <<J
+mkdir -p "$T/defer_proj"; cp -R "$MEMH" "$T/defer_proj/memory"
+MEMD="$T/defer_proj/memory"
+arranque(){ CLAUDE_PLUGIN_ROOT="$PR" CLAUDE_PROJECT_DIR="$T/defer_proj" \
+  PAPERCLIP_RUN_ID="${2:-}" bash "$BIN/session-start.sh" 2>/dev/null <<J
 {"hook_event_name":"SessionStart","source":"$1","cwd":"$T/defer_proj"}
 J
 }
-mkdir -p "$T/defer_proj"; cp -R "$MEMH" "$T/defer_proj/memory"
-arranque startup >/dev/null 2>&1          # estabiliza (normalize re-sella en el primer arranque)
-printf -- '- [ ] llego por git\n' >> "$T/defer_proj/memory/_pendientes.md"
-C1=$(arranque compact)
 dice(){ printf '%s' "$1" | python3 -c 'import json,sys
 try: d=json.load(sys.stdin)
 except Exception: print(0); raise SystemExit
 print(1 if "git pull" in d.get("systemMessage","") else 0)' 2>/dev/null || echo 0; }
+# huella del sellado: si --check-drift corrio, la linea base cambia de bytes
+sello(){ huella "$MEMD/.journal/fingerprints.json"; }
+
+arranque startup >/dev/null 2>&1          # estabiliza (normalize re-sella en el primer arranque)
+printf -- '- [ ] llego por git\n' >> "$MEMD/_pendientes.md"
+H0=$(sello)
+C1=$(arranque compact)
 chk "en compact NO se le dice a nadie"         "0" "$(dice "$C1")"
-chk "pero queda guardado"                      "1" "$([ -s "$T/defer_proj/memory/.journal/human-pending.txt" ] && echo 1 || echo 0)"
+chk "y la linea base NO se toca (no se consume)" "$H0" "$(sello)"
+# lo mismo con un agente de Paperclip, que es la otra forma de no tener persona delante
+C2=$(arranque startup "run-123")
+chk "con agente de Paperclip tampoco"          "0" "$(dice "$C2")"
+chk "y la linea base sigue intacta"            "$H0" "$(sello)"
+# y ahora SI hay alguien
 S1=$(arranque startup)
-chk "y el siguiente arranque SI lo entrega"    "1" "$(dice "$S1")"
-chk "y ya no se repite (se consumio)"          "0" "$([ -s "$T/defer_proj/memory/.journal/human-pending.txt" ] && echo 1 || echo 0)"
+chk "el arranque con persona SI lo entrega"    "1" "$(dice "$S1")"
+chk "y ahi si se re-sella"                     "1" "$([ "$(sello)" != "$H0" ] && echo 1 || echo 0)"
 S2=$(arranque startup)
-chk "el arranque de despues esta callado"      "0" "$(dice "$S2")"
-# Dos arranques mudos a la vez difiriendo cosas distintas: con un `>` truncante uno de los dos
-# avisos desaparecia sin rastro — el mismo fallo que este mecanismo existe para evitar.
-HP="$T/defer_proj/memory/.journal/human-pending.txt"
-: > "$HP"
-for i in 1 2 3 4 5 6; do ( printf 'aviso numero %s\n' "$i" >> "$HP" ) & done
-wait
-chk "6 diferimientos a la vez: no se pierde ninguno" "6" "$(sort -u "$HP" | grep -c 'aviso numero')"
-# Y el consumidor deduplica: el mismo aviso diferido en varios arranques mudos sale UNA vez.
-printf 'repetido\nrepetido\nrepetido\n' > "$HP"
-chk "el consumidor deduplica"                  "1" "$(awk '!visto[$0]++' "$HP" | grep -c 'repetido')"
-chk "y da la salida (--reseal)"               "1" "$(printf '%s' "$DG" | grep -c -- '--reseal')"
-chk "y dice que NO se pierden los cambios"    "1" "$(printf '%s' "$DG" | grep -c 'NO se pierden')"
+chk "y ya no se repite"                        "0" "$(dice "$S2")"
+chk "no se crea ningun fichero de avisos"      "0" "$(ls -1 "$MEMD/.journal"/human-pending* 2>/dev/null | wc -l | tr -d ' ')"
 
 echo "RESULT pass=$pass fail=$fail skip=$skip"
 [ "$fail" -eq 0 ]

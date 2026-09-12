@@ -1570,10 +1570,6 @@ out-of-band.log
 # Estado vivo de un proceso. Nunca tiene sentido fuera de la maquina que lo tomo.
 .lock/
 .lock-steal/
-# Aviso que ESTA maquina detecto y no pudo entregar todavia, esperando a un arranque con persona
-# delante. En otra maquina no significa nada, y a diferencia de pending/ no tiene la propiedad de
-# re-aplicar sin efecto: es texto, y dos maquinas apendando dan conflicto.
-human-pending.txt
 
 # QUE SI SE VERSIONA, a proposito: pending/, applied/ y quarantine/.
 # Son el registro de eventos, y es lo que hace que la memoria viaje entre maquinas.

@@ -26,22 +26,22 @@ source "$(dirname "$0")/resolve-project-dir.sh"
 # entero. `out` acumula para el agente, `human` para la persona.
 _AGENT_BUF=""
 _HUMAN_BUF=""
-_HUMAN_DEFER=""
 out()   { _AGENT_BUF="${_AGENT_BUF}$1
 "; }
 human() { _HUMAN_BUF="${_HUMAN_BUF}$1
 "; }
 
-# Como human(), pero ademas dice "esto no puede simplemente perderse". Si emit_output acaba
-# descartando el buffer de la persona —agente de Paperclip, corrida no atendida, o un
-# `clear`/`compact` donde no hay nadie abriendo sesion— el texto marcado asi se guarda y sale en
-# el proximo arranque CON persona, en vez de consumirse en silencio.
-# Por que hace falta: `--check-drift` RE-SELLA la linea base al detectar la deriva, para que el
-# aviso salga una vez y no en cada sesion. Eso es correcto cuando el aviso llega. Cuando no llega,
-# el re-sellado lo borra para siempre: la deriva se ve una vez, a nadie, y no vuelve. Lo encontro
-# un adversario sobre 2.21.1, que arreglo el canal solo para startup|resume.
-defer_human() { _HUMAN_DEFER="${_HUMAN_DEFER}$1
-"; human "$1"; }
+# ¿Hay una persona a la que dirigirse en esta sesion? UNA sola definicion, que usan tanto el
+# aviso de deriva como emit_output: dos copias de esta regla se separan y una de las dos se
+# queda rancia.
+hay_persona() {
+  [ -n "${PAPERCLIP_RUN_ID:-}" ] && return 1          # agente de Paperclip: no hay pantalla
+  [ "${CLAUDE_CODE_SESSION_ATTENDED:-}" = "0" ] && return 1   # corrida no interactiva
+  case "$(hook_source)" in
+    startup|resume) return 0 ;;
+    *) return 1 ;;                                     # clear/compact: esta a mitad de trabajo
+  esac
+}
 
 # `source` del payload: startup | resume | clear | compact. El mensaje a la persona solo
 # tiene sentido cuando ELLA abre la sesion; en `clear`/`compact` esta a mitad de trabajo.
@@ -71,30 +71,7 @@ emit_output() {
   #     registro: `claude -p` da ATTENDED=0 y ENTRYPOINT=sdk-cli; una sesion interactiva da
   #     ATTENDED=1 y ENTRYPOINT=cli. Solo se apaga con el "0" explicito: si la variable no
   #     existe (CLI mas viejo) se deja pasar, que es el comportamiento de antes.
-  _DROP=""
-  [ -n "${PAPERCLIP_RUN_ID:-}" ] && _DROP=1
-  [ "${CLAUDE_CODE_SESSION_ATTENDED:-}" = "0" ] && _DROP=1
-  case "$(hook_source)" in
-    startup|resume) ;;
-    *) _DROP=1 ;;
-  esac
-  if [ -n "$_DROP" ]; then
-    # Un solo punto de descarte, a proposito: antes habia tres `_HUMAN_BUF=""` sueltos y lo que
-    # hay que guardar antes de tirar el buffer se habria olvidado en alguno.
-    if [ -n "$_HUMAN_DEFER" ] && [ -n "${MEMORY_DIR:-}" ] && [ -d "$MEMORY_DIR/.journal" ]; then
-      # `>>`, NO `>`. Con un truncante, dos arranques simultaneos que difieran cosas distintas
-      # se pisan y uno de los dos avisos desaparece sin rastro — que es el mismo fallo que este
-      # mecanismo existe para evitar. Apendar una linea corta no se entrelaza. El consumidor
-      # deduplica, asi que repetir el mismo aviso no lo repite en pantalla.
-      # Tope: si nadie viene a leerlo, no crece sin fin. Se descarta lo NUEVO y no lo guardado:
-      # el aviso mas viejo es el que lleva mas tiempo sin que lo vea nadie.
-      _HP="$MEMORY_DIR/.journal/human-pending.txt"
-      if [ "$(wc -l < "$_HP" 2>/dev/null || echo 0)" -lt 20 ] 2>/dev/null; then
-        printf '%s' "$_HUMAN_DEFER" >> "$_HP" 2>/dev/null || true
-      fi
-    fi
-    _HUMAN_BUF=""
-  fi
+  hay_persona || _HUMAN_BUF=""
   _JSON_OUT=$(_A="$_AGENT_BUF" _H="$_HUMAN_BUF" python3 -c "import json,os,sys
 a = os.environ.get('_A','').strip()
 h = os.environ.get('_H','').strip()
@@ -181,18 +158,20 @@ fi
 # no lo impide: compara el sha256 de cada indice con el que dejo el compactador. Va FUERA del
 # bloque de arriba a proposito: aquel solo corre si pending/ tiene algo, y la deriva que interesa
 # es justo la de una sesion que no dejo eventos. Barato: hashear media docena de ficheros cortos.
-# Avisos que un arranque anterior no pudo entregar a nadie. Se re-difieren, no se imprimen a
-# secas: si TAMBIEN esta sesion resulta ser de las que no tienen persona delante, emit_output los
-# vuelve a guardar en vez de gastarlos.
-HUMAN_PEND="$MEMORY_DIR/.journal/human-pending.txt"
-if [ -s "$HUMAN_PEND" ]; then
-  # Deduplicado conservando el orden: la misma deriva puede haberse diferido en varios arranques
-  # mudos seguidos, y repetirla cinco veces en pantalla es ruido, no informacion.
-  defer_human "$(awk '!visto[$0]++' "$HUMAN_PEND" 2>/dev/null)"
-  rm -f "$HUMAN_PEND" 2>/dev/null || true
-fi
-
-if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] && [ -d "$MEMORY_DIR/.journal" ]; then
+# NO SE MIRA SI NO HAY QUIEN LO LEA, y esa es toda la solucion. `--check-drift` RE-SELLA la
+# linea base al detectar, para que el aviso salga una vez y no en cada sesion. Correcto cuando el
+# aviso llega; cuando no llega, el re-sellado lo borra para siempre — la deriva se ve una vez, a
+# nadie, y no vuelve.
+#
+# 2.21.2 intento arreglarlo GUARDANDO el aviso en un fichero para el proximo arranque. Tres
+# rondas adversariales despues, ese fichero necesitaba tope, deduplicado, escritura sin carrera,
+# su propia linea de .gitignore y una migracion para quien ya hubiera actualizado — y cada capa
+# traia un defecto nuevo. La deriva YA ES PERSISTENTE: es un hash que no coincide, y sigue ahi
+# hasta que alguien re-selle. No hace falta guardar nada; basta con no consumirla.
+#
+# Lo que se pierde: en una sesion sin persona el AGENTE tampoco ve el aviso. Es el precio, y es
+# barato — en esas sesiones no hay nadie que pueda correr `--reseal` de todos modos.
+if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] && [ -d "$MEMORY_DIR/.journal" ] && hay_persona; then
   DRIFT_OUT=$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" --memory-dir "$MEMORY_DIR" --check-drift 2>/dev/null)
   if [ -n "$DRIFT_OUT" ]; then
     out "$DRIFT_OUT"
@@ -203,7 +182,7 @@ if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] && [ -d "$MEMORY_DIR/.j
     # quien lo hizo es la persona, y quien tiene que correr --reseal tambien.
     DRIFT_N=$(printf '%s' "$DRIFT_OUT" | grep -c 'FUERA DEL JOURNAL')
     if [ "${DRIFT_N:-0}" -gt 0 ] 2>/dev/null; then
-      defer_human "⚠ MEMORIA: un indice de memory/ cambio sin pasar por el journal. Si acabas de hacer git pull/checkout/merge es esperado y no se pierde nada: corre \`python3 journal-compact.py --memory-dir memory --reseal\`. Si no, alguien lo edito a mano y ese cambio se pierde en la proxima compactacion."
+      human "⚠ MEMORIA: un indice de memory/ cambio sin pasar por el journal. Si acabas de hacer git pull/checkout/merge es esperado y no se pierde nada: corre \`python3 journal-compact.py --memory-dir memory --reseal\`. Si no, alguien lo edito a mano y ese cambio se pierde en la proxima compactacion."
     fi
   fi
 fi

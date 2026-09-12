@@ -64,7 +64,7 @@ caso "cr_lineas (mensual)"      journal-compact.py      m_crlf_compact.py    tes
 caso "huella / md5"             journal-compact.py      m_compact.py         test-expire-reopen.sh       "byte a byte"
 caso "norm + SYSTEMROOT"        resolve-project-dir.sh  m_projdir.py         test-resolve-project-dir.sh "el respaldo de python3"
 caso "publicacion del .gitignore" journal-compact.py    m_gitignore_publicacion.py test-expire-reopen.sh "fichero ENTERO"
-caso "deriva -> canal humano"   session-start.sh        m_drift_humano.py    test-expire-reopen.sh       "queda guardado"
+caso "deriva sin persona"       session-start.sh        m_drift_humano.py    test-expire-reopen.sh       "NO se toca"
 
 echo
 if [ "$PEND" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $TOTAL)"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi
