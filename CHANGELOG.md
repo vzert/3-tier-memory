@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.18.9] - 2026-09-12
+### Fixed
+- `bin/test-parser.sh`: el ultimo caso rojo de Windows. `mkproj` pasaba el comando del hook por una
+  **variable de entorno**, y en Git Bash MSYS convierte los valores de entorno que parecen rutas: un
+  comando que empieza por `/usr/bin/env ...` se reescribia a la forma de Windows antes de llegar a
+  python y el fixture quedaba mutilado. El detector funcionaba —se comprobo en CI contra un fixture
+  escrito sin pasar por el entorno, y emitio `HOOK DUPLICADO`—; lo que fallaba era el montaje. Pasa
+  por fichero: por stdin no puede ser, porque ahi va el propio programa, y la RUTA de un fichero si
+  se puede convertir sin dano porque es una ruta de verdad.
+- `.github/workflows/tests.yml`: fuera el paso de diagnostico temporal.
+
+### Nota
+Tres de las cuatro vueltas de Windows acabaron en el mismo sitio: el test medía con una herramienta
+cuyo dialecto cambia con la plataforma y acusaba al plugin de algo que el plugin no hacia. La unica
+forma de distinguirlo fue montar el escenario SIN la herramienta sospechosa y ver que el codigo si
+respondia.
+
 ## [2.18.8] - 2026-09-12
 ### Fixed
 - `bin/session-start.sh`: al sustituir `$CLAUDE_PROJECT_DIR` en el comando de un hook se metia la

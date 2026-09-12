@@ -112,12 +112,20 @@ mkproj() { # dir, comando-del-hook
   # El comando se serializa con json.dumps: escribirlo con printf rompia el JSON en
   # cuanto llevaba comillas, y entonces el detector no leia nada — un test que pasa
   # porque su fixture esta roto es exactamente la no-evidencia que este arnes rechaza.
-  CMD="$2" python3 - "$1/.claude/settings.local.json" <<'PY'
-import json, os, sys
+  # El comando viaja por FICHERO, no por una variable de entorno. En Git Bash, MSYS convierte los
+  # valores de entorno que parecen rutas: un comando que empieza por `/usr/bin/env ...` se
+  # reescribia a la forma de Windows antes de llegar a python y el fixture quedaba mutilado. El
+  # detector funcionaba —comprobado en CI contra un fixture escrito sin pasar por el entorno— y lo
+  # que fallaba era el montaje. Por stdin tampoco puede ser: ahi va el propio programa. La RUTA del
+  # fichero si es convertible sin dano, porque es una ruta de verdad. (CI, 2026-09-12.)
+  printf '%s' "$2" > "$1/.claude/.cmd.tmp"
+  python3 - "$1/.claude/settings.local.json" "$1/.claude/.cmd.tmp" <<'PY'
+import json, sys
 cfg = {"hooks": {"SessionStart": [{"matcher": "", "hooks": [
-    {"type": "command", "command": os.environ["CMD"]}]}]}}
+    {"type": "command", "command": open(sys.argv[2], encoding="utf-8").read()}]}]}}
 json.dump(cfg, open(sys.argv[1], "w", encoding="utf-8"))
 PY
+  rm -f "$1/.claude/.cmd.tmp"
 }
 expect() { # nombre, dir, si|no
   if ! python3 -c "import json,sys;json.load(open(sys.argv[1]))" "$2/.claude/settings.local.json" 2>/dev/null; then
