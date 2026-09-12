@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.17.1] - 2026-09-11
+`/migrate` decide que lineas borrar de un hook legacy del usuario **a partir de lo que el plugin
+re-emite**, y 2.17.0 recorto justo eso. Su regla decia que un volcado de `_pendientes.md` es emision
+duplicada entera porque "el plugin ya inyecta esto, curado"; desde 2.17.0 el plugin solo pone
+delante del agente las de `## Alta prioridad` y las que etiqueta `SIN CLASIFICAR`. Recortar el
+volcado completo con esa regla borra las MEDIA y BAJA — exactamente el dano que el propio fichero
+advierte dos lineas mas abajo: *"Getting this wrong deletes context the user never gets back."*
+
+### Changed
+- **`commands/migrate.md`: la clasificacion de emision duplicada se acota a lo que el plugin re-emite
+  hoy.** Duplicado = la parte ALTA y sin clasificar del volcado; MEDIA y BAJA cuentan como custom.
+- **Una categoria nueva en esa misma clasificacion: lo que el hook legacy escribe para la PERSONA no
+  duplica nada.** El plugin habla por dos canales desde 2.17.0; un hook legacy que solo imprime texto
+  plano llega al agente y a nadie mas, asi que su texto nunca duplica el `systemMessage` del plugin.
+
+### Notas
+- **Barrido completo de los carriers, no una muestra.** `templates/audit-3t.md` y
+  `commands/setup-memory.md` tambien nombran `session-start.sh`, pero solo como **nombre de fichero**
+  para detectar entradas huerfanas en `settings.json`: no leen su salida y no cambian. De las ocho
+  plantillas, solo `audit-3t.md` lo nombra; las otras siete no. `README.md` ya se actualizo en
+  2.17.0. Fuera de las pruebas, nada parsea el stdout del hook: los unicos lectores son
+  `bin/test-parser.sh` y `bin/test-session-start-json.sh`, los dos como JSON desde 2.17.0.
+- **Lo que hacia falta revisar no era la palabra "JSON", era la dependencia.** Ninguno de los tres
+  ficheros menciona el formato de salida; el que cambia lo hace porque *decide* a partir de lo que el
+  plugin emite. Buscar "stdout" o "JSON" en el repo no lo habria encontrado.
+
 ## [2.17.0] - 2026-09-11
 El hook de SessionStart hablaba con un solo lector. La referencia de hooks lo dice: en SessionStart
 Claude Code agrega el stdout plano **como contexto que ve el agente**, y para que un mensaje llegue a
