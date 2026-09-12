@@ -72,7 +72,7 @@ reference files that don't exist. Remove them? (y/n)
 
 Behavior rules:
 - **If the user confirms removal**: edit the settings file and remove ONLY the flagged hook entries. If removing an entry leaves a matcher block with an empty `hooks` array, remove that matcher too. If an event (e.g. `SessionStart`) ends up with an empty array, remove that event key. Preserve every other setting untouched.
-- **If the flagged hook's target file DOES exist**: read it and decide whether it duplicates the plugin, instead of skipping. This is the case that actually costs context — a working legacy hook that dumps the same memory the plugin already injects, silently, every session. Historically it went unnoticed for months (one project shipped ~31 KB of raw pendientes per session on top of the plugin's curated block).
+- **If the flagged hook's target file DOES exist**: read it and decide whether it duplicates the plugin, instead of skipping. This is the case that actually costs context — a working legacy hook whose dump OVERLAPS with what the plugin injects, silently, every session. Overlaps, not equals: since 2.17.0 the plugin re-emits a strict subset of a full dump (see the classification below), so the question is never "delete or keep" but "which part of this is redundant". Historically it went unnoticed for months (one project shipped ~31 KB of raw pendientes per session on top of the plugin's curated block).
 
   Classify each line of the existing script:
   - **Duplicated emission** — reads `_pendientes.md` and echoes its contents (typically `grep -E '^- \[ \]' .../_pendientes.md` piped to `echo`). **Only the part of that dump the plugin actually re-emits counts as duplicated, and since 2.17.0 that is much narrower than the whole file.** The plugin injects the items under `## Alta prioridad` plus the ones it labels `SIN CLASIFICAR` (sections outside the Alta/Media/Baja scheme, and items in the file's preamble) — **at most 25 of them, each cut to its first ~120 characters** (`CEILING` and `BODY_CAP` in `bin/session-start.sh`). So three kinds of line in a legacy dump are NOT duplicated and count as custom: the `## Media prioridad` and `## Baja prioridad` items, anything past the 25th Alta/unclassified item, and the cut tail of every item whose text runs past ~120 characters. Check the real numbers in the project's own `_pendientes.md` before deciding — in a project with more than 25 high-priority items, or with long item bodies, the legacy dump is NOT replaceable by the plugin's block and trimming it loses content. Scope the rest just as narrowly: for `_learnings.md` the plugin emits a **count** (`REGLAS CRITICAS: N`) and never its contents, and it emits no other index at all — so a script that echoes learnings, plans, research, or any other index is providing something the plugin does NOT, and counts as custom. Getting this wrong deletes context the user never gets back.
@@ -93,8 +93,14 @@ Behavior rules:
   **For the other side — how many of those the plugin actually re-emits — read the plugin's own
   number, do not recompute it.** The block the plugin injected at the start of THIS session opens
   with `PENDIENTES ABIERTOS (<total>), <N> de prioridad ALTA o sin clasificar`; that `<N>` is the
-  count, straight from the parser that produces the block. If the line is not in context (the
-  session predates the install), open a new session rather than reimplementing the classification:
+  count, straight from the parser that produces the block. If the line is not in context, do NOT
+  reimplement the classification — read which case you are in first:
+  - **A Paperclip agent (`PAPERCLIP_RUN_ID` set)**: the plugin injects **no** pendientes at all in
+    that branch, so **nothing** in the legacy dump is duplicated. Do not trim it.
+  - **A session that predates the install**: open a new session and read the line there.
+  - **Anything else**: fall back to the byte measurement and warn the user instead of trimming.
+
+  The reason not to recompute it:
   a second copy of that logic looks right and drifts — it skips the items under closed sections
   (`## Completados`, `## Scope`, `## Related`), which the parser deliberately excludes, and it
   misses case variants of the priority headers, which the parser matches. This project already paid
@@ -106,18 +112,32 @@ Behavior rules:
   Then report and offer the specific action:
 
   ```
-  DUPLICATE HOOK DETECTED
+  LEGACY HOOK OVERLAPS WITH THE PLUGIN
   File: .claude/hooks/session-start.sh (exists, runs every session)
-    [DUPLICATE] dumps 109 raw pendientes = 31.5 KB — the plugin already injects this, curated
+    [PARTIAL]   dumps 109 raw pendientes = 31.5 KB — the plugin re-emits 12 of them (Alta +
+                unclassified, capped at 25, each cut to ~120 chars). The other 97 and every
+                cut tail are NOT re-emitted: deleting this line loses them.
     [DUPLICATE] PROTOCOLO reminder — the plugin emits an equivalent line
     [CUSTOM]    "ANTES de SSH/remote ops: leer memory/_learnings.md"
 
-  Trim to the custom line only? (y/n)
+  1) Keep the dump, drop only the fully duplicated lines   (nothing is lost)
+  2) Narrow the dump to what the plugin does NOT re-emit   (see the condition below)
+  3) Delete the whole script                               (only if nothing is [CUSTOM]/[PARTIAL])
   ```
 
-  - If custom lines remain, rewrite the script keeping ONLY those, and leave its registration in settings intact.
-  - If NOTHING custom remains, say so and offer to delete the script and its settings entry together.
-  - If the script contains logic you cannot classify with confidence, do not rewrite it — fall back to warning the user with the byte measurement, so the decision is at least informed.
+  - **Never delete a `[PARTIAL]` line.** It carries duplicated and non-duplicated content in the
+    same command, so "trim to the custom lines only" would throw away the part the plugin never
+    shows. Option 1 is the default: it removes the lines that are wholly redundant and leaves
+    everything else exactly as it was.
+  - **Option 2 only when you can state the condition holds**: the project has 25 or fewer Alta +
+    unclassified items AND their bodies are short enough not to be cut. Then, and only then, is the
+    Alta part of the dump genuinely redundant, and narrowing the legacy command to the `## Media
+    prioridad` section onward loses nothing. Above the cap, or with long bodies, narrowing deletes
+    content — take option 1.
+  - **Option 3 only when nothing is `[CUSTOM]` or `[PARTIAL]`**: then offer to delete the script and
+    its settings entry together.
+  - If the script contains logic you cannot classify with confidence, do not rewrite it — fall back
+    to warning the user with the byte measurement, so the decision is at least informed.
 - **If no orphaned entries are found**: report `Hook entries: clean`.
 
 Never touch hooks for other plugins or commands — only entries matching the heuristics above.

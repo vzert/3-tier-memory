@@ -30,6 +30,20 @@ advierte dos lineas mas abajo: *"Getting this wrong deletes context the user nev
   `systemMessage` SI escribe en el mismo canal, y su contenido se juzga con las mismas reglas que
   cualquier otra linea.
 
+- **La accion que `/migrate` ofrece deja de borrar lo que la clasificacion promete conservar.** El
+  arreglo anterior corrigio la clasificacion y dejo intactos el ejemplo y la accion que vienen
+  despues en el mismo fichero: seguian diciendo `[DUPLICATE] dumps 109 raw pendientes — the plugin
+  already injects this` y ofreciendo *"Trim to the custom line only?"*, que borra la linea entera del
+  volcado — la misma que ahora contiene contenido duplicado Y custom. Lo encontro el verificador
+  externo. Ahora esa linea se marca `[PARTIAL]`, nunca se borra, y la accion por defecto es la que no
+  pierde nada: quitar solo las lineas enteramente redundantes. Estrechar el volcado es la opcion 2 y
+  solo con la condicion declarada (25 o menos items de Alta/sin clasificar y cuerpos cortos);
+  borrarlo entero es la 3 y solo si no queda nada `[CUSTOM]` ni `[PARTIAL]`.
+- **Salida para el caso en que la linea del plugin no esta en contexto.** El texto mandaba abrir una
+  sesion nueva, que en un agente de Paperclip no sirve: esa rama del hook no inyecta pendientes por
+  diseno. Ahora se nombran los tres casos, y en Paperclip la respuesta es que **nada** del volcado
+  esta duplicado.
+
 ### Notas
 - **Barrido completo de los carriers, no una muestra.** `templates/audit-3t.md` y
   `commands/setup-memory.md` tambien nombran `session-start.sh`, pero solo como **nombre de fichero**
