@@ -41,6 +41,14 @@ advierte dos lineas mas abajo: *"Getting this wrong deletes context the user nev
   externo. Ahora esa linea se marca `[PARTIAL]`, nunca se borra, y la accion por defecto es la que no
   pierde nada: quitar solo las lineas enteramente redundantes. Borrar el script entero es la
   opcion 2, y solo si no queda nada `[CUSTOM]` ni `[PARTIAL]`.
+- **La glosa de `SIN CLASIFICAR` se contradecia dentro de su propia frase.** Decia "secciones fuera
+  del esquema Alta/Media/Baja", que incluye literalmente `## Completados` y `## Scope` — las mismas
+  que la frase siguiente declara excluidas. Un agente que leyera la primera mitad daria por
+  duplicados esos items y los borraria: el caso exacto que el arreglo anterior venia a cerrar. Ahora
+  la glosa excluye las secciones cerradas explicitamente. Ademas queda medido y escrito que el
+  `<total>` del bloque tampoco cuenta esos items: con un Alta, uno bajo cabecera no canonica, uno
+  bajo `## Completados` y uno de Media, el hook imprime `PENDIENTES ABIERTOS (3), 2 de prioridad ALTA
+  o sin clasificar` — comparar ese total contra un `grep -c` crudo difiere justo en esas lineas.
 - **Dos frases mas que quedaron vivas de la version intermedia.** La primera decia que la diferencia
   entre lo que el plugin re-emite y el total del fichero "es lo que el recorte borraria": es al
   reves, esa diferencia es justo lo que hay que conservar, y decirlo al reves contradecia la
