@@ -1588,29 +1588,80 @@ def escribir_gitignore_journal(journal):
     creado, asi que colgar esto del makedirs inicial dejaria fuera justo a quien le hace falta.
     Y si el usuario lo edito, su version manda.
 
-    Por que hace falta: sin esto el plugin no tenia postura, y `fingerprints.json` —que son
-    sha256 de ficheros que ya estan en el repo en claro, o sea que no filtran nada— acababa
-    versionado, dando conflicto en cada checkpoint desde dos maquinas."""
+    Por que hace falta: sin esto el plugin no tenia postura sobre que de `.journal/` es estado
+    por copia de trabajo y que es registro compartido, asi que `fingerprints.json` acababa
+    versionado y daba conflicto en cada checkpoint desde dos maquinas.
+
+    DOS PROPIEDADES, Y HACEN FALTA LAS DOS. Costo dos rondas adversariales aprender que arreglar
+    una rompiendo la otra no es arreglar:
+      - EXCLUSIVA: si ya hay un fichero, no se toca. La primera version hacia `if exists` y luego
+        `replace`, y en ese hueco cabe la escritura de otro, asi que el compactador pisaba el
+        fichero del usuario. (Ronda 1: unsafe.)
+      - COMPLETA: nunca se publica un fichero a medias. La segunda version cerro el hueco con
+        `O_EXCL` sobre el destino, pero escribia DENTRO del fichero ya publicado: un fallo de E/S
+        o una muerte del proceso dejaba un `.gitignore` truncado — y `O_EXCL` lo conserva para
+        siempre, porque en la pasada siguiente ve que existe. (Ronda 2: unsafe otra vez, por el
+        arreglo de la ronda 1.)
+    Se escribe entero en un temporal, se fuerza a disco, y se PUBLICA con `os.link`, que falla si
+    el destino existe. El enlace es una sola operacion del sistema de ficheros: o aparece el
+    fichero completo, o no aparece nada. Las dos propiedades salen de la misma llamada."""
     path = os.path.join(journal, ".gitignore")
+    if os.path.exists(path):
+        return False          # atajo barato; quien decide de verdad es el link de abajo
     try:
         os.makedirs(journal, exist_ok=True)
-        # O_EXCL, NO `if exists: ... replace`. La primera version comprobaba y luego reemplazaba,
-        # y entre las dos cosas cabe la escritura de otro: el compactador pisaba el fichero que
-        # el usuario acababa de escribir, justo lo que este fichero promete que no pasa. El
-        # adversario de 2.21.0 lo marco como unsafe. O_EXCL hace la promesa CIERTA por
-        # construccion — el kernel decide quien gana y el perdedor no escribe nada — en vez de
-        # cierta solo si nadie escribe en el hueco. Mismo patron que journal-emit.py.
+    except OSError:
+        return False          # no poder escribirlo no es motivo para no compactar
+    tmp = f"{path}.{os.getpid()}.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(GITIGNORE_JOURNAL)
+            fh.flush()
+            os.fsync(fh.fileno())   # los bytes en disco ANTES de que el fichero sea visible
+    except OSError:
+        _descartar(tmp)
+        return False
+    try:
+        try:
+            os.link(tmp, path)
+            return True
+        except FileExistsError:
+            return False      # gano otro, o ya estaba: su version manda
+        except (OSError, AttributeError, NotImplementedError):
+            # Sin enlaces duros. Pasa en algunos sistemas de ficheros y puede pasar en
+            # Windows/MSYS, donde este plugin ya se ha roto antes por suponer POSIX. Se cae a
+            # O_EXCL sobre el destino: sigue siendo exclusivo, y la ventana de fichero a medias
+            # se reduce a que el proceso MUERA a mitad — un error de E/S se limpia solo, abajo.
+            return _gitignore_por_o_excl(path)
+    finally:
+        _descartar(tmp)
+
+
+def _descartar(path):
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+
+
+def _gitignore_por_o_excl(path):
+    """Respaldo para sistemas sin enlaces duros. Si la escritura falla, BORRA lo que publico:
+    dejar un fichero truncado seria peor que no dejar ninguno, porque O_EXCL lo conserva."""
+    try:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
     except FileExistsError:
-        return False   # ya hay uno: el del usuario manda, o ya lo escribimos
+        return False
     except OSError:
-        return False   # no poder escribirlo no es motivo para no compactar
+        return False
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
             fh.write(GITIGNORE_JOURNAL)
+            fh.flush()
+            os.fsync(fh.fileno())
+        return True
     except OSError:
+        _descartar(path)
         return False
-    return True
 
 
 def compact(mem, budget, quiet):

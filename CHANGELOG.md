@@ -1,5 +1,59 @@
 # Changelog
 
+## [2.21.2] - 2026-09-12
+Segunda ronda adversarial sobre 2.21.1. Encontro que **mi arreglo de la ronda anterior habia roto
+otra cosa**: cerrar la carrera con `O_EXCL` sacrifico la publicacion atomica. De once angulos
+refuto cinco, adjudico a mi favor uno que la ronda 1 habia reportado mal, y confirmo seis.
+
+### Fixed
+- **El `.gitignore` podia publicarse a medias.** `O_EXCL` sobre el destino hace el fichero visible
+  ANTES de escribir dentro: un fallo de E/S o una muerte del proceso dejaba un `.gitignore`
+  truncado — y lo conservaba **para siempre**, porque la pasada siguiente ve que existe y no lo
+  toca. Arregle la exclusividad rompiendo la integridad. Ahora se escribe el fichero entero en un
+  temporal, se fuerza a disco con `fsync`, y se publica con `os.link`, **que falla si el destino
+  existe**: el enlace es una sola operacion del sistema de ficheros, asi que o aparece completo o
+  no aparece. Las dos propiedades salen de la misma llamada. Respaldo para sistemas sin enlaces
+  duros (puede pasar en Windows/MSYS): `O_EXCL` con borrado del parcial si la escritura falla.
+- **Una deriva vista sin nadie delante se perdia para siempre.** `--check-drift` re-sella al
+  detectar, para que el aviso salga una vez. Correcto cuando el aviso llega — pero `emit_output`
+  descarta el mensaje a la persona en `clear`/`compact`, con un agente de Paperclip, o en una
+  corrida no atendida. En esos casos la deriva se veia una vez, a nadie, y no volvia. 2.21.1
+  arreglo `startup|resume` y dejo el resto. Ahora ese aviso usa `defer_human()`: si el buffer se
+  descarta, el texto se guarda en `.journal/human-pending.txt` y sale en el proximo arranque **con
+  persona**. El consumidor esta en `session-start.sh` y re-difiere si tampoco hay nadie, asi que
+  no se gasta en una sesion muda. El filtro por `source` **no se toca**: repetir el aviso en cada
+  `compact` era ruido, y seguirlo siendo.
+
+### Changed
+- **La prueba de concurrencia no probaba concurrencia.** Lanzaba seis compactadores, pero la
+  escritura esta dentro del lock del journal: **serializan y nunca compiten**. Un aserto que no
+  puede fallar por la razon que dice medir es no-evidencia. Ahora llama a la funcion directamente
+  desde 12 procesos independientes, sin lock, y comprueba que gana exactamente uno y que lo
+  publicado es el fichero completo byte a byte.
+- **Dos mutaciones nuevas en `tools/mutaciones/`** — `m_gitignore_publicacion.py` (vuelve a
+  publicar-antes-de-escribir) y `m_drift_humano.py` (vuelve a `human()` sin diferir). Las dos
+  ponen el arnes en rojo, asi que los asertos nuevos estan verificados **en el repo**, no solo en
+  mi terminal. `tools/mutation-check.sh` pasa de 6 casos a 8.
+- **El docstring de `escribir_gitignore_journal()` decia la afirmacion vieja** sobre los sha256.
+  Corregi el CHANGELOG en 2.21.1 y deje la frase viva en el codigo — una regla cambiada en un
+  portador y dejada rancia en otro.
+- **Una frase de 2.21.1 no se seguia**: decia que con `memory/` ignorado "tampoco hay fuga porque
+  el propio `fingerprints.json` esta ignorado y no sube". No vale para quien ya lo tuviera
+  trackeado: anadir la regla no des-trackea, como dice la nota de la propia entrada.
+
+### Sin resolver (siguen abiertos desde la ronda 1)
+`quarantine/` viaja entre maquinas pero solo se escanea `pending/`, asi que un evento
+cuarentenado en A no se reintenta en B aunque alli exista el ancla. `applied/` no tiene poda.
+`memory/.locks/` (de `lock-tier2-write.sh`) es estado por copia de trabajo fuera de `.journal/` y
+ninguna regla lo cubre.
+
+### Nota de metodo
+Construyendo estas pruebas me encontre **otro** aserto de no-evidencia propio: buscaba la
+subcadena `MEMORIA` en el mensaje a la persona, que tambien casa con `MEMORIA 3T — N pendientes
+abiertos` y sale en cada arranque. Medido con mutacion, corregido a `git pull`. Es el mismo error
+que ya habia cometido en 2.21.1 con `grep -c '"systemMessage"'`. El patron —comprobar que el
+canal trae ALGO en vez de comprobar que trae ESTO— es el que hay que vigilar.
+
 ## [2.21.1] - 2026-09-12
 Un adversario independiente (otro vendor) rompio 2.21.0 el mismo dia. De once angulos refuto
 cuatro y confirmo el resto. Esto arregla lo que era mio y corrige por escrito lo que afirme sin
@@ -59,9 +113,11 @@ No lo es. Son `sha256` de los indices de `memory/`, y `fingerprints.json` solo l
 instalaciones donde esos mismos indices tambien se versionan **en texto plano**: un hash de algo ya
 publicado en claro no filtra nada. (Precision que debo al adversario: `indices_protegidos()` no
 mira si el fichero esta trackeado, asi que en una instalacion con `memory/` ignorado — este repo
-mismo — hashea ficheros que NO estan en el repo. Ahi tampoco hay fuga, porque entonces el propio
-`fingerprints.json` esta ignorado y no sube; pero la frase "estan en el repo en claro" no era
-cierta para todos los casos, y lo era por accidente, no por diseno.) (Lo que si es sensible en este sistema es el **contenido** de
+mismo — hashea ficheros que NO estan en el repo. Ahi normalmente tampoco sube, porque el propio
+`fingerprints.json` cae bajo la misma regla — pero "normalmente" no es "nunca": a quien ya lo
+tuviera **trackeado**, anadir la regla no lo des-trackea, como dice la nota de mas abajo. La frase
+"estan en el repo en claro" no era cierta para todos los casos, y donde lo era, lo era por
+accidente.) (Lo que si es sensible en este sistema es el **contenido** de
 `memory/sessions/`, y de eso se ocupa `bin/scan-secrets.py` como compuerta de `/checkpoint-3t`.)
 
 Pero la conclusion era buena por otra razon, y esa razon solo se ve con **mas de una maquina**:

@@ -669,21 +669,86 @@ chk "el texto a la persona nombra git pull"   "1" "$(printf '%s' "$HUM" | python
 chk "y le dice que corra --reseal"            "1" "$(printf '%s' "$HUM" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(1 if "--reseal" in d.get("systemMessage","") else 0)' 2>/dev/null || echo 0)"
 chk "el JSON sigue siendo valido con el texto largo" "1" "$(printf '%s' "$HUM" | python3 -c 'import json,sys; json.load(sys.stdin); print(1)' 2>/dev/null || echo 0)"
 
-echo "== el .gitignore se escribe con O_EXCL: dos compactadores a la vez no lo parten =="
-# La primera version hacia `if exists: return` y luego tmp+replace. Entre la comprobacion y el
-# replace cabe la escritura de otro, asi que el compactador pisaba el fichero del usuario — justo
-# lo que el fichero promete que no pasa. Lo marco el adversario de 2.21.0 como unsafe.
-MEMR="$T/race"; mkdir -p "$MEMR/sessions"
-printf -- '---\ntype: index\n---\n# Pendientes\n\n## Media prioridad\n\n' > "$MEMR/_pendientes.md"
-printf -- '---\ntype: session\n---\n# s\n' > "$MEMR/sessions/2026-01-01-x.md"
-for i in 1 2 3 4 5 6; do
-  python3 "$BIN/journal-compact.py" --memory-dir "$MEMR" --quiet >/dev/null 2>&1 &
+echo "== el .gitignore se publica exclusivo Y entero, con concurrencia DE VERDAD =="
+# La version anterior de esta prueba lanzaba 6 compactadores. No probaba nada: la escritura esta
+# DENTRO del lock del journal, asi que los seis SERIALIZAN y nunca compiten. Un aserto que no
+# puede fallar por la razon que dice medir es no-evidencia, y lo marco el adversario. Aqui se
+# llama a la funcion DIRECTAMENTE desde 12 procesos a la vez, sin lock, que es la unica forma de
+# que compitan de verdad.
+MEMR="$T/race"; mkdir -p "$MEMR/.journal"
+# 12 procesos INDEPENDIENTES, no un Pool: multiprocessing usa `spawn` en macOS y reimporta
+# __main__, que aqui es stdin — se colgaba. Cada uno llama a la funcion y escribe su veredicto en
+# un fichero; se cuentan despues.
+mkdir -p "$T/race_votos"
+llama='import importlib.util, os, sys
+spec = importlib.util.spec_from_file_location("jc", os.path.join(sys.argv[1], "journal-compact.py"))
+jc = importlib.util.module_from_spec(spec); spec.loader.exec_module(jc)
+print(1 if jc.escribir_gitignore_journal(sys.argv[2]) else 0)'
+for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+  python3 -c "$llama" "$BIN" "$MEMR/.journal" > "$T/race_votos/$i" 2>/dev/null &
 done
 wait
-chk "6 compactadores a la vez: un solo .gitignore" "1" "$(ls -1 "$MEMR/.journal"/.gitignore 2>/dev/null | wc -l | tr -d ' ')"
-chk "y ningun .tmp huerfano"                   "0" "$(ls -1 "$MEMR/.journal"/.gitignore.*.tmp 2>/dev/null | wc -l | tr -d ' ')"
-chk "contenido intacto (ni partido ni doble)"  "1" "$(grep -c '^fingerprints.json$' "$MEMR/.journal/.gitignore")"
-chk "y nombra pending/ como versionado"        "1" "$(grep -c 'QUE SI SE VERSIONA' "$MEMR/.journal/.gitignore")"
+GANADORES=$(cat "$T/race_votos"/* 2>/dev/null | grep -c '^1$')
+ENTERO=$(python3 -c '
+import importlib.util, os, sys
+spec = importlib.util.spec_from_file_location("jc", os.path.join(sys.argv[1], "journal-compact.py"))
+jc = importlib.util.module_from_spec(spec); spec.loader.exec_module(jc)
+print(1 if open(os.path.join(sys.argv[2], ".gitignore"), encoding="utf-8").read() == jc.GITIGNORE_JOURNAL else 0)
+' "$BIN" "$MEMR/.journal" 2>/dev/null)
+SOBRAS=$(ls -1 "$MEMR/.journal"/.gitignore.*.tmp 2>/dev/null | wc -l | tr -d ' ')
+chk "12 a la vez: gana EXACTAMENTE uno"        "1" "$GANADORES"
+chk "el publicado es el fichero ENTERO"        "1" "$ENTERO"
+chk "y no queda ningun temporal"               "0" "$SOBRAS"
+# Un fichero a medias es lo que la ronda 2 encontro: O_EXCL sobre el destino publica ANTES de
+# escribir, y si la escritura muere, el truncado se queda para siempre porque el siguiente ve que
+# existe. Esta prueba fija la propiedad en la direccion contraria: existe => esta completo.
+printf 'mio del usuario\n' > "$MEMR/.journal/.gitignore"
+python3 -c "
+import importlib.util, os, sys
+spec = importlib.util.spec_from_file_location('jc', os.path.join('$BIN', 'journal-compact.py'))
+jc = importlib.util.module_from_spec(spec); spec.loader.exec_module(jc)
+jc.escribir_gitignore_journal('$MEMR/.journal')" 2>/dev/null
+chk "no pisa el del usuario"                   "mio del usuario" "$(cat "$MEMR/.journal/.gitignore")"
+
+echo "== una deriva vista sin nadie delante no se consume: se guarda para el proximo arranque =="
+# --check-drift RE-SELLA al detectar, para que el aviso salga una vez. Correcto cuando el aviso
+# llega. En un `clear`/`compact` —o con un agente de Paperclip, o una corrida no atendida— el
+# mensaje a la persona se descarta, asi que el re-sellado lo borraba PARA SIEMPRE: visto una vez,
+# a nadie, y no vuelve. Lo encontro el adversario sobre el arreglo parcial de 2.21.1.
+MEMH="$T/defer"; mkdir -p "$MEMH/sessions"
+cat > "$MEMH/_pendientes.md" <<'EOF'
+---
+type: index
+---
+# Pendientes
+
+## Alta prioridad
+
+## Media prioridad
+
+## Baja prioridad
+EOF
+printf -- '---\ntype: session\n---\n# s\n' > "$MEMH/sessions/2026-01-01-x.md"
+PR="$(cd "$BIN/.." && pwd)"
+arranque(){ CLAUDE_PLUGIN_ROOT="$PR" CLAUDE_PROJECT_DIR="$T/defer_proj" bash "$BIN/session-start.sh" 2>/dev/null <<J
+{"hook_event_name":"SessionStart","source":"$1","cwd":"$T/defer_proj"}
+J
+}
+mkdir -p "$T/defer_proj"; cp -R "$MEMH" "$T/defer_proj/memory"
+arranque startup >/dev/null 2>&1          # estabiliza (normalize re-sella en el primer arranque)
+printf -- '- [ ] llego por git\n' >> "$T/defer_proj/memory/_pendientes.md"
+C1=$(arranque compact)
+dice(){ printf '%s' "$1" | python3 -c 'import json,sys
+try: d=json.load(sys.stdin)
+except Exception: print(0); raise SystemExit
+print(1 if "git pull" in d.get("systemMessage","") else 0)' 2>/dev/null || echo 0; }
+chk "en compact NO se le dice a nadie"         "0" "$(dice "$C1")"
+chk "pero queda guardado"                      "1" "$([ -s "$T/defer_proj/memory/.journal/human-pending.txt" ] && echo 1 || echo 0)"
+S1=$(arranque startup)
+chk "y el siguiente arranque SI lo entrega"    "1" "$(dice "$S1")"
+chk "y ya no se repite (se consumio)"          "0" "$([ -s "$T/defer_proj/memory/.journal/human-pending.txt" ] && echo 1 || echo 0)"
+S2=$(arranque startup)
+chk "el arranque de despues esta callado"      "0" "$(dice "$S2")"
 chk "y da la salida (--reseal)"               "1" "$(printf '%s' "$DG" | grep -c -- '--reseal')"
 chk "y dice que NO se pierden los cambios"    "1" "$(printf '%s' "$DG" | grep -c 'NO se pierden')"
 
