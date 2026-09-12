@@ -20,6 +20,12 @@
 # Uso: test-monthly-rows.sh   (exit 0 = todo verde)
 set -u
 BIN="$(cd "$(dirname "$0")" && pwd)"
+# `export`, y en el codigo python se lee de os.environ en vez de interpolar "$BIN" en el literal.
+# En Git Bash una ruta MSYS como /d/a/... solo se convierte a la forma nativa cuando viaja como
+# ARGUMENTO o como VARIABLE DE ENTORNO hacia un .exe nativo. Interpolada dentro del fuente de
+# python no la ve nadie: el interprete de Windows la resolvia contra la unidad actual y salia
+# `D:\d/a/...`, que no existe. Medido en CI el 2026-09-12.
+export BIN
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 FAIL=0
@@ -173,8 +179,8 @@ check "el informe da las medidas" "$(echo "$OUT" | grep -c 'Medido: 5 celdas')" 
 check "ya no afirma una sola causa" "$(echo "$OUT" | grep -c 'El dato original se perdio')" "0"
 check "la fila del valor raro SI se localiza por id" \
   "$(python3 -c "
-import importlib.util
-spec = importlib.util.spec_from_file_location('jc', '$BIN/journal-compact.py')
+import importlib.util, os
+spec = importlib.util.spec_from_file_location('jc', os.path.join(os.environ['BIN'], 'journal-compact.py'))
 jc = importlib.util.module_from_spec(spec); spec.loader.exec_module(jc)
 print('si' if jc.find_monthly_row('$M4', 'p-3333333333') else 'no')")" "si"
 
@@ -201,20 +207,20 @@ check "y el motivo dice que no se adivina" \
   "$(echo "$OUT" | grep -c 'la cabecera del fichero no dice que columnas son')" "1"
 check "la de 7 celdas SI se localiza (no se tira el bebe con el agua)" \
   "$(python3 -c "
-import importlib.util
-spec = importlib.util.spec_from_file_location('jc', '$BIN/journal-compact.py')
+import importlib.util, os
+spec = importlib.util.spec_from_file_location('jc', os.path.join(os.environ['BIN'], 'journal-compact.py'))
 jc = importlib.util.module_from_spec(spec); spec.loader.exec_module(jc)
 print('si' if jc.find_monthly_row('$M5', 'p-7777777777') else 'no')")" "si"
 check "la ambigua NO se localiza por id (no se escribe a ciegas)" \
   "$(python3 -c "
-import importlib.util
-spec = importlib.util.spec_from_file_location('jc', '$BIN/journal-compact.py')
+import importlib.util, os
+spec = importlib.util.spec_from_file_location('jc', os.path.join(os.environ['BIN'], 'journal-compact.py'))
 jc = importlib.util.module_from_spec(spec); spec.loader.exec_module(jc)
 print('si' if jc.find_monthly_row('$M5', 'p-6666666666') else 'no')")" "no"
 check "con cabecera de 7, la fila de 6 SI se lee (faltan las finales)" \
   "$(python3 -c "
-import importlib.util
-spec = importlib.util.spec_from_file_location('jc', '$BIN/journal-compact.py')
+import importlib.util, os
+spec = importlib.util.spec_from_file_location('jc', os.path.join(os.environ['BIN'], 'journal-compact.py'))
 jc = importlib.util.module_from_spec(spec); spec.loader.exec_module(jc)
 cab = '| # | Pendiente | Prioridad | Creado | Origen | Resuelto | Sesion resolucion |'
 h = jc.header_map([cab, '|---|---|---|---|---|---|---|'])

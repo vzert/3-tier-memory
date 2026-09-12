@@ -1,5 +1,39 @@
 # Changelog
 
+## [2.18.3] - 2026-09-12
+**En Windows, todo el texto en espanol del plugin salia con los acentos y los guiones rotos.** Es
+lo mas grave de esta tanda y lo encontro la primera corrida de las suites en Git Bash.
+
+Python en Windows codifica `stdout` con la pagina de codigos local (cp1252) cuando va a una
+tuberia, no en UTF-8. Ninguno de los siete guiones distribuidos que llaman a python fijaba la
+codificacion. Medido sobre la salida REAL del hook de arranque: `item con id — _creado:` llegaba
+como `item con id � _creado:`. Ese texto se inyecta en el prompt de cada sesion, asi que lo
+veia el modelo en su contexto y lo veia el usuario en su terminal.
+
+### Fixed
+- `export PYTHONUTF8=1 PYTHONIOENCODING=utf-8` en los siete: `session-start.sh`,
+  `bash-journal-nudge.sh`, `context-nudge.sh`, `journal-guard.sh`, `recall.sh`,
+  `resolve-plugin-bin.sh` y `resolve-project-dir.sh`. Los dos son no-op fuera de Windows. Se
+  incluyen los dos resolutores aunque solo impriman rutas: una ruta puede llevar acentos si el
+  usuario los tiene en su nombre.
+- `bin/test-monthly-rows.sh`: interpolaba `$BIN` DENTRO del fuente de python. En Git Bash una ruta
+  MSYS solo se convierte a la forma nativa cuando viaja como argumento o como variable de entorno
+  hacia un `.exe`; dentro de un literal no la ve nadie, y el interprete de Windows la resolvia
+  contra la unidad actual (`D:\d/a/...`, que no existe). Pasa a `os.environ['BIN']`, que es el
+  idioma que ya usaban las dos suites que si pasaban en Windows.
+- `bin/test-normalize-pendientes.sh`: los dos asertos sensibles al CR usaban `grep`, y el de MSYS
+  trata `\r\n` como fin de linea, asi que `$` casa por delante del `\r` y los dos se invertian.
+  El plugin hacia lo correcto —el fichero salia con `nl=cr=14`— y lo que mentia era la medicion.
+  Ahora se cuenta por BYTES, verificado en los dos sentidos con un fichero LF y otro CRLF.
+- `bin/test-expire-reopen.sh`: el caso del destino inescribible se **salta y se informa** donde
+  `chmod` no toca las ACL de NTFS. Se comprueba con una sonda de escritura en vez de suponerlo. Un
+  salto contado es honesto; un fallo por precondicion ausente acusa al codigo de algo que no hizo.
+
+### Nota
+Windows sigue en un job informativo que no bloquea. Sube a la matriz principal cuando encadene
+verdes, y entonces se cierra el pendiente que lleva abierto desde el 2026-09-11 diciendo que
+`resolve-project-dir.sh` nunca se habia probado ahi.
+
 ## [2.18.2] - 2026-09-12
 **El aviso de escritura a mano no disparaba NUNCA en Linux**, en silencio. `bash-journal-nudge.sh`
 es el hook `PostToolUse` que avisa cuando un indice de Tier 2 cambio fuera del journal — la

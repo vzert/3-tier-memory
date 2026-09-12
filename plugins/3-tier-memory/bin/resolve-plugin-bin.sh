@@ -35,6 +35,15 @@
 # sella-huellas: no (no escribe: solo imprime una ruta en stdout; no toca ningun indice)
 set -u
 
+# Salida de python en UTF-8 SIEMPRE. En Windows, python codifica stdout con la pagina de codigos
+# local cuando va a una tuberia (cp1252), no en UTF-8: el texto en espanol de este plugin salia con
+# los guiones largos y los acentos rotos. Medido en CI el 2026-09-12 sobre la salida real del hook
+# de arranque: `item con id — _creado:` llegaba como `item con id \xef\xbf\xbd _creado:`. Es texto
+# que se inyecta en el prompt de cada sesion, asi que lo veia el modelo y lo veia el usuario.
+# PYTHONUTF8 necesita 3.7+; PYTHONIOENCODING cubre lo anterior. Los dos son no-op fuera de Windows.
+export PYTHONUTF8=1 PYTHONIOENCODING=utf-8
+
+
 emit() { [ -d "$1" ] && [ -f "$1/journal-emit.py" ] && { printf '%s\n' "$1"; exit 0; }; }
 
 emit "${CLAUDE_PLUGIN_ROOT:-}/bin"

@@ -5,7 +5,7 @@ set -u
 BIN="$(cd "$(dirname "$0")" && pwd)"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 MEM="$T/memory"; mkdir -p "$MEM/pendientes"
-pass=0; fail=0
+pass=0; fail=0; skip=0
 chk(){ if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FAIL $1"; echo "    esperado: $2"; echo "    obtenido: $3"; fi; }
 
 # Portabilidad BSD/GNU. El CI del 2026-09-12 corrio esta suite en Linux por primera vez y encontro
@@ -216,9 +216,20 @@ MEM8="$T/mem8"; mkdir -p "$MEM8/pendientes"
 printf '# Pendientes\n\n## Media prioridad\n\n- [ ] no me pierdas — _origen: [[sessions/2026-01-01-y]]_ — _creado: 2026-01-01_ — _id: p-8888888888_\n' > "$MEM8/_pendientes.md"
 python3 "$BIN/expire-pendientes.py" --memory-dir "$MEM8" --modo edad --days 90 --apply >/dev/null 2>&1
 chmod a-w "$MEM8/pendientes"          # el destino pasa a ser inescribible
-python3 "$BIN/journal-compact.py" --memory-dir "$MEM8" --quiet >/dev/null 2>&1
-chmod u+w "$MEM8/pendientes"
-chk "con el destino inescribible, la linea NO se pierde" "1" "$(grep -c 'p-8888888888' "$MEM8/_pendientes.md")"
+# En Git Bash/Windows `chmod` no toca las ACL de NTFS, asi que el directorio SIGUE siendo
+# escribible y la precondicion de este caso no se puede construir. Se comprueba en vez de
+# suponerlo —y en vez de dar por fallado un caso que no se ha llegado a montar—: si la sonda
+# entra, se salta y se informa. Un salto contado es honesto; un fallo por precondicion ausente
+# dice que el codigo esta mal cuando lo que falta es el escenario. (Medido en CI, 2026-09-12.)
+if : > "$MEM8/pendientes/.sonda-escritura" 2>/dev/null; then
+  rm -f "$MEM8/pendientes/.sonda-escritura"
+  chmod u+w "$MEM8/pendientes"
+  skip=$((skip+1)); echo "  SKIP con el destino inescribible, la linea NO se pierde (chmod no lo hace inescribible aqui)"
+else
+  python3 "$BIN/journal-compact.py" --memory-dir "$MEM8" --quiet >/dev/null 2>&1
+  chmod u+w "$MEM8/pendientes"
+  chk "con el destino inescribible, la linea NO se pierde" "1" "$(grep -c 'p-8888888888' "$MEM8/_pendientes.md")"
+fi
 # y al reintentar con el destino escribible, el traspaso se completa
 python3 "$BIN/journal-compact.py" --memory-dir "$MEM8" --quiet >/dev/null 2>&1
 EN_CAD=$(grep -c 'p-8888888888' "$MEM8/pendientes/_caducados.md" 2>/dev/null || true)
@@ -462,5 +473,5 @@ printf -- '- [ ] a mano\n' >> "$MEMK/_pendientes.md"
 D3=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMK" --check-drift 2>&1)
 chk "control negativo: la escritura a mano SI dispara" "1" "$(printf '%s' "$D3" | grep -c 'FUERA DEL JOURNAL')"
 
-echo "RESULT pass=$pass fail=$fail"
+echo "RESULT pass=$pass fail=$fail skip=$skip"
 [ "$fail" -eq 0 ]

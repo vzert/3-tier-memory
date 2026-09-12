@@ -32,7 +32,17 @@ PASS=0; FAIL=0
 ok()   { PASS=$((PASS + 1)); }
 fail() { FAIL=$((FAIL + 1)); echo "  FAIL $1"; }
 items() { grep -c '^- \[ \]' "$1"; }
-canon() { grep -cE '^## (Alta|Media|Baja) prioridad$' "$1"; }   # -E: la alternancia BRE \| no es portable (BSD grep)
+# Cuenta EXACTA POR BYTES, no por grep. En Git Bash el grep de MSYS trata `\r\n` como fin de linea,
+# asi que `$` casa por DELANTE del `\r` y los dos asertos sensibles al CR del caso 13 se invertian:
+# `canon` devolvia 3 donde debe devolver 0, y la cuenta de cabeceras CRLF devolvia 0 donde debe dar
+# 1. El plugin hacia lo correcto —el fichero salia con nl=cr=14— y lo que mentia era la medicion.
+# Medido en CI el 2026-09-12. Leer en binario no depende del dialecto de grep de cada plataforma.
+canon() {   # cabeceras canonicas terminadas en LF LIMPIO (una con CRLF no cuenta)
+  python3 -c "import sys,re; d=open(sys.argv[1],'rb').read(); print(len(re.findall(rb'(?m)^## (?:Alta|Media|Baja) prioridad(?=\n|\Z)', d)))" "$1"
+}
+cabecera_crlf() {   # $2 = texto de la cabecera; cuenta las terminadas en CRLF
+  python3 -c "import sys; d=open(sys.argv[1],'rb').read(); print(d.count(sys.argv[2].encode()+b'\r\n'))" "$1" "$2"
+}
 mk() { mkdir -p "$T/$1"; printf -- "$2" > "$T/$1/_pendientes.md"; }
 run() { python3 "$BIN/normalize-pendientes.py" "$T/$1" --apply; }
 
@@ -118,7 +128,7 @@ echo "13 CRLF:"
 mkdir -p "$T/c13"; printf '# Pendientes\r\n\r\n## Abiertos\r\n\r\n- [ ] x\r\n\r\n## Related\r\n- [[x]]\r\n' > "$T/c13/_pendientes.md"
 OUT=$(run c13); F="$T/c13/_pendientes.md"
 NL=$(tr -cd '\n' < "$F" | wc -c | tr -d ' '); CR=$(tr -cd '\r' < "$F" | wc -c | tr -d ' ')
-[ "$OUT" = "headers_added=3 (Alta prioridad, Media prioridad, Baja prioridad)" ] && [ "$NL" = "$CR" ] && [ "$NL" -gt 8 ] && [ "$(canon "$F")" = 0 ] && [ "$(grep -c $'^## Alta prioridad\r$' "$F")" = 1 ] && ok || fail "crlf: '$OUT' nl=$NL cr=$CR"
+[ "$OUT" = "headers_added=3 (Alta prioridad, Media prioridad, Baja prioridad)" ] && [ "$NL" = "$CR" ] && [ "$NL" -gt 8 ] && [ "$(canon "$F")" = 0 ] && [ "$(cabecera_crlf "$F" '## Alta prioridad')" = 1 ] && ok || fail "crlf: '$OUT' nl=$NL cr=$CR"
 
 echo "14 desordenados (Baja antes de Alta, falta Media):"
 mk c14 '# Pendientes\n\n## Baja prioridad\n\n- [ ] c\n\n## Alta prioridad\n\n- [ ] a1\n- [ ] a2\n\n## Related\n- [[x]]\n'

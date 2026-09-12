@@ -39,24 +39,6 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - name: que entorno es esto (diagnostico, no es una prueba)
-        shell: bash
-        run: |
-          echo "uname          : $(uname -s)"
-          echo "bash           : $BASH_VERSION"
-          echo "which python3  : $(command -v python3)"
-          echo "sys.executable : $(python3 -c 'import sys;print(sys.executable)')"
-          echo "os.name        : $(python3 -c 'import os;print(os.name)')"
-          echo "cygpath        : $(command -v cygpath || echo NO)"
-          echo "pwd (bash)     : $PWD"
-          echo "cygpath -w pwd : $(cygpath -w "$PWD" 2>/dev/null || echo n/a)"
-          echo "TMPDIR         : ${TMPDIR:-<vacio>}"
-          T=$(mktemp -d); echo "mktemp -d      : $T"
-          echo "cygpath -w tmp : $(cygpath -w "$T" 2>/dev/null || echo n/a)"
-          echo "--- puede python abrir un fichero creado por bash en ese temporal? ---"
-          echo hola > "$T/f.txt"
-          python3 -c "import sys;print('  ruta MSYS  :', open(sys.argv[1]).read().strip())" "$T/f.txt" 2>&1 | head -2
-          W=$(cygpath -w "$T/f.txt" 2>/dev/null) && python3 -c "import sys;print('  ruta Windows:', open(sys.argv[1]).read().strip())" "$W" 2>&1 | head -2
       - name: suites en Git Bash
         shell: bash
         run: bash tools/run-tests.sh

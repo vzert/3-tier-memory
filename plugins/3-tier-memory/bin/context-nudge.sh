@@ -1,4 +1,13 @@
 #!/bin/bash
+
+# Salida de python en UTF-8 SIEMPRE. En Windows, python codifica stdout con la pagina de codigos
+# local cuando va a una tuberia (cp1252), no en UTF-8: el texto en espanol de este plugin salia con
+# los guiones largos y los acentos rotos. Medido en CI el 2026-09-12 sobre la salida real del hook
+# de arranque: `item con id — _creado:` llegaba como `item con id \xef\xbf\xbd _creado:`. Es texto
+# que se inyecta en el prompt de cada sesion, asi que lo veia el modelo y lo veia el usuario.
+# PYTHONUTF8 necesita 3.7+; PYTHONIOENCODING cubre lo anterior. Los dos son no-op fuera de Windows.
+export PYTHONUTF8=1 PYTHONIOENCODING=utf-8
+
 # sella-huellas: no (solo escribe su propio fichero de estado del aviso)
 # 3-tier-memory plugin: UserPromptSubmit hook — context-aware checkpoint nudge.
 #
