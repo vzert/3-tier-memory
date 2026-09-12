@@ -1,0 +1,44 @@
+name: tests
+
+# Por que existe: habia 11 suites y ningun runner ni CI, asi que solo corrian cuando alguien se
+# acordaba de lanzarlas a mano. Ademas todas se habian ejecutado SOLO en macOS, y varias usan
+# construcciones que difieren entre BSD y GNU (`sed -i`, `stat`, `date -r`, `script` para el pty).
+# Este workflow es la primera vez que se ejecutan en Linux.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  suites:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false   # que una plataforma no oculte el resultado de las otras
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: version de las herramientas
+        shell: bash
+        run: |
+          bash --version | head -1
+          python3 --version
+          git --version
+      - name: suites
+        shell: bash
+        run: bash tools/run-tests.sh
+
+  # Windows va aparte y NO bloquea: `resolve-project-dir.sh` nunca se ha probado en Git Bash y hay
+  # un pendiente abierto que lo dice. Esto lo convierte en una medicion en vez de una suposicion.
+  # Si se pone verde de forma estable, sube a la matriz de arriba y se cierra ese pendiente.
+  windows:
+    name: windows-latest (informativo)
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: suites en Git Bash
+        shell: bash
+        run: bash tools/run-tests.sh
