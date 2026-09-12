@@ -1,5 +1,32 @@
 # Changelog
 
+## [2.19.3] - 2026-09-12
+**La prueba que 2.19.1 presento como "no puede quedarse corta" se quedaba corta en 12 de 14
+ficheros.** Lo cazo un adversario local mutando `build-recall-index.py`: cambio
+`for _flujo in (sys.stdout, sys.stderr):` por `for _flujo in (sys.stdout,):` —dejando stderr sin
+guardar pero conservando el identificador `_flujo`— y la suite siguio diciendo `TODO VERDE`.
+
+La causa es la misma que 2.19.1 decia haber corregido, un nivel mas abajo: **el criterio seguia
+siendo textual**. Antes buscaba no-ASCII literal; despues buscaba los identificadores de la guarda.
+Las dos cosas leen el fuente y ninguna sabe lo que el codigo HACE. Solo `triage-scan.py` y
+`expire-pendientes.py` tenian cobertura real, porque son los unicos con un caso en vivo.
+
+### Changed
+- `bin/test-utf8-streams.sh`, `falta()`: se comprueba **por comportamiento**. Cada `.py` se importa
+  en un proceso propio con `PYTHONIOENCODING=cp437` —lo que hace Windows por su cuenta— y se lee la
+  codificacion REAL de los dos flujos. Los 14 protegen su `main()` con `if __name__ == "__main__"`,
+  asi que importar ejecuta la guarda y nada mas. El informe dice ahora que salio: por ejemplo
+  `build-recall-index.py(utf-8 cp437)`.
+- Verificado con **cuatro** mutaciones distintas, cada una en un fichero distinto, y las cuatro se
+  cazan: quitar la guarda entera (`cp437 cp437`), dejar solo stdout (`utf-8 cp437`), dejar solo
+  stderr (`cp437 utf-8`), y volver inalcanzable el `reconfigure` (`cp437 cp437`). La version
+  anterior no cazaba ninguna salvo en los dos ficheros con caso en vivo.
+
+### Nota
+Tercera vez en esta sesion que una prueba afirma cubrir mas de lo que cubre, y las tres veces la
+forma del error fue la misma: **deducir del fuente lo que solo se sabe ejecutando**. Un detector
+que se ha visto decir "ninguno" no se ha visto funcionar; hay que verlo decir "este".
+
 ## [2.19.2] - 2026-09-12
 ### Fixed
 - `bin/test-journal-race.sh`: el techo de velocidad del caso "un solo agente" era 1000 ms en todo
