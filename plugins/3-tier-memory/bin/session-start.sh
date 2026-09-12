@@ -278,7 +278,12 @@ for name in ("settings.json", "settings.local.json"):
                     continue
                 # Ambas formas de la variable. Y se miran TODOS los segmentos del comando:
                 # con un solo candidato, una entrada huerfana al principio esconde al real.
-                expanded = cmd.replace("${CLAUDE_PROJECT_DIR}", proj).replace("$CLAUDE_PROJECT_DIR", proj)
+                # `scripts_ejecutados` parte el comando con `shlex.split(posix=True)`, y ahi la
+                # barra invertida es un ESCAPE: sustituir una ruta de Windows tal cual
+                # (`C:\\Users\\...`) la destruia al tokenizar y el script quedaba sin detectar.
+                # Windows acepta barras normales en las rutas, asi que se sustituye esa forma.
+                proj_txt = proj.replace("\\", "/")
+                expanded = cmd.replace("${CLAUDE_PROJECT_DIR}", proj_txt).replace("$CLAUDE_PROJECT_DIR", proj_txt)
                 for script in scripts_ejecutados(expanded, proj):
                     if not os.path.isfile(script):
                         continue   # entrada huerfana: eso lo reporta /migrate, no es duplicacion

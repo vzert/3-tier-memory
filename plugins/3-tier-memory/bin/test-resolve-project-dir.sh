@@ -193,10 +193,19 @@ for c in python3 bash sed cat env; do P=$(command -v $c) && ln -sf "$P" "$JQLESS
 # empezar y el caso acusaba al codigo de no resolver el cwd. Se conserva solo esa variable, y solo
 # donde existe, para que el entorno siga siendo minimo en POSIX. (CI, 2026-09-12.)
 SYSROOT_KEEP=""; [ -n "${SYSTEMROOT:-}" ] && SYSROOT_KEEP="SYSTEMROOT=$SYSTEMROOT"
+# En Windows `bash.exe` carga sus DLL por PATH, asi que un PATH reducido a un directorio de enlaces
+# le quita las suyas y no arranca: `error while loading shared libraries`. La precondicion de este
+# caso —un entorno sin jq pero con bash— no se puede construir ahi. Se sonda y se salta con aviso,
+# igual que el caso del pty. Un salto contado es honesto; un fallo dice que el codigo esta mal
+# cuando lo que falta es el escenario. (CI, 2026-09-12.)
+if ! env -i $SYSROOT_KEEP PATH="$JQLESS" "$JQLESS/bash" -c 'exit 0' 2>/dev/null; then
+  SKIP=$((SKIP + 1)); echo "  SKIP sin jq: el respaldo de python3 (el bash aislado no arranca aqui)"
+else
 OUT=$(printf '%s' "$JSON" | env -i $SYSROOT_KEEP PATH="$JQLESS" RESOLVE_SH="$RESOLVE_SH" DUMP="$DUMP" \
       HOOK_STDIN_TIMEOUT=2 "$JQLESS/bash" "$TMP/probe.sh" 2>"$ERR"); RC=$?
 if [ "$RC" -eq 0 ] && [ "$(norm "$(field dir)")" = "$(norm "$TMP/proj")" ]; then ok
 else fail "sin jq: el respaldo de python3 debe resolver el cwd" "rc=$RC out='$OUT' err=$(cat "$ERR")"; fi
+fi
 
 echo "RESULT: pass=$PASS fail=$FAIL skip=$SKIP"
 [ "$FAIL" -eq 0 ]

@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.18.8] - 2026-09-12
+### Fixed
+- `bin/session-start.sh`: al sustituir `$CLAUDE_PROJECT_DIR` en el comando de un hook se metia la
+  ruta del proyecto TAL CUAL, y despues ese texto lo parte `shlex.split(posix=True)`, donde la
+  barra invertida es un **escape**. Una ruta de Windows (`C:\\Users\\...`) se destruia al tokenizar
+  y el hook heredado quedaba sin detectar. Se sustituye la forma con barras normales, que Windows
+  acepta igual. Es codigo que se distribuye.
+- `bin/test-resolve-project-dir.sh`: el caso sin jq monta un `PATH` reducido a un directorio de
+  enlaces, y en Windows `bash.exe` carga sus DLL por `PATH`, asi que no arranca
+  (`error while loading shared libraries`). La precondicion no se puede construir ahi: se sonda y
+  se salta con aviso, como el caso del pty.
+
 ## [2.18.7] - 2026-09-12
 Cuarta vuelta de Windows. Solo suites.
 
