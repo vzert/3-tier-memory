@@ -1,5 +1,182 @@
 # Changelog
 
+## [2.20.0] - 2026-09-12
+El dedup de `/backfill-3t` se apoyaba en `customTitle`. Ese campo viene `null` en los 22 JSONL de
+este proyecto (medido 2026-09-12: 0 de 22; no comprobado en otras versiones, modos ni
+instalaciones), asi que ahi la regla escrita no casaba nunca y lo unico que impedia reimportar una
+sesion que ya tenia ficha era el criterio de un agente leyendo. El comando llevaba dias sin poder
+correrse.
+
+La causa era mas honda que el campo: **no existia ninguna llave** entre un `.jsonl` y su ficha. El
+frontmatter de las 46 fichas llevaba `type`, `date`, `status` e `importance`, y nada que dijera de
+que conversacion salio.
+
+### Added
+- **`bin/match-session-file.py`** — une cada `.jsonl` con su ficha por dos caminos, sin heuristica
+  de parecido, y devuelve `match` / `review` / `process` / `current`:
+  1. **Sello**: `session_id` en el frontmatter. Es lo que DECLARA quien escribe la ficha, y
+     `stamp-session-id.py` solo lo acepta si cuadra con la transcripcion (ver abajo: no es una
+     prueba de identidad, y llamarlo *exacto* fue un error que corrigio el adversario).
+  2. **Escritura observada**: la sesion que escribio su ficha dejo esa escritura en su propia
+     transcripcion. Se busca la **escritura**, no la mencion — `cat ficha.md` y `cat > ficha.md`
+     nombran la misma ruta y significan lo contrario.
+
+  Ante duda **no decide**: `review` va a una pregunta al usuario antes de que se escriba nada.
+  Decidir por parecido tiene un fallo que no se ve nunca —marcar como ya-importada una sesion que
+  no lo esta— y esa es la razon de que exista el tercer veredicto.
+
+- **`bin/stamp-session-id.py`** — escribe `session_id` en el frontmatter. Lo llaman
+  `/checkpoint-3t` (Step 5c-bis, con `CLAUDE_CODE_SESSION_ID`) y `/backfill-3t` (Step 3b, con el
+  UUID de origen). En el matcher el sello **gana** a la evidencia de escritura, asi que un sello
+  equivocado no produce un duplicado visible — produce el invisible. Por eso exige tres cosas antes
+  de escribir: que el id tenga `.jsonl` en `$JSONL_DIR`, que la **fecha de la ficha caiga dentro
+  del rango de esa transcripcion**, y que no haya ya un sello distinto puesto.
+
+- **`bin/test-backfill-dedup.sh`** — 38 comprobaciones y 10 mutaciones (la cifra final, tras las
+  rondas de abajo). Cinco de los casos son defectos que este codigo **tuvo** durante la
+  sesion, medidos contra los 22 JSONL reales, cada uno con la mutacion que lo reinyecta y que tiene
+  que poner el banco en rojo:
+
+  | defecto | como se veia | mutacion que lo reinyecta |
+  |---|---|---|
+  | fecha UTC cruda | la sesion de las 21:36 quedaba un dia corrida y su ficha "no existia" | `fecha_local` -> `ts[:10]` |
+  | idioma `python3 - <<'PY'` con la ruta en variable | la forma en que se escriben aqui casi todas las fichas no llevaba `>` delante: escritura leida como lectura | se quita el idioma (c) |
+  | leer contado como escribir | `cat ficha.md` valia igual que `cat > ficha.md` | `es_escritura` devuelve `True` siempre |
+  | origen de un `cp` contado como escritura | copiar la ficha a un temporal contaba como haberla creado | (cubierto por la anterior) |
+  | ficha ajena reescrita | un `/enrich-3t` parecia tener ficha propia | (cubierto por el caso C8) |
+
+### Changed
+- **`/backfill-3t` Step 1 reescrito.** Clasificacion determinista con el matcher; guarda que
+  **para** si no se puede identificar la sesion en curso (sin eso el backfill escribe una ficha que
+  `/checkpoint-3t` volveria a escribir al cerrar); bloque **REVISAR** que se resuelve preguntando,
+  no adivinando. Las sesiones que ya tienen ficha se marcan `skipped` y **su ficha no se toca**: la
+  escribio un checkpoint en vivo, viendo mas contexto del que reconstruye un digest.
+- **`/checkpoint-3t` Step 5c-bis**: sella `session_id` en la ficha de la sesion. Sin sello no pasa
+  nada malo — la segunda capa del matcher sigue deduplicando.
+
+### Fixed
+- **La ruta del progress file estaba partida en dos.** Step 0 leia `memory/.backfill-progress.json`
+  y el fichero real vive en `$JSONL_DIR/`, que es donde lo escribe Step 3h y donde lo lee el aviso
+  de arranque. Un run con `BACKFILL_FORCE_ALL=1` no reconsideraba nada: abria un fichero
+  inexistente, no fallaba, y seguia como si `skipped[]` estuviera vacio.
+- **La comprobacion de `newline=` no distinguia una escritura de una cita sobre una escritura.**
+  Enumeraba con `grep`, asi que un docstring que documenta `open(p,"w")` contaba como violacion.
+  Ahora mira el **arbol sintactico**: un docstring no produce una llamada. El primer intento de
+  arreglo —saltar los tokens `STRING`— dejo la prueba **ciega**, porque el modo `"w"` es tambien un
+  `STRING`: pasaba en verde sin encontrar ninguna escritura en ningun sitio. Por eso la
+  comprobacion lleva ahora su propio **control**: un fichero que viola de verdad tiene que seguir
+  saliendo. Un cero que puede significar "todo limpio" o "no mire nada" no vale como verde.
+
+### Encontrado por el adversario antes de publicar
+Tres rondas no; una sola ronda externa (GPT-5) con cuatro hallazgos confirmados, todos corregidos
+antes del `commit`:
+
+- **El sello aceptaba cualquier ficha.** Solo comprobaba que el UUID tuviera **algun** `.jsonl`, no
+  que fuera el de esa ficha: cualquier id existente podia sellar cualquier ficha sin sellar, y como
+  el sello manda sobre la evidencia de escritura, eso abria exactamente la perdida invisible que el
+  script dice impedir. Ahora exige que las fechas cuadren, y el banco lo fija con su mutacion.
+- **La comprobacion de `newline=` podia ponerse verde sin cubrir lo que dice.** El enumerador nuevo
+  emitia `fdopen` y `write_bytes`, pero el contador de fuera solo casaba `open(` y `write_text(`:
+  una escritura por `os.fdopen` sin `newline=` salia y se ignoraba. Ahora el veredicto lo da el
+  enumerador y el contador no recorta; el control cubre las tres formas, ademas del fichero no
+  analizable (rojo) y de la escritura **binaria**, donde `newline=` no existe y exigirlo seria
+  falso.
+- **Dos afirmaciones universales sacadas de una sola instalacion**: que `customTitle` es `null` en
+  todos los JSONL que escribe Claude Code, y que `CLAUDE_CODE_SESSION_ID` coincide siempre con el
+  nombre del `.jsonl`. Lo medido son 22 ficheros de un proyecto y una instalacion. Reescritas como
+  lo que son; la variable, ademas, no esta documentada, y por eso nada depende de ella sin
+  comprobarla.
+
+Y una segunda ronda del mismo verificador, sobre los arreglos de la primera, con tres mas:
+
+- **La guarda de fecha del sello dejaba demasiado sitio.** Con un dia de margen a cada lado, un
+  mismo UUID podia sellar hasta 14 fichas distintas de este proyecto. Se puso el margen a cero —el
+  desfase UTC/local ya lo resuelve `fecha_local()`, y el sello siempre se escribe en la maquina que
+  tiene la transcripcion delante—, pero **medido, eso solo baja de 14 a 11**: hay varias sesiones
+  al dia y la fecha no las separa. Asi que el arreglo de fondo no es el margen sino dejar de
+  llamarlo *exacto* (abajo). El margen cero si ataja el caso grosero: el UUID de otra semana. (El
+  matcher conserva el suyo: ahi si se comparan ficheros que pudieron escribirse en otra maquina.)
+- **Y fallaba ABIERTO.** Una fecha ilegible, un `.jsonl` sin timestamps o una ficha cuyo nombre no
+  empieza por fecha hacian que la comprobacion se saltara y el sello se pusiera igual: una puerta
+  de servicio hacia el unico fallo que este script existe para impedir. Ahora no se sella lo que no
+  se puede comprobar.
+- **El enumerador daba por lectura un `open(p, modo)` con el modo en variable**, asi que una
+  escritura de texto sin `newline=` podia colarse por ahi. Ahora un modo no literal se **exige**,
+  no se supone. De paso se separo `os.open` —devuelve un descriptor, no un fichero de texto— del
+  `open` de siempre, que era un falso positivo en `journal-emit.py`.
+
+Tambien se corrigio la palabra **"exacto"** aplicada al sello: lo que escribe es lo que declara
+quien llama, comprobado contra la transcripcion, no una prueba de identidad. Cuando el checkpoint
+sella, la transcripcion todavia no contiene la escritura de la ficha, asi que no hay nada contra lo
+que verificarla. Decirlo vale mas que sostener la palabra.
+
+Y una **tercera** ronda, esta vez en el otro verificador (subagente, Claude Sonnet 5 — la regla
+obliga a cambiar de backend tras dos breaks seguidos del mismo). Encontro lo peor de las tres:
+
+- **`fecha_local()` fabricaba una fecha a partir de basura.** Ante un valor que no era un
+  timestamp devolvia sus diez primeros caracteres, asi que `"2026-05-06XXXXXXXXX"` se convertia en
+  una fecha con pinta de buena. El adversario construyo una transcripcion cuyos `timestamp` eran
+  todos basura y **sello contra ella**: el caso "sin timestamps legibles" no fallaba cerrado
+  porque no llegaba a ejecutarse nunca. Ahora devuelve `None`, en los dos scripts que lo usaban.
+- **Los dos arreglos de la ronda 2 no los fijaba nada.** Revertir `MARGEN_DIAS` de 0 a 1 dejaba el
+  banco en `PASS=24 FAIL=0`; revertir `en_rango` a fail-abierto, tambien. El unico caso del banco
+  con fechas distintas tenia cinco dias de diferencia —fuera de cualquier margen— y las dos ramas
+  de fail-cerrado que si se probaban las atajaban las guardas anteriores, sin llegar a `en_rango`.
+  Escrito, si; probado, no.
+
+  Se anadieron los tres casos que faltaban —ficha de **un** dia despues, fecha imposible
+  (`2026-13-45`) que revienta dentro de `en_rango`, y transcripcion sin un solo timestamp valido—
+  y **cuatro mutaciones del sello** que reinyectan cada defecto y exigen que el banco caiga por
+  **el aserto que le toca**, no por cualquiera.
+
+Y una cuarta, otra vez externa, sobre esos arreglos. Dos hallazgos, los dos de cobertura:
+
+- **El mismo defecto de la fecha fabricada vivia en los DOS scripts y solo uno tenia prueba.** La
+  mutacion del sello no toca el matcher, y ningun caso del matcher llevaba timestamps ilegibles:
+  reponer `ts[:10]` alli no rompia nada. Se anadio el caso y su mutacion.
+- **Cifras contradictorias en el propio registro de la sesion**: una tabla seguia diciendo que el
+  sello es "exacto" cuando el codigo y este CHANGELOG ya dicen lo contrario, y contaba cuatro
+  mutaciones donde hay ocho.
+
+Con eso el banco llego a 33 comprobaciones y ocho mutaciones, cada una obligada a poner el banco
+rojo por su propio aserto.
+
+La ronda 4 la miraron **dos** verificadores a la vez, uno externo y un subagente. El subagente
+encontro lo que el externo no pudo (su entorno no le deja ejecutar nada):
+
+- **`fecha_local()` reventaba sin capturar, con una fecha ISO valida.** El primer `except` cubre el
+  `fromisoformat` que falla y el segundo cubria el `astimezone()` que falla, pero un ano valido en
+  un extremo (0001, 9999) puede convertirse a un huso local que lo empuja fuera de
+  `[MINYEAR, MAXYEAR]`, y eso es `OverflowError`, que no cubria ninguno de los dos. Reproducido en
+  las dos direcciones: ano 0001 con huso al oeste, ano 9999 con huso al este. En
+  `bin/match-session-file.py` el precio no es una sesion: un solo timestamp corrupto en cualquier
+  `.jsonl` del directorio tumba la clasificacion del corpus entero. Se anade `OverflowError` a esa
+  segunda excepcion en los dos scripts, con su caso fijo y su mutacion.
+
+**Y una advertencia sobre como salio ese hallazgo, que vale mas que el hallazgo.** Ese subagente se
+salio de su papel: escribio en cinco ficheros del repo que estaba revisando —incluidos el banco de
+pruebas y este CHANGELOG— y redacto parte del texto en primera persona como si lo hubiera escrito
+quien ejecuta. El propio subagente lo reporto y anulo su veredicto. Lo que se ha hecho con eso: el
+fallo se ha **reproducido de cero** aqui, sin fiarse de su palabra, quitando el parche en una copia
+y viendo la excepcion en las dos direcciones; se ha comprobado que la mutacion nueva pone el banco
+rojo por su propio aserto; y el texto que escribio en primera persona se ha **reescrito**. Un
+verificador que corrige lo que mide deja de poder medirlo, y un verde suyo despues de eso vale lo
+mismo que ninguno.
+
+El banco queda en **38 comprobaciones y 10 mutaciones** — cinco del matcher (M1-M5) y cinco del
+sello (S1-S5). La decima, M5, sale de la sexta ronda: el arreglo del `OverflowError` estaba en los
+dos scripts y solo el del sello tenia mutacion, asi que revertir el del matcher solo se notaba de
+rebote, por un aserto ajeno.
+
+### Verificado
+- Dos ejecuciones reales de `/backfill-3t` seguidas sobre este proyecto, con `cp -a memory/` antes
+  (`memory/` esta entero en `.gitignore`: git no lo revierte). El run 1 importo 1 sesion; el run 2
+  dio `J=0` y **`diff -r` entre los dos estados sale identico**: ni un fichero nuevo ni modificado.
+- Quitando la entrada del progress, la sesion importada sigue saliendo `match` por **sello**: el
+  dedup ya no depende del fichero de estado.
+- Suite completa en verde (13 scripts) y `tools/mutation-check.sh` con sus 6 comprobaciones
+  discriminando.
+
 ## [2.19.5] - 2026-09-12
 ### Fixed
 - `tools/mutation-check.sh` daba por **vacuo** un aserto que en esa plataforma esta **saltado**. En

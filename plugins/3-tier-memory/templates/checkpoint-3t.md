@@ -438,6 +438,47 @@ fi
 If it reports `frontmatter_sealed=N` with N>0, note it for the Step 7 report — it means a
 file slipped through without frontmatter and was auto-repaired (importance is left to /enrich-3t).
 
+### 5c-bis: Sellar `session_id` en SESSION_FILE (la llave del dedup)
+
+Escribe en el frontmatter de la ficha de esta sesion el UUID de su propia transcripcion. Es lo
+que permite que `/backfill-3t` sepa, sin heuristica ninguna, que esta sesion YA tiene ficha:
+
+```bash
+if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/stamp-session-id.py" ]; then
+  STAMP="${CLAUDE_PLUGIN_ROOT}/bin/stamp-session-id.py"
+elif [ -f "plugins/3-tier-memory/bin/stamp-session-id.py" ]; then
+  STAMP="$PWD/plugins/3-tier-memory/bin/stamp-session-id.py"   # el repo del propio plugin
+else
+  _R=$(find "$HOME/.claude/plugins" -name resolve-plugin-bin.sh -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)
+  _B=$([ -n "$_R" ] && bash "$_R" 2>/dev/null)
+  [ -n "$_B" ] || _B=$(dirname "$(find "$HOME/.claude/plugins" -name "stamp-session-id.py" -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)")
+  STAMP=${_B:+$_B/stamp-session-id.py}
+fi
+ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
+JSONL_DIR="$HOME/.claude/projects/$ENCODED"
+if [ -n "$STAMP" ] && [ -f "$STAMP" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+  python3 "$STAMP" "$SESSION_FILE" "$CLAUDE_CODE_SESSION_ID" --jsonl-dir "$JSONL_DIR"
+else
+  echo "stamped=0 reason=sin-STAMP-o-sin-CLAUDE_CODE_SESSION_ID"
+fi
+```
+
+`CLAUDE_CODE_SESSION_ID` **no esta documentada**. Se midio en esta instalacion (2026-09-12: su
+valor coincide con el nombre del `.jsonl` en curso) y no se ha comprobado en otras versiones, en
+modo SDK ni sin terminal. Por eso el sello nunca se da por bueno: `stamp-session-id.py` exige que
+ese id tenga `.jsonl` en `$JSONL_DIR` **y** que la fecha de la ficha caiga dentro del rango de esa
+transcripcion, y si algo no cuadra no sella.
+
+**Sin sello no pasa nada malo**: `match-session-file.py` tiene una segunda capa que reconstruye
+la union observando que ficha escribio cada transcripcion, asi que una instalacion donde
+`CLAUDE_CODE_SESSION_ID` no exista sigue deduplicando. Lo que no se hace nunca es inventarse el
+UUID: el script se niega si ese id no tiene `.jsonl` en `$JSONL_DIR`, porque en el matcher el
+sello GANA a la evidencia de escritura y un sello equivocado no da un duplicado visible — da el
+fallo invisible, una sesion marcada como importada que no lo esta.
+
+Si imprime `stamped=0` con una razon distinta de `ya-sellada-con-el-mismo-id`, anotalo para el
+informe del Step 7.
+
 ## Step 5d: Redact secrets (deterministic gate — runs BEFORE any commit)
 
 Session/plan/research digests can capture real API keys, tokens, or private keys pasted

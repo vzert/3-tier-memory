@@ -349,10 +349,140 @@ echo "== ronda 5: ninguna ruta de escritura del plugin convierte el salto de lin
 # open(...,"a"), os.fdopen(...) y Path.write_text. La primera version solo miraba la primera y se
 # le escapaban dos — el mismo defecto de "la prueba afirma menos que su nombre" que la ronda 5
 # confirmo contra otra prueba de este mismo fichero.
-ESCRITURAS=$(grep -nE 'open\([^)]*"[wa]"|fdopen\(|write_text\(' "$BIN"/*.py | grep -v '/test-' || true)
-SIN_NEWLINE=$(printf '%s\n' "$ESCRITURAS" | grep -v 'newline=' | grep -cE 'open\(|write_text\(' || true)
+# El enumerador mira TOKENS, no texto: un `grep` cuenta tambien los ejemplos escritos dentro de
+# un docstring o un comentario, y eso convierte documentar una escritura en un fallo. Paso el
+# 2026-09-12 con match-session-file.py, que documenta en su docstring los tres idiomas de
+# escritura que sabe reconocer: dos falsos positivos, cero escrituras. Un instrumento que no
+# distingue la evidencia de una cita sobre la evidencia esta roto, aunque su regla sea correcta.
+enumerar_escrituras() {
+  python3 - "$1" <<'ENUMPY'
+import ast, os, sys
+
+# Se mira el ARBOL SINTACTICO, no el texto. Un `grep` cuenta tambien los ejemplos escritos dentro
+# de un docstring, asi que documentar una escritura se convertia en un fallo: paso el 2026-09-12
+# con match-session-file.py, que documenta en su docstring los idiomas de escritura que reconoce
+# — dos falsos positivos, cero escrituras. El primer intento de arreglo (saltar los tokens STRING)
+# dejo la prueba CIEGA: el modo "w" es tambien un token STRING, asi que ya no encontraba ninguna
+# escritura y pasaba en verde sin mirar nada. Una prueba que se pone verde por dejar de mirar es
+# peor que la que fallaba. Con el arbol no hay ambiguedad: un docstring no produce una llamada.
+MODOS_ESCRITURA = ("w", "a", "x", "+")
+
+
+def clasificar(nodo):
+    # Devuelve (es_escritura, exige_newline). Tres reglas, y las dos ultimas fallan CERRADO:
+    #   - en binario `newline=` no existe, asi que exigirlo seria falso;
+    #   - un modo que no es literal ("w" calculado en tiempo de ejecucion) NO se da por lectura:
+    #     asumirlo dejaba colar una escritura de texto sin `newline=`, y el control solo cubria
+    #     modos literales. Lo encontro un adversario externo el 2026-09-12;
+    #   - `os.open` es otra cosa: devuelve un descriptor, no un fichero de texto, y no tiene
+    #     `newline=`. Confundirlo con el `open` de siempre daba un falso positivo en journal-emit.
+    f = nodo.func
+    es_atributo = isinstance(f, ast.Attribute)
+    nombre = f.attr if es_atributo else getattr(f, "id", "")
+    modulo = getattr(f.value, "id", "") if es_atributo and isinstance(f.value, ast.Name) else ""
+
+    if nombre == "write_bytes":
+        return True, False
+    if nombre == "open" and modulo == "os":
+        return False, False          # os.open: descriptor, no fichero de texto
+    if nombre in ("fdopen", "write_text", "open"):
+        if nombre == "write_text":
+            return True, True
+        modo = None
+        literal = False
+        if len(nodo.args) > 1:
+            if isinstance(nodo.args[1], ast.Constant):
+                modo, literal = nodo.args[1].value, True
+            else:
+                return True, True    # modo dinamico: se exige, no se supone
+        for kw in nodo.keywords:
+            if kw.arg == "mode":
+                if isinstance(kw.value, ast.Constant):
+                    modo, literal = kw.value.value, True
+                else:
+                    return True, True
+        if nombre == "fdopen":
+            return True, not (isinstance(modo, str) and "b" in modo)
+        if not literal or not isinstance(modo, str):
+            return False, False      # open(p) a secas: lectura
+        if not any(c in modo for c in MODOS_ESCRITURA):
+            return False, False
+        return True, "b" not in modo
+    return False, False
+
+
+bin_dir = sys.argv[1]
+for nombre in sorted(os.listdir(bin_dir)):
+    if not nombre.endswith(".py") or nombre.startswith("test-"):
+        continue
+    ruta = os.path.join(bin_dir, nombre)
+    try:
+        with open(ruta, "rb") as fh:
+            fuente = fh.read().decode("utf-8", "replace")
+        arbol = ast.parse(fuente)
+    except (OSError, SyntaxError, ValueError) as e:
+        # Un fichero que no se puede analizar NO se salta en silencio: se reporta como escritura
+        # sin newline= para que la prueba se ponga roja. Saltarlo seria el mismo punto ciego.
+        # Un fichero que no se puede analizar NO se salta en silencio: se marca FALTA para que
+        # la prueba se ponga roja. Saltarlo seria el mismo punto ciego.
+        print("%s:0:FALTA-NEWLINE NO-ANALIZABLE %s" % (ruta, e))
+        continue
+    lineas = fuente.splitlines()
+    for nodo in ast.walk(arbol):
+        if not isinstance(nodo, ast.Call):
+            continue
+        escritura, exige = clasificar(nodo)
+        if not escritura:
+            continue
+        tiene = any(kw.arg == "newline" for kw in nodo.keywords)
+        if exige and not tiene:
+            veredicto = "FALTA-NEWLINE"
+        elif exige:
+            veredicto = "ok newline="
+        else:
+            veredicto = "ok binario"
+        texto = lineas[nodo.lineno - 1].strip() if 0 < nodo.lineno <= len(lineas) else ''
+        print("%s:%d:%s :: %s" % (ruta, nodo.lineno, veredicto, texto))
+ENUMPY
+}
+
+ESCRITURAS=$(enumerar_escrituras "$BIN")
+# Se cuenta el VEREDICTO del enumerador, no un recorte por nombre de funcion. Recortar aqui era
+# el hueco: el enumerador emitia `fdopen` y el contador no lo miraba, asi que una escritura por
+# `os.fdopen` sin `newline=` salia y se ignoraba. Lo encontro un adversario externo el 2026-09-12.
+SIN_NEWLINE=$(printf '%s\n' "$ESCRITURAS" | grep -c 'FALTA-NEWLINE' || true)
 chk "toda escritura (w/a/fdopen/write_text) declara newline=" "0" "$SIN_NEWLINE"
-if [ "$SIN_NEWLINE" != "0" ]; then printf '%s\n' "$ESCRITURAS" | grep -v 'newline=' | sed 's/^/     /'; fi
+# CONTROL DEL PROPIO ENUMERADOR. La version anterior de esta comprobacion se puso verde por
+# dejar de mirar: saltaba los tokens STRING y el modo "w" es un STRING, asi que no encontraba
+# ninguna escritura en ningun sitio. Sin este control eso no se ve — un cero puede significar
+# "todo limpio" o "no miro nada", y son indistinguibles desde fuera.
+CTRL="$T/ctrl-newline"; mkdir -p "$CTRL"
+# Las TRES formas que el contador tiene que ver. Recortar por nombre de funcion fue el hueco por
+# el que `fdopen` pasaba sin mirarse, asi que el control las cubre una a una.
+printf 'def f(p):\n    open(p, "w").write("x")\n' > "$CTRL/viola.py"
+printf 'import os\ndef f(fd):\n    os.fdopen(fd, "w").write("x")\n' > "$CTRL/viola_fdopen.py"
+printf 'from pathlib import Path\ndef f(p):\n    Path(p).write_text("x")\n' > "$CTRL/viola_wtext.py"
+printf 'from pathlib import Path\ndef f(p):\n    Path(p).write_bytes(b"x")\n    open(p, "wb").write(b"y")\n' > "$CTRL/binaria.py"
+printf 'def f(p):\n    """ejemplo citado: open(p,"w").write(s)"""\n    return open(p, "w", newline="")\n' > "$CTRL/cita.py"
+printf 'def f(p, modo):\n    open(p, modo).write("x")\n' > "$CTRL/modo_dinamico.py"
+printf 'import os\ndef f(p):\n    return os.open(p, os.O_WRONLY | os.O_CREAT, 0o644)\n' > "$CTRL/osopen.py"
+printf 'def f(p):\n    return open(p).read()\n' > "$CTRL/solo_lee.py"
+printf 'def f(:\n' > "$CTRL/rota.py"
+CTRL_OUT=$(enumerar_escrituras "$CTRL")
+falta() { printf '%s\n' "$CTRL_OUT" | grep 'FALTA-NEWLINE' | grep -c "$1"; }
+chk "caza open(...,w) sin newline="        "1" "$(falta viola.py)"
+chk "caza os.fdopen sin newline="          "1" "$(falta viola_fdopen.py)"
+chk "caza Path.write_text sin newline="    "1" "$(falta viola_wtext.py)"
+chk "un fichero no analizable sale ROJO"   "1" "$(falta rota.py)"
+# Y lo que NO debe exigir: en binario `newline=` no existe, y una cita no es una escritura.
+chk "NO exige newline= en escritura binaria"      "0" "$(falta binaria.py)"
+chk "NO cuenta el ejemplo citado en un docstring" "0" "$(falta cita.py)"
+# Un modo calculado no se da por lectura: si no se sabe, se exige. Y `os.open` no es un fichero
+# de texto, asi que pedirle `newline=` seria un falso positivo (lo daba en journal-emit.py).
+chk "caza open(p, modo) con el modo en variable" "1" "$(falta modo_dinamico.py)"
+chk "NO exige newline= a os.open"                "0" "$(falta osopen.py)"
+chk "NO marca un open() de solo lectura"         "0" "$(falta solo_lee.py)"
+if [ "$SIN_NEWLINE" != "0" ]; then printf '%s\n' "$ESCRITURAS" | grep 'FALTA-NEWLINE' | sed 's/^/     /'; fi
 # Y el comportamiento, no solo la forma: un fichero CRLF sobrevive a cada herramienta.
 MEMG="$T/memg"; mkdir -p "$MEMG/sessions"
 printf -- '---\ntype: session\n---\n# t\r\ncuerpo\r\n' > "$MEMG/sessions/s.md"

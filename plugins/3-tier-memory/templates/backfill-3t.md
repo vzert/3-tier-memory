@@ -15,7 +15,11 @@ Reconstruct the full memory system from past Claude Code conversation logs. Uses
 - `BACKFILL_TRIVIAL_USER_MSG_THRESHOLD=N` — ajusta umbral de user msgs (default 2)
 
 Si `BACKFILL_FORCE_ALL=1` está presente en el env al inicio de la sesión:
-1. Lee `memory/.backfill-progress.json` (si existe)
+1. Lee `$JSONL_DIR/.backfill-progress.json` (si existe). **No esta en `memory/`**: vive
+   junto a los `.jsonl`, que es donde lo escribe Step 3h y donde lo lee el aviso de
+   arranque (`bin/session-start.sh`). Step 0 decia `memory/.backfill-progress.json` y ahi
+   no hay nada, asi que un run con `BACKFILL_FORCE_ALL=1` no reconsideraba nada: leia un
+   fichero inexistente, no fallaba, y seguia como si `skipped[]` estuviera vacio.
 2. Renombra el array `skipped` -> `previously_skipped` (preserva auditoría)
 3. Deja `skipped` como array vacío
 4. Escribe el progress file actualizado y procede al Step 1
@@ -79,51 +83,121 @@ fi
 If it prints `JBIN=NONE` (plugin older than 2.12.0), use the **Fallback** noted in each Step 3 sub-step
 and say so in the final report.
 
+7. Locate the dedup scripts (v2.20.0). `MATCHER` clasifica en Step 1; `STAMP` sella la ficha en
+   Step 3b. Misma resolucion de tres niveles que arriba — incluida la rama que usa el arbol de
+   trabajo cuando se corre dentro del propio repo del plugin:
+```bash
+if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/match-session-file.py" ]; then
+  DBIN="${CLAUDE_PLUGIN_ROOT}/bin"
+elif [ -f "plugins/3-tier-memory/bin/match-session-file.py" ]; then
+  DBIN="$PWD/plugins/3-tier-memory/bin"     # the plugin's own repo: dogfood the working tree
+else
+  _R=$(find "$HOME/.claude/plugins" -name resolve-plugin-bin.sh -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)
+  _B=$([ -n "$_R" ] && bash "$_R" 2>/dev/null)
+  [ -n "$_B" ] || _B=$(dirname "$(find "$HOME/.claude/plugins" -name "match-session-file.py" -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)")
+  DBIN=${_B:+$_B}
+fi
+MATCHER=${DBIN:+$DBIN/match-session-file.py}
+STAMP=${DBIN:+$DBIN/stamp-session-id.py}
+[ -n "$MATCHER" ] && [ -f "$MATCHER" ] && echo "MATCHER=$MATCHER" || echo "MATCHER=NONE"
+```
+   Si imprime `MATCHER=NONE` (plugin anterior a 2.20.0), **para**: sin el matcher la
+   clasificacion de Step 1 volveria a apoyarse en `customTitle`, que viene vacio en los JSONL
+   medidos, y una pasada duplicaria cada sesion que ya tiene ficha. Di al usuario que actualice el
+   plugin.
+
 ## Step 1: Inventory
 
-Run the extraction script in metadata-only mode for every JSONL file:
+### 1a. Guarda: identificar la sesion en curso
 
 ```bash
-for f in "$JSONL_DIR"/*.jsonl; do
-  python3 "$EXTRACT_SCRIPT" --metadata-only "$f"
-done
+echo "CURRENT=${CLAUDE_CODE_SESSION_ID:-NONE}"
 ```
 
-Parse each output and build an inventory. For each JSONL file, collect:
-- `filename` (just the UUID.jsonl basename)
-- `sessionId`
-- `customTitle`
-- `dateFirst`
-- `lineCount`
-- `userMessageCount`
-- `trivial` (boolean)
-- `signals`
+Si imprime `CURRENT=NONE`, **para** y dile al usuario: *"No puedo identificar la sesion en curso,
+y sin eso el backfill escribiria una ficha de esta misma conversacion que `/checkpoint-3t`
+volveria a escribir al cerrar: duplicado seguro. Cierra y reabre la sesion, o dime el UUID del
+`.jsonl` en curso."*
 
-Now classify each file:
+**No lo adivines por fecha de modificacion.** Esa heuristica ya se descarto en 2.15.2 para el
+contador: no es prueba de identidad, y aqui el precio es peor — descartar el `.jsonl` equivocado
+silencia una sesion pendiente de verdad.
 
-- **Already processed**: `filename` appears in `.backfill-progress.json` `processed` or `skipped` arrays -> skip
-- **Trivial**: `trivial == true` (tiny size AND no signal: no tools used, no plan mode, no signals.*) -> will be skipped (mark in progress file)
-- **Already in memory**: A file exists in `memory/sessions/` whose name starts with the same `dateFirst` AND whose title/slug approximately matches `customTitle` -> skip
-- **Current session**: The JSONL file being actively written (check: most recent `tsLast` within last 5 minutes, or matches known current session) -> skip
-- **To process**: Everything else
+### 1b. Clasificacion determinista
 
-Sort the "to process" list chronologically by `dateFirst`.
+```bash
+OUT="${TMPDIR:-/tmp}/backfill-inventario.json"
+python3 "$MATCHER" "$MEMORY_DIR" "$JSONL_DIR" --current "$CLAUDE_CODE_SESSION_ID" > "$OUT"
+python3 -c "
+import json
+d = json.load(open('$OUT'))
+print(d['counts'])
+for r in d['results']:
+    if r['verdict'] != 'match':
+        print(r['verdict'], r['jsonl'], '|', r['reason'])
+"
+```
 
-Report the inventory:
+`match-session-file.py` une cada `.jsonl` con su ficha por dos caminos, sin heuristica de
+parecido: el **sello** `session_id` del frontmatter (lo escriben Step 3b y `/checkpoint-3t`,
+y `stamp-session-id.py` lo rechaza si no cuadra con la transcripcion),
+y la **escritura observada** en la propia transcripcion (para las fichas anteriores al sello).
+Devuelve cuatro veredictos: `match`, `review`, `process`, `current`.
+
+> **Por que no se compara `customTitle`.** La version anterior de este paso clasificaba
+> *"Already in memory"* casando `dateFirst` + `customTitle` contra el nombre de la ficha. Ese campo
+> viene `null` en los 22 JSONL de este proyecto (medido 2026-09-12: 0 de 22; no comprobado en otras
+> versiones, modos ni instalaciones), asi que ahi la regla no casaba nunca y lo unico que impedia el
+> duplicado era el criterio del agente leyendo. Una ejecucion literal habria reimportado toda sesion
+> con ficha. Las dos capas de `match-session-file.py` no dependen de ese campo, este o no relleno.
+
+Ahora cruza el resultado con el resto de senales:
+
+- **`current`** -> skip (la sesion en curso).
+- **Ya procesada**: el nombre aparece en `processed` o `skipped` de
+  `$JSONL_DIR/.backfill-progress.json` -> skip.
+- **`match`** -> skip, y anotalo en `skipped` con `skippedReason` `already-in-memory`.
+  **No toques la ficha existente**: la escribio `/checkpoint-3t` en vivo, viendo mas contexto del
+  que puede reconstruir un digest del JSONL.
+- **`review`** -> **no decide el comando**: va al bloque de abajo.
+- **`process`** + `trivial == true` (de `--metadata-only`: pocas lineas, pocos mensajes y sin
+  senal) -> skip, anotado como `trivial`.
+- **`process`** + no trivial -> **a procesar**.
+
+Ordena la lista "a procesar" cronologicamente por `dateFirst`.
+
+### 1c. Bloque REVISAR — lo resuelve una persona, no el comando
+
+Un `review` significa que hay ficha de esa fecha pero la identidad no esta probada (por ejemplo:
+la sesion reescribio una ficha que creo otra, tipico de `/enrich-3t`). Decidirlo por parecido
+tiene un fallo que no se ve nunca —marcar como ya-importada una sesion que no lo esta, y perderla—
+asi que **antes de que Step 2 escriba nada**, pregunta al usuario con `AskUserQuestion`, una
+pregunta por caso (maximo 4 por modal, en tandas si hay mas), con estas opciones:
+
+- **Saltar (ya esta en memoria)** — anotar en `skipped` con razon `already-in-memory-confirmado`.
+- **Procesar (no tiene ficha)** — entra en la lista a procesar.
+
+Si el usuario no puede responder (headless), **no adivines**: deja esos `.jsonl` sin tocar, fuera
+de `processed` y de `skipped`, y dilo en el informe final. Quedan pendientes para la proxima
+pasada, que es el fallo visible y reversible.
+
+### 1d. Informe del inventario
+
 ```
 BACKFILL INVENTORY
 ==================
-JSONL files found: N
-Already in memory:  M (matched by date+title)
-Already processed:  P (from previous backfill run)
-Trivial (skipped):  K (sin señal y <10 líneas y <2 user msgs)
+JSONL files found:  N
+Already in memory:  M (sello session_id / escritura observada)
+Already processed:  P (de un run anterior)
+Trivial (skipped):  K (sin senal y <10 lineas y <2 user msgs)
 Current session:    1
+Needs review:       R (resueltos arriba: R1 saltar, R2 procesar)
 To process:         J sessions
 
 Processing J sessions...
 ```
 
-If J == 0, report "Nothing to backfill. All sessions are already in memory." and **stop**.
+Si J == 0, di *"Nothing to backfill. All sessions are already in memory."* y **para**.
 
 ## Step 2: Parallel Extraction via Haiku Subagents
 
@@ -295,6 +369,18 @@ status: backfilled
   el de la sesion reconstruida — son el mismo. Si ninguna fecha sigue viva, borra la seccion
   entera.
 
+Y sella la ficha con el UUID del `.jsonl` de origen, en cuanto exista el fichero:
+
+```bash
+python3 "$STAMP" "memory/sessions/YYYY-MM-DD-slug.md" "<uuid-del-jsonl>" --jsonl-dir "$JSONL_DIR"
+```
+
+Esto es lo que hace que el run SIGUIENTE la reconozca aunque se pierda `.backfill-progress.json`:
+el dedup deja de depender de un fichero de estado y pasa a estar escrito en la propia ficha.
+`stamp-session-id.py` se niega si el UUID no tiene `.jsonl` en `$JSONL_DIR` y nunca pisa un sello
+distinto que ya estuviera puesto — un sello equivocado no produce un duplicado visible, produce
+el fallo invisible.
+
 ### 3c. Update session index (Tier 2) — via journal
 
 Emit one `session.add` event per session (the compactor writes the row in Step 4):
@@ -390,7 +476,8 @@ If `signals.research` is true and `research_summary` is not null:
 
 ### 3h. Update progress
 
-After each session is fully written, update `.backfill-progress.json`:
+After each session is fully written, update **`$JSONL_DIR/.backfill-progress.json`**
+(junto a los `.jsonl`, no en `memory/` — es el fichero que lee el aviso de arranque):
 ```json
 {
   "processed": ["uuid1.jsonl", "uuid2.jsonl"],
