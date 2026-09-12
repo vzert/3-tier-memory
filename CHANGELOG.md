@@ -40,7 +40,7 @@ instalada mas alta, que suele ser igual o mas nueva que la activa.
 - La cabecera del script ya no describe el comportamiento sin filtro.
 
 ### Tests
-- Siete asertos nuevos en `bin/test-plugin-bin-resolver.sh` (20 en total): la entrada ajena se
+- Siete asertos nuevos en `bin/test-plugin-bin-resolver.sh` (19 en total; 12 antes): la entrada ajena se
   excluye, con CONTROL que demuestra que sin el filtro ganaba; la misma entrada SI vale desde su
   proyecto y desde un subdirectorio suyo; `/OTRO-bis` no esta dentro de `/OTRO`; `project` sin
   `projectPath` se conserva; y al quedarse sin candidatas se cae al cache, no a la ajena.
