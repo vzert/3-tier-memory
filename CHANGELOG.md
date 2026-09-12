@@ -150,13 +150,17 @@ la otra mitad del arreglo, pero reescribe historial ajeno y es la unica parte ir
   `git show HEAD:`** (no un proxy escrito a mano): `rows_added=1` y 2 filas del mismo id →
   `rows_added=0` y 1 fila. En el cierre: el viejo anadia una fila numerada nueva; el nuevo rellena
   `2026-09-11` en la celda `Resuelto` de la fila que ya estaba, con sus 5 celdas intactas.
-- **Sobre el corpus real: 200 filas de mensual** (126 + 53 + 21; las otras 44 del tarball viven en
-  `2026-07-25-triage-post-0190.md`, que no es un mensual y tiene otra tabla de 4 columnas). Resultado:
+- **Sobre el corpus real: 200 filas de mensual** (126 + 53 + 21; el resto del tarball vive en
+  `2026-07-25-triage-post-0190.md`, que no es un mensual, tiene DOS tablas y **43** filas de datos
+  —6 + 37—). Resultado:
   `unaligned_rows=0 odd_values=1 header_issues=2`, es decir las 39 filas sin numero se ven todas, el
   unico valor raro es el `Media→Alta` y las dos cabeceras cortas salen nombradas. Con 2.17.1 el mismo
   corpus daba `shifted_rows=1` — acusando de dato perdido justamente a esa fila — y **no veia** una
-  fila a la que le faltan columnas de verdad. (La cifra "244" estuvo en este CHANGELOG y era la de
-  todas las filas del tarball, triage incluido: la cazo el adversario externo re-derivandola.)
+  fila a la que le faltan columnas de verdad. (La cifra "244" estuvo en este CHANGELOG y no la produce
+  ningun predicado: 200 + 43 = **243**. El "44" con que se explicaba salia de quitar UNA cabecera de
+  las DOS que tiene el triage, contando la otra como dato; con el predicado que da 200 en los
+  mensuales, el triage da 43. Corregido el 2026-09-12 sobre el tarball, a peticion de un adversario
+  externo que lo dio por roto antes de publicar.)
 - **Ningun dato de nadie se reescribio**: no se toco `memory/` de este repo ni de `goal-spec-skill`;
   todo corrio sobre copias en un directorio temporal.
 - **Adversario externo (Codex / GPT-5, otro proveedor), ronda 1 antes de publicar:
