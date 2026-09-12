@@ -8,7 +8,7 @@ instalacion. En 2.18.0 esto estaba *declarado* en la cabecera del script —no e
 el argumento de que `installed_plugins.json` no documenta precedencia entre ambitos, asi que "la
 mas alta" era una regla declarada en vez de una inferencia.
 
-El argumento tenia un hueco, y lo senalo la sesion de `claude-vzert` al cerrar su seguimiento del
+El argumento tenia un hueco, y lo senalo otra sesion del usuario al cerrar su seguimiento del
 defecto de 2.18.0: **`scope` + `projectPath` si determinan este caso sin inferir nada**. Una
 entrada `project` cuyo `projectPath` no contiene el directorio de trabajo no puede estar activa
 aqui, sea cual sea la precedencia entre ambitos. O sea que se puede EXCLUIR sin necesidad de saber
