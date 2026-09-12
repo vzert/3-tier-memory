@@ -72,7 +72,7 @@ Then compact:
 python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"
 ```
 
-It must print `JOURNAL applied=N quarantined=0 pending_left=0`. If `quarantined>0`, read
+It must print `JOURNAL applied=N quarantined=0 pending_left=0` (a `rescued=N` there is fine: events an older version quarantined for a missing anchor, applied now). If `quarantined>0`, read
 `memory/.journal/quarantine/*.reason`, apply that change by hand, delete the `.json`/`.reason` pair
 and report it in Step 5. If it prints `JOURNAL busy`, retry after a few seconds.
 

@@ -58,7 +58,10 @@ All index files must have:
 > Pendientes, Learnings); the `## Active Research` table (Tema, Next step, Origen, Archivo) and the
 > `## Completed Research` table (Tema, Resultado, Archivo). Keep them verbatim, each followed by its table
 > header + separator row; an event whose anchor is missing goes to `memory/.journal/quarantine/` instead
-> of being applied. `.journal/` itself is created by the compactor on first use.
+> of being applied — with one exception since 2.22.0: a missing `## Alta/Media/Baja prioridad` header in
+> `_pendientes.md` is CREATED by the compactor and the event is applied, because a memory older than
+> 2.12.0 normally has its own headers and that is not a defect. `.journal/` itself is created by the
+> compactor on first use.
 
 ## Step 3b: Write `memory/.memory-config` — `journal_strict=1` by default
 

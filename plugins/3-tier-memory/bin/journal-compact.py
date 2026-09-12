@@ -15,7 +15,11 @@ porque en Windows un antivirus, el indexador u otro compactador pueden tener el 
 un instante; por la misma razon el lock se borra con rmtree_with_retry (medido: sin reintento
 el lock quedaba huerfano en 1 de 5 ensayos en Windows). Cada evento aplicado se mueve a
 applied/YYYY-MM/; un evento invalido o cuyo ancla no existe va a quarantine/ con un archivo
-.reason al lado. Nunca se pierde un evento en silencio.
+.reason al lado. Nunca se pierde un evento en silencio. Excepcion deliberada (2.22.0): un ancla
+que el compactador sabe escribir sin mover nada se escribe — si falta el header de prioridad de
+un `pendiente.add` (o de un `pendiente.reopen`), se crea y el evento se aplica, porque eso es el
+estado normal de una instalacion anterior a 2.12.0 y mandarlo a cuarentena convertia una
+migracion mecanica en trabajo para una persona.
 
 Idempotente: re-aplicar un evento ya aplicado es no-op (la linea ya existe / ya no existe).
 Deltas anclados, nunca regeneracion: insertar tras el header de prioridad, borrar linea por
@@ -53,7 +57,9 @@ Uso:
     --log     archivo al que se agregan lineas de traza; escribe `STOLEN` si reclamo un
               lock vencido (contrato de la prueba de aceptacion).
 Salida: 0 ok (o lock ocupado); 1 error de entorno. Imprime `JOURNAL applied=N quarantined=N
-pending_left=N [noop=N]` salvo --quiet (en ese caso solo imprime si applied>0 o quarantined>0).
+pending_left=N [rescued=N] [noop=N]` salvo --quiet (en ese caso solo imprime si applied>0,
+quarantined>0 o rescued>0). `rescued=N` son eventos que una version anterior mando a cuarentena por
+un ancla que esta ya crea sola: se devuelven a pending/ y se aplican en la misma pasada.
 `applied` cuenta solo eventos que cambiaron algo; un replay de evento ya aplicado se archiva
 y cuenta en `noop`.
 """
@@ -348,6 +354,95 @@ def header_index(lines, prio):
     return None
 
 
+# --- Anclas de prioridad: crearlas es parte de aplicar, no trabajo de una persona ------------
+# Hasta 2.21.4 un `pendiente.add` sobre un `_pendientes.md` sin el header de su prioridad iba a
+# quarantine/ con `no-anchor`, y el aviso pedia intervencion humana. Es el estado NORMAL de toda
+# instalacion anterior a 2.12.0 (medido 2026-09-03: 9 de 38 proyectos locales sin al menos uno de
+# los tres headers), y desde 2.12.1 el hook SessionStart ya lo arreglaba solo... salvo en los dos
+# casos que se dan justo cuando duele: el plugin se actualiza con la sesion YA abierta (no hay
+# otro SessionStart), y dos agentes arrancan a la vez (el normalizador pide el lock con 1 s de
+# presupuesto y si no lo consigue no hace nada). Un header que falta es un ancla que el
+# compactador sabe escribir; escribirla no pierde ni mueve nada, asi que cuarentenar el evento
+# era mandarle a una persona un trabajo mecanico. La cuarentena queda para lo que de verdad
+# necesita ojos: JSON roto, colision de id, fecha imposible, ancla borrada a mano.
+#
+# La politica de DONDE se inserta vive aqui y solo aqui: `normalize-pendientes.py` (hook
+# SessionStart) importa estas dos funciones de este modulo. Dos copias de la misma regla es como
+# se desincronizan (learning 72).
+CANON_PRIOS = [("alta", HEADERS["alta"]), ("media", HEADERS["media"]), ("baja", HEADERS["baja"])]
+ANY_HEADER_RE = re.compile(r"^##\s+", re.I)
+
+
+def section_end(lines, start):
+    """Indice de la primera linea `## ` despues de `start` (o len(lines))."""
+    for i in range(start + 1, len(lines)):
+        if ANY_HEADER_RE.match(lines[i]):
+            return i
+    return len(lines)
+
+
+def plan_header_insertions(lines, keys=None):
+    """[(indice, header)] a insertar para que existan los headers `keys` (default: los tres).
+
+    Un header que falta va pegado a su vecino canonico: al final de la seccion del que le
+    precede en el orden Alta, Media, Baja si existe, y si no, justo antes del que le sigue. Si
+    los existentes estan desordenados NO se reordenan. Si no hay ninguno, van justo antes de
+    `## Related` (o al final). Ninguna otra seccion se toca: `## Abiertos`, `## Como usar` y lo
+    que tenga el usuario se quedan donde estan.
+    """
+    present = {key: header_index(lines, key) for key, _ in CANON_PRIOS}
+    missing = [(key, h) for key, h in CANON_PRIOS
+               if present[key] is None and (keys is None or key in keys)]
+    if not missing:
+        return []
+    if all(v is None for v in present.values()):
+        rel = header_index(lines, "related")
+        at = rel if rel is not None else len(lines)
+        return [(at, h) for _, h in missing]
+    plan = []
+    order = [k for k, _ in CANON_PRIOS]
+    for key, h in missing:
+        i = order.index(key)
+        earlier = [present[k] for k in order[:i] if present[k] is not None]
+        later = [present[k] for k in order[i + 1:] if present[k] is not None]
+        if earlier:
+            at = section_end(lines, max(earlier))
+        elif later:
+            at = min(later)
+        else:
+            at = len(lines)
+        plan.append((at, h))
+    return plan
+
+
+def insert_headers(lines, plan):
+    """Aplica un plan de `plan_header_insertions` y devuelve las lineas nuevas."""
+    out = list(lines)
+    rank = {h: i for i, (_, h) in enumerate(CANON_PRIOS)}
+    # De atras hacia delante para que los indices previos sigan valiendo; a igual indice, primero
+    # Baja, luego Media, luego Alta, para que queden en orden canonico.
+    for at, h in sorted(plan, key=lambda x: (x[0], rank[x[1]]), reverse=True):
+        block = [h, ""]
+        if at > 0 and out[at - 1].strip() != "":
+            block = ["", h, ""]
+        if at < len(out) and out[at].strip() == "":
+            block = block[:-1]
+        out[at:at] = block
+    return out
+
+
+def ensure_header(lines, prio):
+    """(lineas, indice_del_header, creado). Crea el header de `prio` si falta."""
+    h = header_index(lines, prio)
+    if h is not None:
+        return lines, h, False
+    key = prio.lower()
+    if key not in HEADERS:
+        return lines, None, False
+    lines = insert_headers(lines, plan_header_insertions(lines, keys={key}))
+    return lines, header_index(lines, prio), True
+
+
 def apply_add_index(mem, p):
     path = os.path.join(mem, "_pendientes.md")
     if not os.path.isfile(path):
@@ -358,9 +453,11 @@ def apply_add_index(mem, p):
         if line_text(lines[i]) != normalize_text(p["text"]):
             raise Quarantine(f"id-collision: {p['id']} ya existe con otro texto")
         return False  # idempotente: ya aplicado
-    h = header_index(lines, p["prioridad"])
+    lines, h, _creado = ensure_header(lines, p["prioridad"])
     if h is None:
-        raise Quarantine(f"no-anchor: falta el header '{HEADERS.get(p['prioridad'].lower())}'")
+        # Guarda, no camino: `validar` ya cuarentena una prioridad no canonica como `malformed`
+        # antes de llegar aqui. Se queda para que un llamador futuro no inserte en None.
+        raise Quarantine(f"no-anchor: prioridad '{p['prioridad']}' no es Alta, Media ni Baja")
     rev = f" — _revisar: {p['revisar']}_" if p.get("revisar") else ""
     new = (f"- [ ] {p['text']} — _origen: {p['origen']}_ — _creado: {p['creado']}_ "
            f"— _id: {p['id']}_{rev}")
@@ -776,9 +873,10 @@ def apply_reopen(mem, p):
         if not prio:
             found = find_monthly_row(mem, p["id"])
             prio = found[3][COL_PRIO] if found else ""
-        h = header_index(lines, prio) if prio else None
-        if h is None:
-            h = header_index(lines, "media")
+        # Igual que en apply_add_index: si el header no esta, se crea. Sin prioridad conocida
+        # (ni en el evento, ni en la linea archivada, ni en la fila mensual) el destino es Media.
+        prio_key = prio.lower() if prio and prio.lower() in HEADERS else "media"
+        lines, h, _creado = ensure_header(lines, prio_key)
         if h is None:
             raise Quarantine("no-anchor: _pendientes.md sin header de prioridad donde reinsertar")
         at = h + 1
@@ -1693,6 +1791,53 @@ def _gitignore_por_o_excl(path):
         return False
 
 
+# Un evento que la version anterior mando a cuarentena por un ancla que AHORA se crea sola sigue
+# ahi para siempre: el hook SessionStart avisa a la persona en cada arranque de un trabajo que ya
+# no existe. Actualizar el plugin tiene que limpiar lo que el plugin viejo dejo, o el aviso se
+# queda mintiendo hasta que alguien borre el par a mano. Se rescata SOLO el motivo que esta
+# version sabe resolver; cualquier otro se queda donde esta.
+# Ancla al final (`\s*$`) a proposito: sin ella, un `.reason` que EMPIEZA por un motivo rescatable y
+# sigue con otra causa tambien se rescataria. Hoy ningun camino escribe un motivo asi —`move_to`
+# guarda exactamente el texto de la Quarantine— pero el motivo es lo UNICO que decide si un evento
+# vuelve a aplicarse, y una coincidencia parcial ahi es un evento aplicado por el parecido de su
+# prefijo.
+RESCATABLE_RE = re.compile(
+    r"^no-anchor: (?:falta el header '## (?:Alta|Media|Baja) prioridad'"
+    r"|_pendientes\.md sin header de prioridad donde reinsertar)\s*$", re.I)
+
+
+def rescatar_cuarentena(journal):
+    """Devuelve a pending/ los eventos cuarentenados por un ancla que ya se crea sola. Cuenta."""
+    qdir = os.path.join(journal, "quarantine")
+    pending = os.path.join(journal, "pending")
+    if not os.path.isdir(qdir):
+        return 0
+    n = 0
+    for name in sorted(os.listdir(qdir)):
+        if not name.endswith(".reason"):
+            continue
+        rpath = os.path.join(qdir, name)
+        jpath = rpath[:-len(".reason")]
+        if not os.path.isfile(jpath):
+            continue
+        try:
+            with open(rpath, encoding="utf-8") as fh:
+                motivo = fh.read().strip()
+        except OSError:
+            continue
+        if not RESCATABLE_RE.match(motivo):
+            continue
+        try:
+            os.makedirs(pending, exist_ok=True)
+            replace_with_retry(jpath, os.path.join(pending, os.path.basename(jpath)))
+        except OSError:
+            continue        # lo reintenta la proxima pasada; nada se pierde
+        _descartar(rpath)
+        log(f"RESCUED {os.path.basename(jpath)}")
+        n += 1
+    return n
+
+
 def compact(mem, budget, quiet):
     journal = os.path.join(mem, ".journal")
     pending = os.path.join(journal, "pending")
@@ -1708,7 +1853,7 @@ def compact(mem, budget, quiet):
         if not quiet:
             print(f"JOURNAL busy pending_left={len(names)}")
         return 0
-    applied = quarantined = noop = 0
+    applied = quarantined = noop = rescued = 0
     # Bajo el lock, como toda escritura del compactador. Es O_EXCL, asi que seria seguro fuera
     # de el; va aqui para que no haya una segunda regla sobre que se escribe sin lock.
     escribir_gitignore_journal(journal)
@@ -1723,6 +1868,8 @@ def compact(mem, budget, quiet):
         if not quiet:
             avisar_fuera_de_banda(fuera)
     try:
+        # Bajo el lock y antes de re-listar: lo rescatado entra en ESTA pasada.
+        rescued = rescatar_cuarentena(journal)
         # Re-listar bajo lock: entre el listado y el mkdir pudieron entrar eventos.
         names = sorted(n for n in os.listdir(pending) if n.endswith(".json")) \
             if os.path.isdir(pending) else []
@@ -1759,8 +1906,9 @@ def compact(mem, budget, quiet):
         if os.path.isdir(pending) else 0
     qdir = os.path.join(journal, "quarantine")
     qtotal = len([n for n in os.listdir(qdir) if n.endswith(".json")]) if os.path.isdir(qdir) else 0
-    if not quiet or applied or quarantined:
+    if not quiet or applied or quarantined or rescued:
         print(f"JOURNAL applied={applied} quarantined={quarantined} pending_left={left}"
+              + (f" rescued={rescued}" if rescued else "")
               + (f" noop={noop}" if noop else "")
               + (f" quarantine_total={qtotal}" if qtotal else ""))
     return 0

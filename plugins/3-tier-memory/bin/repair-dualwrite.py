@@ -29,8 +29,22 @@ corresponde en `pendientes/<creado[:7]>.md`, con el MISMO formato que
 de Tier 2, `Resuelto` y `Sesion resolucion` en blanco. No inventa datos: un pendiente sin
 `_creado:` o sin `_id:` no se repara, se reporta.
 
+Que hace ademas (2.22.0): ADOPTA los pendientes abiertos que viven fuera de los tres headers de
+prioridad. Un `_pendientes.md` anterior a 2.12.0 se organiza por otra cosa (`## Abiertos`,
+`P0 — ...`, por semana o por tema), y esas lineas no tienen prioridad que leer: hasta 2.21.4 no
+recibian fila de Tier 3 NUNCA y cada checkpoint las reportaba `NO REPARABLE`, con lo que el agente
+se lo contaba a la persona como un dual-write roto. No estaba roto — el archivo es anterior al
+mecanismo. Se mueve la linea verbatim al final de la seccion de su prioridad (Media, o Alta si su
+texto o su seccion marcan urgencia; `URGENTE_RE`), creando el header con la misma politica que el
+compactador. Cada movimiento se imprime con su motivo. Un `- [x]` ya cerrado no se mueve.
+
 Que NO hace:
-  - no toca `_pendientes.md` (Tier 2 es la entrada; aqui solo se lee);
+  - de `_pendientes.md` solo mueve esas lineas huerfanas, y solo con `--apply`: no reescribe su
+    texto, no cambia su id, no borra ni reordena ningun otro item, y no toca ninguna otra seccion (la
+    de origen se queda donde estaba, aunque quede vacia; su espaciado se colapsa a una linea en
+    blanco si el hueco dejaba dos). Todo lo demas de Tier 2 se lee, no se
+    escribe. Por eso esto vive aqui y no en el hook SessionStart: mover datos del usuario solo es
+    aceptable en el camino que acaba en un commit de git, que es /checkpoint-3t Step 3-pre;
   - no recalcula ids. El id de un pendiente emitido por journal es sha1(texto+creado+origen),
     pero una linea escrita a mano puede llevar un id inventado (31 de 118 en claude-vzert).
     Recalcularlos obligaria a reescribir las citas de ese id en los session logs, que son
@@ -45,8 +59,13 @@ Que NO hace:
 Idempotente: una segunda corrida no encuentra nada que reparar y no escribe.
 
 La prioridad sale del header `## Alta|Media|Baja ...` bajo el que vive la linea, que es el
-mismo criterio que usa `journal-compact.header_index` para insertarla. Una linea fuera de
-los tres headers se reporta como no reparable en vez de adivinar `Media`.
+mismo criterio que usa `journal-compact.header_index` para insertarla. Una linea fuera de los tres
+headers se adopta (ver arriba) en vez de quedarse sin fila para siempre.
+
+Un pendiente sin `_origen:` SI recibe fila, con `—` en la columna `Origen`: no hubo sesion que lo
+emitiera porque es anterior al journal, y bloquearlo por eso era condenarlo a perder su fecha de
+cierre, que es justo el dano que esta herramienta evita. Lo que si exige origen es comparar el
+hash del id, y eso lo hace `ids_invented` aparte.
 
 Toma el lock del journal (`memory/.journal/.lock`) para no pisar a un compactador
 concurrente, igual que `normalize-pendientes.py`. Si no lo consigue, no hace nada.
@@ -54,8 +73,8 @@ concurrente, igual que `normalize-pendientes.py`. Si no lo consigue, no hace nad
 Uso: repair-dualwrite.py MEMORY_DIR [--apply] [--fix-pipes] [--quiet] [--budget SEG]
   Sin --apply solo informa (dry-run): lista los ids con el mes donde iria cada fila y avisa
   de las filas con `|` crudo y de los ids que no son el sha1 de su contenido. Salida:
-  `rows_added=N pipes_broken=N pipes_fixed=N unaligned_rows=N unrepairable=N odd_values=N
-  header_issues=N ids_invented=N missing_data=N`. En dry-run
+  `adopted=N rows_added=N pipes_broken=N pipes_fixed=N unaligned_rows=N unrepairable=N
+  odd_values=N header_issues=N ids_invented=N missing_data=N`. En dry-run
   `pipes_fixed` es 0 por construccion: lo que hay que leer es `pipes_broken`.
   Codigos: 0 ok (o lock ocupado); 1 error de entorno (sin _pendientes.md o sin journal-compact).
 
@@ -110,7 +129,7 @@ def cell(text):
 
 
 def parse_tier2(path):
-    """[(id, texto, prioridad, creado, origen, motivo_si_no_reparable)] de _pendientes.md.
+    """[(id, texto, prioridad, creado, origen, [faltas])] de _pendientes.md.
 
     El texto es la linea sin el `- [ ] ` y sin los sufijos de metadatos, igual que
     `journal-compact.line_text`, para que la celda diga lo mismo que diria el compactador.
@@ -139,13 +158,119 @@ def parse_tier2(path):
                 faltan.append("sin header de prioridad")
             if not mcre:
                 faltan.append("sin _creado_")
-            if not mori:
-                faltan.append("sin _origen_")
+            # `sin _origen_` NO bloquea la fila: es el estado normal de un pendiente anterior al
+            # journal (no hubo sesion que lo emitiera) y la columna `Origen` admite "—". Antes
+            # bloqueaba, y el resultado era que esos pendientes no tenian fila de Tier 3 nunca:
+            # al cerrarlos se perdian la fecha de cierre y la sesion que los cerro, que es
+            # exactamente el dano que esta herramienta existe para evitar. Lo que si necesita
+            # origen es el hash del id, y `ids_invented` lo comprueba por separado.
             out.append((pid, text, prio,
                         mcre.group(1) if mcre else None,
                         mori.group(1) if mori else None,
-                        ", ".join(faltan) if faltan else None))
+                        faltan))
     return out
+
+
+# Un pendiente legacy va a Media salvo que su texto (o el header no canonico bajo el que vive)
+# diga que corre prisa. La lista es CORTA y conservadora a proposito: equivocarse hacia Media es
+# un pendiente que se atiende mas tarde; equivocarse hacia Alta contamina el bloque que el hook
+# SessionStart le ensena a la persona en cada arranque. Se imprime cada decision para que se
+# pueda auditar de un vistazo.
+URGENTE_RE = re.compile(
+    r"\b(urgente|urgent|cr[ií]tic[oa]|critical|bloquea|blocker|blocking|asap|p0|"
+    r"ca[ií]d[oa]|roto|broken|prod(?:ucci[oó]n)?\s+(?:roto|ca[ií]d[oa]|down))\b", re.I)
+
+
+def adopt_orphans(jc, mem, apply_):
+    """Mueve los pendientes que viven FUERA de los headers de prioridad a uno canonico.
+
+    Un `_pendientes.md` anterior a 2.12.0 organiza sus items por otra cosa (`## Abiertos`,
+    `P0 — ...`, por semana o por tema). Esas lineas no tienen prioridad que leer, asi que hasta
+    2.21.4 no recibian fila de Tier 3 NUNCA: cada checkpoint las reportaba `NO REPARABLE` y el
+    agente lo trasladaba como si alguien hubiera roto el dual-write. No estaba roto: el archivo
+    es anterior al mecanismo. Adoptarlas es la migracion que nadie iba a correr a mano.
+
+    Se mueve la linea VERBATIM (id, creado y texto intactos) al final de la seccion de su
+    prioridad, creando el header si falta (`journal-compact.ensure_header`, misma politica que el
+    compactador y que normalize-pendientes). La seccion de origen se queda donde estaba: solo
+    pierde esa linea. Los items que YA viven bajo un header canonico no se tocan.
+
+    Lo unico que cambia ademas de la linea movida es el ESPACIADO donde estaba: si al quitarla
+    quedan dos lineas en blanco seguidas, se colapsan a una (igual que `apply_resolve_index`). No es
+    contenido, pero no es "nada": sin decirlo, una comparacion byte a byte del fichero desmiente la
+    garantia. El salto de linea del fichero (LF o CRLF) se conserva, y un fichero sin salto final
+    sale CON el, que es lo que hace `atomic_write` con todo lo que escribe.
+
+    Vive aqui, y no en el hook SessionStart, por una razon: esto MUEVE datos del usuario, y el
+    unico camino que lo deja junto a un commit de git —reversible— es /checkpoint-3t Step 3-pre.
+    `normalize-pendientes.py` sigue creando solo los headers vacios en cada arranque.
+
+    Devuelve [(pid, prioridad, motivo, se_movio)]; con apply_=False no escribe nada.
+    """
+    path = os.path.join(mem, "_pendientes.md")
+    lines = jc.read_lines(path)
+    huerfanos = []           # (indice, linea, pid, destino, motivo)
+    header = ""
+    for i, line in enumerate(lines):
+        if HEADER_RE.match(line.strip()):
+            header = line.strip()
+            continue
+        if not ITEM_RE.match(line):
+            continue
+        abierto = line.lstrip().startswith("- [ ]")
+        mid = ID_RE.search(line)
+        if not mid:
+            continue         # sin id no hay nada que reconciliar: lo pone el enriquecedor
+        low = header.lower()
+        if any(low.startswith(f"## {key}") for key, _ in PRIOS):
+            continue         # ya tiene ancla
+        fuente = URGENTE_RE.search(line) or URGENTE_RE.search(header)
+        destino = "alta" if fuente else "media"
+        motivo = (f"'{fuente.group(0)}' en {'su texto' if URGENTE_RE.search(line) else 'su seccion'}"
+                  if fuente else "sin senal de urgencia")
+        if not abierto:
+            # Un `- [x]` ya cerrado NO se mueve: la linea desaparece en cuanto el checkpoint emita
+            # su `pendiente.resolve`. Pero su fila de Tier 3 si hace falta, y hace falta ANTES de
+            # ese cierre: sin ella `apply_resolve_monthly` deja un WARN y se pierden la fecha de
+            # cierre y la sesion que lo cerro. La prioridad de un item cerrado ya no decide nada,
+            # asi que se registra como Media y se dice.
+            destino, motivo = "media", "cerrado fuera de los headers: solo se registra la fila"
+        huerfanos.append((i, line, mid.group(1), destino, motivo, abierto))
+    salida = [(pid, d.capitalize(), m, ab) for _, _, pid, d, m, ab in huerfanos]
+    movibles = [h for h in huerfanos if h[5]]
+    if not movibles or not apply_:
+        return salida
+
+    # Quitar de atras hacia delante para que los indices previos sigan valiendo.
+    for i, *_ in sorted(movibles, reverse=True):
+        del lines[i]
+        # No dejar dos lineas en blanco seguidas donde estaba la borrada (igual que
+        # apply_resolve_index). `len(lines) - 1`: el ultimo elemento es el centinela del salto
+        # final, borrarlo dejaria el fichero sin newline.
+        if 0 < i < len(lines) - 1 and lines[i].strip() == "" and lines[i - 1].strip() == "":
+            del lines[i]
+    # Insertar al FINAL de la seccion destino, en el orden original: lo que la persona ya tenia
+    # priorizado arriba se queda arriba.
+    for destino in ("alta", "media"):
+        bloque = [h[1] for h in movibles if h[3] == destino]
+        if not bloque:
+            continue
+        lines, h, _ = jc.ensure_header(lines, destino)
+        # Suelo: justo despues del header y de la linea en blanco que lo sigue (el formato que
+        # escribe el compactador). Techo: antes de las lineas en blanco que cierran la seccion.
+        suelo = h + 1
+        if suelo < len(lines) and lines[suelo].strip() == "":
+            suelo += 1
+        at = jc.section_end(lines, h)
+        while at > suelo and lines[at - 1].strip() == "":
+            at -= 1
+        lines[at:at] = bloque
+        # Igual que apply_add_index: no dejar el bloque pegado al header siguiente.
+        fin = at + len(bloque)
+        if fin < len(lines) and lines[fin].startswith("## "):
+            lines.insert(fin, "")
+    jc.atomic_write(path, lines)
+    return salida
 
 
 def monthly_files(mem):
@@ -350,9 +475,9 @@ def ids_invented(idx_path):
     """
     out = []
     prio_ignorada = None  # parse_tier2 ya valida los campos; aqui solo interesa el hash
-    for pid, text, _p, creado, origen, motivo in parse_tier2(idx_path):
-        if motivo:
-            continue
+    for pid, text, _p, creado, origen, faltan in parse_tier2(idx_path):
+        if faltan or origen is None:
+            continue   # sin origen no hay hash que comparar (linea anterior al journal)
         raw = "\n".join([re.sub(r"\s+", " ", unicodedata.normalize("NFC", text)).strip(),
                           creado,
                           re.sub(r"\s+", " ", unicodedata.normalize("NFC", origen)).strip()])
@@ -387,8 +512,8 @@ def main():
         lock = jc.Lock(os.path.join(mem, ".journal"), a.budget)
         if not lock.acquire():
             if not a.quiet:
-                print("rows_added=0 pipes_broken=0 pipes_fixed=0 unaligned_rows=0 unrepairable=0 "
-                      "odd_values=0 header_issues=0 (busy)")
+                print("adopted=0 rows_added=0 pipes_broken=0 pipes_fixed=0 unaligned_rows=0 "
+                      "unrepairable=0 odd_values=0 header_issues=0 (busy)")
             return 0
     try:
         # Primero las filas con `|` crudo: hasta que se reescriben, su `_id:` cae fuera de la
@@ -404,7 +529,15 @@ def main():
                     lines[i] = nueva
                 jc.atomic_write(path, lines)
 
+        # La adopcion va ANTES de cualquier lectura de Tier 2: mueve lineas, y tanto
+        # `ids_invented` como el reparto por mes tienen que ver el archivo ya adoptado.
+        adoptados_todos = adopt_orphans(jc, mem, a.apply)
+
         have = existing_ids(jc, mem)
+        # Un huerfano CERRADO no se mueve nunca, asi que seguiria saliendo en cada corrida una vez
+        # escrita su fila. Se reporta solo mientras haya algo que hacer con el; si no, callar es
+        # lo correcto: un aviso que reaparece sin trabajo detras es el que deja de leerse.
+        adoptados = [x for x in adoptados_todos if x[3] or x[0] not in have]
         inventados = ids_invented(idx)
         desalineadas = unaligned_rows(jc, mem)
         valores_raros = odd_value_rows(jc, mem)
@@ -412,11 +545,19 @@ def main():
         added = 0
         broken = []
         pending = []
-        for pid, text, prio, creado, origen, motivo in parse_tier2(idx):
+        # La prioridad que decidio la adopcion vale para la fila aunque la linea no se haya
+        # movido todavia (dry-run) o no se mueva nunca (un `- [x]` cerrado): sin este respaldo el
+        # item se reportaria NO REPARABLE justo al lado de su propia linea ADOPTADO, que es
+        # contradecirse, y en el caso cerrado se quedaria sin fila para siempre.
+        prio_adoptada = {pid: prio for pid, prio, _, _ in adoptados_todos}
+        for pid, text, prio, creado, origen, faltan in parse_tier2(idx):
             if pid in have:
                 continue
-            if motivo:
-                broken.append((pid, motivo))
+            if prio is None and pid in prio_adoptada:
+                prio = prio_adoptada[pid]
+                faltan = [f for f in faltan if f != "sin header de prioridad"]
+            if faltan:
+                broken.append((pid, ", ".join(faltan)))
                 continue
             pending.append((pid, text, prio, creado, origen))
 
@@ -437,7 +578,7 @@ def main():
             nuevas = []
             for pid, text, prio, creado, origen in por_mes[ym]:
                 nuevas.append(f"| {n} | {cell(text)} _id: {pid}_ | {prio} | {creado} "
-                              f"| {origen} | | |")
+                              f"| {origen or '—'} | | |")
                 n += 1
                 added += 1
             if a.apply:
@@ -463,11 +604,21 @@ def main():
             # REPARADO. Al reves, un consumidor en dry-run (el check 14 de /audit-3t) leeria
             # siempre 0 y daria por sana una memoria con filas irresolubles.
             fixed = len(pipes) if (a.fix_pipes and a.apply) else 0
-            print(f"rows_added={added} pipes_broken={len(pipes)} pipes_fixed={fixed} "
+            print(f"adopted={sum(1 for x in adoptados if x[3])} "
+                  f"rows_added={added} pipes_broken={len(pipes)} pipes_fixed={fixed} "
                   f"unaligned_rows={len(desalineadas)} unrepairable={len(unrepairable)} "
                   f"odd_values={len(valores_raros)} header_issues={len(cabeceras)} "
                   f"ids_invented={len(inventados)} "
                   f"missing_data={len(broken)}{sufijo}")
+            for pid, prio, motivo, movido in adoptados:
+                if movido:
+                    verbo = "movido" if a.apply else "se moveria"
+                    print(f"  ADOPTADO {pid}: {verbo} a '## {prio} prioridad' ({motivo}). Estaba "
+                          f"fuera de los headers de prioridad, asi que no podia recibir su fila de "
+                          f"Tier 3: es estado anterior al journal, no una escritura a mano.")
+                else:
+                    print(f"  ADOPTADO {pid}: se queda donde esta y su fila de Tier 3 se escribe "
+                          f"con prioridad {prio} ({motivo}).")
             if pipes and not fixed:
                 print(f"  AVISO {len(pipes)} filas con `|` crudo no se pueden cerrar "
                       f"(apply_resolve_monthly las lee como ya resueltas): usa --fix-pipes")

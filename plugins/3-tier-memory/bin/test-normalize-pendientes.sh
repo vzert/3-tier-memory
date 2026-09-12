@@ -16,7 +16,9 @@
 #   9. dry-run sin --apply                -> no escribe
 #  10. idempotencia: segunda corrida sobre el caso 3 -> identico, headers_added=0
 #  11. lock ocupado (journal/.lock reciente) -> no escribe, exit 0, mensaje busy
-#  12. tras normalizar el caso 3, un pendiente.add compacta sin cuarentena (fin a fin)
+#  12. tras normalizar el caso 3, un pendiente.add compacta sin cuarentena (fin a fin), y el
+#      mismo add SIN normalizar tampoco cuarentena: el compactador crea el ancla (2.22.0)
+#  12b. y la seccion no canonica del usuario sobrevive a esa autorreparacion, con su item
 #  13. archivo CRLF (Windows): se anade el header y TODAS las lineas siguen terminando en CRLF
 #  14. headers existentes desordenados (Baja antes de Alta, falta Media): se anade Media una sola
 #      vez tras la seccion de Alta, nada se reordena, items intactos
@@ -117,11 +119,20 @@ export MEMORY_DIR="$T/c3"
 python3 "$BIN/journal-emit.py" --type pendiente.add --text "nuevo tras normalizar" --prioridad Baja --origen "[[sessions/test]]" >/dev/null \
   && OUT=$(python3 "$BIN/journal-compact.py" --memory-dir "$T/c3")
 echo "$OUT" | grep -q '^JOURNAL applied=1 quarantined=0 pending_left=0' && grep -q '^- \[ \] nuevo tras normalizar' "$T/c3/_pendientes.md" && ok || fail "fin a fin: '$OUT'"
-# control: la misma emision sobre un archivo sin normalizar SI va a cuarentena
+# 2.22.0: la misma emision SIN normalizar antes tampoco va a cuarentena — el compactador crea
+# el ancla que falta y aplica. Es el primer checkpoint de toda instalacion pre-2.12.0 (el plugin
+# puede haberse actualizado con la sesion ya abierta, o el normalizador no consiguio el lock).
 mk c12 '# Pendientes\n\n## Abiertos\n\n- [ ] x\n'; export MEMORY_DIR="$T/c12"
 python3 "$BIN/journal-emit.py" --type pendiente.add --text "sin header" --prioridad Baja --origen "[[sessions/test]]" >/dev/null \
   && OUT=$(python3 "$BIN/journal-compact.py" --memory-dir "$T/c12")
-echo "$OUT" | grep -q 'quarantined=1' && ok || fail "control cuarentena: '$OUT'"
+F12="$T/c12/_pendientes.md"
+echo "$OUT" | grep -q '^JOURNAL applied=1 quarantined=0 pending_left=0' \
+  && [ "$(grep -c '^## Baja prioridad' "$F12")" = 1 ] \
+  && [ "$(grep -n 'sin header' "$F12" | cut -d: -f1)" -gt "$(grep -n '^## Baja prioridad' "$F12" | cut -d: -f1)" \
+  ] && ok || fail "autorreparacion del ancla: '$OUT'"
+# y la seccion del usuario se queda donde estaba, con su item
+echo "12b la seccion no canonica sobrevive a la autorreparacion:"
+[ "$(grep -c '^## Abiertos' "$F12")" = 1 ] && [ "$(grep -c '^- \[ \] x$' "$F12")" = 1 ] && ok || fail "seccion legacy: $(cat "$F12")"
 unset MEMORY_DIR
 
 echo "13 CRLF:"

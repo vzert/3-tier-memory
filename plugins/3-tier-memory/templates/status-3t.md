@@ -55,9 +55,10 @@ echo "pending=$P quarantine=$Q applied=$A lock=$L strict=$S"
   (locate `JBIN` as in /checkpoint-3t Step 0).
 - `lock`: a lock without an `acquired_at` marker is not orphaned by itself — the compactor ages it by the directory's
   mtime (the marker can be missing for an instant right after `mkdir`, or if writing it failed), which is what the snippet does.
-- `quarantine` > 0 means the compactor refused events (anchor deleted by hand, id collision, malformed JSON).
-  Each `.json` has a `.reason` file next to it. They are never deleted automatically: read the reason,
-  apply the change by hand if it still applies, delete the pair.
+- `quarantine` > 0 means the compactor refused events (anchor deleted by hand, id collision, malformed JSON,
+  impossible date). Each `.json` has a `.reason` file next to it. They are never deleted automatically: read the
+  reason, apply the change by hand if it still applies, delete the pair. A missing priority header stopped being
+  one of these causes in 2.22.0 (the compactor creates it), so whatever is here does need a person.
 - `lock` orphaned (older than 60 s) means a compactor died; the next one steals it. Report it, do not delete it by hand.
 - `strict` on means the PreToolUse guard denies direct `Edit`/`Write` on `_*.md` and `pendientes/YYYY-MM.md`.
 

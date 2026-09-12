@@ -1,5 +1,88 @@
 # Changelog
 
+## [2.22.0] - 2026-09-12
+Un usuario del plugin corrio dos checkpoints el mismo dia y los dos le dijeron algo que suena a
+averia: "sus pendientes no estaban en el journal" y "voy a revisar el motivo de la cuarentena".
+Ninguna de las dos cosas estaba rota. Las dos son el **estado normal de una memoria anterior a
+2.12.0**, y el plugin las reportaba como danos que una persona tenia que arreglar a mano.
+
+Reproducido en local antes de tocar nada, sobre un `memory/` pre-journal (items bajo `## Abiertos`,
+sin `_id`, sin `.journal/`):
+
+```
+repair-dualwrite:  missing_data=3
+  NO REPARABLE p-b59ad2309d: sin header de prioridad, sin _origen_
+journal-compact:   JOURNAL applied=0 quarantined=1
+  no-anchor: falta el header '## Alta prioridad'
+```
+
+### Fixed
+- **El compactador crea el ancla que le falta, en vez de cuarentenar el evento.** Un
+  `pendiente.add` (o un `pendiente.reopen`) sobre un `_pendientes.md` sin su header de prioridad se
+  aplica: el header se escribe con la misma politica que ya usaba `normalize-pendientes.py`, que
+  ahora vive en `journal-compact.py` y se consume desde alli — una sola copia de la regla. Esto
+  cubre los dos casos en que el hook de SessionStart no llega a tiempo: el plugin se actualizo con
+  la sesion **ya abierta**, y dos agentes arrancaron a la vez (el normalizador pide el lock con 1 s
+  de presupuesto y si no lo consigue, calla). La cuarentena queda para lo que de verdad necesita
+  ojos: JSON roto, colision de id, fecha imposible, ancla borrada a mano.
+- **Los eventos que la version vieja cuarenteno se rescatan al actualizar.** Sin esto, el aviso de
+  cuarentena —que va a la PERSONA— seguia pidiendo un trabajo manual que ya no existe, en cada
+  arranque, para siempre. `compact()` devuelve a `pending/` los eventos cuyo `.reason` es
+  exactamente el motivo que esta version sabe resolver, y los aplica en la misma pasada
+  (`rescued=N` en la linea de salida). Cualquier otro motivo se queda donde esta. Y SessionStart
+  ahora compacta tambien cuando `pending/` esta vacio pero `quarantine/` no — era el punto
+  "`quarantine/` viaja pero solo se escanea `pending/`" que 2.21.5 dejo sin resolver.
+- **Los pendientes que viven fuera de los headers se adoptan.** `/checkpoint-3t` Step 3-pre mueve
+  cada item abierto que esta bajo un header propio del usuario (`## Abiertos`, `P0 — ...`, por
+  semana o por tema) a `## Alta/Media/Baja prioridad` —Media, o Alta si su texto o su seccion
+  marcan urgencia— y le escribe la fila de Tier 3 que no tuvo nunca. La linea va **verbatim**: no
+  se reescribe el texto ni se recalcula el id. La seccion de origen se queda donde estaba (solo se
+  colapsa a una la doble linea en blanco que deja el hueco; el tipo de salto de linea se conserva). Un
+  `- [x]` ya cerrado no se mueve, pero si recibe su fila: sin ella, cerrarlo pierde la fecha de
+  cierre y la sesion que lo cerro, que es justo el dano que esta herramienta existe para evitar.
+  Vive en `repair-dualwrite.py` y no en el hook de SessionStart a proposito: mover datos del
+  usuario solo es aceptable en el camino que acaba en un commit de git.
+- **Un pendiente sin `_origen:` ya recibe fila, con `—` en esa columna.** Antes lo bloqueaba, y el
+  resultado era que ningun pendiente anterior al journal tenia fila: al cerrarlo se perdia su
+  historial. No hubo sesion que lo emitiera porque es mas viejo que el mecanismo. Lo que si exige
+  origen es comparar el hash del id, y eso lo mide `ids_invented` aparte.
+- **Los mensajes dejan de acusar.** `rows_added>0` solo significa "alguien escribio Tier 2 a mano"
+  cuando `adopted=0`; con `adopted>0` es la migracion. `missing_data` ya no incluye "sin header de
+  prioridad". Y Step 7 de `/checkpoint-3t` pide decir **que significa** un numero, no el numero:
+  "tus 12 pendientes son anteriores al journal y ahora tienen su fila", nunca "12 pendientes no
+  estaban en el journal".
+
+### Pruebas
+`test-repair-dualwrite.sh` pasa de 10 a 16 casos (11-16). Del 11 al 14: la adopcion completa
+(destino por urgencia, secciones del usuario intactas, el cerrado que no se mueve pero si recibe
+fila, idempotencia, ids sin recalcular), la autorreparacion del ancla, el rescate de la cuarentena
+vieja, y el control de que un motivo que esta version NO sabe resolver **sigue** en cuarentena. El 15
+y el 16 son los dos que anadio la verificacion adversarial, y cada uno guarda un defecto que estaba
+en el codigo antes de publicar: el 15, que un `.reason` que solo EMPIEZA por un motivo rescatable no
+se rescata (al regex le faltaba el ancla final, y sin ella un evento se aplicaba por el parecido de
+su prefijo); el 16, que la adopcion conserva CRLF, el `|` crudo del texto y **ninguna otra linea** —
+ese ultimo aserto nacio roto (calculaba el conteo y no lo miraba) y esta version lo mide de verdad,
+comparando linea por linea, en python y no con `grep -Fxq`, que aqui es ugrep y toma una linea que
+empieza por `-` como opcion.
+`test-normalize-pendientes.sh` invierte su caso 12: el control que antes exigia `quarantined=1`
+ahora exige que se aplique, mas un aserto de que la seccion no canonica sobrevive. Los 13 bancos en
+verde. Mutacion verificada de los cuatro arreglos por separado, comprobando primero que cada
+mutacion se aplica de verdad (un `replace` cuyo ancla ya no existe es un banco que no prueba nada).
+
+### Sin resolver
+`test-journal-race.sh` sigue fallando de forma intermitente (medido aqui 1 de 30 corridas; 2.21.5
+lo midio en 1 de 20 y lo verifico preexistente en `1ed9400`). No se reprodujo en dos lotes limpios
+de 10 y 15 corridas, asi que no se pudo atribuir con seguridad al banco o a la carga de la maquina.
+Dos portadores mas de la regla vieja se arreglaron en esta misma version despues de que un
+verificador independiente los encontrara: `commands/migrate.md` y `commands/setup-memory.md`. El
+primero yo lo habia declarado revisado y exento, y era falso.
+
+### Nota de metodo
+La pregunta del usuario era "¿le damos un nudge a la persona o a su agente?". La respuesta es
+ninguno de los dos: un aviso que el propio programa sabe resolver no es un aviso, es trabajo sin
+hacer. El canal a la persona (2.17.0) se reserva para lo que solo una persona puede decidir, y
+gastarlo en una migracion mecanica es la forma de que deje de leerse.
+
 ## [2.21.5] - 2026-09-12
 Quinta ronda adversarial. Rompio el rediseno de 2.21.4 en una frase: **hay dos llamantes**.
 

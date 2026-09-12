@@ -130,8 +130,10 @@ fi
 
 # Headers de prioridad (v2.12.1): el compactador ancla cada pendiente.add bajo `## Alta/Media/Baja
 # prioridad`; instalaciones anteriores a 2.12.0 a veces no los tienen (`## Abiertos`, secciones
-# por tema) y el evento iria a cuarentena. Se anaden los que falten, sin tocar nada mas, con
-# el lock del journal. Idempotente: con los tres presentes no escribe. Fail-open.
+# por tema). Se anaden los que falten, sin tocar nada mas, con el lock del journal. Idempotente:
+# con los tres presentes no escribe. Fail-open. Desde 2.22.0 esto ya no evita una cuarentena (el
+# compactador crea el ancla que le falte al aplicar): deja el archivo con los tres headers de una
+# vez, que es lo que ve la persona cuando lo abre.
 if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/normalize-pendientes.py" ]; then
   NORM_OUT=$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/normalize-pendientes.py" "$MEMORY_DIR" --apply --quiet --budget 1 2>/dev/null)
   if [ -n "$NORM_OUT" ]; then
@@ -144,9 +146,16 @@ fi
 # los indices, para que lo que se inyecta abajo este fresco. Fast path: solo si pending/
 # tiene algo (un listado de directorio). Presupuesto corto (1 s esperando el lock): si otro
 # compactador lo tiene en ese momento, el aplicara lo pendiente; nada se pierde.
+# Tambien se compacta si hay algo en quarantine/ y pending/ esta vacio (2.22.0): un evento que la
+# version anterior cuarenteno por un ancla que ahora se crea sola se rescata dentro de esa pasada,
+# y el aviso de cuarentena de mas abajo —que va a la PERSONA— tiene que contar lo que quede
+# despues, no antes. Sin esto, actualizar el plugin dejaba el aviso pidiendo un trabajo manual que
+# ya no existe hasta el siguiente /checkpoint-3t.
 JOURNAL_PENDING="$MEMORY_DIR/.journal/pending"
-if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] && [ -d "$JOURNAL_PENDING" ] \
-   && [ -n "$(ls -A "$JOURNAL_PENDING" 2>/dev/null)" ]; then
+if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] \
+   && { { [ -d "$JOURNAL_PENDING" ] && [ -n "$(ls -A "$JOURNAL_PENDING" 2>/dev/null)" ]; } \
+        || { [ -d "$MEMORY_DIR/.journal/quarantine" ] \
+             && [ -n "$(ls -A "$MEMORY_DIR/.journal/quarantine" 2>/dev/null)" ]; }; }; then
   JOURNAL_OUT=$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" --memory-dir "$MEMORY_DIR" --budget 1 --quiet 2>/dev/null)
   if [ -n "$JOURNAL_OUT" ]; then
     out "$JOURNAL_OUT"
@@ -191,8 +200,10 @@ if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] && [ -d "$MEMORY_DIR/.j
   fi
 fi
 
-# Cuarentena: eventos que no se pudieron aplicar de forma segura (ancla borrada a mano,
-# colision de id, JSON roto). Nunca se borran solos; cada uno lleva un .reason al lado.
+# Cuarentena: eventos que no se pudieron aplicar de forma segura (ancla borrada a mano, colision
+# de id, JSON roto, fecha imposible). Nunca se borran solos; cada uno lleva un .reason al lado.
+# Desde 2.22.0 un header de prioridad que falta NO llega aqui: el compactador lo crea y aplica el
+# evento. Lo que quede en cuarentena necesita de verdad a una persona, y por eso se le avisa.
 JOURNAL_Q="$MEMORY_DIR/.journal/quarantine"
 if [ -d "$JOURNAL_Q" ]; then
   JOURNAL_QN=$(ls "$JOURNAL_Q" 2>/dev/null | grep -c '\.json$')

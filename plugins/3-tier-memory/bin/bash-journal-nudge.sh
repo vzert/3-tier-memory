@@ -148,8 +148,8 @@ if re.search(r'(journal-compact|repair-dualwrite|normalize-pendientes|enrich-mem
 print(
     "AVISO del plugin 3-tier-memory: este comando parece escribir un indice de memory/ "
     "directamente. Esos ficheros los escribe SOLO el compactador del journal — una linea "
-    "puesta a mano no tiene evento que auditar, no genera su fila de Tier 3, y la siguiente "
-    "pasada del compactador puede no encontrar su ancla y mandar el evento a cuarentena. "
+    "puesta a mano no tiene evento que auditar y no genera su fila de Tier 3, asi que al "
+    "cerrarla se pierden su fecha de cierre y la sesion que la cerro. "
     "Usa bin/journal-emit.py (pendiente.add/resolve, session.add, learning.add, plan.upsert, "
     "research.upsert) y luego bin/journal-compact.py. "
     "Si la escritura es una reparacion manual deliberada, hazla y despues corre "

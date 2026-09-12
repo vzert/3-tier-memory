@@ -255,9 +255,11 @@ text+date+origin), so a row that already exists in the project index is a no-op.
    ```bash
    python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"   # must print quarantined=0 pending_left=0
    ```
-   If an event is quarantined (its anchor is missing in the project index — e.g. an index created by hand
-   without the standard headers), read `memory/.journal/quarantine/*.reason`, add that row by hand, delete
-   the `.json`/`.reason` pair, and report it.
+   A missing priority header in the project index is NOT a quarantine case since 2.22.0: the compactor
+   creates the header and applies the event, and a `rescued=N` in that line means events an older version
+   had quarantined for that reason were applied now. If an event IS still quarantined (an anchor deleted by
+   hand, an id collision, a broken JSON, an impossible date), read `memory/.journal/quarantine/*.reason`,
+   apply that change by hand, delete the `.json`/`.reason` pair, and report it.
 
    **Fallback (no JBIN)**: re-read the project index right before writing, append the missing rows/items
    by hand (match on the identifiers above), and let the next checkpoint's Step 3-pre assign `_id`s.

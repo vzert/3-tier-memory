@@ -496,7 +496,7 @@ After all sessions are processed:
    ```bash
    python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"
    ```
-   It must print `JOURNAL applied=N quarantined=0 pending_left=0`. If `quarantined>0`, read each
+   It must print `JOURNAL applied=N quarantined=0 pending_left=0` (a `rescued=N` there is fine: events an older version quarantined for a missing anchor, applied now). If `quarantined>0`, read each
    `memory/.journal/quarantine/*.reason`, apply that change by hand, delete the `.json`/`.reason` pair,
    and report it in Step 6. Compacting once at the end (instead of per session) is fine: events are
    applied in emission order.

@@ -168,15 +168,26 @@ This step runs in FOUR sub-phases, in order: 3-pre, 3a, 3b, 3c. Do not merge the
 
 ```bash
 python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"       # apply whatever other agents left pending
+python3 "$JBIN/normalize-pendientes.py" "$MEMORY_DIR" --apply --quiet    # the three priority headers exist; idempotent
 python3 "$JBIN/enrich-memory.py" "$MEMORY_DIR" --apply --only creado,id   # legacy lines get `_creado` (if missing) and `_id: p-…_`; idempotent
-python3 "$JBIN/repair-dualwrite.py" "$MEMORY_DIR" --apply --fix-pipes    # Tier 2 lines with no Tier 3 row; rows a `|` made unclosable; idempotent
+python3 "$JBIN/repair-dualwrite.py" "$MEMORY_DIR" --apply --fix-pipes    # adopts orphan lines; Tier 2 lines with no Tier 3 row; rows a `|` made unclosable; idempotent
 ```
 
-`repair-dualwrite` prints `rows_added=N pipes_broken=N pipes_fixed=N unaligned_rows=N unrepairable=N odd_values=N header_issues=N ids_invented=N missing_data=N`.
-**A non-zero `rows_added` or `ids_invented` means someone wrote Tier 2 outside the journal since the
-last checkpoint** — the dual write was bypassed. Without this repair those pendientes lose their
-resolution date and closing session when they are eventually closed. Report the counts in Step 7;
-if `missing_data>0`, the listed lines lack `_creado` or a priority header and need a look by hand.
+`repair-dualwrite` prints `adopted=N rows_added=N pipes_broken=N pipes_fixed=N unaligned_rows=N unrepairable=N odd_values=N header_issues=N ids_invented=N missing_data=N`.
+
+**Read `adopted` and `rows_added` before you call anything broken — on the FIRST checkpoint of a
+memory that predates 2.12.0 they are both expected and non-zero, and nothing is wrong.** Such a
+`_pendientes.md` organizes its items under its own headers (`## Abiertos`, `P0 — …`, by week or by
+topic), which the journal cannot anchor to, so those lines never had a Tier 3 row: `adopted=N`
+means N of them were moved under `## Alta/Media/Baja prioridad` (each move printed with its reason)
+and `rows_added` counts the rows that were missing. That is a one-time migration of state older
+than the mechanism, not a bypass — say exactly that in Step 7, not "the dual write was broken".
+
+`rows_added` or `ids_invented` above 0 **with `adopted=0`** is the other case: someone wrote Tier 2
+outside the journal since the last checkpoint, and the dual write was bypassed. Without this repair
+those pendientes lose their resolution date and closing session when they are eventually closed.
+Report the counts in Step 7; if `missing_data>0`, the listed lines lack `_creado` and need a look by
+hand (a missing priority header is no longer one of the causes: adoption resolves it).
 **`unaligned_rows` or `unrepairable` above 0 is the serious one**: a Tier 3 row that cannot be
 mapped onto the canonical columns at all, or that the repair refuses to touch because fixing it
 automatically would move data between columns. Neither is repaired for you — report the file and
@@ -272,10 +283,15 @@ same pendiente the same day produce the same id and the line is written once.
 python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"
 ```
 
-It must print `JOURNAL applied=N quarantined=0 pending_left=0`. If `quarantined>0`, open each
-`memory/.journal/quarantine/*.reason` (a hand-edited anchor, an id collision, a broken JSON), apply
-that change by hand, delete the `.json`/`.reason` pair, and report it in Step 7. If it prints
-`JOURNAL busy`, another agent holds the lock right now: run it again after a few seconds. This
+It must print `JOURNAL applied=N quarantined=0 pending_left=0`. A `rescued=N` in that line is good
+news, not a problem: N events that an older version of the plugin quarantined for a missing anchor
+were returned to `pending/` and applied in this same pass. If `quarantined>0`, open each
+`memory/.journal/quarantine/*.reason` (a hand-edited anchor, an id collision, a broken JSON, an
+impossible date), apply that change by hand, delete the `.json`/`.reason` pair, and report it in
+Step 7. Since 2.22.0 a **missing priority header is not one of those cases** — the compactor creates
+the header and applies the event — so a quarantined event really does need a person: do not report it
+as "something the new version does the first time". If it prints `JOURNAL busy`, another agent holds
+the lock right now: run it again after a few seconds. This
 runs now so the reconciliation report is fresh; Steps 2, 4 and 5 emit more events, and Step 5a
 compacts everything again before the commit.
 
@@ -555,6 +571,14 @@ If the commit fails (e.g., user.name/user.email not configured) → set GIT_SKIP
 ## Step 7: Report
 
 Tell the user: session path, N pendientes extracted, M resolved, journal result (`applied=N` for Steps 3c, 5a and 6c together, any quarantined event with its reason, and whether any **Fallback** path was used), N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, N rows pruned by hand (if any), frontmatter sealed (if N>0), **secrets redacted (if N>0, with file:line list + rotate-your-keys warning)**, git result (commit hash OR reason skipped).
+
+**Say what a number MEANS, not just the number.** A count the user cannot interpret reads as a
+failure: an `adopted=12 rows_added=12` on a memory older than 2.12.0 is a one-time migration and
+the sentence for it is "your 12 pendientes predate the journal; they were moved under the priority
+headers and now have their history row" — never "12 pendientes were not in the journal". If a
+number really is a problem (a quarantined event, `unaligned_rows`, a bypassed dual write), say what
+it blocks and what you did about it. Nothing here is for the user to fix by hand unless this file
+says so explicitly.
 
 ## Step 8: Como retomar — snippet de continuidad
 
