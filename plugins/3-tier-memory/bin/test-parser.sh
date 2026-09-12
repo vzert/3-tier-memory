@@ -209,7 +209,19 @@ printf '# P\n\n## Alta prioridad\n- [ ] x\n' > "$FAKEHOME/memory/_pendientes.md"
 HOME="$FAKEHOME" CLAUDE_PROJECT_DIR="$FAKEHOME" CLAUDE_PLUGIN_ROOT="$(cd "$(dirname "$0")/.." && pwd)" \
   bash "$HOOK" < /dev/null > "$TMP/home.out" 2>"$ERR"
 INSTALADOS=$(find "$FAKEHOME/.claude/commands" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')
-if [ "$INSTALADOS" -eq 0 ] && grep -q '^AVISO:' "$TMP/home.out"; then
+# Desde 2.17.0 el hook emite UN objeto JSON, no texto plano: el aviso vive dentro de
+# `additionalContext`. Se lee como JSON a proposito — buscarlo con grep sobre el crudo
+# pasaria igual con un JSON roto, y un JSON roto es "el hook no hizo nada".
+AVISO=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(0)
+ctx = d.get('hookSpecificOutput', {}).get('additionalContext', '')
+print('si' if any(l.startswith('AVISO:') for l in ctx.splitlines()) else '')
+" "$TMP/home.out" 2>/dev/null)
+if [ "$INSTALADOS" -eq 0 ] && [ "$AVISO" = "si" ]; then
   PASS=$((PASS + 1)); echo "  ok   no instala comandos en el ambito USER"
 else
   fail "no instala comandos en el ambito USER (instalados=$INSTALADOS)" "$(head -5 "$TMP/home.out")"

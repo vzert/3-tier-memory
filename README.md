@@ -88,6 +88,11 @@ That's it. `/checkpoint` saves your session, extracts action items, captures lea
 - **Concurrent writes** — since 2.12.0 the shared indexes are written through an event journal (`memory/.journal/`) and one locked compactor, so several sessions or subagents can checkpoint on the same machine without overwriting each other's lines (see [the event journal](#concurrent-writes-the-event-journal-2120))
 - **Calendar reminders** — a pendiente that names a future date also prints a calendar block: a **Title** and a **Description** written for you, plus the agent prompt in a fenced block you paste inside the event. The block is persisted in the session file too, so it does not depend on terminal scrollback. Since 2.13.0, reshaped into calendar fields in 2.15.0
 - **Continuity snippet** — every checkpoint ends with a paste-ready prompt for the next session. Since 2.12.2 it carries what did **not** work (`## Callejones sin salida` → the `No repitas:` line) and where the next step ends (`Terminas cuando:`), not just what got done — so the next session doesn't retry a dead end or expand without a bar
+- **Two readers, two channels** — since 2.17.0 the SessionStart hook emits one JSON object: the
+  agent gets `additionalContext` (high-priority and unclassified action items, counts, warnings),
+  and **you** get a short `systemMessage` — how many items are open, how many are over 30 days
+  old, the three oldest, and `/triage-3t`. Plain stdout at SessionStart only ever reached the
+  agent, which is why open items piled up: closing one is a human decision
 - **Hooks** — auto-inject open action items + learnings at session start, apply pending journal events, surface relevant memory per prompt, detect unregistered files, optional strict guard on the indexes
 
 ### Commands

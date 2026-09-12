@@ -1,5 +1,61 @@
 # Changelog
 
+## [2.17.0] - 2026-09-11
+El hook de SessionStart hablaba con un solo lector. Todo lo que imprimia — pendientes, avisos de
+secretos, eventos en cuarentena — salia por stdout plano, y en SessionStart el stdout plano es
+**contexto del agente**: nunca llega delante de la persona. Medido el 2026-09-11 en este repo: 54
+pendientes abiertos, 14 sin cerrar desde hace mas de 30 dias, el mas viejo del 2026-04-02. El agente
+los veia en cada sesion y la cifra no bajaba — cerrar un pendiente es una decision de la persona, y a
+la persona no le llegaba ninguno.
+
+### Added
+- **Canal a la persona: `systemMessage`.** `bin/session-start.sh` emite ahora UN objeto JSON con dos
+  campos: `hookSpecificOutput.additionalContext` para el agente y `systemMessage` para la persona.
+  El mensaje a la persona es corto a proposito — cuantos pendientes hay abiertos, cuantos pasan de 30
+  dias, los tres mas antiguos con su fecha, y el comando que los cierra (`/triage-3t`). Un aviso que
+  ocupa media pantalla en cada arranque se aprende a ignorar, y entonces vuelve a no existir.
+- **Los avisos que solo puede resolver una persona viajan tambien por `systemMessage`**: secretos en
+  texto plano en `memory/` y eventos en cuarentena. Rotar una key que ya se pusheo no lo puede hacer
+  un agente; hasta ahora ese aviso solo lo leia un agente.
+- **`bin/test-session-start-json.sh`** — 18 comprobaciones sobre la salida del hook: que parsea como
+  JSON, que lleva los dos campos, que `systemMessage` trae conteo + mas antiguos + comando, que en
+  `source=clear` la persona no recibe nada **pero el agente si**, que con la serializacion rota sale
+  texto plano con exit 0, y que sin sistema de memoria no ensucia stdout.
+
+### Changed
+- **El bloque del agente se recorta a ALTA y sin clasificar.** Antes listaba hasta 10 items de
+  cualquier prioridad y cerraba con `[+N mas]`. Lo que se media de ese inventario es que no movia la
+  cifra. La relevancia por peticion ya la cubre `bin/recall.sh` (UserPromptSubmit, 2.8.0), que llega
+  en el momento en que el item importa; el arranque se queda con lo urgente y con el total. Los items
+  bajo secciones fuera del esquema Alta/Media/Baja siguen inyectandose, ahora etiquetados como
+  `SIN CLASIFICAR`: no son de prioridad media, es que nadie los ha clasificado. La regla 20 de
+  `_learnings.md` (contenido, no contadores) sigue viva para esos dos grupos.
+- **`session-start.sh` ya no imprime por su cuenta.** Cada linea pasa por `out` (agente) o `human`
+  (persona) y hay una sola escritura a stdout, al final: `grep -c '^\s*echo ' bin/session-start.sh`
+  da 0. JSON seguido de texto suelto no parsea, y para Claude Code un JSON roto es "el hook no hizo
+  nada".
+
+### Fixed
+- **`repair-dualwrite.py` ya no inventa ids en los pendientes con ventana.** Su `META_RE` borraba
+  `_(origen|creado|id):` antes de re-derivar `sha1(texto+creado+origen)`, pero no `_revisar:`,
+  mientras `journal-emit.strip_meta` si lo borra antes de hashear. El texto que se hasheaba llevaba
+  la ventana pegada, el sha1 salia distinto, y **todo** pendiente con ventana se reportaba como
+  `ids_invented` con un aviso de fila duplicada que nunca iba a ocurrir. Sobre `memory/` de este
+  repo: `ids_invented=1` antes, `ids_invented=0` despues. Las dos expresiones quedan identicas y cada
+  una lleva un comentario apuntando a la otra. Caso 10 de `bin/test-repair-dualwrite.sh`, probado en
+  rojo con el regex viejo.
+
+### Notas
+- **El filtro por `source` va dentro del script, no en el `matcher` de `hooks.json`.** El `matcher`
+  sigue en `""`. Poner `startup|resume` ahi apagaria el hook entero en `clear` y `compact` — y en
+  `clear`/`compact` el agente acaba de perder el contexto, que es justo cuando mas necesita
+  `additionalContext`. El test 4 cubre esa regresion.
+- **Si la serializacion falla, sale texto plano con el bloque del agente intacto y exit 0.** Es lo
+  que hay hoy: la persona se queda sin mensaje esa sesion, el agente no se queda sin memoria.
+- **Sin stdin utilizable no hay `systemMessage`.** `source` se lee del payload del hook; sin payload
+  el mensaje a la persona no sale. Es el lado seguro: repetirlo en cada `compact` lo vuelve ruido.
+- **Coste medido**: 0,23-0,25 s por arranque en este repo (timeout del hook: 10 s).
+
 ## [2.16.0] - 2026-09-11
 El recordatorio de calendario no decia **en que proyecto** correr su propio prompt. Quien usa el
 plugin en varios proyectos acumula recordatorios de todos en un mismo calendario: llegada la fecha,

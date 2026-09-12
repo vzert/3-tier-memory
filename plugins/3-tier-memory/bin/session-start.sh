@@ -5,6 +5,61 @@
 
 source "$(dirname "$0")/resolve-project-dir.sh"
 
+# ---------------------------------------------------------------- salida: dos canales
+# Este hook habla con DOS lectores y hasta 2.17.0 solo alcanzaba a uno:
+#   - `additionalContext` -> el agente. Ahi iba TODO, via stdout plano.
+#   - `systemMessage`     -> la persona. No existia. Por eso los pendientes se acumulaban
+#     (2026-09-11: 54 abiertos, 22 de mas de un mes). El agente los veia en cada sesion y
+#     aun asi no bajaban: cerrarlos es una decision de la persona, y a la persona nunca le
+#     llegaban.
+# Los dos viajan en UN SOLO objeto JSON impreso al final. Por eso NADA en este script puede
+# escribir a stdout por su cuenta: JSON seguido de texto suelto no parsea y se pierde el hook
+# entero. `out` acumula para el agente, `human` para la persona.
+_AGENT_BUF=""
+_HUMAN_BUF=""
+out()   { _AGENT_BUF="${_AGENT_BUF}$1
+"; }
+human() { _HUMAN_BUF="${_HUMAN_BUF}$1
+"; }
+
+# `source` del payload: startup | resume | clear | compact. El mensaje a la persona solo
+# tiene sentido cuando ELLA abre la sesion; en `clear`/`compact` esta a mitad de trabajo.
+# Se filtra AQUI y no con el `matcher` de hooks.json a proposito: el matcher apaga el hook
+# entero, y en `clear`/`compact` el agente acaba de perder el contexto — es justo cuando mas
+# necesita `additionalContext`. Sin stdin utilizable devuelve vacio y la persona no recibe
+# nada, que es el lado seguro: repetirle el aviso en cada compact lo vuelve ruido.
+hook_source() {
+  [ -z "$_HOOK_INPUT" ] && return 0
+  printf '%s' "$_HOOK_INPUT" | python3 -c "import json,sys
+try:
+    print(json.load(sys.stdin).get('source',''))
+except Exception:
+    print('')" 2>/dev/null
+}
+
+# La UNICA escritura a stdout del script. Si la serializacion falla, cae a texto plano con el
+# bloque del agente intacto: eso es lo que funciona hoy y es lo que no se puede perder. La
+# persona se queda sin mensaje esa sesion; el agente no se queda sin memoria.
+emit_output() {
+  [ -z "$_AGENT_BUF" ] && [ -z "$_HUMAN_BUF" ] && return 0
+  case "$(hook_source)" in
+    startup|resume) ;;
+    *) _HUMAN_BUF="" ;;
+  esac
+  _JSON_OUT=$(_A="$_AGENT_BUF" _H="$_HUMAN_BUF" python3 -c "import json,os,sys
+a = os.environ.get('_A','').strip()
+h = os.environ.get('_H','').strip()
+o = {'hookSpecificOutput': {'hookEventName': 'SessionStart', 'additionalContext': a}}
+if h:
+    o['systemMessage'] = h
+sys.stdout.write(json.dumps(o, ensure_ascii=False))" 2>/dev/null)
+  if [ -n "$_JSON_OUT" ]; then
+    printf '%s' "$_JSON_OUT"
+  else
+    printf '%s' "$_AGENT_BUF"
+  fi
+}
+
 # Auto-enable marketplace auto-update (idempotent, runs silently)
 KM_FILE="$HOME/.claude/plugins/known_marketplaces.json"
 if [ -f "$KM_FILE" ]; then
@@ -27,7 +82,7 @@ f = '$KM_FILE'
 d = json.load(open(f))
 d['3-tier-memory-marketplace']['autoUpdate'] = True
 json.dump(d, open(f, 'w'), indent=2)
-" 2>/dev/null && echo "AUTO-UPDATE: enabled for 3-tier-memory marketplace."
+" 2>/dev/null && out "AUTO-UPDATE: enabled for 3-tier-memory marketplace."
   fi
 fi
 
@@ -43,8 +98,9 @@ elif [ -d "$HOME/.claude/projects" ]; then
   fi
 fi
 
-# Exit silently if no memory system found
-[ -z "$MEMORY_DIR" ] && exit 0
+# Sin sistema de memoria no hay nada que inyectar — pero el buffer puede traer ya el aviso
+# de AUTO-UPDATE, que se emitia antes de esta linea. Vaciarlo aqui o se pierde.
+[ -z "$MEMORY_DIR" ] && { emit_output; exit 0; }
 
 # Headers de prioridad (v2.12.1): el compactador ancla cada pendiente.add bajo `## Alta/Media/Baja
 # prioridad`; instalaciones anteriores a 2.12.0 a veces no los tienen (`## Abiertos`, secciones
@@ -53,8 +109,8 @@ fi
 if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/normalize-pendientes.py" ]; then
   NORM_OUT=$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/normalize-pendientes.py" "$MEMORY_DIR" --apply --quiet --budget 1 2>/dev/null)
   if [ -n "$NORM_OUT" ]; then
-    echo "NORMALIZADO: _pendientes.md — $NORM_OUT (headers de prioridad que faltaban; los items no se movieron)."
-    echo ""
+    out "NORMALIZADO: _pendientes.md — $NORM_OUT (headers de prioridad que faltaban; los items no se movieron)."
+    out ""
   fi
 fi
 
@@ -67,8 +123,8 @@ if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] && [ -d "$JOURNAL_PENDI
    && [ -n "$(ls -A "$JOURNAL_PENDING" 2>/dev/null)" ]; then
   JOURNAL_OUT=$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" --memory-dir "$MEMORY_DIR" --budget 1 --quiet 2>/dev/null)
   if [ -n "$JOURNAL_OUT" ]; then
-    echo "$JOURNAL_OUT"
-    echo ""
+    out "$JOURNAL_OUT"
+    out ""
   fi
 fi
 # Deriva fuera del journal (v2.13.2): journal_strict solo cubre Edit/Write/MultiEdit — Bash no
@@ -79,8 +135,8 @@ fi
 if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] && [ -d "$MEMORY_DIR/.journal" ]; then
   DRIFT_OUT=$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" --memory-dir "$MEMORY_DIR" --check-drift 2>/dev/null)
   if [ -n "$DRIFT_OUT" ]; then
-    echo "$DRIFT_OUT"
-    echo ""
+    out "$DRIFT_OUT"
+    out ""
   fi
 fi
 
@@ -90,8 +146,9 @@ JOURNAL_Q="$MEMORY_DIR/.journal/quarantine"
 if [ -d "$JOURNAL_Q" ]; then
   JOURNAL_QN=$(ls "$JOURNAL_Q" 2>/dev/null | grep -c '\.json$')
   if [ "${JOURNAL_QN:-0}" -gt 0 ] 2>/dev/null; then
-    echo "⚠ JOURNAL: $JOURNAL_QN evento(s) en cuarentena en memory/.journal/quarantine/ — lee el .reason de cada uno, aplica el cambio a mano si aplica y borra el par .json/.reason."
-    echo ""
+    out "⚠ JOURNAL: $JOURNAL_QN evento(s) en cuarentena en memory/.journal/quarantine/ — lee el .reason de cada uno, aplica el cambio a mano si aplica y borra el par .json/.reason."
+    human "⚠ JOURNAL: $JOURNAL_QN evento(s) en cuarentena — hay que revisarlos a mano en memory/.journal/quarantine/."
+    out ""
   fi
 fi
 
@@ -101,8 +158,8 @@ fi
 if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/ensure-frontmatter.py" ]; then
   FM_MISSING=$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/ensure-frontmatter.py" "$MEMORY_DIR" --count 2>/dev/null)
   if [ -n "$FM_MISSING" ] && [ "$FM_MISSING" -gt 0 ] 2>/dev/null; then
-    echo "⚠ $FM_MISSING archivo(s) de memoria sin frontmatter — corre /enrich-3t para repararlos (o se auto-sellan en el proximo /checkpoint-3t)."
-    echo ""
+    out "⚠ $FM_MISSING archivo(s) de memoria sin frontmatter — corre /enrich-3t para repararlos (o se auto-sellan en el proximo /checkpoint-3t)."
+    out ""
   fi
 fi
 
@@ -234,8 +291,8 @@ print(f"HOOK DUPLICADO: {script}{extra}, registrado en .claude/{settings}, {cost
 DUPEOF
 )
   if [ -n "$DUP_HOOK" ]; then
-    echo "$DUP_HOOK"
-    echo ""
+    out "$DUP_HOOK"
+    out ""
   fi
 fi
 
@@ -244,8 +301,9 @@ fi
 if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/scan-secrets.py" ]; then
   SEC_FOUND=$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/scan-secrets.py" "$MEMORY_DIR" --count 2>/dev/null)
   if [ -n "$SEC_FOUND" ] && [ "$SEC_FOUND" -gt 0 ] 2>/dev/null; then
-    echo "⚠ SECRETS: $SEC_FOUND posible(s) secreto(s) en texto plano en memory/ — corre /checkpoint-3t para redactarlos (Step 5d) y ROTA cualquier key ya pusheada (la redacción no des-filtra el historial)."
-    echo ""
+    out "⚠ SECRETS: $SEC_FOUND posible(s) secreto(s) en texto plano en memory/ — corre /checkpoint-3t para redactarlos (Step 5d) y ROTA cualquier key ya pusheada (la redacción no des-filtra el historial)."
+    human "⚠ SECRETOS: $SEC_FOUND posible(s) en texto plano en memory/ — corre /checkpoint-3t (Step 5d) y ROTA cualquier key que ya este pusheada: redactarla no la des-filtra."
+    out ""
   fi
 fi
 
@@ -259,8 +317,8 @@ if [ "$IS_PAPERCLIP_AGENT" = true ]; then
     LEARNINGS_COUNT=$(sed -n '/## Quick Reference/,/## Related/p' "$MEMORY_DIR/_learnings.md" 2>/dev/null | grep -cE '^([0-9]+\.|[-*] )')
     LEARNINGS_COUNT=${LEARNINGS_COUNT:-0}
     if [ "$LEARNINGS_COUNT" -gt 0 ]; then
-      echo "REGLAS CRITICAS: $LEARNINGS_COUNT. Revisa _learnings.md para ver el detalle."
-      echo ""
+      out "REGLAS CRITICAS: $LEARNINGS_COUNT. Revisa _learnings.md para ver el detalle."
+      out ""
     fi
   fi
 else
@@ -362,7 +420,8 @@ notes = []
 if odd_sections:
     uniq = list(dict.fromkeys(odd_sections))
     shown_secs = ", ".join(uniq[:3]) + (f" [+{len(uniq) - 3} mas]" if len(uniq) > 3 else "")
-    notes.append("seccion(es) fuera del esquema Alta/Media/Baja, mostradas al final como OTROS: "
+    notes.append("seccion(es) fuera del esquema Alta/Media/Baja, cuyos items se inyectan "
+                 "arriba como SIN CLASIFICAR: "
                  + shown_secs
                  + " — mueve esos items a Alta/Media/Baja prioridad para que se prioricen")
 if dup_headers:
@@ -408,34 +467,46 @@ def shorten(text):
         cut += "**"
     return cut + "…"
 
-# ALTA nunca se recorta por cap: esconder un item de alta prioridad es peor que el
-# costo de mostrarlo. El cap aplica al resto, con techo duro por seguridad.
-CAP = 10
+# --- BLOQUE DEL AGENTE: conteo + ALTA inline + instruccion.
+# Hasta 2.17.0 listaba tambien MEDIA/BAJA hasta un cap de 10 y cerraba con "[+N mas]".
+# Lo medido: el agente veia el inventario entero en CADA sesion y los pendientes seguian
+# subiendo igual (2026-09-11: 54 abiertos, 22 de mas de un mes). Cerrar un pendiente es una
+# decision de la persona, y hasta esta version el inventario no llegaba a ninguna persona.
+# La relevancia por peticion ya la cubre recall.sh (UserPromptSubmit, v2.8.0) — es lo que de
+# verdad hace que el agente cruce peticion vs memoria, y llega en el momento que importa.
+# Queda ALTA inline (regla 20 de _learnings.md: contenido, no contadores, que sigue viva para
+# lo urgente) y el resto vive en _pendientes.md, que el agente abre cuando la peticion lo pide.
+# `otros` entra con ALTA, no con el resto: no son items de prioridad media, son items que
+# NADIE ha clasificado (seccion fuera del esquema, o preambulo del archivo). Esconderlos es
+# el fallo de la regla 11 de _learnings.md — descartar y luego contar — que este parser vino
+# a arreglar: el archivo de unifi-expert inyectaba 0 de 15 y el header decia 15.
 CEILING = 25
 altas = [x for x in selected if x[0] == "alta"]
-resto = [x for x in selected if x[0] != "alta"]
-shown = (altas + resto[: max(0, CAP - len(altas))])[:CEILING]
-extra = total - len(shown)
+otros = [x for x in selected if x[0] == "otros"]
+shown = (altas + otros)[:CEILING]
 
-print(f"PENDIENTES ABIERTOS ({total}). Antes de responder, verifica si la peticion del usuario se relaciona con alguno de estos items — si lo resuelves durante la sesion, marcalo en /checkpoint-3t:")
+print(f"PENDIENTES ABIERTOS ({total}), {len(shown)} de prioridad ALTA o sin clasificar. Antes de responder, "
+      f"verifica si la peticion del usuario se relaciona con alguno de estos items o con el "
+      f"resto de memory/_pendientes.md — si lo resuelves durante la sesion, marcalo en "
+      f"/checkpoint-3t:")
 print()
-last = None
-for prio, (created, text) in shown:
-    if prio != last:
-        print(f"{prio.upper()}:")
-        last = prio
-    if created != "9999":
-        age = days_old(created)
-        stale = " ⚠ posible stale — reconciliar" if age is not None and age > STALE_DAYS else ""
-        print(f"  - [ ] {shorten(text)} — _creado: {created}_{stale}")
-    else:
-        print(f"  - [ ] {shorten(text)}")
-if extra > 0:
-    print()
-    if len(altas) > CEILING:
-        print(f"[+ {extra} mas — revisa _pendientes.md. OJO: solo {CEILING} de {len(altas)} ALTA caben aqui]")
-    else:
-        print(f"[+ {extra} mas — revisa _pendientes.md]")
+if shown:
+    last = None
+    for prio, (created, text) in shown:
+        if prio != last:
+            print("ALTA:" if prio == "alta" else "SIN CLASIFICAR:")
+            last = prio
+        if created != "9999":
+            age = days_old(created)
+            stale = " ⚠ posible stale — reconciliar" if age is not None and age > STALE_DAYS else ""
+            print(f"  - [ ] {shorten(text)} — _creado: {created}_{stale}")
+        else:
+            print(f"  - [ ] {shorten(text)}")
+    if len(altas) + len(otros) > CEILING:
+        print(f"[+ {len(altas) + len(otros) - CEILING} de ALTA o sin clasificar mas — abre _pendientes.md]")
+else:
+    print("  (ninguno de prioridad ALTA ni sin clasificar — el resto esta en memory/_pendientes.md)")
+
 if any(days_old(c) is not None and days_old(c) > STALE_DAYS for _, (c, _t) in shown):
     print()
     print(f"Items marcados ⚠ tienen >{STALE_DAYS} dias sin cerrar — probables candidatos a resolved/abandoned en /checkpoint-3t Step 3a.")
@@ -443,12 +514,38 @@ if any(days_old(c) is not None and days_old(c) > STALE_DAYS for _, (c, _t) in sh
 if notes:
     print()
     print("ESTRUCTURA de _pendientes.md: " + "; ".join(notes) + ".")
+
+# --- BLOQUE DE LA PERSONA, detras de la sentinela. Lo separa el shell y lo manda por
+# `systemMessage`. Es corto a proposito: un aviso que ocupa media pantalla en cada arranque
+# se aprende a ignorar, y entonces vuelve a no existir.
+print("---3T-HUMANO---")
+viejos = sorted([(c, t) for _p, (c, t) in selected if c != "9999"], key=lambda x: x[0])
+stale_n = sum(1 for c, _t in viejos if (days_old(c) or 0) > STALE_DAYS)
+cab = f"MEMORIA 3T — {total} pendientes abiertos"
+cab += f", {stale_n} sin cerrar desde hace mas de {STALE_DAYS} dias." if stale_n else "."
+print(cab)
+if viejos[:3]:
+    print("Los mas antiguos:")
+    for c, t in viejos[:3]:
+        print(f"  · {shorten(t)}  ({c}, {days_old(c)} dias)")
+print("Cierra o descarta con /triage-3t. Para reconciliarlos uno a uno: /checkpoint-3t Step 3a.")
 PYEOF
 )
 
+    # El bloque de arriba imprime las dos mitades separadas por la sentinela: lo de antes
+    # para el agente, el resumen corto para la persona. Sin sentinela (por ejemplo cuando
+    # solo salen notas de ESTRUCTURA) todo es del agente.
     if [ -n "$PENDIENTES_OUTPUT" ]; then
-      echo "$PENDIENTES_OUTPUT"
-      echo ""
+      case "$PENDIENTES_OUTPUT" in
+        *---3T-HUMANO---*)
+          out "${PENDIENTES_OUTPUT%%---3T-HUMANO---*}"
+          human "${PENDIENTES_OUTPUT#*---3T-HUMANO---}"
+          ;;
+        *)
+          out "$PENDIENTES_OUTPUT"
+          out ""
+          ;;
+      esac
     fi
   fi
 
@@ -456,8 +553,8 @@ PYEOF
     LEARNINGS_COUNT=$(sed -n '/## Quick Reference/,/## Related/p' "$MEMORY_DIR/_learnings.md" 2>/dev/null | grep -cE '^([0-9]+\.|[-*] )')
     LEARNINGS_COUNT=${LEARNINGS_COUNT:-0}
     if [ "$LEARNINGS_COUNT" -gt 0 ]; then
-      echo "REGLAS CRITICAS: $LEARNINGS_COUNT. Revisa _learnings.md para ver el detalle."
-      echo ""
+      out "REGLAS CRITICAS: $LEARNINGS_COUNT. Revisa _learnings.md para ver el detalle."
+      out ""
     fi
   fi
 fi
@@ -473,10 +570,10 @@ MIGRATED=""
 # y el usuario no tiene como saber de donde salio. El hook sigue inyectando memoria
 # normalmente; lo unico que se salta es la escritura de comandos.
 if [ "$(cd "$CLAUDE_PROJECT_DIR" 2>/dev/null && pwd -P)" = "$(cd "$HOME" 2>/dev/null && pwd -P)" ]; then
-  echo "AVISO: la sesion se abrio desde \$HOME, asi que .claude/commands/ es el ambito USER (global)."
-  echo "No se instalan los comandos -3t aqui: apareceria un duplicado user+project en cada proyecto."
-  echo "Abre la sesion desde el directorio del proyecto para que se instalen donde corresponde."
-  echo ""
+  out "AVISO: la sesion se abrio desde \$HOME, asi que .claude/commands/ es el ambito USER (global)."
+  out "No se instalan los comandos -3t aqui: apareceria un duplicado user+project en cada proyecto."
+  out "Abre la sesion desde el directorio del proyecto para que se instalen donde corresponde."
+  out ""
   SKIP_CMD_INSTALL=1
 fi
 
@@ -491,8 +588,8 @@ for old_cmd in checkpoint status audit backfill; do
 done
 
 if [ -n "$MIGRATED" ]; then
-  echo "MIGRADO:$MIGRATED (renamed to avoid collisions with global skills)."
-  echo ""
+  out "MIGRADO:$MIGRATED (renamed to avoid collisions with global skills)."
+  out ""
 fi
 
 # Auto-update local commands if plugin has newer versions (also installs missing ones)
@@ -516,13 +613,13 @@ for cmd in checkpoint-3t status-3t audit-3t backfill-3t save-learning consolidat
 done
 
 if [ -n "$INSTALLED" ]; then
-  echo "INSTALADO:$INSTALLED (nuevos comandos del plugin)."
-  echo ""
+  out "INSTALADO:$INSTALLED (nuevos comandos del plugin)."
+  out ""
 fi
 
 if [ -n "$UPDATED" ]; then
-  echo "ACTUALIZADO:$UPDATED se actualizaron a la version mas reciente del plugin."
-  echo ""
+  out "ACTUALIZADO:$UPDATED se actualizaron a la version mas reciente del plugin."
+  out ""
 fi
 
 # Notify if JSONL backfill is pending
@@ -620,14 +717,17 @@ print(len(pending))
 PYEOF
 )
   if [ -n "$REMAINING" ] && [ "$REMAINING" -gt 0 ]; then
-    echo "BACKFILL PENDIENTE: $REMAINING sesiones sin procesar. Run /backfill-3t to import past sessions."
-    echo ""
+    out "BACKFILL PENDIENTE: $REMAINING sesiones sin procesar. Run /backfill-3t to import past sessions."
+    out ""
   fi
 fi
 
 if [ "$IS_PAPERCLIP_AGENT" = true ]; then
-  echo "PROTOCOLO: Usar /save-learning cuando descubras un patron o regla nueva."
+  out "PROTOCOLO: Usar /save-learning cuando descubras un patron o regla nueva."
 else
-  echo "PROTOCOLO: Dual-write siempre (indice + archivo detalle) para sessions, pendientes y learnings. Plans y research solo si aplica."
-  echo "Usar /checkpoint-3t para guardar progreso."
+  out "PROTOCOLO: Dual-write siempre (indice + archivo detalle) para sessions, pendientes y learnings. Plans y research solo si aplica."
+  out "Usar /checkpoint-3t para guardar progreso."
 fi
+
+# Nada puede imprimir despues de esto.
+emit_output
