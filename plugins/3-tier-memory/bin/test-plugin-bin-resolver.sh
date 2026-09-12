@@ -31,10 +31,6 @@ done
 mkdir -p "$H/.claude/plugins/marketplaces/mkt/plugins/3-tier-memory/bin"
 : > "$H/.claude/plugins/marketplaces/mkt/plugins/3-tier-memory/bin/journal-emit.py"
 
-viejo() {   # el patron que se retira, para el control
-  dirname "$(find "$1/.claude/plugins" -name "journal-emit.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)"
-}
-
 echo "1. con installed_plugins.json gana la version INSTALADA, no la mas alta del cache"
 cat > "$H/.claude/plugins/installed_plugins.json" <<'EOF'
 {"plugins": {"3-tier-memory@mkt": [{"scope": "user", "version": "2.9.0",
@@ -48,8 +44,14 @@ open(p, "w", encoding="utf-8").write(t)
 PY
 GOT=$(env -u CLAUDE_PLUGIN_ROOT HOME="$H" bash "$BIN/resolve-plugin-bin.sh")
 check "devuelve la instalada (2.9.0)" "$GOT" "$H/.claude/plugins/cache/mkt/3-tier-memory/2.9.0/bin"
-check "CONTROL: el patron viejo devolvia otra cosa" \
-  "$([ "$(viejo "$H")" = "$GOT" ] && echo igual || echo distinto)" "distinto"
+# El patron viejo no es "siempre mal": es ARBITRARIO. Que su `head -1` coincida o no con la version
+# instalada depende del orden del sistema de ficheros. La primera version de este CONTROL afirmaba
+# "devuelve otra cosa" y paso en macOS por suerte: el CI lo puso en Linux el 2026-09-12 y ahi el
+# find devolvio justo la instalada, asi que fallo. Lo comprobable de verdad no es el resultado sino
+# la AUSENCIA DE CRITERIO: habiendo mas de una candidata, `head -1` elige sin mirar la version.
+_N=$(find "$H/.claude/plugins" -name "journal-emit.py" -path "*/3-tier-memory/*" 2>/dev/null | wc -l | tr -d " ")
+check "CONTROL: el patron viejo elegia a ciegas entre >1 candidata" \
+  "$([ "${_N:-0}" -ge 2 ] && echo si || echo no)" "si"
 
 echo "1b. entre VARIAS entradas instaladas gana la version mas alta, y una prerelease pierde"
 # Adversario ronda 2: `clave()` tomaba TODOS los digitos de cada parte, asi que "0-rc1" valia 1 y
