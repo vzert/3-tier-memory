@@ -411,9 +411,54 @@ def monthly_path(mem, creado):
     return os.path.join(mem, "pendientes", creado[:7] + ".md")
 
 
+def anotar_nota_perdida(mem, path, pid, nota):
+    """Guarda en disco la nota de cierre que no cabe en una fila sin `Sesion resolucion`.
+
+    El `WARN` solo no basta: `recall.sh` corre el compactador con `--quiet >/dev/null 2>&1`, asi
+    que por ese camino la nota se iria sin dejar rastro — "no en silencio" era cierto para el
+    checkpoint y falso para ese hook (adversario externo, ronda 1, H4). Esto no reescribe la
+    tabla de nadie: deja la nota en un log propio del journal, con su id y su fichero, para que
+    se pueda recuperar a mano.
+    """
+    try:
+        d = os.path.join(mem, ".journal")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "notas-sin-columna.log"), "a",
+                  encoding="utf-8", newline="\n") as fh:
+            fh.write(f"{date.today().isoformat()}\t{os.path.basename(path)}\t{pid}\t{nota}\n")
+        return True
+    except Exception:
+        return False
+
+
+def header_issue(lines):
+    """Que le pasa a la cabecera de este mensual, o None si esta bien. No la arregla.
+
+    `ensure_monthly` escribe la cabecera canonica de 7 columnas SOLO al crear el fichero, y
+    hasta 2.18.0 nadie la volvia a mirar: un mensual con cabecera de 5 columnas convivia
+    indefinidamente con filas de 7 que el propio compactador le escribia encima, sin un aviso.
+    Medido 2026-09-11 en una instalacion real: `2026-08.md` con 5 columnas — le faltaba
+    `Sesion resolucion`, justo la que registra que sesion cerro el item — y `2026-09.md` con 6.
+    """
+    hmap = header_map(lines)
+    if hmap is None:
+        return "cabecera ausente o con nombres de columna que no se reconocen"
+    if hmap == list(range(7)):
+        return None
+    faltan = [CANON_COLS[c] for c in range(7) if c not in hmap]
+    return f"cabecera de {len(hmap)} columnas; falta(n): {', '.join(faltan)}"
+
+
 def ensure_monthly(path, ym):
     if os.path.isfile(path):
-        return read_lines(path)
+        lines = read_lines(path)
+        problema = header_issue(lines)
+        if problema:
+            # No se reescribe: cambiar la cabecera de un historial ajeno es una migracion, y se
+            # decidio no hacerla desde aqui. Se avisa, con el fichero y que columna falta.
+            log(f"WARN monthly: {os.path.basename(path)} — {problema}. Las filas nuevas se "
+                f"escriben con las 7 columnas canonicas; revisa la cabecera a mano.")
+        return lines
     os.makedirs(os.path.dirname(path), exist_ok=True)
     y, m = ym.split("-")
     mes = MESES[int(m) - 1] if 1 <= int(m) <= 12 else m
@@ -427,8 +472,154 @@ def ensure_monthly(path, ym):
     ]
 
 
+# Columnas canonicas del mensual. El indice es el que usan TODOS los lectores y escritores
+# (cells[COL_PRIO] es la prioridad, cells[COL_RESUELTO] la fecha de cierre), sea cual sea la
+# forma que la fila tenga EN DISCO. Medido 2026-09-11 en una instalacion real: conviven cuatro
+# formas — 7 celdas con numero, 6 con numero (sin `Sesion resolucion`), 6 sin numero y 5 sin
+# numero (sin `#` ni `Sesion resolucion`) — porque `ensure_monthly` solo escribe la cabecera
+# canonica al CREAR el fichero y nada la valida despues.
+COL_NUM, COL_TEXT, COL_PRIO, COL_CREADO, COL_ORIGEN, COL_RESUELTO, COL_SESION = range(7)
+CANON_COLS = ["#", "Pendiente", "Prioridad", "Creado", "Origen", "Resuelto", "Sesion resolucion"]
+PRIO_CELL = re.compile(r"^(Alta|Media|Baja)$", re.I)
+MID_RE = re.compile(r"_id:\s*(p-[0-9a-f]{10})_")
+_COL_ALIAS = {"#": 0, "n": 0, "num": 0, "pendiente": 1, "item": 1, "prioridad": 2, "prio": 2,
+              "creado": 3, "origen": 4, "resuelto": 5, "sesion resolucion": 6, "sesion": 6}
+
+
+def _colkey(cell):
+    """Nombre de columna comparable: minusculas, sin tildes, espacios colapsados."""
+    t = unicodedata.normalize("NFD", (cell or "").strip().lower())
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def header_map(lines):
+    """[indice canonico de cada columna EN DISCO] leido de la cabecera, o None si no se reconoce.
+
+    Una cabecera corta no tiene columnas *distintas*: tiene las canonicas menos algunas, y es la
+    unica fuente que dice CUALES faltan sin adivinar. Se exige que los nombres sean canonicos,
+    distintos y en orden creciente; cualquier otra cosa devuelve None y la fila se alinea por su
+    forma.
+    """
+    for line in lines:
+        s = line.strip()
+        if not s.startswith("|") or is_separator(line):
+            continue
+        keys = [_colkey(c) for c in split_cells(line)]
+        if keys and all(k in _COL_ALIAS for k in keys):
+            idx = [_COL_ALIAS[k] for k in keys]
+            if len(set(idx)) == len(idx) and idx == sorted(idx):
+                return idx
+        return None          # la primera fila de tabla no es una cabecera reconocible
+    return None
+
+
+def align_row(line, hmap=None):
+    """(cells7, colmap) de una fila de mensual, o (None, motivo) si no se puede alinear.
+
+    `cells7` sale SIEMPRE en orden canonico, asi que quien escribe indexa igual con una fila de
+    7, de 6 o de 5 celdas, con numero o sin el. `colmap` dice que columna canonica ocupa cada
+    celda en disco, para devolver la fila con SU MISMA forma (ver `render_row`): esto no
+    normaliza ni numera nada, que es justo lo que no se quiere hacerle al historial de nadie.
+
+    El ancla es la FECHA de `Creado`, no la prioridad. Una prioridad no canonica (`Media→Alta`,
+    escrita a mano) es un problema de VALOR con las columnas en su sitio; exigirla aqui haria
+    ilocalizable esa fila y el compactador le escribiria una segunda al lado — el mismo defecto
+    que este alineador cierra. Los valores raros se reportan aparte (`odd_value_rows`).
+
+    Donde NO se adivina, y por que. Una fila corta admite mas de una lectura: `| 56 | texto |
+    Alta | 2026-07-20 | algo | algo |` puede ser "le falta `Sesion resolucion`" o "le falta
+    `Origen`", y la fecha de `Creado` esta en su sitio en las dos. Si se elige mal, un cierre
+    escribe la fecha sobre la celda equivocada — o sea que el lector tolerante INTRODUCE la
+    perdida de datos que venia a cerrar (adversario externo, ronda 1, H1).
+    La cabecera del fichero es lo que rompe el empate, y solo ella:
+      - cabecera reconocida y la fila tiene SUS columnas -> mapa exacto;
+      - cabecera reconocida y la fila es mas CORTA -> faltan las celdas FINALES, que es lo que
+        significa una fila corta en markdown (la tabla la renderiza asi);
+      - cabecera reconocida SIN `#` y la fila trae una celda mas, empezando por un numero -> es
+        una fila de 7 que el compactador escribio en un fichero de cabecera corta;
+      - cabecera NO reconocida -> solo se aceptan las dos formas donde NO falta ninguna columna
+        (7 celdas con numero, 6 sin numero). Cualquier otra se devuelve sin alinear, con su
+        motivo, y la cuenta `unaligned_rows`.
+    """
+    raw = split_cells(line)
+    n = len(raw)
+    if n < 4:
+        return None, f"{n} celdas: menos que las cuatro minimas (texto, prioridad, creado, origen)"
+    if n > 7:
+        return None, f"{n} celdas: mas de 7 (un `|` crudo en el texto parte la fila)"
+    numerada = bool(re.match(r"^\s*\d+\s*$", raw[0] or ""))
+    cands = []
+    if hmap:
+        if len(hmap) == n:
+            cands.append(list(hmap))
+        elif n < len(hmap):
+            cands.append(list(hmap[:n]))
+        elif numerada and 0 not in hmap and n == len(hmap) + 1:
+            cands.append([0] + list(hmap))
+    if n == 7 and numerada:
+        cands.append(list(range(0, 7)))
+    elif n == 6 and not numerada:
+        cands.append(list(range(1, 7)))
+    for cmap in cands:
+        if max(cmap) > 6:
+            continue
+        cells = [""] * 7
+        for pos, col in enumerate(cmap):
+            cells[col] = raw[pos]
+        if DATE_RE.match(cells[COL_CREADO]):
+            return cells, cmap
+    if not cands:
+        return None, (f"{n} celdas" + (" con numero" if numerada else " sin numero") +
+                      ", y la cabecera del fichero no dice que columnas son: la fila admite mas "
+                      f"de una lectura y no se adivina")
+    return None, (f"{n} celdas y ninguna alineacion deja una fecha en `Creado` "
+                  f"(candidatas: {cands})")
+
+
+def render_row(cells7, cmap):
+    """La fila de vuelta con la MISMA forma en disco que tenia. No normaliza ni numera.
+
+    Las dos celdas finales vacias se escriben `| | |` como las escribe `apply_add_monthly`: con
+    `join_cells` saldria `|  |  |` y la fila no volveria byte a byte a como nacio.
+    """
+    return re.sub(r"\|\s+\|\s+\|$", "| | |",
+                  "| " + " | ".join(cells7[c] for c in cmap) + " |")
+
+
+def monthly_rows(lines):
+    r"""[(indice, cells7, colmap)] de cada fila alineable del mensual, CON o SIN numero.
+
+    La version anterior filtraba por `^\|\s*\d+\s*\|`, asi que una fila sin la columna `#` no
+    existia para nadie: `find_monthly_row` no la encontraba, `apply_add_monthly` escribia una
+    SEGUNDA fila para el mismo pendiente y `apply_resolve_monthly` dejaba un WARN y perdia la
+    fecha de cierre y la sesion que lo cerro. Medido 2026-09-11: 39 filas asi en una instalacion.
+    """
+    hmap = header_map(lines)
+    out = []
+    for i, line in enumerate(lines):
+        s = line.strip()
+        if not s.startswith("|") or is_separator(line):
+            continue
+        keys = [_colkey(c) for c in split_cells(line)]
+        if keys and all(k in _COL_ALIAS for k in keys):
+            continue                      # una fila cuyas celdas son TODAS nombres de columna
+                                          # es la cabecera, no un pendiente
+        cells, cmap = align_row(line, hmap)
+        if cells is None:
+            continue
+        out.append((i, cells, cmap))
+    return out
+
+
 def table_rows(lines):
-    """(indice, celdas) de cada fila numerada de la tabla."""
+    """(indice, celdas) de cada fila NUMERADA de la tabla.
+
+    Deliberadamente solo numeradas: lo unico que queda que la usa es el calculo del numero
+    siguiente, que necesita justo las que llevan numero. Para localizar un pendiente por id,
+    leer su prioridad o diagnosticar una fila, usar `monthly_rows`, que tambien ve las que no
+    lo llevan.
+    """
     out = []
     for i, line in enumerate(lines):
         s = line.strip()
@@ -512,13 +703,20 @@ def apply_expire_monthly(mem, p):
     if not found:
         log(f"WARN monthly: sin fila con id {p['id']} — caducado sin fila de Tier 3")
         return False
-    path, lines, i = found
-    cells = pad(split_cells(lines[i]), 7)
-    if cells[5]:
+    path, lines, i, cells, cmap = found
+    if cells[COL_RESUELTO]:
         return False  # ya cerrado (idempotente)
-    cells[5] = p.get("fecha") or date.today().isoformat()
-    cells[6] = f"expired — sin actividad en {p.get('dias', '?')} dias"
-    lines[i] = join_cells(cells)
+    cells[COL_RESUELTO] = p.get("fecha") or date.today().isoformat()
+    nota = f"expired — sin actividad en {p.get('dias', '?')} dias"
+    if COL_SESION in cmap:
+        cells[COL_SESION] = nota
+    else:
+        guardada = anotar_nota_perdida(mem, path, p["id"], nota)
+        destino = (".journal/notas-sin-columna.log" if guardada
+                   else "NINGUN SITIO (no se pudo escribir el log)")
+        log(f"WARN monthly: {os.path.basename(path)} no tiene columna `Sesion resolucion`; "
+            f"{p['id']} queda con la fecha y la nota en {destino}: {nota}")
+    lines[i] = render_row(cells, cmap)
     atomic_write(path, lines)
     return True
 
@@ -576,7 +774,7 @@ def apply_reopen(mem, p):
             prio = ""
         if not prio:
             found = find_monthly_row(mem, p["id"])
-            prio = pad(split_cells(found[1][found[2]]), 7)[2] if found else ""
+            prio = found[3][COL_PRIO] if found else ""
         h = header_index(lines, prio) if prio else None
         if h is None:
             h = header_index(lines, "media")
@@ -599,20 +797,26 @@ def apply_reopen(mem, p):
 
     found = find_monthly_row(mem, p["id"])
     if found:
-        mpath, mlines, i = found
-        cells = pad(split_cells(mlines[i]), 7)
-        if cells[6].startswith("expired"):
-            cells[5] = ""
-            cells[6] = ""
-            # apply_add_monthly escribe las dos celdas vacias como "| | |"; join_cells daria
-            # "|  |  |" y la fila no volveria byte a byte a como nacio.
-            mlines[i] = re.sub(r"\|\s+\|\s+\|$", "| | |", join_cells(cells))
+        mpath, mlines, i, cells, cmap = found
+        # Una fila sin columna `Sesion resolucion` no pudo guardar el "expired —...", asi que la
+        # marca de caducado es la FECHA: se limpia igual, y no se exige la nota para reabrir.
+        if cells[COL_SESION].startswith("expired") or \
+                (COL_SESION not in cmap and cells[COL_RESUELTO]):
+            cells[COL_RESUELTO] = ""
+            cells[COL_SESION] = ""
+            mlines[i] = render_row(cells, cmap)
             atomic_write(mpath, mlines)
     return True
 
 
 def find_monthly_row(mem, pid):
-    """Busca la fila con ese id en cualquier mensual. Devuelve (path, lines, idx) o None."""
+    """Busca la fila de ese id en cualquier mensual. (path, lines, idx, cells7, colmap) o None.
+
+    El id se busca en la CELDA DE TEXTO y se toma el ULTIMO `_id:` de esa celda, que es el
+    propio: el texto de un pendiente puede citar el id de otro, y buscar `_id: X_` en la linea
+    entera devolvia la fila del que lo cita. Antes no se notaba porque la mitad de las filas era
+    invisible; al verlas todas, ese falso positivo crece, asi que se cierra aqui.
+    """
     d = os.path.join(mem, "pendientes")
     if not os.path.isdir(d):
         return None
@@ -621,9 +825,10 @@ def find_monthly_row(mem, pid):
             continue
         path = os.path.join(d, fn)
         lines = read_lines(path)
-        for i, cells in table_rows(lines):
-            if f"_id: {pid}_" in lines[i]:
-                return path, lines, i
+        for i, cells, cmap in monthly_rows(lines):
+            ids = MID_RE.findall(cells[COL_TEXT])
+            if ids and ids[-1] == pid:
+                return path, lines, i, cells, cmap
     return None
 
 
@@ -651,21 +856,30 @@ def apply_resolve_monthly(mem, p):
     if not found:
         log(f"WARN monthly: sin fila con id {p['id']} — llenar Resuelto a mano si aplica")
         return False
-    path, lines, i = found
+    path, lines, i, cells, cmap = found
+    # Las celdas llegan YA alineadas a las columnas canonicas (ver align_row): con una fila de 5
+    # o 6 celdas, indexar en crudo ponia la fecha de cierre sobre `Origen`. Y el alineador usa
     # split_cells, no split("|"): un `|` dentro del texto (`sort \\| uniq -c`) partia la fila en
-    # mas de 7 celdas, cells[5] caia sobre la prioridad ("Alta"), se leia como "ya resuelto" y el
-    # pendiente no se podia cerrar nunca — en silencio. Medido 2026-09-10: 7 filas en claude-vzert.
-    cells = split_cells(lines[i])
-    while len(cells) < 7:
-        cells.append("")
-    if cells[5]:
+    # mas de 7 celdas y el pendiente no se podia cerrar nunca, en silencio.
+    if cells[COL_RESUELTO]:
         return False  # ya resuelto (idempotente)
     parts = [x for x in (p.get("sesion", ""), p["estado"], p.get("nota", "")) if x]
-    cells[5] = p.get("fecha") or date.today().isoformat()
+    cells[COL_RESUELTO] = p.get("fecha") or date.today().isoformat()
     # escape_cell tambien aqui: una nota de cierre con un `|` (`7 filas con | reparadas`) volvia
     # a partir la fila en mas de 7 celdas, justo el defecto que este arreglo cierra del otro lado.
-    cells[6] = escape_cell(" — ".join(parts))
-    lines[i] = "| " + " | ".join(cells) + " |"
+    nota = escape_cell(" — ".join(parts))
+    if COL_SESION in cmap:
+        cells[COL_SESION] = nota
+    elif nota:
+        # La fila no tiene donde guardarla. Se escribe la fecha (que si cabe), la nota va al log
+        # del journal —que SOBREVIVE a un `--quiet >/dev/null`— y ademas se avisa. Normalizar la
+        # fila aqui reescribiria historial ajeno, que es lo que se decidio no hacer.
+        guardada = anotar_nota_perdida(mem, path, p["id"], nota)
+        destino = (".journal/notas-sin-columna.log" if guardada
+                   else "NINGUN SITIO (no se pudo escribir el log)")
+        log(f"WARN monthly: {os.path.basename(path)} no tiene columna `Sesion resolucion`; "
+            f"{p['id']} cierra con fecha y la nota queda en {destino}: {nota}")
+    lines[i] = render_row(cells, cmap)
     atomic_write(path, lines)
     return True
 

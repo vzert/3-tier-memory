@@ -1,5 +1,168 @@
 # Changelog
 
+## [2.18.0] - 2026-09-11
+Una fila del historial mensual **sin la columna `#` no existia para ningun script del plugin**, y de
+ahi salian duplicados silenciosos. `journal-compact.table_rows` y los tres lectores de
+`repair-dualwrite` decidian "esta linea es una fila" con `re.match(r"^\|\s*\d+\s*\|", s)`, asi que
+`find_monthly_row` no encontraba esas filas, `apply_add_monthly` escribia una **segunda** para el
+mismo pendiente y `apply_resolve_monthly` dejaba un `WARN` y perdia la fecha de cierre y la sesion
+que lo cerro. El informe lo reportaba al contrario: con el codigo de 2.17.1, sobre un corpus real
+de otra instalacion, `repair-dualwrite --apply` decia `rows_added=1` y dejaba **dos filas** para el
+mismo id — el duplicado lo creaba la reparacion.
+
+Reportado por la sesion del repo `goal-spec-skill`, que lo encontro migrando sus propios mensuales,
+con un corpus de 80K para reproducirlo. Sus tres defectos se confirmaron en el arbol de trabajo
+antes de tocar nada; una de sus cifras no: el tarball **no** reproduce los `rows_added=49` de su
+corrida (da `rows_added=0`, porque sus 49 venian de su memoria viva, no del corpus), asi que el
+fixture de la prueba se construyo aqui. Y hay un cuarto camino que el informe no nombraba: el que
+duplica esta tambien en `journal-compact.find_monthly_row`, o sea que **el compactador se duplicaba
+solo**, sin que `repair-dualwrite` corriera nunca.
+
+Medido el 2026-09-11 sobre ese corpus, con un instrumento propio: **39 filas sin numero** (34 en
+`2026-08.md`, 5 en `2026-09.md`) y cabeceras de **5 y 6 columnas** donde la canonica tiene 7. Las
+cuatro formas de fila que existen en la vida real: 7 celdas con numero (160), 6 con numero (1), 6
+sin numero (6) y 5 sin numero (33).
+
+Decision del usuario, preguntada antes de escribir codigo: **lector tolerante, no migrador**; **solo
+codigo, no se reescribe ningun dato en disco**; y publicar al marketplace. Un migrador habria sido
+la otra mitad del arreglo, pero reescribe historial ajeno y es la unica parte irreversible.
+
+### Fixed
+- **Las filas sin `#` se leen, se localizan y se cierran.** El lector nuevo (`monthly_rows`,
+  `align_row`, `header_map`, `render_row` en `journal-compact.py`) devuelve las celdas **ya
+  alineadas a las columnas canonicas**, no en crudo. Esto era lo unico que no podia hacerse
+  ensanchando el filtro: todos los escritores indexan por posicion (`cells[5]` es `Resuelto`), asi
+  que en una fila de 6 celdas sin numero cada indice cae una columna a la izquierda y un cierre
+  habria escrito la fecha sobre `Sesion resolucion`. El ancla de la alineacion es la **fecha de
+  `Creado`**, no la prioridad: exigir la prioridad dejaba ilocalizable una fila con un valor
+  escrito a mano y el compactador le escribia otra al lado — el mismo defecto por otra puerta.
+- **`render_row` devuelve la fila con SU forma en disco.** Una fila de 5 celdas sigue teniendo 5
+  celdas despues de cerrarse: no se numera ni se normaliza nada. Cuando la nota de cierre no tiene
+  columna donde caber, se escribe la fecha (que si cabe) y la nota sale por un `WARN` con su id —
+  se pierde de la tabla, pero **no en silencio**, que es el fallo que este script existe para
+  cerrar.
+- **`find_monthly_row` busca el id en la CELDA DE TEXTO**, y toma el ultimo `_id:` de esa celda, que
+  es el propio. Antes buscaba `_id: X_` en la linea entera y devolvia la fila de un pendiente que
+  *cita* el id de otro. No era visible porque la mitad de las filas era invisible; al verlas todas,
+  ese falso positivo crece, asi que entra en el mismo cambio.
+- **`repair-dualwrite`: los cuatro lectores comparten el lector nuevo.** `existing_ids` ya no
+  concluye "este pendiente no tiene fila de Tier 3" cuando la tiene sin numero. Una fila con `|`
+  crudo y **sin** numero se reporta en vez de repararse: el colapso de `row_cells` asume que la
+  celda 0 es el numero, asi que reconstruirla moveria el texto de columna.
+
+### Changed
+- **El informe GRAVE ya no afirma una causa que no puede determinar** (`shifted_rows` →
+  `unaligned_rows`). Decia "El dato original se perdio; reconstruyela de un respaldo", y la senal
+  que lo disparaba — prioridad o fecha no canonicas — la produce al menos otra cosa: una fila
+  escrita a mano con un valor no canonico, donde no se perdio nada. Caso real, `2026-07.md:111`:
+  `Media→Alta` en la celda de prioridad, las 7 celdas en su sitio, 8 `|` crudos, 0 escapes. Ahora
+  el mensaje imprime **lo que se midio** (celdas, `|` crudos, `\|` escapados, el motivo del
+  alineador) y **lista** las causas posibles. Un colapso mal hecho deja `|` crudos dentro de una
+  celda, que vuelven a partir la fila: por eso una fila colapsada aparece con MAS de 7 celdas y la
+  cuenta `pipes_broken`, no esta.
+- **Contador nuevo `odd_values`**: fila bien alineada cuya `Prioridad` no es Alta, Media ni Baja. No
+  falta ni se movio nada; lo que rompe es `header_index`, que no sabra donde reinsertar la linea si
+  se reabre. El informe lo dice con esas palabras.
+- **Contador nuevo `header_issues` y validacion de cabecera en cada pasada** (`header_issue`).
+  `ensure_monthly` escribia la cabecera canonica **solo al CREAR** el fichero y nadie la volvia a
+  mirar, asi que un mensual de 5 columnas convivia indefinidamente con las filas de 7 que el propio
+  compactador le escribia encima. Ahora avisa, con el fichero y **que columna falta**, y el aviso
+  distingue la consecuencia: sin `Sesion resolucion` un cierre pierde la sesion que lo cerro; sin
+  `#` las filas nuevas salen numeradas y las viejas no, nada mas. No la reescribe: eso es una
+  migracion.
+- **Los comandos localizan el plugin por version instalada, no por el orden de `find`**
+  (`bin/resolve-plugin-bin.sh`, nuevo). Los 13 sitios de 7 ficheros (6 plantillas y
+  `commands/migrate.md`) usaban
+  `find "$HOME/.claude/plugins" -name X.py -path "*/3-tier-memory/*" | head -1`, cuyo orden **no es
+  por version**: en esta maquina, con 14 versiones en el cache, devolvia la **2.13.2 con la 2.17.1
+  instalada**, asi que un checkpoint habria escrito los indices con scripts cuatro versiones viejos
+  en silencio. Resuelve en este orden: `$CLAUDE_PLUGIN_ROOT/bin` (el plugin que corre, lo tienen los
+  hooks) → `installPath` de `installed_plugins.json` (la unica fuente de cual esta **instalado**: el
+  cache puede guardar una descarga que no es la activa, asi que "la mas alta del cache" no es lo
+  mismo) → la mas alta del cache por `sort -V` → su propio directorio. El fallback de las plantillas
+  usa `sort -V | tail -1` en vez de `head -1`, asi que ni antes de que 2.18.0 este instalada puede
+  elegir una version vieja.
+
+### Added
+- **`bin/test-monthly-rows.sh`** — 7 casos: que no se duplica la fila sin numero, que la segunda
+  corrida deja el fichero byte a byte igual, que un cierre rellena `Resuelto` **en su columna**
+  conservando las 5 celdas, que la fila canonica sigue usando las 7, que un huerfano de verdad
+  **si** recibe su fila (el arreglo no apaga la reparacion), la discriminacion de D2 en los dos
+  sentidos, y una **prueba de conservacion de contenido con parser propio**, escrito en el test y
+  sin importar `journal-compact`: un verificador que comparte el reparto de celdas del codigo que
+  verifica no puede ver un error en ese reparto.
+- **`bin/test-plugin-bin-resolver.sh`** — 7 casos, cada uno con su control del patron viejo sobre el
+  mismo arbol: gana la version *instalada* y no la mas alta; `2.10.0` gana a `2.9.0` (donde `sort`
+  alfabetico se equivoca); un `installed_plugins.json` ilegible no rompe nada; `CLAUDE_PLUGIN_ROOT`
+  manda; sin plugin no imprime ruta y sale 1; y cero `find ... | head -1` vivos en las plantillas. Los dos que quedan en el repo son el comentario que documenta el patron retirado y el CONTROL de esta propia prueba, que lo ejecuta a proposito para comparar.
+
+### Verificacion
+- **Las 11 suites de `bin/test-*.sh` en verde**, incluidas las 9 anteriores; `check-index-writers`:
+  `scanned=24 undeclared=0 mislabeled=0`. Esta medicion es **propia**: el verificador externo no
+  pudo repetirla porque su sandbox le niega `mktemp`. Cualquiera la repite con
+  `for t in plugins/3-tier-memory/bin/test-*.sh; do bash "$t"; done`.
+- **Viejo contra nuevo, sobre el mismo fixture, ejecutando el bloque de 2.17.1 sacado de
+  `git show HEAD:`** (no un proxy escrito a mano): `rows_added=1` y 2 filas del mismo id →
+  `rows_added=0` y 1 fila. En el cierre: el viejo anadia una fila numerada nueva; el nuevo rellena
+  `2026-09-11` en la celda `Resuelto` de la fila que ya estaba, con sus 5 celdas intactas.
+- **Sobre el corpus real: 200 filas de mensual** (126 + 53 + 21; las otras 44 del tarball viven en
+  `2026-07-25-triage-post-0190.md`, que no es un mensual y tiene otra tabla de 4 columnas). Resultado:
+  `unaligned_rows=0 odd_values=1 header_issues=2`, es decir las 39 filas sin numero se ven todas, el
+  unico valor raro es el `Media→Alta` y las dos cabeceras cortas salen nombradas. Con 2.17.1 el mismo
+  corpus daba `shifted_rows=1` — acusando de dato perdido justamente a esa fila — y **no veia** una
+  fila a la que le faltan columnas de verdad. (La cifra "244" estuvo en este CHANGELOG y era la de
+  todas las filas del tarball, triage incluido: la cazo el adversario externo re-derivandola.)
+- **Ningun dato de nadie se reescribio**: no se toco `memory/` de este repo ni de `goal-spec-skill`;
+  todo corrio sobre copias en un directorio temporal.
+- **Adversario externo (Codex / GPT-5, otro proveedor), ronda 1 antes de publicar:
+  `break ungrounded=4 incomplete=1 unsafe=2`.** Seis hallazgos reales, los seis arreglados aqui:
+  - **H1 (unsafe), el peor: el lector tolerante introducia la perdida de datos que venia a cerrar.**
+    `| 56 | texto | Alta | 2026-06-10 | a | b |` sin cabecera que lo explique puede ser "le falta
+    `Sesion resolucion`" o "le falta `Origen`", y la fecha de `Creado` esta en su sitio en las dos.
+    La primera version elegia siempre la primera lectura, asi que un cierre podia escribir la fecha
+    sobre la celda equivocada. Ahora la cabecera del fichero es lo unico que rompe el empate: con
+    cabecera reconocida, una fila corta pierde las celdas FINALES (que es lo que significa en
+    markdown); **sin** cabecera reconocida solo se aceptan las dos formas donde no falta ninguna
+    columna (7 con numero, 6 sin numero) y cualquier otra se devuelve sin alinear, con su motivo.
+  - **H5 (incomplete), consecuencia del anterior**: una fila falsamente alineada no caia en ningun
+    contador, asi que el informe podia decir todo a cero con las columnas desplazadas. Cerrado por
+    el mismo cambio: ahora cae en `unaligned_rows`.
+  - **H4 (ungrounded): "no en silencio" era falso para un camino.** `recall.sh` corre el compactador
+    con `--quiet >/dev/null 2>&1`, asi que por ahi el `WARN` de la nota que no cabe se descartaba.
+    Ahora la nota va tambien a `.journal/notas-sin-columna.log`, con fecha, fichero e id.
+  - **H6 (ungrounded): la afirmacion sobre `installed_plugins.json` era mas fuerte que lo medido.**
+    No se verifico que resuelva varios marketplaces o ambitos. El resolutor ya no toma "la primera
+    entrada que coincide": entre varias toma la de **version mas alta**, comparada por numeros, y el
+    comentario dice que eso es una eleccion declarada y no un conocimiento de cual esta activo.
+  - **H7 (ungrounded)**: las 244 filas, arriba.
+  - **H8 (nota fuera de la superficie)**: quedaba un `find ... | head -1` vivo en
+    `commands/migrate.md`. El barrido de la regla solo habia mirado `templates/`, que es una
+    cobertura incompleta: `commands/` tambien lleva comandos. Arreglado, y son 13 sitios en 7
+    ficheros, no 12 en 6.
+  - **H2 (unsafe)**: sin prueba de conservacion exacta para CRLF. Anadida: un mensual con saltos de
+    Windows conserva su numero de CRLF y no queda ni un `\n` suelto despues de un cierre.
+  - H3 refutada (las filas sin numero no ocupan numero, asi que `max+1` no puede colisionar) y la
+    revision de autonomia tambien: las tres decisiones estan en la transcripcion como
+    `AskUserQuestion` con su respuesta.
+  - Lo que **no** pudo re-ejecutar: las 11 suites, porque `mktemp` le dio `Operation not permitted`
+    en su propio entorno. Es un limite de su sandbox, no un defecto del cambio; las 11 corren en
+    verde aqui, y esa parte no tiene verificacion independiente.
+- **Adversario externo, ronda 2 (delta, solo sobre los arreglos de la ronda 1):
+  `break ungrounded=4 incomplete=1 unsafe=1`.** Refuto H1/H5 importando el modulo y construyendo
+  filas nuevas (la de 6 celdas sin cabecera queda sin alinear; las cabeceras repetidas, desordenadas
+  o con nombres parecidos se rechazan; ninguna forma legitima del corpus se perdio) y volvio a
+  refutar H3 y la autonomia. Lo que **si** encontro, y esta arreglado:
+  - **Las cifras viejas seguian vivas en la seccion autoritativa del checkpoint** (C4 decia 244
+    filas, C7 decia 8 sitios en 6 plantillas) mientras "Medido" y este CHANGELOG ya estaban
+    corregidos: el mismo fichero se contradecia. Corregido, con la nota de por que.
+  - **El comentario copiado en los 13 sitios decia "Ruta del plugin ACTIVO"** cuando el propio
+    resolutor admite que, si el plugin llega por varios marketplaces, no sabe cual esta activo.
+    Ahora dice lo que hace: la version mas alta de las **instaladas**.
+  - **El orden de versiones del resolutor no era semantico**: `clave()` tomaba todos los digitos de
+    cada parte, asi que `"0-rc1"` valia `1` y `2.18.0-rc1` salia **por encima** de `2.18.0`. Ahora
+    cuenta los digitos de cabecera y un sufijo baja el empate; con prueba propia en
+    `test-plugin-bin-resolver.sh` (caso 1b).
+
 ## [2.17.1] - 2026-09-11
 `/migrate` decide que lineas borrar de un hook legacy del usuario **a partir de lo que el plugin
 re-emite**, y 2.17.0 recorto justo eso. Su regla decia que un volcado de `_pendientes.md` es emision

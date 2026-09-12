@@ -34,7 +34,15 @@ if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-emit.
 elif [ -f "plugins/3-tier-memory/bin/journal-emit.py" ]; then
   JBIN="$PWD/plugins/3-tier-memory/bin"     # the plugin's own repo: dogfood the working tree, not the cache
 else
-  JEMIT=$(find "$HOME/.claude/plugins" -name "journal-emit.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)
+  # Ruta del plugin INSTALADO: la version mas alta de `installed_plugins.json`
+  # (si el plugin llega por varios marketplaces, cual esta activo no se sabe).
+  # `find ... | head -1` devolvia una version ARBITRARIA del
+  # cache (medido 2026-09-11: 2.13.2 con 2.17.1 instalada), y un checkpoint escribia
+  # los indices con scripts cuatro versiones viejos, en silencio.
+  _R=$(find "$HOME/.claude/plugins" -name resolve-plugin-bin.sh -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)
+  _B=$([ -n "$_R" ] && bash "$_R" 2>/dev/null)
+  [ -n "$_B" ] || _B=$(dirname "$(find "$HOME/.claude/plugins" -name "journal-emit.py" -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)")
+  JEMIT=${_B:+$_B/journal-emit.py}
   JBIN=${JEMIT:+$(dirname "$JEMIT")}   # empty when find found nothing (dirname "" would give ".")
 fi
 [ -n "$JBIN" ] && [ -f "$JBIN/journal-compact.py" ] && echo "JBIN=$JBIN" || echo "JBIN=NONE"
@@ -164,15 +172,22 @@ python3 "$JBIN/enrich-memory.py" "$MEMORY_DIR" --apply --only creado,id   # lega
 python3 "$JBIN/repair-dualwrite.py" "$MEMORY_DIR" --apply --fix-pipes    # Tier 2 lines with no Tier 3 row; rows a `|` made unclosable; idempotent
 ```
 
-`repair-dualwrite` prints `rows_added=N pipes_broken=N pipes_fixed=N shifted_rows=N unrepairable=N ids_invented=N missing_data=N`.
+`repair-dualwrite` prints `rows_added=N pipes_broken=N pipes_fixed=N unaligned_rows=N unrepairable=N odd_values=N header_issues=N ids_invented=N missing_data=N`.
 **A non-zero `rows_added` or `ids_invented` means someone wrote Tier 2 outside the journal since the
 last checkpoint** — the dual write was bypassed. Without this repair those pendientes lose their
 resolution date and closing session when they are eventually closed. Report the counts in Step 7;
 if `missing_data>0`, the listed lines lack `_creado` or a priority header and need a look by hand.
-**`shifted_rows` or `unrepairable` above 0 is the serious one**: a Tier 3 row whose columns no
-longer mean what their header says, or that the repair refuses to touch because fixing it
+**`unaligned_rows` or `unrepairable` above 0 is the serious one**: a Tier 3 row that cannot be
+mapped onto the canonical columns at all, or that the repair refuses to touch because fixing it
 automatically would move data between columns. Neither is repaired for you — report the file and
-line in Step 7 and rebuild the row by hand from a backup or from its Tier 2 line.
+line in Step 7 and check it against its Tier 2 line before rewriting anything. Read the GRAVE line
+itself: it prints what was MEASURED (cells, raw `|`, escaped `\|`) and lists the candidate causes.
+It no longer claims the data is lost, because that was only one of them — a hand-written row
+missing middle columns produces the same signal with nothing lost.
+`odd_values>0` and `header_issues>0` are warnings, not damage: the first is a row that is aligned
+fine but whose `Prioridad` is not Alta/Media/Baja (fix the value, not the row); the second is a
+monthly whose header is shorter than the canonical 7 columns, so a close has nowhere to record the
+session that closed it. Neither is fixed automatically — rewriting a header is a migration.
 
 THEN read `memory/_pendientes.md`. Every open line now ends with `_id: p-xxxxxxxxxx_`. That id is
 how you resolve it in 3a; never match a line by its text.
@@ -408,7 +423,15 @@ MEMORY_DIR="memory"   # the directory located in Step 0 (Model B); use the Model
 if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/ensure-frontmatter.py" ]; then
   SEAL="${CLAUDE_PLUGIN_ROOT}/bin/ensure-frontmatter.py"
 else
-  SEAL=$(find "$HOME/.claude/plugins" -name "ensure-frontmatter.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)
+  # Ruta del plugin INSTALADO: la version mas alta de `installed_plugins.json`
+  # (si el plugin llega por varios marketplaces, cual esta activo no se sabe).
+  # `find ... | head -1` devolvia una version ARBITRARIA del
+  # cache (medido 2026-09-11: 2.13.2 con 2.17.1 instalada), y un checkpoint escribia
+  # los indices con scripts cuatro versiones viejos, en silencio.
+  _R=$(find "$HOME/.claude/plugins" -name resolve-plugin-bin.sh -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)
+  _B=$([ -n "$_R" ] && bash "$_R" 2>/dev/null)
+  [ -n "$_B" ] || _B=$(dirname "$(find "$HOME/.claude/plugins" -name "ensure-frontmatter.py" -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)")
+  SEAL=${_B:+$_B/ensure-frontmatter.py}
 fi
 [ -n "$SEAL" ] && python3 "$SEAL" "$MEMORY_DIR" --apply
 ```
@@ -429,7 +452,15 @@ MEMORY_DIR="memory"   # the directory located in Step 0 (Model B); use the Model
 if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/scan-secrets.py" ]; then
   SCAN="${CLAUDE_PLUGIN_ROOT}/bin/scan-secrets.py"
 else
-  SCAN=$(find "$HOME/.claude/plugins" -name "scan-secrets.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)
+  # Ruta del plugin INSTALADO: la version mas alta de `installed_plugins.json`
+  # (si el plugin llega por varios marketplaces, cual esta activo no se sabe).
+  # `find ... | head -1` devolvia una version ARBITRARIA del
+  # cache (medido 2026-09-11: 2.13.2 con 2.17.1 instalada), y un checkpoint escribia
+  # los indices con scripts cuatro versiones viejos, en silencio.
+  _R=$(find "$HOME/.claude/plugins" -name resolve-plugin-bin.sh -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)
+  _B=$([ -n "$_R" ] && bash "$_R" 2>/dev/null)
+  [ -n "$_B" ] || _B=$(dirname "$(find "$HOME/.claude/plugins" -name "scan-secrets.py" -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)")
+  SCAN=${_B:+$_B/scan-secrets.py}
 fi
 [ -n "$SCAN" ] && python3 "$SCAN" "$MEMORY_DIR" --apply
 ```

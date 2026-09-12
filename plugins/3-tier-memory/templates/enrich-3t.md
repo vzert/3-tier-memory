@@ -26,7 +26,17 @@ If `memory/` exists in the project root, use it (Model B); else use the auto-mem
 ```bash
 MEMORY_DIR="memory"   # or the Model A path if that's what you found
 BIN="${CLAUDE_PLUGIN_ROOT}/bin"
-[ -f "$BIN/enrich-memory.py" ] || BIN=$(dirname "$(find "$HOME/.claude/plugins" -name "enrich-memory.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)")
+if [ ! -f "$BIN/enrich-memory.py" ]; then
+  # Ruta del plugin INSTALADO: la version mas alta de `installed_plugins.json`
+  # (si el plugin llega por varios marketplaces, cual esta activo no se sabe).
+  # `find ... | head -1` devolvia una version ARBITRARIA del
+  # cache (medido 2026-09-11: 2.13.2 con 2.17.1 instalada), y un checkpoint escribia
+  # los indices con scripts cuatro versiones viejos, en silencio.
+  _R=$(find "$HOME/.claude/plugins" -name resolve-plugin-bin.sh -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)
+  _B=$([ -n "$_R" ] && bash "$_R" 2>/dev/null)
+  [ -n "$_B" ] || _B=$(dirname "$(find "$HOME/.claude/plugins" -name "enrich-memory.py" -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)")
+  BIN=$_B
+fi
 ENRICH="$BIN/enrich-memory.py"
 SEAL="$BIN/ensure-frontmatter.py"
 ```

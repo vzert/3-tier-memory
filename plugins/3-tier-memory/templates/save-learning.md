@@ -27,7 +27,15 @@ if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-emit.
 elif [ -f "plugins/3-tier-memory/bin/journal-emit.py" ]; then
   JBIN="$PWD/plugins/3-tier-memory/bin"     # the plugin's own repo: dogfood the working tree, not the cache
 else
-  JEMIT=$(find "$HOME/.claude/plugins" -name "journal-emit.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)
+  # Ruta del plugin INSTALADO: la version mas alta de `installed_plugins.json`
+  # (si el plugin llega por varios marketplaces, cual esta activo no se sabe).
+  # `find ... | head -1` devolvia una version ARBITRARIA del
+  # cache (medido 2026-09-11: 2.13.2 con 2.17.1 instalada), y un checkpoint escribia
+  # los indices con scripts cuatro versiones viejos, en silencio.
+  _R=$(find "$HOME/.claude/plugins" -name resolve-plugin-bin.sh -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)
+  _B=$([ -n "$_R" ] && bash "$_R" 2>/dev/null)
+  [ -n "$_B" ] || _B=$(dirname "$(find "$HOME/.claude/plugins" -name "journal-emit.py" -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)")
+  JEMIT=${_B:+$_B/journal-emit.py}
   JBIN=${JEMIT:+$(dirname "$JEMIT")}   # empty when find found nothing (dirname "" would give ".")
 fi
 [ -n "$JBIN" ] && [ -f "$JBIN/journal-compact.py" ] && echo "JBIN=$JBIN" || echo "JBIN=NONE"
@@ -89,7 +97,15 @@ right). Idempotent, atomic, never touches the body.
 if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/ensure-frontmatter.py" ]; then
   SEAL="${CLAUDE_PLUGIN_ROOT}/bin/ensure-frontmatter.py"
 else
-  SEAL=$(find "$HOME/.claude/plugins" -name "ensure-frontmatter.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)
+  # Ruta del plugin INSTALADO: la version mas alta de `installed_plugins.json`
+  # (si el plugin llega por varios marketplaces, cual esta activo no se sabe).
+  # `find ... | head -1` devolvia una version ARBITRARIA del
+  # cache (medido 2026-09-11: 2.13.2 con 2.17.1 instalada), y un checkpoint escribia
+  # los indices con scripts cuatro versiones viejos, en silencio.
+  _R=$(find "$HOME/.claude/plugins" -name resolve-plugin-bin.sh -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)
+  _B=$([ -n "$_R" ] && bash "$_R" 2>/dev/null)
+  [ -n "$_B" ] || _B=$(dirname "$(find "$HOME/.claude/plugins" -name "ensure-frontmatter.py" -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)")
+  SEAL=${_B:+$_B/ensure-frontmatter.py}
 fi
 [ -n "$SEAL" ] && python3 "$SEAL" "$MEMORY_DIR" --apply
 ```
@@ -103,7 +119,15 @@ gets committed. Idempotent and a no-op when clean (skips `$VAR`/`<REDACTED>`/pla
 if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/scan-secrets.py" ]; then
   SCAN="${CLAUDE_PLUGIN_ROOT}/bin/scan-secrets.py"
 else
-  SCAN=$(find "$HOME/.claude/plugins" -name "scan-secrets.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)
+  # Ruta del plugin INSTALADO: la version mas alta de `installed_plugins.json`
+  # (si el plugin llega por varios marketplaces, cual esta activo no se sabe).
+  # `find ... | head -1` devolvia una version ARBITRARIA del
+  # cache (medido 2026-09-11: 2.13.2 con 2.17.1 instalada), y un checkpoint escribia
+  # los indices con scripts cuatro versiones viejos, en silencio.
+  _R=$(find "$HOME/.claude/plugins" -name resolve-plugin-bin.sh -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)
+  _B=$([ -n "$_R" ] && bash "$_R" 2>/dev/null)
+  [ -n "$_B" ] || _B=$(dirname "$(find "$HOME/.claude/plugins" -name "scan-secrets.py" -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)")
+  SCAN=${_B:+$_B/scan-secrets.py}
 fi
 [ -n "$SCAN" ] && python3 "$SCAN" "$MEMORY_DIR" --apply
 ```

@@ -177,7 +177,14 @@ MEMORY_DIR="memory"
 if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-emit.py" ]; then
   JBIN="${CLAUDE_PLUGIN_ROOT}/bin"
 else
-  JEMIT=$(find "$HOME/.claude/plugins" -name "journal-emit.py" -path "*/3-tier-memory/*" 2>/dev/null | head -1)
+  # Ruta del plugin INSTALADO: la version mas alta de `installed_plugins.json`
+  # (si el plugin llega por varios marketplaces, cual esta activo no se sabe).
+  # `find ... | head -1` devolvia una version ARBITRARIA del
+  # cache (medido 2026-09-11: 2.13.2 con 2.17.1 instalada).
+  _R=$(find "$HOME/.claude/plugins" -name resolve-plugin-bin.sh -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)
+  _B=$([ -n "$_R" ] && bash "$_R" 2>/dev/null)
+  [ -n "$_B" ] || _B=$(dirname "$(find "$HOME/.claude/plugins" -name "journal-emit.py" -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)")
+  JEMIT=${_B:+$_B/journal-emit.py}
   JBIN=${JEMIT:+$(dirname "$JEMIT")}
 fi
 [ -n "$JBIN" ] && [ -f "$JBIN/journal-compact.py" ] && echo "JBIN=$JBIN" || echo "JBIN=NONE"

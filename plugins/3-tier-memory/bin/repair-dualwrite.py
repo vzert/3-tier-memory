@@ -54,7 +54,8 @@ concurrente, igual que `normalize-pendientes.py`. Si no lo consigue, no hace nad
 Uso: repair-dualwrite.py MEMORY_DIR [--apply] [--fix-pipes] [--quiet] [--budget SEG]
   Sin --apply solo informa (dry-run): lista los ids con el mes donde iria cada fila y avisa
   de las filas con `|` crudo y de los ids que no son el sha1 de su contenido. Salida:
-  `rows_added=N pipes_broken=N pipes_fixed=N ids_invented=N missing_data=N`. En dry-run
+  `rows_added=N pipes_broken=N pipes_fixed=N unaligned_rows=N unrepairable=N odd_values=N
+  header_issues=N ids_invented=N missing_data=N`. En dry-run
   `pipes_fixed` es 0 por construccion: lo que hay que leer es `pipes_broken`.
   Codigos: 0 ok (o lock ocupado); 1 error de entorno (sin _pendientes.md o sin journal-compact).
 
@@ -198,14 +199,16 @@ def row_cells(jc, line):
     return cells
 
 
-def numbered_rows(jc, path):
-    """(indice, celdas) de cada fila numerada del mensual."""
-    out = []
+def monthly_table_rows(jc, path):
+    """(lines, [(indice, cells7, colmap)]) de cada fila ALINEABLE del mensual, con numero o sin el.
+
+    Antes filtraba por `^\\|\\s*\\d+\\s*\\|`, igual que el compactador, asi que una fila sin la
+    columna `#` no existia para este script: concluia "este pendiente de Tier 2 no tiene fila de
+    Tier 3" y escribia una numerada al lado. El duplicado lo creaba la reparacion. Medido
+    2026-09-11 en una instalacion real: 39 filas sin numero y 11 duplicados ya materializados.
+    """
     lines = jc.read_lines(path)
-    for i, line in enumerate(lines):
-        if re.match(r"^\|\s*\d+\s*\|", line.strip()):
-            out.append((i, row_cells(jc, line)))
-    return lines, out
+    return lines, jc.monthly_rows(lines)
 
 
 def existing_ids(jc, mem):
@@ -218,11 +221,10 @@ def existing_ids(jc, mem):
     """
     ids = set()
     for path in monthly_files(mem):
-        for _, cells in numbered_rows(jc, path)[1]:
-            if len(cells) >= 2:
-                ms = ID_RE.findall(cells[1])
-                if ms:
-                    ids.add(ms[-1])
+        for _, cells, _cmap in monthly_table_rows(jc, path)[1]:
+            ms = ID_RE.findall(cells[jc.COL_TEXT])
+            if ms:
+                ids.add(ms[-1])
     return ids
 
 
@@ -237,9 +239,17 @@ def broken_pipe_rows(jc, mem):
     for path in monthly_files(mem):
         lines = jc.read_lines(path)
         for i, line in enumerate(lines):
-            if not re.match(r"^\|\s*\d+\s*\|", line.strip()):
+            s = line.strip()
+            if not s.startswith("|") or jc.is_separator(line):
                 continue
             if len(jc.split_cells(line)) <= 7:
+                continue
+            if not re.match(r"^\|\s*\d+\s*\|", s):
+                # Fila con `|` crudo y SIN numero: el colapso de `row_cells` asume que la celda 0
+                # es el numero, asi que reconstruirla moveria el texto a la columna equivocada.
+                # Se reporta y no se toca: adivinar aqui es exactamente lo que este script no hace.
+                m = ID_RE.findall(line)
+                unrep.append((os.path.basename(path), i + 1, m[-1] if m else "?"))
                 continue
             cells = row_cells(jc, line)
             if len(cells) != 7 or not PRIO_CELL.match(cells[2]):
@@ -255,25 +265,74 @@ def broken_pipe_rows(jc, mem):
     return out, unrep
 
 
-def shifted_rows(jc, mem):
-    """Filas de 7 celdas cuyas columnas NO son lo que dicen ser: prioridad o creado invalidos.
+def unaligned_rows(jc, mem):
+    """Filas de 7 celdas o menos que NO se pueden alinear con las columnas canonicas.
 
-    Una fila asi ya no se puede reparar desde aqui, porque el dato original se perdio al
-    colapsar mal las celdas: hay que reconstruirla de un respaldo o de la linea de Tier 2. Se
-    reportan para que no pasen inadvertidas, que es justo lo que hacen: tienen el numero de
-    celdas correcto, asi que ningun contador de estructura las ve.
+    Devuelve [(fichero, linea, id, medidas)] donde `medidas` dice lo que se midio, no lo que se
+    supone: celdas, `|` crudos, `\\|` escapados, y el motivo que dio el alineador. Hasta 2.18.0
+    este informe afirmaba UNA causa — "el dato original se perdio al colapsar mal las celdas;
+    reconstruyela de un respaldo" — y la senal que lo disparaba (prioridad o fecha no canonicas)
+    la produce al menos otra: una fila escrita a mano con un valor no canonico, donde no se
+    perdio nada. Caso real, `2026-07.md:111` de una instalacion: `Media→Alta` en la celda de
+    prioridad, las 7 celdas en su sitio, 8 `|` crudos y ningun escape. Un colapso mal hecho
+    habria dejado `|` crudos DENTRO de una celda, que vuelven a partir la fila: por eso una fila
+    colapsada aparece con MAS de 7 celdas (la cuenta `pipes_broken`), no aqui.
     """
     out = []
     for path in monthly_files(mem):
-        for i, line in enumerate(jc.read_lines(path)):
-            if not re.match(r"^\|\s*\d+\s*\|", line.strip()):
+        lines = jc.read_lines(path)
+        hmap = jc.header_map(lines)
+        for i, line in enumerate(lines):
+            t = line.strip()
+            if not t.startswith("|") or jc.is_separator(line):
                 continue
-            c = jc.split_cells(line)
-            if len(c) != 7:
+            celdas = jc.split_cells(line)
+            if len(celdas) > 7:
+                continue                      # eso es `pipes_broken`, no una fila desalineada
+            if [jc._colkey(c) for c in celdas] and all(
+                    jc._colkey(c) in jc._COL_ALIAS for c in celdas):
+                continue                      # la cabecera
+            cells, motivo = jc.align_row(line, hmap)
+            if cells is not None:
                 continue
-            if not PRIO_CELL.match(c[2]) or not FECHA_CELL.match(c[3]):
-                m = ID_RE.findall(c[1])
-                out.append((os.path.basename(path), i + 1, m[-1] if m else "?"))
+            m = ID_RE.findall(line)
+            medidas = (f"{len(celdas)} celdas, {t.count('|')} `|` crudos, "
+                       f"{t.count(chr(92) + '|')} escapados; {motivo}")
+            out.append((os.path.basename(path), i + 1, m[-1] if m else "?", medidas))
+    return out
+
+
+def odd_value_rows(jc, mem):
+    """Filas BIEN alineadas cuya `Prioridad` no es Alta, Media ni Baja.
+
+    No falta nada ni se movio nada: es un valor no canonico, casi siempre escrito a mano
+    (`Media→Alta`). Se separa de `unaligned_rows` a proposito — las dos cosas daban el mismo
+    mensaje y ese mensaje afirmaba una perdida de datos que en este caso no existe.
+    """
+    out = []
+    for path in monthly_files(mem):
+        lines = jc.read_lines(path)
+        for _i, cells, _cmap in jc.monthly_rows(lines):
+            prio = cells[jc.COL_PRIO]
+            if prio and not PRIO_CELL.match(prio):
+                ms = ID_RE.findall(cells[jc.COL_TEXT])
+                out.append((os.path.basename(path), _i + 1, ms[-1] if ms else "?", prio))
+    return out
+
+
+def header_issues(jc, mem):
+    """[(fichero, problema)] de los mensuales cuya cabecera no es la canonica de 7 columnas.
+
+    `journal-compact.ensure_monthly` escribe la cabecera solo al CREAR el fichero y nada la
+    validaba despues, asi que un mensual con cabecera de 5 columnas convivia indefinidamente con
+    filas de 7 que el propio compactador le escribia encima. Aqui solo se informa: cambiar la
+    cabecera de un historial es una migracion, y no se hace desde este script.
+    """
+    out = []
+    for path in monthly_files(mem):
+        problema = jc.header_issue(jc.read_lines(path))
+        if problema:
+            out.append((os.path.basename(path), problema))
     return out
 
 
@@ -327,7 +386,8 @@ def main():
         lock = jc.Lock(os.path.join(mem, ".journal"), a.budget)
         if not lock.acquire():
             if not a.quiet:
-                print("rows_added=0 pipes_broken=0 pipes_fixed=0 shifted_rows=0 unrepairable=0 (busy)")
+                print("rows_added=0 pipes_broken=0 pipes_fixed=0 unaligned_rows=0 unrepairable=0 "
+                      "odd_values=0 header_issues=0 (busy)")
             return 0
     try:
         # Primero las filas con `|` crudo: hasta que se reescriben, su `_id:` cae fuera de la
@@ -345,7 +405,9 @@ def main():
 
         have = existing_ids(jc, mem)
         inventados = ids_invented(idx)
-        desplazadas = shifted_rows(jc, mem)
+        desalineadas = unaligned_rows(jc, mem)
+        valores_raros = odd_value_rows(jc, mem)
+        cabeceras = header_issues(jc, mem)
         added = 0
         broken = []
         pending = []
@@ -401,7 +463,8 @@ def main():
             # siempre 0 y daria por sana una memoria con filas irresolubles.
             fixed = len(pipes) if (a.fix_pipes and a.apply) else 0
             print(f"rows_added={added} pipes_broken={len(pipes)} pipes_fixed={fixed} "
-                  f"shifted_rows={len(desplazadas)} unrepairable={len(unrepairable)} "
+                  f"unaligned_rows={len(desalineadas)} unrepairable={len(unrepairable)} "
+                  f"odd_values={len(valores_raros)} header_issues={len(cabeceras)} "
                   f"ids_invented={len(inventados)} "
                   f"missing_data={len(broken)}{sufijo}")
             if pipes and not fixed:
@@ -411,10 +474,30 @@ def main():
                 print(f"  GRAVE {fn}:{ln} ({pid}) tiene celdas de mas que no se pueden anclar "
                       f"por forma: no se toca, porque cualquier reparacion automatica moveria "
                       f"datos de columna. Revisala a mano.")
-            for fn, ln, pid in desplazadas:
-                print(f"  GRAVE {fn}:{ln} ({pid}) tiene 7 celdas pero sus columnas estan "
-                      f"desplazadas: la prioridad o la fecha no son validas. El dato original "
-                      f"se perdio; reconstruyela de un respaldo o de su linea de Tier 2.")
+            for fn, ln, pid, medidas in desalineadas:
+                print(f"  GRAVE {fn}:{ln} ({pid}) no se puede alinear con las columnas "
+                      f"canonicas. Medido: {medidas}. Causas posibles, de mas a menos probable: "
+                      f"(1) fila escrita a mano a la que le faltan columnas de en medio; "
+                      f"(2) `Creado` con una fecha no canonica o vacia; (3) columnas colapsadas "
+                      f"mal por una version anterior — esta ultima dejaria `|` crudos dentro de "
+                      f"una celda y la fila saldria con MAS de 7 celdas, asi que si arriba dice "
+                      f"7 o menos y 0 escapados, NO se ha perdido ningun dato. Compruebalo "
+                      f"contra su linea de Tier 2 antes de reescribir nada.")
+            for fn, ln, pid, prio in valores_raros:
+                print(f"  AVISO {fn}:{ln} ({pid}) esta bien alineada pero su `Prioridad` es "
+                      f"'{prio}', que no es Alta, Media ni Baja. No falta ni se movio nada: es "
+                      f"un valor no canonico, y `header_index` no sabra donde reinsertar la "
+                      f"linea si se reabre. Corrige el valor, no la fila.")
+            for fn, problema in cabeceras:
+                # La consecuencia NO es la misma segun la columna que falte: sin `Sesion
+                # resolucion` un cierre pierde la sesion que lo cerro; sin `#` solo se queda sin
+                # numerar. Decirlo al reves es afirmar un dano que no se midio.
+                extra = ("un cierre no tiene donde guardar la sesion que lo cerro"
+                         if "Sesion resolucion" in problema
+                         else "las filas nuevas salen numeradas y las viejas no, nada mas")
+                print(f"  AVISO {fn}: {problema}. El compactador le escribe filas de 7 columnas "
+                      f"encima y las filas cortas se leen igual; {extra}. Arreglar la cabecera "
+                      f"es una migracion y no se hace desde aqui.")
             if inventados:
                 print(f"  AVISO {len(inventados)} ids de Tier 2 no coinciden con el sha1 de su "
                       f"linea. Si alguien reemite ese mismo pendiente por journal saldra el id "
