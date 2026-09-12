@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.19.5] - 2026-09-12
+### Fixed
+- `tools/mutation-check.sh` daba por **vacuo** un aserto que en esa plataforma esta **saltado**. En
+  Git Bash el caso "sin jq" de `test-resolve-project-dir.sh` se salta —un `bash.exe` con el PATH
+  reducido no encuentra sus DLL—, asi que el aserto no llega a correr y no puede cazar la mutacion.
+  El arnes lo reportaba como "no discrimina" y ponia el CI en rojo.
+
+  Ahora distingue las dos cosas: si el aserto esperado sale como `SKIP`, se informa **no evaluable
+  aqui** con el motivo, y no cuenta como pendiente. Confundir "no llego a correr" con "corrio y no
+  vio nada" es acusar al codigo de algo que no hizo — el mismo error que este arnes existe para no
+  cometer, cometido por el arnes.
+
 ## [2.19.4] - 2026-09-12
 Cierra el hueco que el adversario **declaro** en vez de tapar: las ediciones de portabilidad del
 2026-09-12 —comparar rutas en vez de cadenas, contar CR por bytes en vez de con `grep`, un digest

@@ -35,6 +35,15 @@ caso() {  # etiqueta | fichero a mutar | mutador | suite | aserto que DEBE caer
           PEND=$(( PEND + 1 )); rm -rf "$(dirname "$D")"; return ;;
   esac
   local out rc; out=$(cd "$D" && bash "$D/$suite" 2>&1); rc=$?
+  # Un aserto SALTADO no es un aserto vacuo: no llego a correr. En Git Bash el caso "sin jq" se
+  # salta porque un `bash.exe` con el PATH reducido no encuentra sus DLL, asi que ahi no hay nada
+  # que mutar. Confundir "no evaluable aqui" con "no discrimina" seria acusar al aserto de algo
+  # que no hizo — el mismo error que este arnes existe para no cometer. (CI, 2026-09-12.)
+  if printf '%s' "$out" | grep -qiE "SKIP.*${espera}"; then
+    printf '  -- %-30s no evaluable aqui: %s\n' "$et" \
+      "$(printf '%s' "$out" | grep -iE "SKIP.*${espera}" | head -1 | sed 's/^ *//')"
+    rm -rf "$(dirname "$D")"; return
+  fi
   if [ "$rc" -eq 0 ]; then
     printf '  NO %-30s la suite NO cae (%s) -> el aserto es vacuo\n' "$et" "$n"; PEND=$(( PEND + 1 ))
   elif printf '%s' "$out" | grep -qiE "(FAIL|FALLA).*${espera}"; then
@@ -56,5 +65,5 @@ caso "huella / md5"             journal-compact.py      m_compact.py         tes
 caso "norm + SYSTEMROOT"        resolve-project-dir.sh  m_projdir.py         test-resolve-project-dir.sh "el respaldo de python3"
 
 echo
-if [ "$PEND" -eq 0 ]; then echo "LAS $TOTAL DISCRIMINAN"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi
+if [ "$PEND" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $TOTAL)"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi
 exit $(( PEND > 0 ))
