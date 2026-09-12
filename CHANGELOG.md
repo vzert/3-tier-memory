@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.18.7] - 2026-09-12
+Cuarta vuelta de Windows. Solo suites.
+
+### Fixed
+- Seis interpolaciones mas de rutas del shell DENTRO del fuente de python
+  (`test-monthly-rows.sh` 1, `test-session-start-json.sh` 5). Pasan por `sys.argv`, que MSYS si
+  convierte. Es el mismo defecto de 2.18.3 y 2.18.6: se fue arreglando donde fallaba en vez de
+  barrer el patron entero, y cada vuelta destapaba el siguiente. El barrido completo esta hecho.
+- `bin/test-resolve-project-dir.sh`: `env -i` borra `SYSTEMROOT`, y **el python de Windows no
+  arranca sin el**. El respaldo moria antes de empezar y el caso acusaba al codigo de no resolver
+  el cwd. Se conserva esa unica variable, y solo donde existe, para que el entorno siga siendo
+  minimo en POSIX.
+
 ## [2.18.6] - 2026-09-12
 Tercera vuelta de Windows. Solo suites: las tres son la misma familia de defecto de medicion.
 

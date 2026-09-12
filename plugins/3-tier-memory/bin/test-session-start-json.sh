@@ -67,7 +67,7 @@ PYEOF
 echo "1. source=startup: un JSON con los dos canales"
 P="$TMP/p1"; nuevo_proyecto "$P"
 correr "$P" startup > "$TMP/o1"
-check "parsea como JSON" "$(python3 -c "import json,sys;json.load(open('$TMP/o1'));print('si')" 2>/dev/null)" "si"
+check "parsea como JSON" "$(python3 -c "import json,sys;json.load(open(sys.argv[1]));print('si')" "$TMP/o1" 2>/dev/null)" "si"
 check "lleva los dos campos" "$(python3 "$TMP/leer.py" "$TMP/o1" claves)" "hookSpecificOutput,systemMessage"
 
 echo "2. el mensaje a la persona trae conteo, los mas antiguos y que hacer"
@@ -110,7 +110,7 @@ chmod +x "$STUB/python3"
 REAL_PYTHON3="$REAL_PY" PATH="$STUB:$PATH" CLAUDE_PROJECT_DIR="$P" CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" \
   bash "$BIN/session-start.sh" </dev/null > "$TMP/o4" 2>/dev/null
 check "exit 0" "$?" "0"
-check "NO es JSON" "$(python3 -c "import json;json.load(open('$TMP/o4'));print('si')" 2>/dev/null || echo no)" "no"
+check "NO es JSON" "$(python3 -c "import json,sys;json.load(open(sys.argv[1]));print('si')" "$TMP/o4" 2>/dev/null || echo no)" "no"
 check "los pendientes siguen ahi" "$(grep -c 'PENDIENTES ABIERTOS (3)' "$TMP/o4")" "1"
 check "la ALTA sigue inline" "$(grep -c 'Item de alta que lleva abierto' "$TMP/o4")" "1"
 check "y el protocolo tambien" "$(grep -c 'PROTOCOLO' "$TMP/o4")" "1"
@@ -120,7 +120,7 @@ STUB2="$TMP/stub2"; mkdir -p "$STUB2"; printf '#!/bin/sh\nexit 1\n' > "$STUB2/py
 PATH="$STUB2:$PATH" CLAUDE_PROJECT_DIR="$P" CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" \
   bash "$BIN/session-start.sh" </dev/null > "$TMP/o4b" 2>/dev/null
 check "exit 0" "$?" "0"
-check "NO es JSON" "$(python3 -c "import json;json.load(open('$TMP/o4b'));print('si')" 2>/dev/null || echo no)" "no"
+check "NO es JSON" "$(python3 -c "import json,sys;json.load(open(sys.argv[1]));print('si')" "$TMP/o4b" 2>/dev/null || echo no)" "no"
 
 echo "7. la cuarentena del journal llega a la persona"
 P2="$TMP/p2"; nuevo_proyecto "$P2"
@@ -138,7 +138,7 @@ P3="$TMP/p3"; mkdir -p "$P3"
 correr "$P3" startup > "$TMP/o6"
 check "exit 0" "$?" "0"
 check "no deja basura en stdout" \
-  "$([ ! -s "$TMP/o6" ] && echo vacio || (python3 -c "import json;json.load(open('$TMP/o6'))" 2>/dev/null && echo json || echo basura))" \
+  "$([ ! -s "$TMP/o6" ] && echo vacio || (python3 -c "import json,sys;json.load(open(sys.argv[1]))" "$TMP/o6" 2>/dev/null && echo json || echo basura))" \
   "vacio"
 
 echo "9. un pendiente con la vieja sentinela en su texto no contamina el canal de la persona"
@@ -157,7 +157,7 @@ s = s.replace("## Alta prioridad\n\n", "## Alta prioridad\n\n" + item, 1)
 open(p, "w", encoding="utf-8").write(s)
 INYEOF
 correr "$P4" startup > "$TMP/o7"
-check "sigue siendo JSON valido" "$(python3 -c "import json;json.load(open('$TMP/o7'));print('si')" 2>/dev/null)" "si"
+check "sigue siendo JSON valido" "$(python3 -c "import json,sys;json.load(open(sys.argv[1]));print('si')" "$TMP/o7" 2>/dev/null)" "si"
 check "el item con la cadena SI se parseo" \
   "$(python3 "$TMP/leer.py" "$TMP/o7" additionalContext | grep -c 'PENDIENTES ABIERTOS (4)')" "1"
 check "y aparece entero en el bloque del agente" \

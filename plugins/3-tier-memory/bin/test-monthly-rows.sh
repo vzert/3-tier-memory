@@ -257,8 +257,9 @@ DESPUES_LF=$(cr_lineas "$M7/pendientes/2026-08.md")
 check "el numero de lineas CRLF no cambia" "$DESPUES_LF" "$ANTES_LF"
 check "no quedo ningun salto suelto" \
   "$(python3 -c "
-b = open('$M7/pendientes/2026-08.md','rb').read()
-print(b.count(b'\n') - b.count(b'\r\n'))")" "0"
+import sys
+b = open(sys.argv[1],'rb').read()
+print(b.count(b'\n') - b.count(b'\r\n'))" "$M7/pendientes/2026-08.md")" "0"
 check "y la fecha si se escribio" \
   "$(grep -c "$(date +%Y-%m-%d)" "$M7/pendientes/2026-08.md")" "1"
 

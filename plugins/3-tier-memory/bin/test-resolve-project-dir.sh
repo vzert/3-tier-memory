@@ -189,7 +189,11 @@ fi
 JQLESS="$TMP/bin"; mkdir -p "$JQLESS"
 for c in python3 bash sed cat env; do P=$(command -v $c) && ln -sf "$P" "$JQLESS/$c"; done
 : > "$ERR"; : > "$DUMP"
-OUT=$(printf '%s' "$JSON" | env -i PATH="$JQLESS" RESOLVE_SH="$RESOLVE_SH" DUMP="$DUMP" \
+# `env -i` borra SYSTEMROOT, y el python de Windows NO ARRANCA sin el: el respaldo moria antes de
+# empezar y el caso acusaba al codigo de no resolver el cwd. Se conserva solo esa variable, y solo
+# donde existe, para que el entorno siga siendo minimo en POSIX. (CI, 2026-09-12.)
+SYSROOT_KEEP=""; [ -n "${SYSTEMROOT:-}" ] && SYSROOT_KEEP="SYSTEMROOT=$SYSTEMROOT"
+OUT=$(printf '%s' "$JSON" | env -i $SYSROOT_KEEP PATH="$JQLESS" RESOLVE_SH="$RESOLVE_SH" DUMP="$DUMP" \
       HOOK_STDIN_TIMEOUT=2 "$JQLESS/bash" "$TMP/probe.sh" 2>"$ERR"); RC=$?
 if [ "$RC" -eq 0 ] && [ "$(norm "$(field dir)")" = "$(norm "$TMP/proj")" ]; then ok
 else fail "sin jq: el respaldo de python3 debe resolver el cwd" "rc=$RC out='$OUT' err=$(cat "$ERR")"; fi
