@@ -603,5 +603,53 @@ printf -- '- [ ] a mano\n' >> "$MEMK/_pendientes.md"
 D3=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMK" --check-drift 2>&1)
 chk "control negativo: la escritura a mano SI dispara" "1" "$(printf '%s' "$D3" | grep -c 'FUERA DEL JOURNAL')"
 
+echo "== .journal/.gitignore: git tiene que ignorar la linea base y VERSIONAR los eventos =="
+# El fichero de huellas es estado POR COPIA DE TRABAJO: la deteccion compara contra lo que sello
+# el compactador de ESTA maquina. Versionarlo da conflicto en cada checkpoint desde dos maquinas.
+# Los eventos son lo contrario: son lo que hace que la memoria viaje. Que el fichero EXISTA no
+# prueba nada (regla del repo: un aserto que mira el nombre no mira el comportamiento), asi que
+# esto le pregunta a git de verdad con `check-ignore`.
+MEMG="$T/gitrepo/memory"; mkdir -p "$MEMG/sessions"
+printf -- '---\ntype: index\n---\n# Pendientes\n\n## Media prioridad\n\n' > "$MEMG/_pendientes.md"
+printf -- '---\ntype: session\n---\n# s\n' > "$MEMG/sessions/2026-01-01-x.md"
+# --check-drift NO debe escribirlo: su contrato dice "no escribe nada salvo el log de constancia"
+python3 "$BIN/journal-compact.py" --memory-dir "$MEMG" --check-drift >/dev/null 2>&1
+chk "--check-drift NO escribe el .gitignore"  "0" "$([ -f "$MEMG/.journal/.gitignore" ] && echo 1 || echo 0)"
+# compact() si, y una instalacion VIEJA ya tiene .journal/ creado: por eso no cuelga del makedirs
+python3 "$BIN/journal-emit.py" --memory-dir "$MEMG" --type pendiente.add --text "uno" \
+  --prioridad Media --origen "[[sessions/2026-01-01-x]]" --creado 2026-01-01 >/dev/null 2>&1
+python3 "$BIN/journal-compact.py" --memory-dir "$MEMG" --quiet >/dev/null 2>&1
+chk "compact lo escribe aunque .journal/ ya existiera" "1" "$([ -f "$MEMG/.journal/.gitignore" ] && echo 1 || echo 0)"
+
+if command -v git >/dev/null 2>&1; then
+  ( cd "$T/gitrepo" && git init -q . >/dev/null 2>&1 )
+  gi(){ ( cd "$T/gitrepo" && git check-ignore -q "$1" >/dev/null 2>&1 && echo 1 || echo 0 ); }
+  chk "git IGNORA fingerprints.json"          "1" "$(gi memory/.journal/fingerprints.json)"
+  chk "git IGNORA out-of-band.log"            "1" "$(gi memory/.journal/out-of-band.log)"
+  chk "git IGNORA el lock"                    "1" "$(gi memory/.journal/.lock/owner)"
+  # control positivo: lo que SI tiene que viajar entre maquinas
+  APL=$(ls "$MEMG/.journal/applied"/*/*.json 2>/dev/null | head -1)
+  chk "hay un evento en applied/ que probar"  "1" "$([ -n "$APL" ] && echo 1 || echo 0)"
+  chk "git NO ignora applied/ (viaja)"        "0" "$(gi "${APL#"$T/gitrepo/"}")"
+  chk "git NO ignora pending/ (viaja)"        "0" "$(gi memory/.journal/pending/x.json)"
+  chk "git NO ignora quarantine/ (viaja)"     "0" "$(gi memory/.journal/quarantine/x.json)"
+else
+  skip=$((skip+7)); echo "  skip sin git: 7 asertos de check-ignore"
+fi
+
+# No se pisa lo que el usuario haya puesto
+printf 'mio\n' > "$MEMG/.journal/.gitignore"
+python3 "$BIN/journal-compact.py" --memory-dir "$MEMG" --quiet >/dev/null 2>&1
+chk "no sobreescribe un .gitignore propio"    "mio" "$(cat "$MEMG/.journal/.gitignore")"
+
+echo "== tras un git pull el aviso de deriva explica que hacer, en vez de acusar =="
+# El coste de NO versionar la linea base: los indices que llegan por git no son los que sello
+# esta maquina, asi que el detector los ve como deriva. Es correcto pero suena a acusacion.
+printf -- '- [ ] llego por git\n' >> "$MEMG/_pendientes.md"
+DG=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMG" --check-drift 2>&1)
+chk "el aviso nombra git pull"                "1" "$(printf '%s' "$DG" | grep -c 'git pull')"
+chk "y da la salida (--reseal)"               "1" "$(printf '%s' "$DG" | grep -c -- '--reseal')"
+chk "y dice que NO se pierden los cambios"    "1" "$(printf '%s' "$DG" | grep -c 'NO se pierden')"
+
 echo "RESULT pass=$pass fail=$fail skip=$skip"
 [ "$fail" -eq 0 ]

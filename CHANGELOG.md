@@ -1,5 +1,63 @@
 # Changelog
 
+## [2.21.0] - 2026-09-12
+El plugin no tenia postura sobre que de `memory/.journal/` se versiona. El compactador crea el
+directorio con `os.makedirs` y no dejaba nada dentro que lo dijera, asi que cada usuario lo
+decidia solo — y al menos uno recibio el consejo equivocado: que `fingerprints.json` era
+**inseguro** subirlo a GitHub.
+
+No lo es. Son `sha256` de ficheros que estan en el mismo repo en texto plano; un hash de algo ya
+publicado en claro no filtra nada. (Lo que si es sensible en este sistema es el **contenido** de
+`memory/sessions/`, y de eso se ocupa `bin/scan-secrets.py` como compuerta de `/checkpoint-3t`.)
+
+Pero la conclusion era buena por otra razon, y esa razon solo se ve con **mas de una maquina**:
+`fingerprints.json` cambia en CADA compactacion, y `/checkpoint-3t` hace `git add memory/`. En un
+repo donde `memory/` se versiona, eso es un diff de hashes sin significado en cada checkpoint y un
+conflicto de merge garantizado entre dos maquinas, sobre las mismas claves del mismo JSON.
+
+### Added
+- **`memory/.journal/.gitignore`, escrito por el compactador.** Separa estado local de registro
+  compartido, y explica por escrito por que cada cosa cae de un lado:
+  - **No se versiona** — `fingerprints.json` (la linea base es por copia de trabajo: compara
+    contra lo que sello el compactador de ESA maquina), `out-of-band.log` (dos maquinas
+    apendando = conflicto que git no fusiona), `.lock/` y `.lock-steal/` (estado vivo de un
+    proceso).
+  - **Si se versiona, a proposito** — `pending/`, `applied/`, `quarantine/`. Son lo que hace que
+    la memoria viaje. Un evento emitido y aun sin aplicar llega a la otra maquina y se aplica
+    alli en vez de perderse; re-aplicarlo es no-op porque el compactador es idempotente, asi que
+    no duplica si ambas lo aplican. `applied/` y `quarantine/` son un fichero por evento con
+    nombre unico: no pueden dar conflicto.
+
+  **Se escribe si falta, nunca se sobreescribe.** Colgarlo del `makedirs` inicial habria dejado
+  fuera justo a quien le hace falta: toda instalacion existente ya tiene `.journal/` creado. Y si
+  el usuario lo edito, manda su version. Va en `compact()` y **no** en `--check-drift`, cuyo
+  contrato dice que no escribe nada salvo el log de constancia.
+
+### Changed
+- **El aviso `FUERA DEL JOURNAL` ya no acusa cuando la causa fue git.** El precio de no versionar
+  la linea base es que los indices que llegan por `git pull`/`checkout`/`merge` no son los que
+  sello esta maquina, y el detector los ve como deriva. La deteccion es correcta; el diagnostico
+  que imprimia no lo era — decia "edicion a mano" y "se pierde en la siguiente pasada", y post-pull
+  las dos cosas son falsas: los cambios vienen anclados en `applied/` y sobreviven. Ahora el aviso
+  nombra ese caso y da la salida (`journal-compact.py --reseal`), que hasta ahora solo estaba
+  documentada para el otro camino sancionado, la reparacion manual de `/audit-3t`.
+
+### Notas para quien ya lo tenia en git
+`.gitignore` no des-trackea lo ya trackeado. Si `fingerprints.json` esta en el indice de git:
+
+```
+git rm --cached memory/.journal/fingerprints.json
+git rm --cached -r memory/.journal/out-of-band.log   # si existe
+```
+
+### Sin resolver
+Detectar el caso git automaticamente (`git diff --quiet HEAD -- <indice>` distingue "viene de git"
+de "editado a mano") se deja fuera a proposito: son ~11 llamadas a git en cada `--check-drift`, que
+corre en el PostToolUse de Bash, y el plugin tiene historial de romperse en Git Bash/MSYS. Por
+ahora el aviso lo explica y `--reseal` lo cierra en un comando. Con una arista honesta: `--reseal`
+quita el aviso pero **no borra la linea ya apendada a `out-of-band.log`**, asi que el rastro de
+auditoria acumula una entrada por cada pull hasta que eso se construya.
+
 ## [2.20.0] - 2026-09-12
 El dedup de `/backfill-3t` se apoyaba en `customTitle`. Ese campo viene `null` en los 22 JSONL de
 este proyecto (medido 2026-09-12: 0 de 22; no comprobado en otras versiones, modos ni

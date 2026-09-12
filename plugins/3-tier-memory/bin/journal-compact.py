@@ -1549,11 +1549,66 @@ def avisar_fuera_de_banda(fuera):
           "—con Edit/Write o con Bash, que el guard no cubre— se pierde en la siguiente pasada")
     print("  y no deja evento que auditar. Usa bin/journal-emit.py. Queda anotado en "
           ".journal/out-of-band.log; este aviso no se repite.")
+    print("  SI ACABAS DE HACER `git pull`/`git checkout`/`git merge`: es esperado y NO es una "
+          "edicion a mano. La linea base vive por copia de trabajo (.journal/fingerprints.json no")
+    print("  se versiona), asi que los indices que llegan por git no son los que sello ESTA "
+          "maquina. Los cambios NO se pierden —vienen anclados en applied/—; corre "
+          "`journal-compact.py --reseal` para aceptarlos como linea base.")
+
+
+GITIGNORE_JOURNAL = """\
+# Lo escribe journal-compact.py cuando falta. Puedes editarlo: no se sobreescribe.
+#
+# QUE NO SE VERSIONA — estado por copia de trabajo. La deteccion de escrituras fuera del
+# journal compara contra lo que sello EL COMPACTADOR DE ESTA MAQUINA, asi que la linea base
+# no significa nada en otra. Versionarla ademas da un conflicto de merge garantizado: cambia
+# en cada compactacion, y dos maquinas tocan las mismas claves del JSON.
+fingerprints.json
+# Append de dos maquinas = conflicto que git no sabe fusionar. Y lo que se anoto aqui es lo
+# que se toco a mano EN ESTA copia.
+out-of-band.log
+# Estado vivo de un proceso. Nunca tiene sentido fuera de la maquina que lo tomo.
+.lock/
+.lock-steal/
+
+# QUE SI SE VERSIONA, a proposito: pending/, applied/ y quarantine/.
+# Son el registro de eventos, y es lo que hace que la memoria viaje entre maquinas.
+#   - pending/: un evento emitido y aun sin aplicar llega a la otra maquina y se aplica alli,
+#     en vez de perderse. Re-aplicar es no-op (el compactador es idempotente), asi que no
+#     duplica nada si ambas lo aplican.
+#   - applied/ y quarantine/: rastro auditable. Un fichero por evento, nombre unico, sin
+#     conflictos posibles.
+"""
+
+
+def escribir_gitignore_journal(journal):
+    """Deja claro que de .journal/ es estado local y que es registro compartido.
+
+    SE ESCRIBE SI FALTA, NUNCA SE SOBREESCRIBE: una instalacion existente ya tiene .journal/
+    creado, asi que colgar esto del makedirs inicial dejaria fuera justo a quien le hace falta.
+    Y si el usuario lo edito, su version manda.
+
+    Por que hace falta: sin esto el plugin no tenia postura, y `fingerprints.json` —que son
+    sha256 de ficheros que ya estan en el repo en claro, o sea que no filtran nada— acababa
+    versionado, dando conflicto en cada checkpoint desde dos maquinas."""
+    path = os.path.join(journal, ".gitignore")
+    if os.path.exists(path):
+        return False
+    try:
+        os.makedirs(journal, exist_ok=True)
+        tmp = f"{path}.{os.getpid()}.tmp"
+        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(GITIGNORE_JOURNAL)
+        replace_with_retry(tmp, path)
+        return True
+    except OSError:
+        return False   # no poder escribirlo no es motivo para no compactar
 
 
 def compact(mem, budget, quiet):
     journal = os.path.join(mem, ".journal")
     pending = os.path.join(journal, "pending")
+    escribir_gitignore_journal(journal)
     if not os.path.isdir(pending):
         names = []
     else:
