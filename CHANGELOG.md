@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.18.5] - 2026-09-12
+### Fixed
+- `bin/session-start.sh`: el detector de hooks heredados daba por RELATIVA una ruta absoluta de
+  Windows. `cand.startswith("/")` solo reconoce las de POSIX, asi que una `C:\\...` se pegaba detras
+  del directorio del proyecto. Pasa a `os.path.isabs`, conservando el `/` explicito porque en
+  Windows `isabs("/x")` es False y ahi si es absoluta.
+- `bin/test-plugin-bin-resolver.sh`: el manifiesto sintetico escribia `projectPath` en forma MSYS,
+  pero el `cwd` llega al python nativo ya convertido a forma de Windows, asi que no habia
+  contencion que cuadrase y una entrada legitima se excluia. Se escribe en forma nativa, que ademas
+  es lo que contiene un `installed_plugins.json` de verdad en esa plataforma.
+
 ## [2.18.4] - 2026-09-12
 Segunda vuelta de Windows, con el CI midiendo en vez de suponer.
 

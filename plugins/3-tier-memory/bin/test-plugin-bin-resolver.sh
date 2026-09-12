@@ -93,8 +93,12 @@ mkdir -p "$H3/.claude/plugins/cache/mkt/3-tier-memory/1.0.0/bin" \
 : > "$H3/.claude/plugins/cache/mkt/3-tier-memory/1.0.0/bin/journal-emit.py"
 : > "$H3/inst/2.18.0/bin/journal-emit.py"
 : > "$H3/inst/2.20.0/bin/journal-emit.py"
+# El manifiesto lo lee un python NATIVO. En Git Bash el `cwd` que le pasamos como argumento llega
+# ya convertido a la forma de Windows, asi que si el `projectPath` del JSON se queda en forma MSYS
+# no hay contencion que cuadre y una entrada legitima se excluia. Se escriben en forma nativa, que
+# ademas es la que tiene un `installed_plugins.json` de verdad en esa plataforma.
 manifiesto() {   # $1 = json con PLACEHOLDER por $H3
-  printf '%s' "$1" | sed "s#PLACEHOLDER#$H3#g" > "$H3/.claude/plugins/installed_plugins.json"
+  printf '%s' "$1" | sed "s#PLACEHOLDER#$(norm "$H3")#g" > "$H3/.claude/plugins/installed_plugins.json"
 }
 resolver() {     # $1 = cwd desde el que se resuelve
   ( cd "$1" && env -u CLAUDE_PLUGIN_ROOT HOME="$H3" bash "$BIN/resolve-plugin-bin.sh" )

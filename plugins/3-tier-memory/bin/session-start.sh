@@ -255,7 +255,11 @@ def _segmento(toks, proj, depth):
     if not cand:
         return []
     # Ruta relativa: se resuelve contra el proyecto, que es el cwd del hook.
-    return [cand if cand.startswith("/") else os.path.normpath(os.path.join(proj, cand))]
+    # `startswith("/")` solo reconoce absolutas de POSIX: una ruta de Windows (`C:\\x`) la daba por
+    # relativa y la pegaba detras del proyecto. `os.path.isabs` acierta en las dos plataformas, y se
+    # conserva el `/` explicito porque en Windows `isabs("/x")` es False y ahi si es absoluta.
+    es_abs = os.path.isabs(cand) or cand.startswith("/")
+    return [cand if es_abs else os.path.normpath(os.path.join(proj, cand))]
 
 found = []
 for name in ("settings.json", "settings.local.json"):
