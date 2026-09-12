@@ -14,11 +14,16 @@ advierte dos lineas mas abajo: *"Getting this wrong deletes context the user nev
   **como mucho 25** y **cada uno cortado a ~120 caracteres** (`CEILING` y `BODY_CAP` de
   `bin/session-start.sh`). Cuentan como custom, y no se borran: las MEDIA y BAJA, lo que pase del
   item 25, y la cola cortada de cada item largo.
-- **La medicion que `/migrate` ensena al usuario mide ahora los dos lados.** Antes solo contaba los
-  bytes del volcado legacy, que es la mitad que no decide nada. Ahora cuenta tambien cuantos items
-  re-emite el plugin, clasificando igual que el hook (un `awk` de tres lineas); la diferencia con el
-  total es lo que el recorte borraria. Comprobado contra este repo: el `awk` da 2 y el hook dice
-  `PENDIENTES ABIERTOS (52), 2 de prioridad ALTA o sin clasificar`.
+- **La medicion que `/migrate` ensena al usuario mide ahora los dos lados, y el lado del plugin lo
+  lee del propio plugin.** Antes solo contaba los bytes del volcado legacy, que es la mitad que no
+  decide nada. El primer intento anadio un `awk` que clasificaba "igual que el hook" y no lo hacia:
+  contaba los items bajo secciones cerradas (`## Completados`), que el parser excluye a proposito, y
+  fallaba con encabezados en mayusculas, que el parser si reconoce. Lo encontro el verificador con
+  dos casos reproducidos contra el parser real. El arreglo no es corregir el `awk` — es no tener una
+  segunda copia de esa logica: el numero ya lo publica el bloque que el plugin inyecta al arrancar
+  (`PENDIENTES ABIERTOS (<total>), <N> de prioridad ALTA o sin clasificar`), y `/migrate` lee ese
+  `<N>`. Es el mismo fallo que `repair-dualwrite.META_RE` en 2.17.0, dos implementaciones que tenian
+  que coincidir y divergieron.
 - **Una categoria nueva: el texto plano nunca duplica el mensaje que el plugin manda a la persona.**
   El plugin habla por dos canales desde 2.17.0; un hook legacy que imprime texto plano llega al
   agente y a nadie mas. **Con una excepcion declarada**: un hook legacy que emita JSON propio con

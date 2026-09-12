@@ -80,22 +80,28 @@ Behavior rules:
   - **Duplicated protocol** — an `echo` whose text restates the plugin's own PROTOCOLO/dual-write reminder.
   - **Genuinely custom** — anything project-specific the plugin does not emit (e.g. a domain rule like "read learnings before SSH ops"). Note that scaffolding placeholders left unsubstituted (`<DOMAIN-SPECIFIC-ACTION>` and similar) are NOT custom — they are dead template text.
 
-  Measure the emission before asking, so the user sees the real cost — and measure BOTH sides, because only part of the dump is duplicated:
+  Measure the emission before asking, so the user sees the real cost — and measure BOTH sides,
+  because only part of the dump is duplicated:
 
   ```bash
   # bytes the legacy hook injects each session
   grep -E '^- \[ \]' memory/_pendientes.md | wc -c
-  # items the plugin re-emits: Alta + unclassified, classified the same way the hook does
-  awk '/^## [Aa]lta/{s="alta";next} /^## [Mm]edia/{s="media";next} /^## [Bb]aja/{s="baja";next} \
-       /^## /{s="otros";next} /^- \[ \]/{if(s=="alta"||s=="otros"||s=="")n++} END{print n+0}' \
-      memory/_pendientes.md
-  # items in total
+  # items in the file in total
   grep -cE '^- \[ \]' memory/_pendientes.md
   ```
 
-  The second number is capped at 25 in what the agent actually sees, and each of those items is cut
-  to ~120 characters. The gap between the second number and the third is what the trim would delete
-  outright.
+  **For the other side — how many of those the plugin actually re-emits — read the plugin's own
+  number, do not recompute it.** The block the plugin injected at the start of THIS session opens
+  with `PENDIENTES ABIERTOS (<total>), <N> de prioridad ALTA o sin clasificar`; that `<N>` is the
+  count, straight from the parser that produces the block. If the line is not in context (the
+  session predates the install), open a new session rather than reimplementing the classification:
+  a second copy of that logic looks right and drifts — it skips the items under closed sections
+  (`## Completados`, `## Scope`, `## Related`), which the parser deliberately excludes, and it
+  misses case variants of the priority headers, which the parser matches. This project already paid
+  for that failure once, in `repair-dualwrite.META_RE` (CHANGELOG 2.17.0).
+
+  The gap between `<N>` (capped at 25, each item cut to ~120 characters) and the file's total is
+  what the trim would delete outright.
 
   Then report and offer the specific action:
 
