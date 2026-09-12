@@ -633,8 +633,12 @@ if command -v git >/dev/null 2>&1; then
   chk "git NO ignora applied/ (viaja)"        "0" "$(gi "${APL#"$T/gitrepo/"}")"
   chk "git NO ignora pending/ (viaja)"        "0" "$(gi memory/.journal/pending/x.json)"
   chk "git NO ignora quarantine/ (viaja)"     "0" "$(gi memory/.journal/quarantine/x.json)"
+  # El aviso diferido es estado de ESTA maquina, como la linea base: en otra no significa nada, y
+  # a diferencia de pending/ no se puede re-aplicar sin efecto — es texto, y dos maquinas
+  # apendando dan conflicto. /checkpoint-3t hace `git add memory/`, asi que sin esta regla viaja.
+  chk "git IGNORA human-pending.txt"          "1" "$(gi memory/.journal/human-pending.txt)"
 else
-  skip=$((skip+7)); echo "  skip sin git: 7 asertos de check-ignore"
+  skip=$((skip+8)); echo "  skip sin git: 8 asertos de check-ignore"
 fi
 
 # No se pisa lo que el usuario haya puesto
@@ -749,6 +753,16 @@ chk "y el siguiente arranque SI lo entrega"    "1" "$(dice "$S1")"
 chk "y ya no se repite (se consumio)"          "0" "$([ -s "$T/defer_proj/memory/.journal/human-pending.txt" ] && echo 1 || echo 0)"
 S2=$(arranque startup)
 chk "el arranque de despues esta callado"      "0" "$(dice "$S2")"
+# Dos arranques mudos a la vez difiriendo cosas distintas: con un `>` truncante uno de los dos
+# avisos desaparecia sin rastro — el mismo fallo que este mecanismo existe para evitar.
+HP="$T/defer_proj/memory/.journal/human-pending.txt"
+: > "$HP"
+for i in 1 2 3 4 5 6; do ( printf 'aviso numero %s\n' "$i" >> "$HP" ) & done
+wait
+chk "6 diferimientos a la vez: no se pierde ninguno" "6" "$(sort -u "$HP" | grep -c 'aviso numero')"
+# Y el consumidor deduplica: el mismo aviso diferido en varios arranques mudos sale UNA vez.
+printf 'repetido\nrepetido\nrepetido\n' > "$HP"
+chk "el consumidor deduplica"                  "1" "$(awk '!visto[$0]++' "$HP" | grep -c 'repetido')"
 chk "y da la salida (--reseal)"               "1" "$(printf '%s' "$DG" | grep -c -- '--reseal')"
 chk "y dice que NO se pierden los cambios"    "1" "$(printf '%s' "$DG" | grep -c 'NO se pierden')"
 

@@ -1,5 +1,40 @@
 # Changelog
 
+## [2.21.3] - 2026-09-12
+Tercera ronda adversarial, esta vez en otro verificador (el metodo obliga a cambiar de backend
+tras dos roturas seguidas del mismo). Refuto siete angulos **corriendo las pruebas el mismo** —la
+suite entera, el arnes de mutacion y la prueba de carrera— y encontro uno solo.
+
+Y es mi mismo patron por tercera vez: **anadi un instrumento nuevo y lo deje fuera del
+`.gitignore` que esta misma linea de releases introdujo.**
+
+### Fixed
+- **`.journal/human-pending.txt` no estaba cubierto.** Es el aviso que ESTA maquina detecto y no
+  pudo entregar; en otra no significa nada — exactamente la categoria que `GITIGNORE_JOURNAL`
+  define— y sin embargo no estaba en la lista. Como `/checkpoint-3t` hace `git add memory/`, en
+  una instalacion donde `memory/` se versiona (el escenario para el que existe todo esto) el
+  aviso viajaba a las demas maquinas. Peor que `fingerprints.json`: es texto, no tiene la
+  propiedad de re-aplicar sin efecto que salva a `pending/`, asi que dos maquinas apendando dan
+  conflicto directo.
+- **Dos arranques mudos a la vez perdian un aviso.** La escritura era `>` truncante y sin lock:
+  el segundo pisaba al primero y ese aviso desaparecia sin rastro — el mismo fallo que el
+  diferimiento existe para evitar. Ahora es `>>`; el consumidor deduplica con `awk` conservando
+  el orden, asi que el mismo aviso diferido en varios arranques mudos sale una vez. Tope de 20
+  lineas para que no crezca sin fin si nadie viene a leerlo; se descarta lo NUEVO, no lo
+  guardado, porque el aviso mas viejo es el que lleva mas tiempo sin que lo vea nadie.
+
+### Pruebas
+Tres asertos nuevos (118 -> 121): que git ignora `human-pending.txt` —preguntandoselo a git con
+`check-ignore`, no mirando si el fichero existe—, que seis diferimientos simultaneos no pierden
+ninguno, y que el consumidor deduplica. El primero verificado con mutacion: quitar la linea de
+`GITIGNORE_JOURNAL` lo tumba.
+
+### Nota de metodo
+Tres releases, tres veces el mismo error de forma distinta: un instrumento nuevo cuyo contrato no
+se propago a todos los portadores (el docstring en 2.21.1, las mutaciones en 2.21.2, el
+`.gitignore` aqui). La pregunta que lo habria cazado las tres veces no es "¿funciona?" sino
+**"¿quien consume lo que esto emite, y que pasa si no llega?"**.
+
 ## [2.21.2] - 2026-09-12
 Segunda ronda adversarial sobre 2.21.1. Encontro que **mi arreglo de la ronda anterior habia roto
 otra cosa**: cerrar la carrera con `O_EXCL` sacrifico la publicacion atomica. De once angulos

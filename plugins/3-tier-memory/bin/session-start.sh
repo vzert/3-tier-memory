@@ -82,7 +82,16 @@ emit_output() {
     # Un solo punto de descarte, a proposito: antes habia tres `_HUMAN_BUF=""` sueltos y lo que
     # hay que guardar antes de tirar el buffer se habria olvidado en alguno.
     if [ -n "$_HUMAN_DEFER" ] && [ -n "${MEMORY_DIR:-}" ] && [ -d "$MEMORY_DIR/.journal" ]; then
-      printf '%s' "$_HUMAN_DEFER" > "$MEMORY_DIR/.journal/human-pending.txt" 2>/dev/null || true
+      # `>>`, NO `>`. Con un truncante, dos arranques simultaneos que difieran cosas distintas
+      # se pisan y uno de los dos avisos desaparece sin rastro — que es el mismo fallo que este
+      # mecanismo existe para evitar. Apendar una linea corta no se entrelaza. El consumidor
+      # deduplica, asi que repetir el mismo aviso no lo repite en pantalla.
+      # Tope: si nadie viene a leerlo, no crece sin fin. Se descarta lo NUEVO y no lo guardado:
+      # el aviso mas viejo es el que lleva mas tiempo sin que lo vea nadie.
+      _HP="$MEMORY_DIR/.journal/human-pending.txt"
+      if [ "$(wc -l < "$_HP" 2>/dev/null || echo 0)" -lt 20 ] 2>/dev/null; then
+        printf '%s' "$_HUMAN_DEFER" >> "$_HP" 2>/dev/null || true
+      fi
     fi
     _HUMAN_BUF=""
   fi
@@ -177,7 +186,9 @@ fi
 # vuelve a guardar en vez de gastarlos.
 HUMAN_PEND="$MEMORY_DIR/.journal/human-pending.txt"
 if [ -s "$HUMAN_PEND" ]; then
-  defer_human "$(cat "$HUMAN_PEND" 2>/dev/null)"
+  # Deduplicado conservando el orden: la misma deriva puede haberse diferido en varios arranques
+  # mudos seguidos, y repetirla cinco veces en pantalla es ruido, no informacion.
+  defer_human "$(awk '!visto[$0]++' "$HUMAN_PEND" 2>/dev/null)"
   rm -f "$HUMAN_PEND" 2>/dev/null || true
 fi
 
