@@ -30,15 +30,43 @@ MATCHER_PY="${MATCHER_PY:-$DIR/match-session-file.py}"
 [ -f "$MATCHER_PY" ] || { echo "no existe: $MATCHER_PY"; exit 2; }
 command -v python3 >/dev/null 2>&1 || { echo "python3 no esta en PATH"; exit 2; }
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-PASS=0; FAIL=0; SALIDA=""; RC=0
+PASS=0; FAIL=0; SKIP=0; SALIDA=""; RC=0
 echo "SUT: $MATCHER_PY"
 
 ok()   { PASS=$((PASS + 1)); }
+salta(){ SKIP=$((SKIP + 1)); echo "  SKIP $1"; }
 fail() { FAIL=$((FAIL + 1)); echo "  FAIL $1"; [ -n "${2:-}" ] && echo "$2" | sed 's/^/         /'; return 0; }
 
 # El desfase UTC solo existe fuera de UTC: se fija el huso para que el banco mida lo mismo en
 # cualquier maquina. El runner de macOS ya dio un rojo falso por el reloj (2.19.2).
-export TZ="America/Mexico_City"
+#
+# Y se fija en formato POSIX, no con el nombre IANA. `America/Mexico_City` lo entienden glibc y BSD
+# pero NO el CRT de Windows, que solo parsea `STDoffsetDST[,regla]`: en Git Bash el huso quedaba en
+# UTC, el desfase desaparecia, y con el desaparecian las DOS mutaciones que existen para verlo (M1
+# y M5 salian "no discrimina" en cada corrida de windows-latest desde 2.20.0). El `,M3.2.0,M11.1.0`
+# deja las reglas de DST explicitas para que las tres plataformas calculen el mismo offset y no
+# dependa de la base de datos de husos de cada una.
+#
+# Medido en macOS cambiando a UTC el `export TZ` de ESTE fichero (poner `TZ=UTC` en el entorno no
+# sirve: este export lo pisa): `PASS=34 FAIL=4`. CUATRO, no dos — los dos de windows-latest mas el
+# caso del ano imposible del sello y su colateral, que Windows no daba. Los cuatro dependen de un
+# huso al oeste y los cuatro los cubre la guarda de abajo.
+export TZ="CST6CDT,M3.2.0,M11.1.0"
+
+# Y no se da por hecho que se aplique: si el huso acaba en UTC, este banco NO PUEDE ver el defecto
+# del desfase, y las comprobaciones que dependen de el se SALTAN Y SE CUENTAN — nunca se dan por
+# buenas en verde (es la misma regla que el workflow aplica a los 3 casos no construibles en
+# Windows). Fail cerrado: si la medicion falla, se trata como "no se aplica".
+HUSO_APLICADO=$(python3 -c "
+import datetime
+try:
+    mayo = datetime.datetime(2026, 5, 9, 21).astimezone().utcoffset()
+    enero = datetime.datetime(2026, 1, 9, 21).astimezone().utcoffset()
+    print('si' if mayo and enero and mayo.total_seconds() and enero.total_seconds() else 'no')
+except Exception:
+    print('no')
+" 2>/dev/null) || HUSO_APLICADO=no
+[ "$HUSO_APLICADO" = "si" ] || HUSO_APLICADO=no
 
 # ---------------------------------------------------------------- fixture
 # Construye mem/ y jd/ con un caso por sesion. Se regenera en cada llamada para que una mutacion
@@ -246,6 +274,27 @@ d = json.load(sys.stdin)
 print('\n'.join(r['matched'] for r in d['results'] if 'soy-un-directorio' in (r['matched'] or '')))
 ")" ]; then fail "C10 un directorio .md se conto como ficha"; else ok; fi
 
+# C14: `en_rango` con los anos en los extremos. SIN HUSO de por medio, a proposito: se llama a la
+# funcion directamente con las dos fechas que desbordan la aritmetica de `datetime.date` (0001-01-01
+# menos el margen cae bajo date.min; 9999-12-31 mas el margen pasa date.max). Asi el caso se mide en
+# UTC tambien — que es donde estaba vivo: en un huso al oeste la fecha ya se descartaba antes de
+# llegar aqui, y por eso el defecto no se veia en macOS pero SI abortaba el matcher entero en
+# cualquier servidor o CI en UTC. Encontrado el 2026-09-12 al investigar el rojo de windows-latest.
+for SUT_RANGO in "$MATCHER_PY" "$DIR/stamp-session-id.py"; do
+  [ -f "$SUT_RANGO" ] || continue
+  RANGO_OUT=$(python3 -c "
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location('m', sys.argv[1])
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+print('%s %s %s' % (m.en_rango('2026-05-06', '0001-01-01', '0001-01-01'),
+                    m.en_rango('2026-05-06', '9999-12-31', '9999-12-31'),
+                    m.en_rango('2026-05-06', '2026-05-06', '2026-05-06')))
+" "$SUT_RANGO" 2>"$TMP/rango_err")
+  if [ "$RANGO_OUT" = "False False True" ]; then ok
+  else fail "C14 en_rango($(basename "$SUT_RANGO")): esperaba 'False False True', dio '$RANGO_OUT'" "$(cat "$TMP/rango_err")"; fi
+done
+
 # ---------------------------------------------------------------- el sello (stamp-session-id.py)
 # El sello GANA a la evidencia de escritura en el matcher, asi que un sello equivocado no da un
 # duplicado visible: da el fallo invisible. La primera version solo comprobaba que el UUID tuviera
@@ -310,12 +359,19 @@ if [ -f "$STAMP_PY" ]; then
   # el corpus, no solo esta transcripcion) en vez de devolver None y dejar actuar al fail-cerrado.
   # Lo encontro un adversario en la cuarta ronda, probando exactamente el caso que el propio round
   # pedia probar: "fecha valida pero absurda como el ano 0001 o 9999".
-  printf '{"type":"user","timestamp":"0001-01-01T02:00:00Z","message":{"role":"user","content":"x"}}\n' \
-    > "$TMP/jd/99999999-0000-0000-0000-0000000000ee.jsonl"
-  printf -- '---\ntype: session\ndate: 2026-05-06\nstatus: completed\n---\n# x\n' > "$TMP/mem/sessions/2026-05-06-ano-imposible.md"
-  python3 "$STAMP_PY" "$TMP/mem/sessions/2026-05-06-ano-imposible.md" "99999999-0000-0000-0000-0000000000ee" --jsonl-dir "$TMP/jd" >"$TMP/st9" 2>&1
-  if [ $? != 0 ] && grep -q 'timestamps-legibles' "$TMP/st9" && ! grep -q 'Traceback' "$TMP/st9"; then ok
-  else fail "sello: OverflowError (ano 0001) no capturada -- crash en vez de stamped=0" "$(cat "$TMP/st9")"; fi
+  # Solo se puede medir con un huso al oeste: en UTC el ano 0001 no desborda, asi que no hay
+  # OverflowError que capturar y el fixture, en vez de rechazarse, sellaria la ficha y ensuciaria el
+  # aserto de mas abajo. Si el huso no se aplico, este caso se salta y se cuenta.
+  if [ "$HUSO_APLICADO" = "si" ]; then
+    printf '{"type":"user","timestamp":"0001-01-01T02:00:00Z","message":{"role":"user","content":"x"}}\n' \
+      > "$TMP/jd/99999999-0000-0000-0000-0000000000ee.jsonl"
+    printf -- '---\ntype: session\ndate: 2026-05-06\nstatus: completed\n---\n# x\n' > "$TMP/mem/sessions/2026-05-06-ano-imposible.md"
+    python3 "$STAMP_PY" "$TMP/mem/sessions/2026-05-06-ano-imposible.md" "99999999-0000-0000-0000-0000000000ee" --jsonl-dir "$TMP/jd" >"$TMP/st9" 2>&1
+    if [ $? != 0 ] && grep -q 'timestamps-legibles' "$TMP/st9" && ! grep -q 'Traceback' "$TMP/st9"; then ok
+    else fail "sello: OverflowError (ano 0001) no capturada -- crash en vez de stamped=0" "$(cat "$TMP/st9")"; fi
+  else
+    salta "sello: el ano imposible necesita un huso al oeste y TZ no se aplico en esta plataforma"
+  fi
 
   # Fail CERRADO: si la ficha no empieza por fecha, no hay nada que comprobar y no se sella.
   printf -- '---\ntype: session\ndate: 2026-05-06\nstatus: completed\n---\n# x\n' > "$TMP/mem/sessions/sin-fecha.md"
@@ -370,11 +426,16 @@ PY
   if [ "$rojo" = "1" ]; then ok; else fail "$etiqueta: el banco NO se puso rojo — no discrimina"; fi
 }
 
-# M1: fecha UTC cruda en vez de local -> C6 tiene que caer.
-CASOS_QUE_DEBEN_CAER=("ffffffff dateFirst=2026-05-09")
-muta "M1 fecha UTC cruda" \
-  '        return dt.astimezone().date().isoformat() if dt.tzinfo else dt.date().isoformat()' \
-  '        return ts[:10]  # MUTACION'
+# M1: fecha UTC cruda en vez de local -> C6 tiene que caer. En UTC la fecha local y la cruda son la
+# MISMA, asi que la mutacion es invisible por construccion: sin huso aplicado esto no se mide.
+if [ "$HUSO_APLICADO" = "si" ]; then
+  CASOS_QUE_DEBEN_CAER=("ffffffff dateFirst=2026-05-09")
+  muta "M1 fecha UTC cruda" \
+    '        return dt.astimezone().date().isoformat() if dt.tzinfo else dt.date().isoformat()' \
+    '        return ts[:10]  # MUTACION'
+else
+  salta "M1 fecha UTC cruda: en UTC la fecha cruda y la local coinciden, la mutacion no es visible"
+fi
 
 # M2: sin el idioma (c), la ruta ligada a variable -> C3 tiene que caer.
 CASOS_QUE_DEBEN_CAER=("cccccccc match")
@@ -396,16 +457,63 @@ muta "M4 el matcher fabrica fecha con ts[:10]" \
 # directorio es la clasificacion del corpus entero, no la de esa sesion. El aserto de arriba
 # ("un timestamp imposible tumbo la clasificacion del corpus") es el que nombra esa diferencia.
 # Antes de tener C13 y M5, el arreglo del matcher solo se probaba de rebote.
-CASOS_QUE_DEBEN_CAER=("aaaa0001 process")
-muta "M5 el matcher no captura OverflowError" \
-  '    except (ValueError, OSError, OverflowError):' \
-  '    except (ValueError, OSError):  # MUTACION'
+if [ "$HUSO_APLICADO" = "si" ]; then
+  CASOS_QUE_DEBEN_CAER=("aaaa0001 process")
+  muta "M5 el matcher no captura OverflowError" \
+    '    except (ValueError, OSError, OverflowError):' \
+    '    except (ValueError, OSError):  # MUTACION'
+else
+  salta "M5 OverflowError: en UTC el ano 0001 no desborda, asi que quitar la captura no rompe nada"
+fi
 
 # M3: todo cuenta como escritura -> C4, C5 y C7 tienen que caer.
 CASOS_QUE_DEBEN_CAER=("dddddddd process" "eeeeeeee process" "11111111 process")
 muta "M3 siempre casa" \
   '    tramo = cmd[:inicio]' \
   '    return True  # MUTACION'
+
+# M6: quitar `OverflowError` de `en_rango` -> tiene que reventar. Se muta en LOS DOS ficheros, uno
+# por corrida: el arreglo toca dos, asi que probar uno no prueba el otro. No usa el helper `muta`
+# porque esto no mira un veredicto del corpus, sino el valor que devuelve la funcion.
+#
+# La mutacion fija ademas `MARGEN_DIAS = 1`. No es para forzar un rojo comodo: en
+# `stamp-session-id.py` el margen es 0 y la aritmetica no desborda, asi que alli la captura es una
+# guarda LATENTE y quitarla no rompe nada hoy. Lo que este par mutacion+aserto mide es exactamente
+# la garantia que se quiere: que subir el margen no reabre el fallo. En `match-session-file.py` el
+# margen ya es 1 y la linea no cambia nada.
+for MUT_RANGO in "$MATCHER_PY" "$DIR/stamp-session-id.py"; do
+  [ -f "$MUT_RANGO" ] || continue
+  # Sobre una COPIA, nunca sobre el fuente del repo: un abort a media mutacion dejaria el fichero
+  # del plugin roto, y `set -u` hace que cualquier fallo intermedio aborte.
+  COPIA_RANGO="$TMP/rango-mutante.py"
+  cp "$MUT_RANGO" "$COPIA_RANGO"
+  python3 - "$COPIA_RANGO" <<'PYMUT'
+import io, sys
+p = sys.argv[1]
+s = io.open(p, encoding="utf-8").read()
+viejo = "    except (ValueError, TypeError, OverflowError):"
+assert s.count(viejo) == 1, "la mutacion M6 no se aplica en %s" % p
+s = s.replace(viejo, "    except (ValueError, TypeError):  # MUTACION")
+margen = "MARGEN_DIAS = 0"
+if margen in s:
+    s = s.replace(margen, "MARGEN_DIAS = 1  # MUTACION", 1)
+io.open(p, "w", encoding="utf-8").write(s)
+PYMUT
+  MUT_RC=$?
+  SIGUE=$(python3 -c "
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location('m', sys.argv[1])
+m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m)
+try:
+    m.en_rango('2026-05-06', '0001-01-01', '0001-01-01')
+    print('no-revienta')
+except OverflowError:
+    print('revienta')
+" "$COPIA_RANGO" 2>/dev/null)
+  if [ "$MUT_RC" = "0" ] && [ "$SIGUE" = "revienta" ]; then ok
+  else fail "M6 en_rango($(basename "$MUT_RANGO")): el banco NO se puso rojo — no discrimina (rc=$MUT_RC, $SIGUE)"; fi
+done
 
 # ---------------------------------------------------------------- mutaciones del sello
 # La ronda 3 del adversario midio que los dos arreglos de la ronda 2 NO estaban fijados por nada:
@@ -453,12 +561,16 @@ if [ -f "$STAMP_PY" ] && [ -z "${EN_MUTACION:-}" ]; then
         return ts[:10]  # MUTACION" "sin un solo timestamp valido"
   mutar_sello "S4 sin guarda de fecha" \
     "        if not en_rango(fecha_ficha, primera, ultima):" "        if False:  # MUTACION" "fecha ajena"
-  mutar_sello "S5 OverflowError sin capturar (ano imposible)" \
-    "    except (ValueError, OSError, OverflowError):" "    except (ValueError, OSError):  # MUTACION" \
-    "OverflowError"
+  if [ "$HUSO_APLICADO" = "si" ]; then
+    mutar_sello "S5 OverflowError sin capturar (ano imposible)" \
+      "    except (ValueError, OSError, OverflowError):" "    except (ValueError, OSError):  # MUTACION" \
+      "OverflowError"
+  else
+    salta "S5 OverflowError del sello: mismo motivo que M5 (sin desfase no hay desbordamiento)"
+  fi
   unset EN_MUTACION
 fi
 
 echo
-echo "PASS=$PASS FAIL=$FAIL"
+echo "PASS=$PASS FAIL=$FAIL SKIP=$SKIP"
 [ "$FAIL" = "0" ] || exit 1

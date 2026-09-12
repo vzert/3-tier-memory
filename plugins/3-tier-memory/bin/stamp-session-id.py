@@ -122,10 +122,15 @@ def en_rango(fecha, primera, ultima):
         f = datetime.date.fromisoformat(fecha)
         a = datetime.date.fromisoformat(primera) - datetime.timedelta(days=MARGEN_DIAS)
         b = datetime.date.fromisoformat(ultima) + datetime.timedelta(days=MARGEN_DIAS)
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, OverflowError):
         # Fail CERRADO. La version anterior devolvia True aqui —"no se puede decidir, pues pasa"—
         # y eso convertia una fecha ilegible en una puerta de servicio hacia el unico fallo que
         # este script existe para impedir. Si no se puede comprobar, no se sella.
+        #
+        # `OverflowError` aqui es LATENTE, no activa: con `MARGEN_DIAS = 0` la resta y la suma no
+        # desbordan nunca. Se nombra porque el mismo `en_rango` de `match-session-file.py` (margen 1)
+        # SI abortaba el proceso entero por esto, y la unica diferencia entre los dos es una
+        # constante. Subir el margen aqui no debe reabrir ese fallo.
         return False
     return a <= f <= b
 

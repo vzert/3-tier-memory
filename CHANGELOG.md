@@ -1,5 +1,55 @@
 # Changelog
 
+## [2.22.1] - 2026-09-12
+`windows-latest` llevaba en rojo desde 2.20.0 con dos mutaciones diciendo "no discrimina". No era
+el producto: era el huso del banco. Y al investigarlo salio un defecto de producto peor, vivo en
+cualquier maquina en UTC.
+
+### Fixed
+- **`en_rango` abortaba el proceso ENTERO por un timestamp absurdo en UNA transcripcion.** Un
+  `0001-01-01` (o un `9999-12-31`) parsea sin excepcion, pero restarle o sumarle el margen de dias
+  desborda `datetime.date` y lanza `OverflowError`, que no es ValueError ni TypeError. Sin capturarla,
+  `match-session-file.py` moria con traceback y `/backfill-3t` perdia la clasificacion del corpus
+  completo por un solo fichero. Vivo en cualquier maquina cuyo huso local sea UTC —casi todo servidor
+  y casi todo CI—; invisible en un huso al oeste, porque alli la fecha se descartaba antes de llegar
+  a esa resta. Reproducido en los dos husos con el arreglo revertido. Mismo `except` en
+  `stamp-session-id.py`, donde con `MARGEN_DIAS = 0` la guarda es LATENTE: hoy no desborda, y la
+  unica diferencia entre los dos ficheros es esa constante.
+- **El banco fijaba el huso con un nombre que Windows no entiende.** `TZ="America/Mexico_City"` lo
+  aceptan glibc y BSD, pero el CRT de Windows solo parsea `STDoffsetDST[,regla]`: en Git Bash el huso
+  quedaba en UTC, el desfase desaparecia, y con el desaparecian las dos mutaciones que existen para
+  verlo (M1 y M5, "no discrimina" en cada corrida). Ahora se fija en formato POSIX con reglas de DST
+  explicitas (`CST6CDT,M3.2.0,M11.1.0`), que las tres plataformas calculan igual.
+
+  Medido en macOS sobre el banco anterior, cambiando a UTC su propio `export TZ` (poner `TZ=UTC` en
+  el entorno no sirve: ese export lo pisa y salen `PASS=38 FAIL=0`): `PASS=34 FAIL=4`. Son CUATRO, no dos —
+  los dos rojos de `windows-latest` mas otros dos que Windows no daba, del caso del ano imposible en
+  `stamp-session-id.py` (que tiene su propia guarda de `OverflowError`, esta por el desbordamiento de
+  `astimezone()` al oeste) y su colateral. Windows no es UTC puro: alli esa conversion falla con
+  `OSError`, que si esta capturado, asi que el caso pasaba. Los CUATRO dependen de un huso al oeste y
+  los cuatro quedan cubiertos por la guarda de abajo: en una plataforma que ignore TZ el banco da
+  `PASS=38 FAIL=0 SKIP=4`, medido dos veces por separado.
+- **Y no se da por hecho que se aplique.** El banco mide el desfase real al arrancar; si sale 0, las
+  cuatro comprobaciones que necesitan un huso al oeste se SALTAN Y SE CUENTAN (`SKIP=N` en el
+  resumen), nunca se dan por buenas en verde. Es la misma regla que el workflow ya aplica a los 3
+  casos no construibles en Windows.
+
+### Pruebas
+`test-backfill-dedup.sh` pasa de 38 a 42 asertos. El nuevo C14 llama a `en_rango` DIRECTAMENTE con
+los dos anos extremos, sin huso de por medio, en los dos ficheros que la tienen — asi el caso se mide
+tambien en UTC, que es donde estaba vivo. Su mutacion M6 quita `OverflowError` en cada fichero por
+separado (el arreglo toca dos, probar uno no prueba el otro) y fija ademas `MARGEN_DIAS = 1`, porque
+en `stamp-session-id.py` la guarda es latente y lo que hay que medir es que subir el margen no reabra
+el fallo. La mutacion va sobre una COPIA: la version anterior de este parche mutaba el fuente del
+repo y lo restauraba, que es exactamente como un abort deja un fichero del plugin roto.
+`tools/run-tests.sh` en verde 15/15 en macOS.
+
+### Nota de metodo
+El rojo de CI era de plataforma y el defecto que escondia era de producto. Llevaban cinco releases
+juntos porque el banco solo podia ver el desfase en el huso donde el defecto NO se manifiesta: la
+prueba y el fallo se tapaban mutuamente. Un banco que fija el entorno para "medir lo mismo en
+cualquier maquina" tambien elige lo que no va a poder ver nunca.
+
 ## [2.22.0] - 2026-09-12
 Un usuario del plugin corrio dos checkpoints el mismo dia y los dos le dijeron algo que suena a
 averia: "sus pendientes no estaban en el journal" y "voy a revisar el motivo de la cuarentena".

@@ -119,7 +119,13 @@ def en_rango(fecha, primera, ultima):
         f = datetime.date.fromisoformat(fecha)
         a = datetime.date.fromisoformat(primera) - datetime.timedelta(days=MARGEN_DIAS)
         b = datetime.date.fromisoformat(ultima) + datetime.timedelta(days=MARGEN_DIAS)
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, OverflowError):
+        # OverflowError es el ano en los extremos: `0001-01-01` menos el margen cae por debajo de
+        # date.min y `9999-12-31` mas el margen por encima de date.max. No es ValueError ni
+        # TypeError, asi que sin nombrarla la excepcion no cogida aborta el proceso ENTERO —y con
+        # el, la clasificacion de todo el corpus— por UN timestamp absurdo en UN fichero. Solo se
+        # llega aqui cuando el huso local NO desplaza esa fecha fuera de rango antes (es decir, en
+        # UTC: casi todo servidor y casi todo CI), que es justo donde nadie lo estaba mirando.
         return False
     return a <= f <= b
 
