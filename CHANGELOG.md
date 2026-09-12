@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.18.6] - 2026-09-12
+Tercera vuelta de Windows. Solo suites: las tres son la misma familia de defecto de medicion.
+
+### Fixed
+- `bin/test-monthly-rows.sh`: los directorios de memoria se interpolaban DENTRO del fuente de
+  python (`jc.find_monthly_row('$M4', ...)`), donde MSYS no convierte nada. Pasan por el entorno,
+  igual que `$BIN` en 2.18.3.
+- `bin/test-monthly-rows.sh`: el conteo de CR usaba `grep`, que en MSYS trata `\r\n` como fin de
+  linea y devuelve 0 donde hay CRLF. Se cuenta por bytes, como ya se hizo en
+  `test-normalize-pendientes.sh`.
+- `bin/test-resolve-project-dir.sh`: el respaldo de python3 devuelve la ruta en forma nativa y el
+  shell la construye en forma MSYS. Se comparan rutas normalizadas, no cadenas.
+
 ## [2.18.5] - 2026-09-12
 ### Fixed
 - `bin/session-start.sh`: el detector de hooks heredados daba por RELATIVA una ruta absoluta de

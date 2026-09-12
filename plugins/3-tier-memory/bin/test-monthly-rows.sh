@@ -33,6 +33,10 @@ ok()   { printf '  ok   %s\n' "$1"; }
 bad()  { printf '  FAIL %s\n' "$1"; FAIL=1; }
 check(){ [ "$2" = "$3" ] && ok "$1" || { bad "$1"; printf '       esperado: %s\n       real:     %s\n' "$3" "$2"; }; }
 
+# Contar CR con `grep` no es portable: el grep de MSYS trata `\r\n` como fin de linea y devuelve 0
+# donde hay CRLF. Se cuentan BYTES. (CI, 2026-09-12.)
+cr_lineas() { python3 -c "import sys; print(open(sys.argv[1],'rb').read().count(b'\r'))" "$1"; }
+
 # Mensual con cabecera de 5 columnas (sin `#` ni `Sesion resolucion`) y una fila sin numero,
 # exactamente la forma medida en `2026-08.md` de la instalacion real.
 mem_corto() {
@@ -178,11 +182,11 @@ check "la fila corta si se ve" "$(echo "$OUT" | grep -o 'unaligned_rows=[0-9]*')
 check "el informe da las medidas" "$(echo "$OUT" | grep -c 'Medido: 5 celdas')" "1"
 check "ya no afirma una sola causa" "$(echo "$OUT" | grep -c 'El dato original se perdio')" "0"
 check "la fila del valor raro SI se localiza por id" \
-  "$(python3 -c "
+  "$(MDIR="$M4" python3 -c "
 import importlib.util, os
 spec = importlib.util.spec_from_file_location('jc', os.path.join(os.environ['BIN'], 'journal-compact.py'))
 jc = importlib.util.module_from_spec(spec); spec.loader.exec_module(jc)
-print('si' if jc.find_monthly_row('$M4', 'p-3333333333') else 'no')")" "si"
+print('si' if jc.find_monthly_row(os.environ['MDIR'], 'p-3333333333') else 'no')")" "si"
 
 echo "8. una fila corta SIN cabecera que la explique no se adivina (adversario ronda 1, H1)"
 M5="$TMP/m5"; mkdir -p "$M5/pendientes" "$M5/.journal/pending"
@@ -206,17 +210,17 @@ check "la ambigua NO se alinea" "$(echo "$OUT" | grep -o 'unaligned_rows=[0-9]*'
 check "y el motivo dice que no se adivina" \
   "$(echo "$OUT" | grep -c 'la cabecera del fichero no dice que columnas son')" "1"
 check "la de 7 celdas SI se localiza (no se tira el bebe con el agua)" \
-  "$(python3 -c "
+  "$(MDIR="$M5" python3 -c "
 import importlib.util, os
 spec = importlib.util.spec_from_file_location('jc', os.path.join(os.environ['BIN'], 'journal-compact.py'))
 jc = importlib.util.module_from_spec(spec); spec.loader.exec_module(jc)
-print('si' if jc.find_monthly_row('$M5', 'p-7777777777') else 'no')")" "si"
+print('si' if jc.find_monthly_row(os.environ['MDIR'], 'p-7777777777') else 'no')")" "si"
 check "la ambigua NO se localiza por id (no se escribe a ciegas)" \
-  "$(python3 -c "
+  "$(MDIR="$M5" python3 -c "
 import importlib.util, os
 spec = importlib.util.spec_from_file_location('jc', os.path.join(os.environ['BIN'], 'journal-compact.py'))
 jc = importlib.util.module_from_spec(spec); spec.loader.exec_module(jc)
-print('si' if jc.find_monthly_row('$M5', 'p-6666666666') else 'no')")" "no"
+print('si' if jc.find_monthly_row(os.environ['MDIR'], 'p-6666666666') else 'no')")" "no"
 check "con cabecera de 7, la fila de 6 SI se lee (faltan las finales)" \
   "$(python3 -c "
 import importlib.util, os
@@ -245,11 +249,11 @@ p = sys.argv[1]
 b = open(p, "rb").read().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
 open(p, "wb").write(b)
 PY
-ANTES_LF=$(grep -c $'\r' "$M7/pendientes/2026-08.md" || true)
+ANTES_LF=$(cr_lineas "$M7/pendientes/2026-08.md")
 python3 "$BIN/journal-emit.py" --memory-dir "$M7" --type pendiente.resolve --id p-1111111111 \
   --estado resolved --sesion "[[sessions/prueba]]" --nota "cierre crlf" >/dev/null
 python3 "$BIN/journal-compact.py" --memory-dir "$M7" >/dev/null 2>&1
-DESPUES_LF=$(grep -c $'\r' "$M7/pendientes/2026-08.md" || true)
+DESPUES_LF=$(cr_lineas "$M7/pendientes/2026-08.md")
 check "el numero de lineas CRLF no cambia" "$DESPUES_LF" "$ANTES_LF"
 check "no quedo ningun salto suelto" \
   "$(python3 -c "

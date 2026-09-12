@@ -60,13 +60,18 @@ field() { echo "$OUT" | sed -n "s/.*$1=\[\([^]]*\)\].*/\1/p"; }
 
 JSON='{"session_id":"t","cwd":"'"$TMP"'/proj","hook_event_name":"PreToolUse"}'
 mkdir -p "$TMP/proj"
+
+# En Git Bash el mismo directorio tiene dos ortografias —MSYS (/tmp/x) y nativa (C:/.../Temp/x)— y
+# el respaldo de python3 devuelve la segunda mientras el shell construye la primera. Se comparan
+# rutas, no cadenas. Fuera de Windows `cygpath` no existe y esto no toca nada. (CI, 2026-09-12.)
+norm() { command -v cygpath >/dev/null 2>&1 && cygpath -m "$1" 2>/dev/null || printf '%s' "$1"; }
 IN="$TMP/in"   # stdin por REDIRECCION, nunca por tuberia: `x | probe` corre probe en un subshell
 printf '%s' "$JSON" > "$IN"
 
 echo "D1 — sourceable bajo set -u:"
 probe probe.sh < "$IN"
 if sentinel "set -u + stdin con JSON no debe abortar"; then
-  [ "$(field dir)" = "$TMP/proj" ] && ok || fail "cwd del JSON mal resuelto: '$(field dir)'"
+  [ "$(norm "$(field dir)")" = "$(norm "$TMP/proj")" ] && ok || fail "cwd del JSON mal resuelto: '$(field dir)'"
 fi
 probe probe.sh < /dev/null
 if sentinel "set -u + stdin vacio no debe abortar"; then
@@ -140,7 +145,7 @@ fi
 : > "$ERR"; : > "$DUMP"
 OUT=$(printf '%s' "$JSON" | env -u CLAUDE_PLUGIN_ROOT CLAUDE_PROJECT_DIR="$TMP/desde-entorno" \
       RESOLVE_SH="$RESOLVE_SH" DUMP="$DUMP" HOOK_STDIN_TIMEOUT=2 bash "$TMP/probe.sh" 2>"$ERR"); RC=$?
-if [ "$RC" -eq 0 ] && [ "$(field dir)" = "$TMP/desde-entorno" ]; then ok
+if [ "$RC" -eq 0 ] && [ "$(norm "$(field dir)")" = "$(norm "$TMP/desde-entorno")" ]; then ok
 else fail "el entorno gana sobre el cwd del JSON" "rc=$RC out='$OUT' err=$(cat "$ERR")"; fi
 
 # _HOOK_INPUT llega entero a los llamantes: seis hooks lo reenvian a un parser de JSON o lo
@@ -186,7 +191,7 @@ for c in python3 bash sed cat env; do P=$(command -v $c) && ln -sf "$P" "$JQLESS
 : > "$ERR"; : > "$DUMP"
 OUT=$(printf '%s' "$JSON" | env -i PATH="$JQLESS" RESOLVE_SH="$RESOLVE_SH" DUMP="$DUMP" \
       HOOK_STDIN_TIMEOUT=2 "$JQLESS/bash" "$TMP/probe.sh" 2>"$ERR"); RC=$?
-if [ "$RC" -eq 0 ] && [ "$(field dir)" = "$TMP/proj" ]; then ok
+if [ "$RC" -eq 0 ] && [ "$(norm "$(field dir)")" = "$(norm "$TMP/proj")" ]; then ok
 else fail "sin jq: el respaldo de python3 debe resolver el cwd" "rc=$RC out='$OUT' err=$(cat "$ERR")"; fi
 
 echo "RESULT: pass=$PASS fail=$FAIL skip=$SKIP"
