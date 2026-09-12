@@ -43,6 +43,9 @@ correr() {   # $1 = etiqueta, $2... = comando
 
 echo "Higiene del repo"
 correr "check-ignored-tracked" bash tools/check-ignored-tracked.sh
+# Que las comprobaciones editadas sigan sabiendo fallar. Un aserto que nunca se ha visto fallar no
+# se ha visto funcionar, y en esta sesion tres afirmaron cubrir mas de lo que cubrian.
+correr "mutation-check" bash tools/mutation-check.sh
 
 echo
 echo "Suites del plugin"

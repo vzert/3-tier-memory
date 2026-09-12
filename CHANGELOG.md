@@ -1,5 +1,36 @@
 # Changelog
 
+## [2.19.4] - 2026-09-12
+Cierra el hueco que el adversario **declaro** en vez de tapar: las ediciones de portabilidad del
+2026-09-12 —comparar rutas en vez de cadenas, contar CR por bytes en vez de con `grep`, un digest
+portable, el `CONTROL` reescrito, el `SYSTEMROOT` del `env -i`— nunca se habian visto FALLAR. Un
+aserto que solo se ha visto pasar no se ha visto funcionar.
+
+### Added
+- `tools/mutation-check.sh` y `tools/mutaciones/`: para cada comprobacion editada, rompe su codigo
+  bajo prueba en una copia y exige que la suite caiga **por el aserto que le toca**, no por
+  cualquiera. Las **seis** discriminan:
+
+  | comprobacion | cae por |
+  |---|---|
+  | `check_ruta` / `norm` | «la estable gana a la prerelease» |
+  | `CONTROL` del resolutor | «el patron viejo elegia a ciegas» |
+  | `canon` / `cabecera_crlf` | «crlf» |
+  | `cr_lineas` | «lineas CRLF no cambia» |
+  | `huella` / md5 | «byte a byte» |
+  | `norm` + `SYSTEMROOT` | «el respaldo de python3» |
+
+- Entra en `tools/run-tests.sh` (14 comprobaciones ahora, +13 s). Un arnes que nadie corre se
+  pudre.
+
+### Nota de metodo
+La regla que hace util este arnes: **si la suite no cae, primero se mira si la mutacion llego a
+aplicarse**. Dos de las seis mutaciones de la primera pasada no se aplicaron —suposiciones mias
+sobre el fuente— y de haberme quedado ahi habria concluido "vacuo" sobre asertos que si
+discriminan. Cada mutador imprime cuantas sustituciones hizo y CERO se reporta como **SIN PROBAR**,
+nunca como aprobado. Verificado tambien en ese sentido: rompiendo a proposito un mutador, el arnes
+se pone rojo con `SIN PROBAR` en vez de decir que todo bien.
+
 ## [2.19.3] - 2026-09-12
 **La prueba que 2.19.1 presento como "no puede quedarse corta" se quedaba corta en 12 de 14
 ficheros.** Lo cazo un adversario local mutando `build-recall-index.py`: cambio
