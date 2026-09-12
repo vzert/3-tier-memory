@@ -13,7 +13,10 @@ advierte dos lineas mas abajo: *"Getting this wrong deletes context the user nev
   hoy, con sus tres limites.** Duplicado = los items de `## Alta prioridad` y los `SIN CLASIFICAR`,
   **como mucho 25** y **cada uno cortado a ~120 caracteres** (`CEILING` y `BODY_CAP` de
   `bin/session-start.sh`). Cuentan como custom, y no se borran: las MEDIA y BAJA, lo que pase del
-  item 25, y la cola cortada de cada item largo.
+  item 25, la cola cortada de cada item largo, y los `- [ ]` que viven bajo una seccion cerrada
+  (`## Completados`, `## Scope`, `## Related`...) — que el parser excluye a proposito y un `grep`
+  legacy captura sin enterarse. Esa cuarta clase faltaba en la enumeracion y la encontro el
+  verificador; hay un pendiente vivo que documenta el caso real (16 items asi en otro proyecto).
 - **La medicion que `/migrate` ensena al usuario mide ahora los dos lados, y el lado del plugin lo
   lee del propio plugin.** Antes solo contaba los bytes del volcado legacy, que es la mitad que no
   decide nada. El primer intento anadio un `awk` que clasificaba "igual que el hook" y no lo hacia:
