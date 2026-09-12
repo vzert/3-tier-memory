@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pruebas de resolve-plugin-bin.sh (2.18.0).
+# Pruebas de resolve-plugin-bin.sh (2.18.1).
 #
 # Que cierra: los comandos localizaban sus scripts con
 #   find "$HOME/.claude/plugins" -name "X.py" -path "*/3-tier-memory/*" | head -1
@@ -70,6 +70,55 @@ json.dump(d, open(h + "/.claude/plugins/installed_plugins.json", "w"))
 PY
 GOT=$(env -u CLAUDE_PLUGIN_ROOT HOME="$H" bash "$BIN/resolve-plugin-bin.sh")
 check "la estable gana a la prerelease" "$GOT" "$H/.claude/plugins/cache/mkt2/3-tier-memory/2.18.0/bin"
+
+echo "1c. una entrada scope=project de OTRO proyecto no puede estar activa aqui: se excluye"
+# Adversario externo ronda 1, H6, reproducido 2026-09-12 con manifiesto. Sin el filtro, una
+# entrada `project` de otro proyecto ganaba por version: el texto del comando venia de la version
+# instalada aqui y los scripts que invocaba eran de otra instalacion.
+H3="$TMP/ambitos"
+mkdir -p "$H3/.claude/plugins/cache/mkt/3-tier-memory/1.0.0/bin" \
+         "$H3/inst/2.18.0/bin" "$H3/inst/2.20.0/bin" \
+         "$H3/ACTUAL" "$H3/OTRO/sub/dir" "$H3/OTRO-bis"
+: > "$H3/.claude/plugins/cache/mkt/3-tier-memory/1.0.0/bin/journal-emit.py"
+: > "$H3/inst/2.18.0/bin/journal-emit.py"
+: > "$H3/inst/2.20.0/bin/journal-emit.py"
+manifiesto() {   # $1 = json con PLACEHOLDER por $H3
+  printf '%s' "$1" | sed "s#PLACEHOLDER#$H3#g" > "$H3/.claude/plugins/installed_plugins.json"
+}
+resolver() {     # $1 = cwd desde el que se resuelve
+  ( cd "$1" && env -u CLAUDE_PLUGIN_ROOT HOME="$H3" bash "$BIN/resolve-plugin-bin.sh" )
+}
+DOS='{"plugins":{"3-tier-memory@mkt":[
+ {"scope":"user","version":"2.18.0","installPath":"PLACEHOLDER/inst/2.18.0"},
+ {"scope":"project","projectPath":"PLACEHOLDER/OTRO","version":"2.20.0","installPath":"PLACEHOLDER/inst/2.20.0"}]}}'
+manifiesto "$DOS"
+check "gana la entrada user, no la project ajena" "$(resolver "$H3/ACTUAL")" "$H3/inst/2.18.0/bin"
+# CONTROL: la regla vieja era "la mas alta gana" sin mirar el ambito.
+VIEJO=$(python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))["plugins"]
+c = [e for v in d.values() for e in v]
+print(max(c, key=lambda e: e["version"])["installPath"] + "/bin")
+' "$H3/.claude/plugins/installed_plugins.json")
+check "CONTROL: sin el filtro ganaba la ajena" "$VIEJO" "$H3/inst/2.20.0/bin"
+
+echo "1d. la misma entrada project SI vale desde su proyecto, y desde un subdirectorio suyo"
+# Se comparan componentes de ruta: el cwd puede ser un subdirectorio del projectPath (un comando
+# no siempre corre en la raiz), pero /OTRO-bis NO esta dentro de /OTRO aunque lo tenga de prefijo.
+check "desde su propio proyecto" "$(resolver "$H3/OTRO")" "$H3/inst/2.20.0/bin"
+check "desde un subdirectorio del proyecto" "$(resolver "$H3/OTRO/sub/dir")" "$H3/inst/2.20.0/bin"
+check "un prefijo de texto no es estar dentro" "$(resolver "$H3/OTRO-bis")" "$H3/inst/2.18.0/bin"
+
+echo "1e. scope=project SIN projectPath se conserva: no se puede probar que sea ajena"
+manifiesto '{"plugins":{"3-tier-memory@mkt":[
+ {"scope":"user","version":"2.18.0","installPath":"PLACEHOLDER/inst/2.18.0"},
+ {"scope":"project","version":"2.20.0","installPath":"PLACEHOLDER/inst/2.20.0"}]}}'
+check "sigue ganando la mas alta" "$(resolver "$H3/ACTUAL")" "$H3/inst/2.20.0/bin"
+
+echo "1f. si al filtrar no queda ninguna candidata, se cae al cache (no a la ajena)"
+manifiesto '{"plugins":{"3-tier-memory@mkt":[
+ {"scope":"project","projectPath":"PLACEHOLDER/OTRO","version":"2.20.0","installPath":"PLACEHOLDER/inst/2.20.0"}]}}'
+check "cae al cache" "$(resolver "$H3/ACTUAL")" "$H3/.claude/plugins/cache/mkt/3-tier-memory/1.0.0/bin"
 
 echo "2. sin installed_plugins.json, la mas alta POR VERSION (no alfabetica)"
 mv "$H/.claude/plugins/installed_plugins.json" "$TMP/guardado.json"

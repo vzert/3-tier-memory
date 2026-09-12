@@ -1,5 +1,50 @@
 # Changelog
 
+## [2.18.1] - 2026-09-12
+`resolve-plugin-bin.sh` elegia **la version mas alta de `installed_plugins.json` sin mirar el
+ambito**, asi que una entrada `scope=project` de OTRO proyecto ganaba aqui. El texto del comando
+venia de la version instalada en este proyecto y los scripts que ese texto invocaba eran de otra
+instalacion. En 2.18.0 esto estaba *declarado* en la cabecera del script —no era un descuido— con
+el argumento de que `installed_plugins.json` no documenta precedencia entre ambitos, asi que "la
+mas alta" era una regla declarada en vez de una inferencia.
+
+El argumento tenia un hueco, y lo senalo la sesion de `claude-vzert` al cerrar su seguimiento del
+defecto de 2.18.0: **`scope` + `projectPath` si determinan este caso sin inferir nada**. Una
+entrada `project` cuyo `projectPath` no contiene el directorio de trabajo no puede estar activa
+aqui, sea cual sea la precedencia entre ambitos. O sea que se puede EXCLUIR sin necesidad de saber
+cual manda entre las que quedan.
+
+Reproducido aqui el 2026-09-12 con manifiesto sintetico antes de tocar nada, en los dos casos que
+esa sesion describio: con una entrada `user` 2.18.0 y una `project` 2.20.0 de otro proyecto, el
+resolutor devolvia la 2.20.0; y con SOLO la entrada `project` ajena —el plugin ni siquiera
+instalado aqui— devolvia igualmente su bin. Alcanzable en esta maquina: ya hay una entrada
+`scope=project` con `projectPath` en el manifiesto (de otro plugin), asi que instalar por proyecto
+es algo que se hace de verdad. Hoy 3-tier-memory tiene una sola entrada `user`: el caso estaba
+latente, no activo.
+
+Severidad baja, y menor que la del defecto que arreglo 2.18.0: aquel daba una version **arbitraria**
+(2.13.2 con 2.17.1 instalada, cuatro versiones atras y sin `repair-dualwrite.py`); este daba la
+instalada mas alta, que suele ser igual o mas nueva que la activa.
+
+### Fixed
+- `bin/resolve-plugin-bin.sh`: se excluye toda entrada `scope=project` cuyo `projectPath` no
+  contenga el directorio de trabajo. Entre las que quedan **sigue ganando la version mas alta** —
+  el filtro reduce las candidatas, no cambia la regla de desempate. Una entrada `project` del
+  proyecto actual NO gana por serlo a una `user` de version superior: eso seria inferir la
+  precedencia entre ambitos, que es justo lo que la cabecera declara no saber.
+- La comparacion es por **componentes de ruta**, no por prefijo de texto, y con `realpath` en los
+  dos lados. Un `startswith` a secas habria hecho que `/foo-bar` casara con `/foo`, y una igualdad
+  estricta habria excluido una entrada valida cuando el comando corre desde un subdirectorio del
+  proyecto.
+- `scope=project` **sin** `projectPath` se conserva: no se puede probar que sea ajena.
+- La cabecera del script ya no describe el comportamiento sin filtro.
+
+### Tests
+- Siete asertos nuevos en `bin/test-plugin-bin-resolver.sh` (20 en total): la entrada ajena se
+  excluye, con CONTROL que demuestra que sin el filtro ganaba; la misma entrada SI vale desde su
+  proyecto y desde un subdirectorio suyo; `/OTRO-bis` no esta dentro de `/OTRO`; `project` sin
+  `projectPath` se conserva; y al quedarse sin candidatas se cae al cache, no a la ajena.
+
 ## [2.18.0] - 2026-09-11
 Una fila del historial mensual **sin la columna `#` no existia para ningun script del plugin**, y de
 ahi salian duplicados silenciosos. `journal-compact.table_rows` y los tres lectores de

@@ -18,11 +18,16 @@
 #   1. $CLAUDE_PLUGIN_ROOT/bin — el plugin que esta corriendo. Lo tienen los hooks.
 #   2. installed_plugins.json  — `installPath` de las entradas `3-tier-memory@...`. Dice que
 #      versiones estan INSTALADAS, que no es lo mismo que lo que hay en el cache: el cache puede
-#      guardar una descarga que no es la activa. Lo que este fichero NO resuelve es cual de
-#      varias entradas manda si el plugin llega por mas de un marketplace o con mas de un
-#      ambito; no se ha verificado su esquema ni si hay precedencia documentada (adversario
-#      externo, ronda 1, H6). Asi que entre varias se toma la de VERSION MAS ALTA, y eso es una
-#      eleccion declarada, no un conocimiento del que esta activo.
+#      guardar una descarga que no es la activa. Aqui se hacen DOS cosas distintas:
+#      a) Se EXCLUYE toda entrada `scope=project` cuyo `projectPath` no contenga el directorio
+#         de trabajo. Esa entrada no puede estar activa aqui, sea cual sea la precedencia entre
+#         ambitos, asi que excluirla no infiere nada. Sin `projectPath` no se puede probar que
+#         sea ajena: se conserva. (Adversario externo ronda 1 H6, reproducido 2026-09-12 con
+#         manifiesto: una entrada `project` de OTRO proyecto ganaba por version.)
+#      b) Entre las que QUEDAN se toma la de VERSION MAS ALTA. Cual de ellas manda de verdad si
+#         el plugin llega por mas de un marketplace no lo resuelve este fichero —no se ha
+#         verificado su esquema ni si hay precedencia documentada—, asi que esto sigue siendo
+#         una eleccion declarada, no un conocimiento del que esta activo.
 #   3. la version mas alta del cache, ordenada por version (`sort -V`), no por orden de `find`.
 #   4. el directorio de este propio script.
 # Sin nada que resolver: no imprime nada y sale 1.
@@ -37,7 +42,7 @@ emit "${CLAUDE_PLUGIN_ROOT:-}/bin"
 INSTALLED="${HOME}/.claude/plugins/installed_plugins.json"
 if [ -f "$INSTALLED" ]; then
   P=$(python3 -c '
-import json, sys
+import json, os, sys
 
 def clave(ver):
     # "2.10.0" > "2.9.0": se compara por numeros, no por texto. Y una prerelease va por DEBAJO de
@@ -55,20 +60,39 @@ def clave(ver):
             estable = 0
     return (nums, estable)
 
+def real(ruta):
+    try:
+        return os.path.realpath(str(ruta))
+    except Exception:
+        return ""
+
+def aqui(e, cwd):
+    # Una entrada `scope=project` cuyo `projectPath` no CONTIENE el directorio de trabajo no
+    # puede estar activa aqui: se excluye. Sin `projectPath` —o sin cwd— no se puede probar que
+    # sea ajena, asi que se conserva. Se comparan componentes de ruta, no prefijos de texto:
+    # startswith a secas haria que /foo-bar casara con /foo.
+    if str(e.get("scope") or "") != "project":
+        return True
+    pp = real(e.get("projectPath") or "")
+    if not pp or not cwd:
+        return True
+    return cwd == pp or cwd.startswith(pp + os.sep)
+
 try:
     d = json.load(open(sys.argv[1], encoding="utf-8")).get("plugins") or {}
 except Exception:
     sys.exit(0)
+cwd = real(sys.argv[2]) if len(sys.argv) > 2 else ""
 cands = []
 for k, v in (d.items() if isinstance(d, dict) else []):
     if str(k).split("@")[0] != "3-tier-memory":
         continue
     for e in (v if isinstance(v, list) else [v]):
-        if isinstance(e, dict) and e.get("installPath"):
+        if isinstance(e, dict) and e.get("installPath") and aqui(e, cwd):
             cands.append((clave(e.get("version")), e["installPath"]))
 if cands:
     print(max(cands)[1])
-' "$INSTALLED" 2>/dev/null) || P=""
+' "$INSTALLED" "$PWD" 2>/dev/null) || P=""
   [ -n "$P" ] && emit "$P/bin"
 fi
 
