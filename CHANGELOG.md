@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.19.2] - 2026-09-12
+### Fixed
+- `bin/test-journal-race.sh`: el techo de velocidad del caso "un solo agente" era 1000 ms en todo
+  POSIX, y un runner compartido de macOS lo paso por encima: **1465 ms con `items=10` y `lock=0`**,
+  o sea que lo que fallaba era el reloj del runner y no el codigo. El coste de arrancar 10 procesos
+  de python depende de la MAQUINA, no solo del sistema. Se declara 3 s tambien cuando `CI` esta
+  puesto, igual que ya se hacia para Git Bash.
+
+  Se afloja un techo de **rendimiento** medido en hardware ajeno; las dos comprobaciones de
+  **correccion** de ese mismo caso —`items=10` y `lock=0`— siguen estrictas en todas las
+  plataformas, y en local el techo sigue siendo 1 s.
+
 ## [2.19.1] - 2026-09-12
 **La entrada de 2.19.0 afirmaba que el barrido de UTF-8 estaba completo. No lo estaba.** Lo rompio
 un adversario externo y se reprodujo aqui: la guarda cubria `stdout` y no `stderr`, asi que
