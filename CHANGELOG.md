@@ -1,5 +1,48 @@
 # Changelog
 
+## [2.18.2] - 2026-09-12
+**El aviso de escritura a mano no disparaba NUNCA en Linux**, en silencio. `bash-journal-nudge.sh`
+es el hook `PostToolUse` que avisa cuando un indice de Tier 2 cambio fuera del journal — la
+barandilla que existe justamente porque `journal_strict` es un `PreToolUse` y por diseno no ve un
+`sed -i` ni un heredoc por Bash.
+
+Su compuerta barata comparaba mtimes con
+`stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null`. En GNU eso NO cae al segundo: `-f` no
+toma argumento, asi que `%m` se lee como otro fichero. Ese falla —de ahi el exit distinto de 0— pero
+**el fichero real si se imprime**, con la info del sistema de ficheros. `2>/dev/null` tapaba el
+error y la sustitucion se quedaba con las dos salidas pegadas; el `[ "$m" -ge "$FPM" ]` de despues
+no recibia un numero, fallaba, y `NEWER` no se ponia nunca. La compuerta cerraba siempre.
+
+Un aviso que no avisa es peor que no tenerlo: se cuenta como cubierto.
+
+### Fixed
+- `bin/bash-journal-nudge.sh`: se prueba GNU primero (BSD no tiene `-c`, alli falla y cae) y se
+  **exige que la salida sea un entero**. Una utilidad que responde otra cosa vale lo mismo que no
+  estar: se devuelve vacio, que el llamador ya sabia tratar.
+- `bin/test-expire-reopen.sh`: `sed -i ''` es BSD. En GNU, `-i` no lleva el sufijo como argumento
+  suelto, asi que el `''` se tomaba como el SCRIPT y la expresion como el NOMBRE DE FICHERO. La
+  edicion no ocurria y el caso de la valvula `_revisar` fallaba. Sustituido por un helper con
+  fichero temporal, que no depende del dialecto.
+- `bin/test-expire-reopen.sh`: `md5 -q` es BSD. En Linux no existe, asi que los **cuatro** asertos
+  "byte a byte" comparaban cadena vacia contra cadena vacia y **pasaban sin comprobar nada**. Un
+  falso verde es peor que un fallo: el fallo se ve. Helper con `md5` o `md5sum`, verificado que
+  distingue dos ficheros distintos y no solo que devuelve algo.
+- `bin/test-plugin-bin-resolver.sh`: el CONTROL afirmaba que `find ... | head -1` "devolvia otra
+  cosa", pero el defecto que cubre es que ese orden es **arbitrario**, no que sea siempre el
+  equivocado. En macOS devolvia otra; en Linux devolvio justo la instalada y el aserto fallo. Ahora
+  mide lo comprobable: que habia mas de una candidata y `head -1` elegia sin mirar la version.
+
+### Added
+- `tools/run-tests.sh`: corre el guard de higiene mas las 11 suites, en orden estable, y devuelve 1
+  si alguna falla. Las 12 tardan 27 s juntas.
+- `.github/workflows/tests.yml`: ubuntu y macOS bloqueantes, Windows informativo.
+
+### Nota de metodo
+Las cuatro cosas de arriba las encontro **la primera ejecucion en Linux**, en la misma corrida.
+Ninguna suite las habia visto en meses porque todas se habian corrido solo en macOS, y la del
+resolutor llevaba encima dos rondas de adversario —una de ellas ejecutandola y mutandola— sin
+cazarlo: no era un hueco de rigor, era de plataforma, y solo lo cierra ejecutar en la otra.
+
 ## [2.18.1] - 2026-09-12
 `resolve-plugin-bin.sh` elegia **la version mas alta de `installed_plugins.json` sin mirar el
 ambito**, asi que una entrada `scope=project` de OTRO proyecto ganaba aqui. El texto del comando

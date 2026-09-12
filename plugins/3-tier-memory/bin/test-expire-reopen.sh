@@ -8,6 +8,19 @@ MEM="$T/memory"; mkdir -p "$MEM/pendientes"
 pass=0; fail=0
 chk(){ if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FAIL $1"; echo "    esperado: $2"; echo "    obtenido: $3"; fi; }
 
+# Portabilidad BSD/GNU. El CI del 2026-09-12 corrio esta suite en Linux por primera vez y encontro
+# las dos cosas de golpe:
+#   - `sed -i ''` es BSD. En GNU, `-i` no lleva el sufijo como argumento suelto, asi que el '' se
+#     toma como el SCRIPT y la expresion como el NOMBRE DE FICHERO: la edicion no ocurria y el caso
+#     de la valvula `_revisar` fallaba.
+#   - `md5 -q` es BSD. En Linux no existe, asi que los cuatro asertos "byte a byte" comparaban
+#     cadena vacia contra cadena vacia y pasaban SIN COMPROBAR NADA. Un falso verde es peor que un
+#     fallo: el fallo se ve.
+huella(){ if command -v md5 >/dev/null 2>&1; then md5 -q "$1"
+          elif command -v md5sum >/dev/null 2>&1; then md5sum "$1" | cut -d" " -f1
+          else echo "SIN-DIGEST-$1"; fi; }
+edita(){ local f="$1"; shift; sed "$@" "$f" > "$f.__tmp" && mv "$f.__tmp" "$f"; }
+
 cat > "$MEM/_pendientes.md" <<'EOF'
 # Pendientes
 
@@ -37,7 +50,7 @@ cp "$MEM/pendientes/2026-01.md" "$T/antes-mensual.md"
 
 echo "== dry-run no escribe =="
 python3 "$BIN/expire-pendientes.py" --memory-dir "$MEM" --modo edad --days 90 >/dev/null 2>&1
-chk "dry-run deja el indice intacto" "$(md5 -q "$T/antes-index.md")" "$(md5 -q "$MEM/_pendientes.md")"
+chk "dry-run deja el indice intacto" "$(huella "$T/antes-index.md")" "$(huella "$MEM/_pendientes.md")"
 
 echo "== expire =="
 python3 "$BIN/expire-pendientes.py" --memory-dir "$MEM" --modo edad --days 90 --apply >/dev/null 2>&1
@@ -50,8 +63,8 @@ chk "fila mensual = expired"    "1" "$(grep -c 'expired — sin actividad' "$MEM
 echo "== reopen =="
 python3 "$BIN/expire-pendientes.py" --memory-dir "$MEM" --revertir p-2222222222 --apply >/dev/null 2>&1
 python3 "$BIN/journal-compact.py" --memory-dir "$MEM" --quiet >/dev/null 2>&1
-chk "indice byte a byte"   "$(md5 -q "$T/antes-index.md")"   "$(md5 -q "$MEM/_pendientes.md")"
-chk "mensual byte a byte"  "$(md5 -q "$T/antes-mensual.md")" "$(md5 -q "$MEM/pendientes/2026-01.md")"
+chk "indice byte a byte"   "$(huella "$T/antes-index.md")"   "$(huella "$MEM/_pendientes.md")"
+chk "mensual byte a byte"  "$(huella "$T/antes-mensual.md")" "$(huella "$MEM/pendientes/2026-01.md")"
 chk "_caducados vacio"     "0" "$(grep -c "p-2222222222" "$MEM/pendientes/_caducados.md" 2>/dev/null || true)"
 
 echo "== idempotencia =="
@@ -60,7 +73,7 @@ python3 "$BIN/journal-compact.py" --memory-dir "$MEM" --quiet >/dev/null 2>&1
 chk "reopen dos veces no duplica" "1" "$(grep -c 'p-2222222222' "$MEM/_pendientes.md")"
 
 echo "== valvula _revisar futuro =="
-sed -i '' 's|_creado: 2026-01-02_|_creado: 2026-01-02_ — _revisar: 2027-01-01_|' "$MEM/_pendientes.md"
+edita "$MEM/_pendientes.md" -e 's|_creado: 2026-01-02_|_creado: 2026-01-02_ — _revisar: 2027-01-01_|'
 python3 "$BIN/expire-pendientes.py" --memory-dir "$MEM" --modo edad --days 90 --apply >/dev/null 2>&1
 python3 "$BIN/journal-compact.py" --memory-dir "$MEM" --quiet >/dev/null 2>&1
 chk "no caduca con _revisar futuro" "1" "$(grep -c 'p-2222222222' "$MEM/_pendientes.md")"
@@ -90,7 +103,7 @@ for id in p-3333333333 p-4444444444; do
   python3 "$BIN/expire-pendientes.py" --memory-dir "$MEM2" --revertir $id --apply >/dev/null 2>&1
 done
 python3 "$BIN/journal-compact.py" --memory-dir "$MEM2" --quiet >/dev/null 2>&1
-chk "vuelven a su seccion con su prioridad" "$(md5 -q "$T/antes2.md")" "$(md5 -q "$MEM2/_pendientes.md")"
+chk "vuelven a su seccion con su prioridad" "$(huella "$T/antes2.md")" "$(huella "$MEM2/_pendientes.md")"
 
 echo "== modo revisar: solo caduca lo que declaro su ventana y la paso =="
 MEM3="$T/mem3"; mkdir -p "$MEM3/pendientes"

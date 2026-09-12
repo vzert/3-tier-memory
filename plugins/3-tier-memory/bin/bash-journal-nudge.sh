@@ -58,7 +58,26 @@ if [ "$EVENT" = "PostToolUse" ]; then
   # `find -newer` exige marca ESTRICTAMENTE posterior, asi que en un sistema con mtime de 1 s una
   # escritura en el mismo segundo que el sellado empata y no se ve. Se compara `>=` con stat.
   # (Ronda 6.) Peor caso si stat no esta: se llama a python siempre, que es correcto y solo cuesta.
-  _mt() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null; }
+  #
+  # (2026-09-12, primera corrida en Linux.) La version anterior era
+  #     stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null
+  # y en GNU NO caia al segundo: `-f` no toma argumento, asi que `%m` se lee como OTRO fichero.
+  # Ese falla —de ahi el exit distinto de 0 que disparaba el `||`— pero el fichero real SI se
+  # imprime, con la info del sistema de ficheros. `2>/dev/null` tapaba el error y la sustitucion se
+  # quedaba con las dos salidas pegadas. El `[ "$m" -ge "$FPM" ]` posterior no es un numero, falla,
+  # y NEWER nunca se ponia: el aviso no disparaba NUNCA en Linux. Silencioso, que es lo peor que
+  # puede hacer una barandilla.
+  #
+  # Ahora se prueba GNU primero (BSD no tiene `-c`, asi que alli falla y cae) y sobre todo se
+  # EXIGE QUE LA SALIDA SEA UN ENTERO: una utilidad que responde otra cosa vale lo mismo que no
+  # estar, y en ese caso se devuelve vacio, que el llamador ya sabe tratar.
+  _entero() { case "${1:-}" in ''|*[!0-9]*) return 1 ;; *) return 0 ;; esac; }
+  _mt() {
+    local m
+    m=$(stat -c %Y "$1" 2>/dev/null); _entero "$m" && { printf '%s' "$m"; return 0; }
+    m=$(stat -f %m "$1" 2>/dev/null); _entero "$m" && { printf '%s' "$m"; return 0; }
+    return 1
+  }
   FPM=$(_mt "$FP")
   if [ -n "$FPM" ]; then
     NEWER=""
