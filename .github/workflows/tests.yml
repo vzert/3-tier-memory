@@ -43,39 +43,16 @@ jobs:
         shell: bash
         run: |
           set -u
-          B=plugins/3-tier-memory/bin
           T=$(mktemp -d); D6="$T/d6"
           mkdir -p "$D6/.claude/hooks" "$D6/memory"
-          printf '#!/bin/bash\nP=$(grep -E "^- \\[ \\]" "$CLAUDE_PROJECT_DIR/memory/_pendientes.md")\necho "$P"\n' > "$D6/.claude/hooks/session-start.sh"
+          printf '#!/bin/bash\necho "$CLAUDE_PROJECT_DIR/memory/_pendientes.md"\n' > "$D6/.claude/hooks/session-start.sh"
           printf '# P\n\n## Alta prioridad\n- [ ] x\n' > "$D6/memory/_pendientes.md"
-          python3 -c "
-import json,sys
-cmd='/usr/bin/env bash \$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh'
-json.dump({'hooks':{'SessionStart':[{'hooks':[{'type':'command','command':cmd}]}]}}, open(sys.argv[1],'w'))
-" "$D6/.claude/settings.local.json"
-          python3 - "$B/session-start.sh" "$T/dup.py" <<'PYX'
-import sys
-l=open(sys.argv[1],encoding="utf-8").read().split("\n")
-a=next(i for i,x in enumerate(l) if "<<'DUPEOF'" in x)
-b=next(i for i,x in enumerate(l) if x.strip()=="DUPEOF" and i>a)
-open(sys.argv[2],"w",encoding="utf-8").write("\n".join(l[a+1:b]))
-PYX
+          python3 -c "import json,sys; cmd='/usr/bin/env bash \$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh'; json.dump({'hooks':{'SessionStart':[{'hooks':[{'type':'command','command':cmd}]}]}}, open(sys.argv[1],'w'))" "$D6/.claude/settings.local.json"
+          python3 -c "import sys; l=open(sys.argv[1],encoding='utf-8').read().split(chr(10)); a=next(i for i,x in enumerate(l) if chr(60)*2+chr(39)+'DUPEOF'+chr(39) in x); b=next(i for i,x in enumerate(l) if x.strip()=='DUPEOF' and i>a); open(sys.argv[2],'w',encoding='utf-8').write(chr(10).join(l[a+1:b]))" plugins/3-tier-memory/bin/session-start.sh "$T/dup.py"
           echo "--- lo que ve python del entorno ---"
-          CLAUDE_PROJECT_DIR="$D6" MEMORY_DIR="$D6/memory" python3 -c "
-import os, shlex, json
-proj = os.environ.get('CLAUDE_PROJECT_DIR','')
-print('  proj            =', repr(proj))
-print('  proj isdir      =', os.path.isdir(proj))
-hook = proj + '/.claude/hooks/session-start.sh'
-print('  hook isfile     =', os.path.isfile(hook))
-cmd = json.load(open(os.path.join(proj,'.claude','settings.local.json')))['hooks']['SessionStart'][0]['hooks'][0]['command']
-print('  cmd             =', repr(cmd))
-exp = cmd.replace('\$CLAUDE_PROJECT_DIR', proj.replace(chr(92),'/'))
-print('  expanded        =', repr(exp))
-print('  shlex tokens    =', shlex.split(exp, posix=True))
-"
+          CLAUDE_PROJECT_DIR="$D6" MEMORY_DIR="$D6/memory" python3 -c "import os,shlex,json; proj=os.environ.get('CLAUDE_PROJECT_DIR',''); print('  proj       =',repr(proj)); print('  proj isdir =',os.path.isdir(proj)); h=proj+'/.claude/hooks/session-start.sh'; print('  hook isfile=',os.path.isfile(h)); cmd=json.load(open(os.path.join(proj,'.claude','settings.local.json')))['hooks']['SessionStart'][0]['hooks'][0]['command']; print('  cmd        =',repr(cmd)); exp=cmd.replace(chr(36)+'CLAUDE_PROJECT_DIR', proj.replace(chr(92),'/')); print('  expanded   =',repr(exp)); print('  tokens     =',shlex.split(exp,posix=True))"
           echo "--- salida real del detector ---"
-          CLAUDE_PROJECT_DIR="$D6" MEMORY_DIR="$D6/memory" python3 "$T/dup.py"; echo "  rc=$?"
+          CLAUDE_PROJECT_DIR="$D6" MEMORY_DIR="$D6/memory" python3 "$T/dup.py" || true
       - name: suites en Git Bash
         shell: bash
         run: bash tools/run-tests.sh
