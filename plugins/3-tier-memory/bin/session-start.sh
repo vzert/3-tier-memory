@@ -171,7 +171,11 @@ fi
 #
 # Lo que se pierde: en una sesion sin persona el AGENTE tampoco ve el aviso. Es el precio, y es
 # barato — en esas sesiones no hay nadie que pueda correr `--reseal` de todos modos.
-if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] && [ -d "$MEMORY_DIR/.journal" ] && hay_persona; then
+if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] && [ -d "$MEMORY_DIR/.journal" ]; then
+  # Quien decide si se consume la deriva es el compactador (`hay_lector()`), no este script: hay
+  # otro llamante —el PostToolUse de Bash— y una regla en dos sitios se separa. Aqui solo se le
+  # pasa lo que el entorno NO dice: que en un `clear`/`compact` hay agente pero no persona.
+  hay_persona || export THREET_SIN_LECTOR=1
   DRIFT_OUT=$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" --memory-dir "$MEMORY_DIR" --check-drift 2>/dev/null)
   if [ -n "$DRIFT_OUT" ]; then
     out "$DRIFT_OUT"

@@ -769,5 +769,27 @@ S2=$(arranque startup)
 chk "y ya no se repite"                        "0" "$(dice "$S2")"
 chk "no se crea ningun fichero de avisos"      "0" "$(ls -1 "$MEMD/.journal"/human-pending* 2>/dev/null | wc -l | tr -d ' ')"
 
+# LOS DOS LLAMANTES, no solo uno. 2.21.4 puso la guarda en session-start.sh y el adversario la
+# rompio en una frase: bash-journal-nudge.sh corre --check-drift en CADA PostToolUse de Bash y no
+# sabia nada de quien mira. Por eso la guarda vive ahora en el compactador, y por eso esto lo
+# comprueba por LOS DOS caminos.
+printf -- '- [ ] otra deriva\n' >> "$MEMD/_pendientes.md"
+H1=$(sello)
+MEMORY_DIR="$MEMD" PAPERCLIP_RUN_ID=run-9 bash "$BIN/bash-journal-nudge.sh" >/dev/null 2>&1 <<'J'
+{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"echo x"}}
+J
+chk "el hook de Bash con Paperclip: no consume"  "$H1" "$(sello)"
+MEMORY_DIR="$MEMD" CLAUDE_CODE_SESSION_ATTENDED=0 bash "$BIN/bash-journal-nudge.sh" >/dev/null 2>&1 <<'J'
+{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"echo x"}}
+J
+chk "el hook de Bash sin sesion atendida: tampoco" "$H1" "$(sello)"
+# control positivo: con lector, ese mismo hook SI detecta y re-sella
+NUD=$(MEMORY_DIR="$MEMD" bash "$BIN/bash-journal-nudge.sh" 2>&1 <<'J'
+{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"echo x"}}
+J
+)
+chk "con lector, el hook de Bash SI avisa"       "1" "$(printf '%s' "$NUD" | grep -c 'FUERA DEL JOURNAL')"
+chk "y ahi si re-sella"                          "1" "$([ "$(sello)" != "$H1" ] && echo 1 || echo 0)"
+
 echo "RESULT pass=$pass fail=$fail skip=$skip"
 [ "$fail" -eq 0 ]

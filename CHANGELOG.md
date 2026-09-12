@@ -1,5 +1,41 @@
 # Changelog
 
+## [2.21.5] - 2026-09-12
+Quinta ronda adversarial. Rompio el rediseno de 2.21.4 en una frase: **hay dos llamantes**.
+
+### Fixed
+- **La guarda estaba en el sitio equivocado.** 2.21.4 hizo que `session-start.sh` no llamara a
+  `--check-drift` cuando no hay persona, porque esa comprobacion RE-SELLA al detectar y sin lector
+  el aviso se consume para siempre. Correcto, e incompleto: `bash-journal-nudge.sh:107` corre
+  `--check-drift` en **cada `PostToolUse` de Bash** y no sabe nada de quien mira, asi que la
+  deriva se consumia igual por ese lado — en la siguiente llamada a Bash. La seccion "Lo que se
+  pierde" de 2.21.4 era falsa por eso mismo: decia que solo se perdia la visualizacion.
+
+  Anadirle la guarda al nudge habria sido la misma forma por tercera vez. Ahora la decision vive
+  donde esta el **efecto**: `hay_lector()` en `journal-compact.py`, consultada en la ruta de
+  `--check-drift` antes de anotar y re-sellar. Los dos llamantes quedan cubiertos, y el tercero
+  que aparezca tambien. `session-start.sh` solo aporta lo que el entorno no dice —que en un
+  `clear`/`compact` hay agente pero no persona— via `THREET_SIN_LECTOR=1`.
+
+### Pruebas
+Cuatro asertos nuevos (119 -> 123) que recorren **los dos caminos**: el hook de Bash con agente de
+Paperclip y sin sesion atendida no consume la deriva, y el control positivo de que **con** lector
+ese mismo hook si avisa y si re-sella. La mutacion se reapunto al compactador: quitar `hay_lector()`
+tumba los asertos de ambos lados, no solo de uno.
+
+### Sin resolver
+`quarantine/` viaja pero solo se escanea `pending/`; `applied/` no tiene poda; `memory/.locks/`
+queda fuera del reparto; `test-journal-race.sh` falla 1 de 20 corridas (medido: misma tasa en
+`1ed9400`, preexistente). Y una que este parche NO cubre: `compact()` tambien avisa y re-sella, y
+ahi el re-sellado es legitimo porque acaba de escribir los indices — su aviso si puede perderse
+sin lector. Solo corre cuando hay eventos pendientes.
+
+### Nota de metodo
+Seis releases, cinco rondas, cinco roturas. El patron de todas: **un contrato que no se propago a
+todos sus portadores** — el docstring, las mutaciones, el `.gitignore`, y ahora el segundo
+llamante. La pregunta que las habria cazado todas es la misma: quien consume esto, y que pasa si
+no llega.
+
 ## [2.21.4] - 2026-09-12
 Cuarta ronda adversarial. Rompio el arreglo de la tercera, que habia roto el de la segunda, que
 habia roto el de la primera. Eso ya no es converger, es parchear — asi que esta entrada **no

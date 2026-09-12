@@ -1494,6 +1494,35 @@ def guardar_huellas(mem, journal, estado=None):
     replace_with_retry(tmp, _ruta_huellas(journal))
 
 
+def hay_lector():
+    """¿Va a leer alguien lo que --check-drift imprima?
+
+    AQUI Y NO EN EL LLAMANTE, y costo cinco rondas adversariales aprenderlo. `--check-drift`
+    RE-SELLA la linea base al detectar, para que el aviso salga una vez y no en cada sesion. Si
+    nadie lee ese aviso, el re-sellado lo borra para siempre: visto una vez, a nadie, y no vuelve.
+
+    2.21.4 puso la guarda en `session-start.sh`. El adversario encontro el agujero en una frase:
+    **hay DOS llamantes**. `bash-journal-nudge.sh` corre esto en CADA PostToolUse de Bash y no
+    sabe nada de quien mira, asi que la deriva se consumia igual por ese lado. Poner la guarda
+    tambien alli habria sido la misma forma por tercera vez — la decision pertenece a donde esta
+    el EFECTO (el re-sellado), no a cada sitio que llama.
+
+    Dos senales de entorno y una explicita:
+      - PAPERCLIP_RUN_ID: agente de Paperclip, no hay pantalla.
+      - CLAUDE_CODE_SESSION_ATTENDED=0: corrida no interactiva. Solo el "0" explicito apaga; si
+        la variable no existe (CLI mas viejo) se deja pasar, que es el comportamiento de antes.
+      - THREET_SIN_LECTOR=1: lo pone el llamante que SABE algo que el entorno no dice — p. ej.
+        session-start.sh con `source` de clear/compact, donde hay agente pero no persona.
+    """
+    if os.environ.get("PAPERCLIP_RUN_ID"):
+        return False
+    if os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0":
+        return False
+    if os.environ.get("THREET_SIN_LECTOR") == "1":
+        return False
+    return True
+
+
 def detectar_fuera_de_banda(mem, journal, estado=None):
     """Indices cuyo contenido no es el que dejo el compactador la ultima vez.
 
@@ -1781,6 +1810,14 @@ def main():
     if a.check_drift:
         # Entrada propia porque session-start.sh solo llama al compactador cuando pending/ tiene
         # algo, y la deriva que interesa es justo la de una sesion que NO dejo eventos.
+        #
+        # NO SE MIRA SI NO HAY QUIEN LO LEA. Esta comprobacion re-sella al detectar; sin lector,
+        # ese re-sellado consume la deriva en silencio y no vuelve. La deriva YA ES PERSISTENTE
+        # —un hash que no coincide— asi que no hay nada que guardar: basta con no tocarla y la
+        # ve la primera sesion que tenga a alguien delante. Sale 0: no es un error, es que no
+        # era el momento.
+        if not hay_lector():
+            sys.exit(0)
         journal = os.path.join(mem, ".journal")
         # SI toma el lock, y lo dijo el adversario en la ronda 6: sin el, esta comprobacion puede
         # leer un indice que un compactador concurrente ACABA de reescribir legitimamente pero
