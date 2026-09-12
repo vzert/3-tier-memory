@@ -41,6 +41,14 @@ advierte dos lineas mas abajo: *"Getting this wrong deletes context the user nev
   externo. Ahora esa linea se marca `[PARTIAL]`, nunca se borra, y la accion por defecto es la que no
   pierde nada: quitar solo las lineas enteramente redundantes. Borrar el script entero es la
   opcion 2, y solo si no queda nada `[CUSTOM]` ni `[PARTIAL]`.
+- **Dos frases mas que quedaron vivas de la version intermedia.** La primera decia que la diferencia
+  entre lo que el plugin re-emite y el total del fichero "es lo que el recorte borraria": es al
+  reves, esa diferencia es justo lo que hay que conservar, y decirlo al reves contradecia la
+  clasificacion y la prohibicion de recortar del mismo fichero. La segunda decia que con mas de 25
+  items de alta prioridad el volcado "no es reemplazable" por el bloque del plugin, lo que implica
+  que con 25 o menos si lo es — no lo es a ningun tamano, porque el corte a ~120 caracteres pierde
+  las colas igual. Las encontro la sexta ronda adversaria (la primera) y el barrido propio del
+  fichero entero (la segunda).
 - **No hay opcion de estrechar el volcado, y es deliberado.** Una version intermedia la ofrecia con
   una condicion escrita (25 o menos items de Alta/sin clasificar, cuerpos cortos) y el verificador
   mostro que la condicion no basta: estrechar "al `## Media prioridad` en adelante" supone que ese
