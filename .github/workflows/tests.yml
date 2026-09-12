@@ -1,9 +1,13 @@
 name: tests
 
 # Por que existe: habia 11 suites y ningun runner ni CI, asi que solo corrian cuando alguien se
-# acordaba de lanzarlas a mano. Ademas todas se habian ejecutado SOLO en macOS, y varias usan
-# construcciones que difieren entre BSD y GNU (`sed -i`, `stat`, `date -r`, `script` para el pty).
-# Este workflow es la primera vez que se ejecutan en Linux.
+# acordaba de lanzarlas a mano, una por una. Ademas todas se habian ejecutado SOLO en macOS.
+#
+# La primera corrida en Linux y Windows encontro NUEVE defectos, cinco de ellos en codigo que se
+# distribuye: el texto en espanol salia con los acentos rotos en Windows, el aviso de escritura a
+# mano no disparaba nunca en Linux, el detector de hooks heredados no disparaba nunca en Windows.
+# Ninguno lo habia visto ninguna suite en meses, y la del resolutor llevaba encima dos rondas de
+# adversario. No era un hueco de rigor sino de plataforma, y eso solo lo cierra ejecutar en la otra.
 on:
   push:
     branches: [main]
@@ -17,28 +21,21 @@ jobs:
     strategy:
       fail-fast: false   # que una plataforma no oculte el resultado de las otras
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # Windows entro aqui el 2026-09-12, tras 2.18.9. Antes era un job aparte con
+        # `continue-on-error` mientras se medía: informativo primero, bloqueante cuando dejo de
+        # tener rojos propios. Corre con Git Bash, y sus 3 casos no construibles alli (las ACL de
+        # NTFS frente a `chmod`, un `bash.exe` sin sus DLL, el pty) se SALTAN Y SE CUENTAN, no se
+        # dan por buenos.
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - name: version de las herramientas
         shell: bash
         run: |
+          uname -s
           bash --version | head -1
           python3 --version
           git --version
       - name: suites
-        shell: bash
-        run: bash tools/run-tests.sh
-
-  # Windows va aparte y NO bloquea: `resolve-project-dir.sh` nunca se ha probado en Git Bash y hay
-  # un pendiente abierto que lo dice. Esto lo convierte en una medicion en vez de una suposicion.
-  # Si se pone verde de forma estable, sube a la matriz de arriba y se cierra ese pendiente.
-  windows:
-    name: windows-latest (informativo)
-    runs-on: windows-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - name: suites en Git Bash
         shell: bash
         run: bash tools/run-tests.sh
