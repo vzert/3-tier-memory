@@ -10,10 +10,20 @@ advierte dos lineas mas abajo: *"Getting this wrong deletes context the user nev
 
 ### Changed
 - **`commands/migrate.md`: la clasificacion de emision duplicada se acota a lo que el plugin re-emite
-  hoy.** Duplicado = la parte ALTA y sin clasificar del volcado; MEDIA y BAJA cuentan como custom.
-- **Una categoria nueva en esa misma clasificacion: lo que el hook legacy escribe para la PERSONA no
-  duplica nada.** El plugin habla por dos canales desde 2.17.0; un hook legacy que solo imprime texto
-  plano llega al agente y a nadie mas, asi que su texto nunca duplica el `systemMessage` del plugin.
+  hoy, con sus tres limites.** Duplicado = los items de `## Alta prioridad` y los `SIN CLASIFICAR`,
+  **como mucho 25** y **cada uno cortado a ~120 caracteres** (`CEILING` y `BODY_CAP` de
+  `bin/session-start.sh`). Cuentan como custom, y no se borran: las MEDIA y BAJA, lo que pase del
+  item 25, y la cola cortada de cada item largo.
+- **La medicion que `/migrate` ensena al usuario mide ahora los dos lados.** Antes solo contaba los
+  bytes del volcado legacy, que es la mitad que no decide nada. Ahora cuenta tambien cuantos items
+  re-emite el plugin, clasificando igual que el hook (un `awk` de tres lineas); la diferencia con el
+  total es lo que el recorte borraria. Comprobado contra este repo: el `awk` da 2 y el hook dice
+  `PENDIENTES ABIERTOS (52), 2 de prioridad ALTA o sin clasificar`.
+- **Una categoria nueva: el texto plano nunca duplica el mensaje que el plugin manda a la persona.**
+  El plugin habla por dos canales desde 2.17.0; un hook legacy que imprime texto plano llega al
+  agente y a nadie mas. **Con una excepcion declarada**: un hook legacy que emita JSON propio con
+  `systemMessage` SI escribe en el mismo canal, y su contenido se juzga con las mismas reglas que
+  cualquier otra linea.
 
 ### Notas
 - **Barrido completo de los carriers, no una muestra.** `templates/audit-3t.md` y

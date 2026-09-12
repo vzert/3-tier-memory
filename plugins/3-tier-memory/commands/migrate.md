@@ -75,16 +75,27 @@ Behavior rules:
 - **If the flagged hook's target file DOES exist**: read it and decide whether it duplicates the plugin, instead of skipping. This is the case that actually costs context — a working legacy hook that dumps the same memory the plugin already injects, silently, every session. Historically it went unnoticed for months (one project shipped ~31 KB of raw pendientes per session on top of the plugin's curated block).
 
   Classify each line of the existing script:
-  - **Duplicated emission** — reads `_pendientes.md` and echoes its contents (typically `grep -E '^- \[ \]' .../_pendientes.md` piped to `echo`). **Only the part of that dump the plugin actually re-emits counts as duplicated, and since 2.17.0 that is narrower than the whole file**: the plugin injects the items under `## Alta prioridad` plus the ones it labels `SIN CLASIFICAR` (sections outside the Alta/Media/Baja scheme, and items in the file's preamble), truncated per item. The `## Media prioridad` and `## Baja prioridad` lines of a legacy dump are content the plugin no longer puts in front of the agent — treat them as custom, or the trim silently removes them. Scope the rest just as narrowly: for `_learnings.md` the plugin emits a **count** (`REGLAS CRITICAS: N`) and never its contents, and it emits no other index at all — so a script that echoes learnings, plans, research, or any other index is providing something the plugin does NOT, and counts as custom. Getting this wrong deletes context the user never gets back.
-  - **Not duplicated at all: anything the legacy hook writes for the PERSON.** Since 2.17.0 the plugin speaks on two channels — `additionalContext` for the agent and `systemMessage` for the human. A legacy hook that only prints plain text reaches the agent and nobody else, so its text is never duplicating the plugin's human-facing message; if the user wants that content in front of them, the answer is the plugin's channel, not keeping the legacy dump.
+  - **Duplicated emission** — reads `_pendientes.md` and echoes its contents (typically `grep -E '^- \[ \]' .../_pendientes.md` piped to `echo`). **Only the part of that dump the plugin actually re-emits counts as duplicated, and since 2.17.0 that is much narrower than the whole file.** The plugin injects the items under `## Alta prioridad` plus the ones it labels `SIN CLASIFICAR` (sections outside the Alta/Media/Baja scheme, and items in the file's preamble) — **at most 25 of them, each cut to its first ~120 characters** (`CEILING` and `BODY_CAP` in `bin/session-start.sh`). So three kinds of line in a legacy dump are NOT duplicated and count as custom: the `## Media prioridad` and `## Baja prioridad` items, anything past the 25th Alta/unclassified item, and the cut tail of every item whose text runs past ~120 characters. Check the real numbers in the project's own `_pendientes.md` before deciding — in a project with more than 25 high-priority items, or with long item bodies, the legacy dump is NOT replaceable by the plugin's block and trimming it loses content. Scope the rest just as narrowly: for `_learnings.md` the plugin emits a **count** (`REGLAS CRITICAS: N`) and never its contents, and it emits no other index at all — so a script that echoes learnings, plans, research, or any other index is providing something the plugin does NOT, and counts as custom. Getting this wrong deletes context the user never gets back.
+  - **Plain text never duplicates the plugin's human-facing message.** Since 2.17.0 the plugin speaks on two channels — `additionalContext` for the agent and `systemMessage` for the human. A legacy hook that prints plain text reaches the agent and nobody else, so that text cannot be duplicating the plugin's `systemMessage`; if the user wants it in front of them, the answer is the plugin's channel, not keeping the legacy dump. **The exception is a legacy hook that emits JSON of its own**: one returning `systemMessage` (or `hookSpecificOutput.additionalContext`) IS writing on the same channel as the plugin, and its content is judged by the same rules as any other line — duplicated where the plugin already says it, custom where it does not.
   - **Duplicated protocol** — an `echo` whose text restates the plugin's own PROTOCOLO/dual-write reminder.
   - **Genuinely custom** — anything project-specific the plugin does not emit (e.g. a domain rule like "read learnings before SSH ops"). Note that scaffolding placeholders left unsubstituted (`<DOMAIN-SPECIFIC-ACTION>` and similar) are NOT custom — they are dead template text.
 
-  Measure the duplicated emission before asking, so the user sees the real cost:
+  Measure the emission before asking, so the user sees the real cost — and measure BOTH sides, because only part of the dump is duplicated:
 
   ```bash
-  grep -E '^- \[ \]' memory/_pendientes.md | wc -c   # bytes injected per session by the legacy hook
+  # bytes the legacy hook injects each session
+  grep -E '^- \[ \]' memory/_pendientes.md | wc -c
+  # items the plugin re-emits: Alta + unclassified, classified the same way the hook does
+  awk '/^## [Aa]lta/{s="alta";next} /^## [Mm]edia/{s="media";next} /^## [Bb]aja/{s="baja";next} \
+       /^## /{s="otros";next} /^- \[ \]/{if(s=="alta"||s=="otros"||s=="")n++} END{print n+0}' \
+      memory/_pendientes.md
+  # items in total
+  grep -cE '^- \[ \]' memory/_pendientes.md
   ```
+
+  The second number is capped at 25 in what the agent actually sees, and each of those items is cut
+  to ~120 characters. The gap between the second number and the third is what the trim would delete
+  outright.
 
   Then report and offer the specific action:
 
