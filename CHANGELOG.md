@@ -1,5 +1,28 @@
 # Changelog
 
+## [2.19.0] - 2026-09-12
+**`expire-pendientes.py` y `triage-scan.py` MUEREN en una consola de Windows con pagina OEM.** No
+degradan el texto: se llevan el proceso con `UnicodeEncodeError` al imprimir un guion largo.
+
+El `export PYTHONUTF8` de 2.18.3 no los cubria, y no podia: estos scripts se invocan **tambien
+directamente desde las plantillas de los comandos** (`python3 "$JBIN/triage-scan.py" ...`), sin
+ningun `.sh` de por medio. Una garantia que depende de quien te invoque no es una garantia — la
+misma leccion que 2.18.4, ahora del lado de los `.py`.
+
+Medido, no supuesto: de los 7 scripts de `bin/` que imprimen no-ASCII, 5 ya fijaban UTF-8 en su
+propio stdout y estos 2 se habian quedado fuera. Con cp1252 sus caracteres (`—`, `…`) si existen y
+solo se degradan; con cp437 no existen y el proceso truena.
+
+### Fixed
+- `bin/expire-pendientes.py` y `bin/triage-scan.py`: `sys.stdout.reconfigure(encoding="utf-8")`,
+  el mismo idioma que ya usaban los otros cinco.
+
+### Added
+- `bin/test-utf8-stdout.sh`: falla si cualquier `.py` de `bin/` imprime no-ASCII sin fijar UTF-8.
+  Con su CONTROL —un fichero sintetico sin guarda que el detector tiene que cazar— y con una
+  corrida real bajo `PYTHONIOENCODING=cp437` en los dos sentidos: con guarda el texto sale entero,
+  sin guarda truena. Un detector que solo se ha visto decir "ninguno" no se ha visto funcionar.
+
 ## [2.18.9] - 2026-09-12
 ### Fixed
 - `bin/test-parser.sh`: el ultimo caso rojo de Windows. `mkproj` pasaba el comando del hook por una

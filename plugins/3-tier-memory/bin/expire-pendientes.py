@@ -59,6 +59,14 @@ import subprocess
 import sys
 from datetime import date
 
+# Salida en UTF-8 pase lo que pase. En Windows, python codifica stdout con la pagina de codigos
+# local cuando va a una tuberia: con cp437 —la OEM clasica de consola— este fichero MUERE con
+# UnicodeEncodeError al imprimir sus guiones largos; no los degrada, se lleva el proceso. Los otros
+# cinco scripts de bin/ que imprimen no-ASCII ya lo hacian y estos dos se quedaron fuera.
+# Comprobado 2026-09-12 en los dos sentidos: con la guarda sobrevive, sin ella truena.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 BIN = os.path.dirname(os.path.abspath(__file__))
 CREADO = re.compile(r"_creado: (\d{4}-\d{2}-\d{2})")
 REVISAR = re.compile(r"_revisar: (\d{4}-\d{2}-\d{2})")
