@@ -1,13 +1,67 @@
 # Changelog
 
+## [2.21.1] - 2026-09-12
+Un adversario independiente (otro vendor) rompio 2.21.0 el mismo dia. De once angulos refuto
+cuatro y confirmo el resto. Esto arregla lo que era mio y corrige por escrito lo que afirme sin
+medir.
+
+### Fixed
+- **El `.gitignore` podia pisar el del usuario — la garantia era falsa.** `escribir_gitignore_journal()`
+  hacia `if exists: return` y despues `tmp + replace`. Entre las dos cosas cabe la escritura de
+  otro proceso, asi que el compactador sobreescribia justo el fichero que el propio fichero
+  promete no tocar. Ahora se crea con `O_EXCL`: **el kernel decide quien gana y el perdedor no
+  escribe nada**, asi que la promesa es cierta por construccion y no solo mientras nadie escriba
+  en el hueco. Mismo patron que `journal-emit.py`. Ademas se movio dentro del lock, no porque
+  haga falta —`O_EXCL` ya basta— sino para no tener una segunda regla sobre que se escribe fuera
+  de el. Prueba nueva: seis compactadores a la vez dejan un solo fichero, intacto y sin `.tmp`
+  huerfano; con `O_EXCL` quitado, el aserto de "no sobreescribe" falla.
+- **El aviso de deriva no llegaba a ninguna persona.** `session-start.sh` mandaba `DRIFT_OUT`
+  solo por `out()` (`additionalContext`, o sea el agente) y nunca por `human()`
+  (`systemMessage`). Es el mismo fallo que 2.17.0 arreglo para los pendientes, vivo en este
+  aviso. Pesa mas aqui que en otros: si la causa fue un `git pull`, quien lo hizo es la persona
+  y quien tiene que correr `--reseal` tambien. **La verificacion de 2.21.0 no lo vio porque midio
+  el canal del agente y lo llamo "llega al humano".**
+- **`templates/audit-3t.md` seguia diciendo la regla vieja** — que todo `⚠ FUERA DEL JOURNAL`
+  significa una escritura a mano y que el cambio se pierde en la siguiente pasada. Desde 2.21.0
+  eso es falso para la deriva que viene de git. Ahora el paso 15 distingue las dos causas y dice
+  que el detector compara bytes y no sabe cual es.
+
+### Changed
+- **Dos afirmaciones del CHANGELOG de 2.21.0, corregidas.** (1) "son sha256 de ficheros que estan
+  en el mismo repo en texto plano": `indices_protegidos()` no mira si el fichero esta trackeado,
+  asi que con `memory/` ignorado hashea ficheros que no estan en el repo — no hay fuga, pero por
+  otra razon que la que escribi. (2) "son ~11 llamadas a git": **no lo medi**, lo estime contando
+  indices, y `git diff --quiet HEAD -- <paths...>` los toma todos de una. El motivo honesto para
+  no construir git-awareness es solo el historial de Git Bash/MSYS.
+
+### Sin resolver (hallazgos del adversario, fuera del alcance de este parche)
+- **`quarantine/` viaja pero nunca se reintenta.** El compactador solo escanea `pending/`. Un
+  evento cuarentenado en la maquina A por ancla ausente llega a B, donde el ancla puede existir,
+  y nadie lo vuelve a intentar. Versionarlo es correcto para auditar y **insuficiente** para
+  aplicar.
+- **`applied/` no tiene poda**, asi que versionarlo hace crecer el historial del repo sin techo.
+- **`memory/.locks/` queda fuera.** `lock-tier2-write.sh` crea estado de proceso por copia de
+  trabajo ahi, fuera de `.journal/`, con el mismo problema de conflicto y sin regla que lo cubra.
+
+### Nota de metodo
+El adversario tambien reporto un doble `lines.insert(at + 1, row)` en `apply_add_monthly()` que
+duplicaria cada fila mensual. **Es falso**: hay una sola, en `journal-compact.py:850`. Verificado
+antes de actuar. Y no pudo correr `tools/run-tests.sh` (su entorno no crea directorios con
+`mktemp`), asi que el 15/15 lo firma esta maquina, no el.
+
 ## [2.21.0] - 2026-09-12
 El plugin no tenia postura sobre que de `memory/.journal/` se versiona. El compactador crea el
 directorio con `os.makedirs` y no dejaba nada dentro que lo dijera, asi que cada usuario lo
 decidia solo — y al menos uno recibio el consejo equivocado: que `fingerprints.json` era
 **inseguro** subirlo a GitHub.
 
-No lo es. Son `sha256` de ficheros que estan en el mismo repo en texto plano; un hash de algo ya
-publicado en claro no filtra nada. (Lo que si es sensible en este sistema es el **contenido** de
+No lo es. Son `sha256` de los indices de `memory/`, y `fingerprints.json` solo llega a GitHub en
+instalaciones donde esos mismos indices tambien se versionan **en texto plano**: un hash de algo ya
+publicado en claro no filtra nada. (Precision que debo al adversario: `indices_protegidos()` no
+mira si el fichero esta trackeado, asi que en una instalacion con `memory/` ignorado — este repo
+mismo — hashea ficheros que NO estan en el repo. Ahi tampoco hay fuga, porque entonces el propio
+`fingerprints.json` esta ignorado y no sube; pero la frase "estan en el repo en claro" no era
+cierta para todos los casos, y lo era por accidente, no por diseno.) (Lo que si es sensible en este sistema es el **contenido** de
 `memory/sessions/`, y de eso se ocupa `bin/scan-secrets.py` como compuerta de `/checkpoint-3t`.)
 
 Pero la conclusion era buena por otra razon, y esa razon solo se ve con **mas de una maquina**:
@@ -52,8 +106,12 @@ git rm --cached -r memory/.journal/out-of-band.log   # si existe
 
 ### Sin resolver
 Detectar el caso git automaticamente (`git diff --quiet HEAD -- <indice>` distingue "viene de git"
-de "editado a mano") se deja fuera a proposito: son ~11 llamadas a git en cada `--check-drift`, que
-corre en el PostToolUse de Bash, y el plugin tiene historial de romperse en Git Bash/MSYS. Por
+de "editado a mano") se deja fuera por **una** razon, no por dos: el plugin tiene historial de
+romperse en Git Bash/MSYS y eso pide medir antes de meter git en un hook. La otra razon que llegue
+a escribir aqui —"son ~11 llamadas a git"— **no la medi**: la estime contando indices, y ni
+siquiera hace falta una por indice, `git diff --quiet HEAD -- <paths...>` los toma todos de una;
+ademas la compuerta de mtime de `bash-journal-nudge.sh` ya filtra casi todas las pasadas. El
+adversario tenia razon en marcarla. El coste real esta sin medir, que no es lo mismo que alto. Por
 ahora el aviso lo explica y `--reseal` lo cierra en un comando. Con una arista honesta: `--reseal`
 quita el aviso pero **no borra la linea ya apendada a `out-of-band.log`**, asi que el rastro de
 auditoria acumula una entrada por cada pull hasta que eso se construya.

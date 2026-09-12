@@ -156,6 +156,14 @@ if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] && [ -d "$MEMORY_DIR/.j
   if [ -n "$DRIFT_OUT" ]; then
     out "$DRIFT_OUT"
     out ""
+    # Y A LA PERSONA. Hasta 2.21.0 la deriva salia SOLO por additionalContext, o sea solo para
+    # el agente — el mismo fallo que 2.17.0 arreglo para los pendientes y que aqui seguia vivo.
+    # Lo marco el adversario. Importa mas que en otros avisos: si la causa fue un `git pull`,
+    # quien lo hizo es la persona, y quien tiene que correr --reseal tambien.
+    DRIFT_N=$(printf '%s' "$DRIFT_OUT" | grep -c 'FUERA DEL JOURNAL')
+    if [ "${DRIFT_N:-0}" -gt 0 ] 2>/dev/null; then
+      human "⚠ MEMORIA: un indice de memory/ cambio sin pasar por el journal. Si acabas de hacer git pull/checkout/merge es esperado y no se pierde nada: corre \`python3 journal-compact.py --memory-dir memory --reseal\`. Si no, alguien lo edito a mano y ese cambio se pierde en la proxima compactacion."
+    fi
   fi
 fi
 

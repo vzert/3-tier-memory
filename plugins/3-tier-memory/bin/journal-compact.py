@@ -1592,23 +1592,30 @@ def escribir_gitignore_journal(journal):
     sha256 de ficheros que ya estan en el repo en claro, o sea que no filtran nada— acababa
     versionado, dando conflicto en cada checkpoint desde dos maquinas."""
     path = os.path.join(journal, ".gitignore")
-    if os.path.exists(path):
-        return False
     try:
         os.makedirs(journal, exist_ok=True)
-        tmp = f"{path}.{os.getpid()}.tmp"
-        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-            fh.write(GITIGNORE_JOURNAL)
-        replace_with_retry(tmp, path)
-        return True
+        # O_EXCL, NO `if exists: ... replace`. La primera version comprobaba y luego reemplazaba,
+        # y entre las dos cosas cabe la escritura de otro: el compactador pisaba el fichero que
+        # el usuario acababa de escribir, justo lo que este fichero promete que no pasa. El
+        # adversario de 2.21.0 lo marco como unsafe. O_EXCL hace la promesa CIERTA por
+        # construccion — el kernel decide quien gana y el perdedor no escribe nada — en vez de
+        # cierta solo si nadie escribe en el hueco. Mismo patron que journal-emit.py.
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    except FileExistsError:
+        return False   # ya hay uno: el del usuario manda, o ya lo escribimos
     except OSError:
         return False   # no poder escribirlo no es motivo para no compactar
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(GITIGNORE_JOURNAL)
+    except OSError:
+        return False
+    return True
 
 
 def compact(mem, budget, quiet):
     journal = os.path.join(mem, ".journal")
     pending = os.path.join(journal, "pending")
-    escribir_gitignore_journal(journal)
     if not os.path.isdir(pending):
         names = []
     else:
@@ -1622,6 +1629,9 @@ def compact(mem, budget, quiet):
             print(f"JOURNAL busy pending_left={len(names)}")
         return 0
     applied = quarantined = noop = 0
+    # Bajo el lock, como toda escritura del compactador. Es O_EXCL, asi que seria seguro fuera
+    # de el; va aqui para que no haya una segunda regla sobre que se escribe sin lock.
+    escribir_gitignore_journal(journal)
     # Antes de aplicar nada: si un indice no es el que dejo la pasada anterior, alguien escribio
     # fuera del journal. Tiene que ir AQUI — en cuanto el compactador escriba, su propio cambio
     # tapa la diferencia y ya no se puede distinguir.

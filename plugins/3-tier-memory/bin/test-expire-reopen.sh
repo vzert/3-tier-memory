@@ -648,6 +648,42 @@ echo "== tras un git pull el aviso de deriva explica que hacer, en vez de acusar
 printf -- '- [ ] llego por git\n' >> "$MEMG/_pendientes.md"
 DG=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMG" --check-drift 2>&1)
 chk "el aviso nombra git pull"                "1" "$(printf '%s' "$DG" | grep -c 'git pull')"
+# Primer arranque para ESTABILIZAR, sin aserto: session-start corre normalize-pendientes antes
+# del detector, y normalize re-sella. Si el fixture necesita normalizar, se lleva por delante la
+# deriva que queremos medir y el aserto de abajo mide el arnes, no el producto.
+CLAUDE_PLUGIN_ROOT="$(cd "$BIN/.." && pwd)" CLAUDE_PROJECT_DIR="$T/gitrepo" \
+  bash "$BIN/session-start.sh" >/dev/null 2>&1 <<J
+{"hook_event_name":"SessionStart","source":"startup","cwd":"$T/gitrepo"}
+J
+# El aviso de deriva salia SOLO por additionalContext hasta 2.21.0: lo veia el agente y nunca una
+# persona, el mismo fallo que 2.17.0 arreglo para los pendientes. Y aqui pesa mas, porque quien
+# hizo el `git pull` y quien tiene que correr --reseal es la persona.
+python3 "$BIN/journal-compact.py" --memory-dir "$MEMG" --reseal >/dev/null 2>&1
+printf -- '- [ ] otra que llego por git\n' >> "$MEMG/_pendientes.md"
+HUM=$(CLAUDE_PLUGIN_ROOT="$(cd "$BIN/.." && pwd)" CLAUDE_PROJECT_DIR="$T/gitrepo" \
+  bash "$BIN/session-start.sh" <<J 2>/dev/null
+{"hook_event_name":"SessionStart","source":"startup","cwd":"$T/gitrepo"}
+J
+)
+chk "el texto a la persona nombra git pull"   "1" "$(printf '%s' "$HUM" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(1 if "git pull" in d.get("systemMessage","") else 0)' 2>/dev/null || echo 0)"
+chk "y le dice que corra --reseal"            "1" "$(printf '%s' "$HUM" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(1 if "--reseal" in d.get("systemMessage","") else 0)' 2>/dev/null || echo 0)"
+chk "el JSON sigue siendo valido con el texto largo" "1" "$(printf '%s' "$HUM" | python3 -c 'import json,sys; json.load(sys.stdin); print(1)' 2>/dev/null || echo 0)"
+
+echo "== el .gitignore se escribe con O_EXCL: dos compactadores a la vez no lo parten =="
+# La primera version hacia `if exists: return` y luego tmp+replace. Entre la comprobacion y el
+# replace cabe la escritura de otro, asi que el compactador pisaba el fichero del usuario — justo
+# lo que el fichero promete que no pasa. Lo marco el adversario de 2.21.0 como unsafe.
+MEMR="$T/race"; mkdir -p "$MEMR/sessions"
+printf -- '---\ntype: index\n---\n# Pendientes\n\n## Media prioridad\n\n' > "$MEMR/_pendientes.md"
+printf -- '---\ntype: session\n---\n# s\n' > "$MEMR/sessions/2026-01-01-x.md"
+for i in 1 2 3 4 5 6; do
+  python3 "$BIN/journal-compact.py" --memory-dir "$MEMR" --quiet >/dev/null 2>&1 &
+done
+wait
+chk "6 compactadores a la vez: un solo .gitignore" "1" "$(ls -1 "$MEMR/.journal"/.gitignore 2>/dev/null | wc -l | tr -d ' ')"
+chk "y ningun .tmp huerfano"                   "0" "$(ls -1 "$MEMR/.journal"/.gitignore.*.tmp 2>/dev/null | wc -l | tr -d ' ')"
+chk "contenido intacto (ni partido ni doble)"  "1" "$(grep -c '^fingerprints.json$' "$MEMR/.journal/.gitignore")"
+chk "y nombra pending/ como versionado"        "1" "$(grep -c 'QUE SI SE VERSIONA' "$MEMR/.journal/.gitignore")"
 chk "y da la salida (--reseal)"               "1" "$(printf '%s' "$DG" | grep -c -- '--reseal')"
 chk "y dice que NO se pierden los cambios"    "1" "$(printf '%s' "$DG" | grep -c 'NO se pierden')"
 
