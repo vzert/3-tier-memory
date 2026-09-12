@@ -350,6 +350,13 @@ else
 import os, re, sys
 from datetime import date
 
+# La garantia de UTF-8 vive AQUI, con el codigo que imprime, no solo en el `export` del guion que
+# lo llama: este bloque tambien se ejecuta suelto (test-parser lo extrae de aqui), y una garantia
+# que depende de quien te invoque no es una garantia. En Windows, python codifica stdout con la
+# pagina de codigos local cuando va a una tuberia y los guiones largos salian como `?`.
+try: sys.stdout.reconfigure(encoding="utf-8")
+except Exception: pass
+
 STALE_DAYS = 30  # a pendiente older than this is flagged as suspect-stale
 
 def days_old(created):

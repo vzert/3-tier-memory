@@ -20,6 +20,15 @@ ok()   { printf '  ok   %s\n' "$1"; }
 bad()  { printf '  FAIL %s\n' "$1"; FAIL=1; }
 check(){ [ "$2" = "$3" ] && ok "$1" || { bad "$1"; printf '       esperado: %s\n       real:     %s\n' "$3" "$2"; }; }
 
+# Comparacion de RUTAS, no de cadenas. En Git Bash conviven dos dialectos para el MISMO directorio:
+# la forma MSYS (/tmp/x) que construye el shell, y la nativa (C:/Users/.../Temp/x) que sale cuando
+# esa ruta cruza hacia un .exe como argumento o variable de entorno. El resolutor devolvia la misma
+# carpeta en la otra forma y el aserto la daba por distinta: 2 de 19 fallaban por la ortografia de
+# la ruta, no por la eleccion. Medido en CI el 2026-09-12. `cygpath -m` lleva ambas a la forma
+# nativa con barras normales; fuera de Windows no existe y esto no toca nada.
+norm() { command -v cygpath >/dev/null 2>&1 && cygpath -m "$1" 2>/dev/null || printf '%s' "$1"; }
+check_ruta(){ check "$1" "$(norm "$2")" "$(norm "$3")"; }
+
 # Arbol falso: dos versiones en el cache donde `sort` alfabetico se equivoca (2.9.0 > 2.10.0)
 # y el clon del marketplace, que es el que `find` devolvia primero en la instalacion real.
 H="$TMP/home"
@@ -43,7 +52,7 @@ t = open(p, encoding="utf-8").read().replace("PLACEHOLDER", h)
 open(p, "w", encoding="utf-8").write(t)
 PY
 GOT=$(env -u CLAUDE_PLUGIN_ROOT HOME="$H" bash "$BIN/resolve-plugin-bin.sh")
-check "devuelve la instalada (2.9.0)" "$GOT" "$H/.claude/plugins/cache/mkt/3-tier-memory/2.9.0/bin"
+check_ruta "devuelve la instalada (2.9.0)" "$GOT" "$H/.claude/plugins/cache/mkt/3-tier-memory/2.9.0/bin"
 # El patron viejo no es "siempre mal": es ARBITRARIO. Que su `head -1` coincida o no con la version
 # instalada depende del orden del sistema de ficheros. La primera version de este CONTROL afirmaba
 # "devuelve otra cosa" y paso en macOS por suerte: el CI lo puso en Linux el 2026-09-12 y ahi el
@@ -71,7 +80,7 @@ d = {"plugins": {"3-tier-memory@a": [{"version": "2.18.0-rc1",
 json.dump(d, open(h + "/.claude/plugins/installed_plugins.json", "w"))
 PY
 GOT=$(env -u CLAUDE_PLUGIN_ROOT HOME="$H" bash "$BIN/resolve-plugin-bin.sh")
-check "la estable gana a la prerelease" "$GOT" "$H/.claude/plugins/cache/mkt2/3-tier-memory/2.18.0/bin"
+check_ruta "la estable gana a la prerelease" "$GOT" "$H/.claude/plugins/cache/mkt2/3-tier-memory/2.18.0/bin"
 
 echo "1c. una entrada scope=project de OTRO proyecto no puede estar activa aqui: se excluye"
 # Adversario externo ronda 1, H6, reproducido 2026-09-12 con manifiesto. Sin el filtro, una
@@ -94,7 +103,7 @@ DOS='{"plugins":{"3-tier-memory@mkt":[
  {"scope":"user","version":"2.18.0","installPath":"PLACEHOLDER/inst/2.18.0"},
  {"scope":"project","projectPath":"PLACEHOLDER/OTRO","version":"2.20.0","installPath":"PLACEHOLDER/inst/2.20.0"}]}}'
 manifiesto "$DOS"
-check "gana la entrada user, no la project ajena" "$(resolver "$H3/ACTUAL")" "$H3/inst/2.18.0/bin"
+check_ruta "gana la entrada user, no la project ajena" "$(resolver "$H3/ACTUAL")" "$H3/inst/2.18.0/bin"
 # CONTROL: la regla vieja era "la mas alta gana" sin mirar el ambito.
 VIEJO=$(python3 -c '
 import json, sys
@@ -102,46 +111,46 @@ d = json.load(open(sys.argv[1], encoding="utf-8"))["plugins"]
 c = [e for v in d.values() for e in v]
 print(max(c, key=lambda e: e["version"])["installPath"] + "/bin")
 ' "$H3/.claude/plugins/installed_plugins.json")
-check "CONTROL: sin el filtro ganaba la ajena" "$VIEJO" "$H3/inst/2.20.0/bin"
+check_ruta "CONTROL: sin el filtro ganaba la ajena" "$VIEJO" "$H3/inst/2.20.0/bin"
 
 echo "1d. la misma entrada project SI vale desde su proyecto, y desde un subdirectorio suyo"
 # Se comparan componentes de ruta: el cwd puede ser un subdirectorio del projectPath (un comando
 # no siempre corre en la raiz), pero /OTRO-bis NO esta dentro de /OTRO aunque lo tenga de prefijo.
-check "desde su propio proyecto" "$(resolver "$H3/OTRO")" "$H3/inst/2.20.0/bin"
-check "desde un subdirectorio del proyecto" "$(resolver "$H3/OTRO/sub/dir")" "$H3/inst/2.20.0/bin"
-check "un prefijo de texto no es estar dentro" "$(resolver "$H3/OTRO-bis")" "$H3/inst/2.18.0/bin"
+check_ruta "desde su propio proyecto" "$(resolver "$H3/OTRO")" "$H3/inst/2.20.0/bin"
+check_ruta "desde un subdirectorio del proyecto" "$(resolver "$H3/OTRO/sub/dir")" "$H3/inst/2.20.0/bin"
+check_ruta "un prefijo de texto no es estar dentro" "$(resolver "$H3/OTRO-bis")" "$H3/inst/2.18.0/bin"
 
 echo "1e. scope=project SIN projectPath se conserva: no se puede probar que sea ajena"
 manifiesto '{"plugins":{"3-tier-memory@mkt":[
  {"scope":"user","version":"2.18.0","installPath":"PLACEHOLDER/inst/2.18.0"},
  {"scope":"project","version":"2.20.0","installPath":"PLACEHOLDER/inst/2.20.0"}]}}'
-check "sigue ganando la mas alta" "$(resolver "$H3/ACTUAL")" "$H3/inst/2.20.0/bin"
+check_ruta "sigue ganando la mas alta" "$(resolver "$H3/ACTUAL")" "$H3/inst/2.20.0/bin"
 
 echo "1f. si al filtrar no queda ninguna candidata, se cae al cache (no a la ajena)"
 manifiesto '{"plugins":{"3-tier-memory@mkt":[
  {"scope":"project","projectPath":"PLACEHOLDER/OTRO","version":"2.20.0","installPath":"PLACEHOLDER/inst/2.20.0"}]}}'
-check "cae al cache" "$(resolver "$H3/ACTUAL")" "$H3/.claude/plugins/cache/mkt/3-tier-memory/1.0.0/bin"
+check_ruta "cae al cache" "$(resolver "$H3/ACTUAL")" "$H3/.claude/plugins/cache/mkt/3-tier-memory/1.0.0/bin"
 
 echo "2. sin installed_plugins.json, la mas alta POR VERSION (no alfabetica)"
 mv "$H/.claude/plugins/installed_plugins.json" "$TMP/guardado.json"
 GOT=$(env -u CLAUDE_PLUGIN_ROOT HOME="$H" bash "$BIN/resolve-plugin-bin.sh")
-check "2.10.0 gana a 2.9.0" "$GOT" "$H/.claude/plugins/cache/mkt/3-tier-memory/2.10.0/bin"
+check_ruta "2.10.0 gana a 2.9.0" "$GOT" "$H/.claude/plugins/cache/mkt/3-tier-memory/2.10.0/bin"
 
 echo "3. un installed_plugins.json ilegible no rompe nada: cae al cache"
 printf 'esto no es json' > "$H/.claude/plugins/installed_plugins.json"
 GOT=$(env -u CLAUDE_PLUGIN_ROOT HOME="$H" bash "$BIN/resolve-plugin-bin.sh")
-check "sigue resolviendo" "$GOT" "$H/.claude/plugins/cache/mkt/3-tier-memory/2.10.0/bin"
+check_ruta "sigue resolviendo" "$GOT" "$H/.claude/plugins/cache/mkt/3-tier-memory/2.10.0/bin"
 
 echo "4. CLAUDE_PLUGIN_ROOT manda sobre todo lo demas (es el plugin que CORRE)"
 mkdir -p "$TMP/corriendo/bin"; : > "$TMP/corriendo/bin/journal-emit.py"
 GOT=$(CLAUDE_PLUGIN_ROOT="$TMP/corriendo" HOME="$H" bash "$BIN/resolve-plugin-bin.sh")
-check "devuelve el que corre" "$GOT" "$TMP/corriendo/bin"
+check_ruta "devuelve el que corre" "$GOT" "$TMP/corriendo/bin"
 
 echo "5. corriendo desde el propio bin sin nada instalado: se devuelve a si mismo"
 H2="$TMP/vacio"; mkdir -p "$H2"
 GOT=$(env -u CLAUDE_PLUGIN_ROOT HOME="$H2" bash "$BIN/resolve-plugin-bin.sh" 2>/dev/null); RC=$?
 check "codigo de salida 0" "$RC" "0"
-check "devuelve su propio directorio" "$GOT" "$BIN"
+check_ruta "devuelve su propio directorio" "$GOT" "$BIN"
 
 echo "6. sin plugin por ningun lado: no imprime ruta y sale 1"
 SOLO="$TMP/solo"; mkdir -p "$SOLO"; cp "$BIN/resolve-plugin-bin.sh" "$SOLO/"

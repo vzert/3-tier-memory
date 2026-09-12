@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.18.4] - 2026-09-12
+Segunda vuelta de Windows, con el CI midiendo en vez de suponer.
+
+### Fixed
+- `bin/session-start.sh`: la garantia de UTF-8 pasa a vivir **dentro** del bloque que imprime
+  (`sys.stdout.reconfigure`), no solo en el `export` del guion que lo llama. Ese bloque tambien se
+  ejecuta suelto —`test-parser` lo extrae de aqui— y una garantia que depende de quien te invoque
+  no es una garantia. El `export` de 2.18.3 se queda: cubre las otras once llamadas a python.
+- `bin/test-plugin-bin-resolver.sh`: dos asertos comparaban rutas **como cadenas**. En Git Bash
+  conviven dos dialectos para el mismo directorio —la forma MSYS que construye el shell y la nativa
+  que sale al cruzar hacia un `.exe`— y el resolutor devolvia la misma carpeta en la otra forma. No
+  fallaba la eleccion, fallaba la ortografia. Las 13 comparaciones de ruta pasan por `cygpath -m`
+  donde existe, y fuera de Windows no tocan nada.
+
 ## [2.18.3] - 2026-09-12
 **En Windows, todo el texto en espanol del plugin salia con los acentos y los guiones rotos.** Es
 lo mas grave de esta tanda y lo encontro la primera corrida de las suites en Git Bash.
