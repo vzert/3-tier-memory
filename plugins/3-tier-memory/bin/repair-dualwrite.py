@@ -8,8 +8,12 @@ las dos a la vez. Una linea escrita a mano en Tier 2 no genera la fila de Tier 3
 es silencioso hasta que se cierra el pendiente: `apply_resolve_monthly` no encuentra la fila,
 deja un WARN, y se pierden la fecha de resolucion y la sesion que lo cerro.
 
-Medido el 2026-09-10 en claude-vzert: 49 de 118 pendientes abiertos (42%) sin fila en Tier 3;
+Medido el 2026-09-10 en una instalacion real: 49 de 118 pendientes abiertos (42%) sin fila en Tier 3;
 ninguno tenia evento propio en `.journal/applied/`, o sea que los 49 se escribieron a mano.
+(Desde 2.23.0 `applied/` no se versiona, asi que esa comprobacion solo vale EN LA MAQUINA que
+aplico los eventos: en un clon recien traido `applied/` esta vacio y toda fila pareceria
+escrita a mano. No lo usa ningun camino de codigo de aqui — es como se midio, no como se
+repara — pero quien quiera repetir la medida tiene que hacerlo donde se genero.)
 La mayoria es anterior al despliegue del journal (2026-09-03), pero 14 son posteriores: la
 fuga seguia abierta con el journal ya en marcha, porque nada impedia escribir Tier 2 a mano.
 (La corrida real escribio 51 filas: esos 49 mas 2 pendientes que otra sesion anadio a mano
@@ -46,7 +50,7 @@ Que NO hace:
     escribe. Por eso esto vive aqui y no en el hook SessionStart: mover datos del usuario solo es
     aceptable en el camino que acaba en un commit de git, que es /checkpoint-3t Step 3-pre;
   - no recalcula ids. El id de un pendiente emitido por journal es sha1(texto+creado+origen),
-    pero una linea escrita a mano puede llevar un id inventado (31 de 118 en claude-vzert).
+    pero una linea escrita a mano puede llevar un id inventado (31 de 118 en lo medido).
     Recalcularlos obligaria a reescribir las citas de ese id en los session logs, que son
     registro historico. El id vale por ser estable, no por ser reproducible, asi que se
     conserva tal cual. Reemitir ese mismo texto por journal generaria el id canonico y una
@@ -97,7 +101,7 @@ PRIOS = (("alta", "Alta"), ("media", "Media"), ("baja", "Baja"))
 HEADER_RE = re.compile(r"^##\s+", re.I)
 ITEM_RE = re.compile(r"^\s*-\s*\[[ xX]\]\s")
 # Sufijos de metadatos al final de la linea. Se buscan por separado y en cualquier orden:
-# 6 de 119 lineas medidas en claude-vzert no siguen el orden origen/creado/id.
+# 6 de 119 lineas medidas en una instalacion real no siguen el orden origen/creado/id.
 ID_RE = re.compile(r"_id:\s*(p-[0-9a-f]{10})_")
 CREADO_RE = re.compile(r"_creado:\s*(\d{4}-\d{2}-\d{2})_")
 ORIGEN_RE = re.compile(r"_origen:\s*(\[\[[^\]]+\]\])_")
@@ -293,7 +297,7 @@ def row_cells(jc, line):
     (celda 1) o la nota de cierre (celda 6, la ultima). Colapsar siempre contra el texto —como
     hacia la primera version— desplaza las columnas de una fila cuyo pipe estaba en la nota, y
     el resultado tiene 7 celdas, asi que ya nadie lo detecta. Paso exactamente eso el
-    2026-09-11 con la fila 149 de claude-vzert.
+    2026-09-11 con la fila 149 de esa instalacion.
 
     Se ancla por FORMA, que es verificable: prioridad es Alta|Media|Baja y creado es una fecha,
     siempre en las celdas 2 y 3. Se busca esa pareja; lo que va antes es el texto y lo que va

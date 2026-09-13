@@ -242,6 +242,8 @@ your-project/
     ├── _plans-index.md        # Tier 2: plan registry
     ├── _research-index.md     # Tier 2: research tracker
     ├── .journal/              # event log: pending/ applied/ quarantine/ failed/ .lock/ (2.12.0)
+    │                          #   versioned: pending/ quarantine/ — they must be APPLIED elsewhere
+    │                          #   gitignored: applied/ (2.23.0), fingerprints.json, out-of-band.log, .lock/
     ├── .memory-config         # optional: journal_strict=1
     ├── learnings/             # Tier 3: topic files
     ├── sessions/              # Tier 3: session logs

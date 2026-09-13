@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Pruebas de repair-dualwrite.py y del arreglo del `|` en journal-compact.py.
 #
-# Cubre las dos perdidas de historial medidas el 2026-09-10 en claude-vzert:
+# Cubre las dos perdidas de historial medidas el 2026-09-10 en una instalacion real:
 #   A. una linea de Tier 2 escrita a mano no genera fila en Tier 3 (51 de 120 pendientes);
 #   B. una fila cuyo texto lleva un `|` tiene mas de 7 celdas, `apply_resolve_monthly` lee la
 #      prioridad como fecha de resolucion y concluye "ya resuelto": el pendiente no se puede

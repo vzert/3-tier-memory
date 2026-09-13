@@ -65,6 +65,8 @@ caso "huella / md5"             journal-compact.py      m_compact.py         tes
 caso "norm + SYSTEMROOT"        resolve-project-dir.sh  m_projdir.py         test-resolve-project-dir.sh "el respaldo de python3"
 caso "publicacion del .gitignore" journal-compact.py    m_gitignore_publicacion.py test-expire-reopen.sh "fichero ENTERO"
 caso "deriva sin lector"        journal-compact.py      m_drift_humano.py    test-expire-reopen.sh       "no consume"
+caso "guarda de la migracion"   journal-compact.py      m_gitignore_migracion.py test-expire-reopen.sh    "NO toca el del usuario"
+caso "CRLF de la migracion"     journal-compact.py      m_gitignore_crlf.py  test-expire-reopen.sh       "mismo bloque en CRLF"
 
 echo
 if [ "$PEND" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $TOTAL)"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi

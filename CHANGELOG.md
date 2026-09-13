@@ -1,5 +1,60 @@
 # Changelog
 
+## [2.23.0] - 2026-09-12
+La mitad de un repo real era rastro que nadie lee: `memory/.journal/applied/` son **628 de sus
+1230 ficheros (51%), 2.5 MB, 619 de un solo mes**. Crece ~600 ficheros al mes, cada `/checkpoint`
+anade varios y no se poda nunca. El efecto de un evento ya aplicado **es la fila del indice**, y
+esa si se versiona, asi que el directorio entero es historial duplicado.
+
+Y habia una segunda mitad del problema, que es la que costaba: el bloque de `.journal/.gitignore`
+se escribia **solo si faltaba**, asi que una linea nueva no llegaba **a ninguna** instalacion de
+2.21.0 en adelante — justo las que tienen el fichero, o sea todas las que tienen el problema. Un
+fichero generado si-falta era inmutable en la practica.
+
+### Changed
+- **`applied/` deja de versionarse.** El bloque de `memory/.journal/.gitignore` lo anade. Siguen
+  versionados `pending/` y `quarantine/`, y no por simetria: los dos hacen falta para **aplicar**
+  en la otra maquina (un `pending` se aplica alli en vez de perderse; un evento en cuarentena por
+  un ancla que aqui no existia puede tenerla alli, y desde 2.22.0 el compactador lo rescata). El
+  rastro de `applied/` no se aplica en ningun sitio: solo se consulta.
+- **El `.journal/.gitignore` que escribimos nosotros ahora se actualiza.** Si su contenido
+  coincide **entero** con un bloque que este plugin publico —sha256 de los dos unicos cuerpos que
+  ha tenido: 2.21.0-2.22.1 y el de 2.21.3—, se reemplaza de forma atomica (`os.replace`) y el
+  compactador lo dice por pantalla, con el `git rm -r --cached` que hace falta despues. Si difiere
+  **en un byte**, lo edito el usuario y su version manda: eso no cambia. La comparacion normaliza
+  CRLF antes de mirar, porque este fichero esta **trackeado** y en Windows con `core.autocrlf`
+  vuelve del checkout con CRLF — sin normalizar, la migracion no llegaria jamas a esa plataforma.
+  Cierra la deuda abierta en 2.21.0.
+
+### Migration
+Anadir algo al `.gitignore` **no lo des-trackea**. Si ya tenias `applied/` versionado:
+
+```
+git rm -r --cached memory/.journal/applied && git commit -m "journal: applied/ deja de versionarse"
+```
+
+Los ficheros siguen en tu disco (el compactador los necesita ahi) y siguen en el **historial** del
+repo: esto detiene el crecimiento, no lo revierte.
+
+### Fixed
+- El aviso de deriva decia *"los cambios NO se pierden, vienen anclados en `applied/`"*. Tras un
+  `git pull` eso deja de ser cierto con `applied/` ignorado — y nunca fue lo que tranquilizaba:
+  lo que llega por git **es el contenido de los indices, ya aplicado en la otra copia**. Reescrito.
+- `templates/audit-3t.md` decia que el conteo `applied` era de todos los meses; pasa a ser por
+  copia de trabajo, y un clon recien traido empieza en 0. Esperado, no una perdida.
+- El docstring de `repair-dualwrite.py` describia una medida ("ninguna de las 49 filas tenia
+  evento propio en `applied/`") que en un clon ya no se puede repetir. No lo usa ningun camino de
+  codigo; queda anotado donde estaba.
+
+### Tests
+- 130 asertos en `test-expire-reopen.sh` (eran 123). El fixture de la migracion es el cuerpo
+  **literal** de `GITIGNORE_JOURNAL` en 2.21.0, extraido del historial (`d71e45e`), no tecleado.
+  Cubre: migra el bloque de 2.21.0, lo dice por pantalla, **no** re-migra en la pasada siguiente,
+  migra tambien el mismo bloque en CRLF, y el control negativo — un byte distinto y no se toca.
+- Dos mutaciones nuevas (8 -> 10 casos en `tools/mutation-check.sh`): una quita la guarda de la
+  migracion (reescribir siempre) y tiene que tirar el control negativo; la otra quita la
+  normalizacion CRLF y tiene que tirar el caso de Windows. Las dos caen por el aserto que les toca.
+
 ## [2.22.1] - 2026-09-12
 `windows-latest` llevaba en rojo desde 2.20.0 con dos mutaciones diciendo "no discrimina". No era
 el producto: era el huso del banco. Y al investigarlo salio un defecto de producto peor, vivo en

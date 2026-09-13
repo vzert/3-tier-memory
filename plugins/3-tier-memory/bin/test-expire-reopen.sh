@@ -627,15 +627,88 @@ if command -v git >/dev/null 2>&1; then
   chk "git IGNORA fingerprints.json"          "1" "$(gi memory/.journal/fingerprints.json)"
   chk "git IGNORA out-of-band.log"            "1" "$(gi memory/.journal/out-of-band.log)"
   chk "git IGNORA el lock"                    "1" "$(gi memory/.journal/.lock/owner)"
-  # control positivo: lo que SI tiene que viajar entre maquinas
+  # applied/ NO viaja desde 2.23.0: su efecto ya es la fila del indice, y el directorio crece
+  # ~600 ficheros al mes sin poda (medido: 628 de 1230 ficheros de un repo real).
   APL=$(ls "$MEMG/.journal/applied"/*/*.json 2>/dev/null | head -1)
   chk "hay un evento en applied/ que probar"  "1" "$([ -n "$APL" ] && echo 1 || echo 0)"
-  chk "git NO ignora applied/ (viaja)"        "0" "$(gi "${APL#"$T/gitrepo/"}")"
+  chk "git IGNORA applied/ (ya aplicado)"     "1" "$(gi "${APL#"$T/gitrepo/"}")"
+  # control positivo: lo que SI tiene que viajar, porque hace falta APLICARLO en la otra copia
   chk "git NO ignora pending/ (viaja)"        "0" "$(gi memory/.journal/pending/x.json)"
   chk "git NO ignora quarantine/ (viaja)"     "0" "$(gi memory/.journal/quarantine/x.json)"
 else
   skip=$((skip+7)); echo "  skip sin git: 7 asertos de check-ignore"
 fi
+
+echo "== el .gitignore que escribimos NOSOTROS se actualiza; el que toco el usuario, no =="
+# Por que hace falta: escribir_gitignore_journal es write-if-absent, asi que hasta 2.23.0 una
+# linea nueva del bloque no llegaba NUNCA a quien ya tenia el fichero — o sea, a toda instalacion
+# de 2.21.0 en adelante, justo las que tienen el problema. El fixture de abajo es el cuerpo
+# LITERAL de GITIGNORE_JOURNAL en 2.21.0 (commit d71e45e), sha256 9bfbd258...: extraido del
+# historial, no tecleado. Que la migracion lo reconozca es lo unico que prueba que llega a una
+# instalacion real, y no solo a un repo recien creado.
+mig_fixture() { cat <<'GI_2210'
+# Lo escribe journal-compact.py cuando falta. Puedes editarlo: no se sobreescribe.
+#
+# QUE NO SE VERSIONA — estado por copia de trabajo. La deteccion de escrituras fuera del
+# journal compara contra lo que sello EL COMPACTADOR DE ESTA MAQUINA, asi que la linea base
+# no significa nada en otra. Versionarla ademas da un conflicto de merge garantizado: cambia
+# en cada compactacion, y dos maquinas tocan las mismas claves del JSON.
+fingerprints.json
+# Append de dos maquinas = conflicto que git no sabe fusionar. Y lo que se anoto aqui es lo
+# que se toco a mano EN ESTA copia.
+out-of-band.log
+# Estado vivo de un proceso. Nunca tiene sentido fuera de la maquina que lo tomo.
+.lock/
+.lock-steal/
+
+# QUE SI SE VERSIONA, a proposito: pending/, applied/ y quarantine/.
+# Son el registro de eventos, y es lo que hace que la memoria viaje entre maquinas.
+#   - pending/: un evento emitido y aun sin aplicar llega a la otra maquina y se aplica alli,
+#     en vez de perderse. Re-aplicar es no-op (el compactador es idempotente), asi que no
+#     duplica nada si ambas lo aplican.
+#   - applied/ y quarantine/: rastro auditable. Un fichero por evento, nombre unico, sin
+#     conflictos posibles.
+GI_2210
+}
+# 1) el bloque de 2.21.0 SE ACTUALIZA, y despues git si ignora applied/
+MEMM="$T/mig"; mkdir -p "$MEMM/.journal" "$MEMM/sessions"
+printf -- '---\ntype: index\n---\n# Pendientes\n\n## Media prioridad\n\n' > "$MEMM/_pendientes.md"
+printf -- '---\ntype: session\n---\n# s\n' > "$MEMM/sessions/2026-01-01-x.md"
+mig_fixture > "$MEMM/.journal/.gitignore"
+python3 "$BIN/journal-emit.py" --memory-dir "$MEMM" --type pendiente.add --text "uno" \
+  --prioridad Media --origen "[[sessions/2026-01-01-x]]" --creado 2026-01-01 >/dev/null 2>&1
+MOUT=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMM" 2>&1)
+chk "migra el bloque de 2.21.0"               "1" "$(grep -c '^applied/$' "$MEMM/.journal/.gitignore")"
+chk "y lo dice por pantalla"                  "1" "$(printf '%s' "$MOUT" | grep -c 'gitignore actualizado')"
+chk "avisa del git rm --cached"               "1" "$(printf '%s' "$MOUT" | grep -c 'rm -r --cached')"
+# 2) NO lo repite en la pasada siguiente: el bloque de hoy no esta en la lista de superados
+python3 "$BIN/journal-emit.py" --memory-dir "$MEMM" --type pendiente.add --text "dos" \
+  --prioridad Media --origen "[[sessions/2026-01-01-x]]" --creado 2026-01-01 >/dev/null 2>&1
+M2=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMM" 2>&1)
+chk "no re-migra en la pasada siguiente"      "0" "$(printf '%s' "$M2" | grep -c 'gitignore actualizado')"
+# 3) CRLF: este fichero esta TRACKEADO, asi que en Windows con core.autocrlf vuelve del checkout
+#    con CRLF. Sin normalizar, el compactador no reconoceria su propio bloque y la migracion no
+#    llegaria jamas a la plataforma donde menos se mira. Control de la normalizacion, no cosmetico.
+MEMC="$T/migcrlf"; mkdir -p "$MEMC/.journal" "$MEMC/sessions"
+printf -- '---\ntype: index\n---\n# Pendientes\n\n## Media prioridad\n\n' > "$MEMC/_pendientes.md"
+printf -- '---\ntype: session\n---\n# s\n' > "$MEMC/sessions/2026-01-01-x.md"
+mig_fixture | python3 -c 'import sys,io; io.open(sys.argv[1],"wb").write(sys.stdin.buffer.read().replace(b"\n", b"\r\n"))' "$MEMC/.journal/.gitignore"
+python3 "$BIN/journal-emit.py" --memory-dir "$MEMC" --type pendiente.add --text "uno" \
+  --prioridad Media --origen "[[sessions/2026-01-01-x]]" --creado 2026-01-01 >/dev/null 2>&1
+python3 "$BIN/journal-compact.py" --memory-dir "$MEMC" --quiet >/dev/null 2>&1
+chk "migra tambien el mismo bloque en CRLF"   "1" "$(grep -c '^applied/$' "$MEMC/.journal/.gitignore")"
+# 4) CONTROL NEGATIVO: un byte distinto y ya es del usuario. Un aserto que solo mira los casos
+#    que migran no distingue "migra lo nuestro" de "pisa lo que encuentre".
+MEMU="$T/migusr"; mkdir -p "$MEMU/.journal" "$MEMU/sessions"
+printf -- '---\ntype: index\n---\n# Pendientes\n\n## Media prioridad\n\n' > "$MEMU/_pendientes.md"
+printf -- '---\ntype: session\n---\n# s\n' > "$MEMU/sessions/2026-01-01-x.md"
+{ mig_fixture; printf 'mi-linea-propia\n'; } > "$MEMU/.journal/.gitignore"
+cp "$MEMU/.journal/.gitignore" "$T/migusr-antes"
+python3 "$BIN/journal-emit.py" --memory-dir "$MEMU" --type pendiente.add --text "uno" \
+  --prioridad Media --origen "[[sessions/2026-01-01-x]]" --creado 2026-01-01 >/dev/null 2>&1
+python3 "$BIN/journal-compact.py" --memory-dir "$MEMU" --quiet >/dev/null 2>&1
+chk "NO toca el del usuario (un byte basta)"  "0" "$(cmp -s "$T/migusr-antes" "$MEMU/.journal/.gitignore" && echo 0 || echo 1)"
+chk "y por tanto no le mete applied/"         "0" "$(grep -c '^applied/$' "$MEMU/.journal/.gitignore")"
 
 # No se pisa lo que el usuario haya puesto
 printf 'mio\n' > "$MEMG/.journal/.gitignore"

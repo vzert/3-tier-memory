@@ -1679,7 +1679,8 @@ def avisar_fuera_de_banda(fuera):
     print("  SI ACABAS DE HACER `git pull`/`git checkout`/`git merge`: es esperado y NO es una "
           "edicion a mano. La linea base vive por copia de trabajo (.journal/fingerprints.json no")
     print("  se versiona), asi que los indices que llegan por git no son los que sello ESTA "
-          "maquina. Los cambios NO se pierden —vienen anclados en applied/—; corre "
+          "maquina. Los cambios NO se pierden —son el contenido que acabas de traer, ya "
+          "aplicado en la otra copia—; corre "
           "`journal-compact.py --reseal` para aceptarlos como linea base.")
 
 
@@ -1698,22 +1699,93 @@ out-of-band.log
 .lock/
 .lock-steal/
 
-# QUE SI SE VERSIONA, a proposito: pending/, applied/ y quarantine/.
-# Son el registro de eventos, y es lo que hace que la memoria viaje entre maquinas.
+# Un evento YA APLICADO no le hace falta a nadie mas: su efecto es la fila del indice, y esa si
+# se versiona. Medido en una instalacion real (2026-09-12): 628 de 1230 ficheros del repo (51%),
+# 2.5 MB, 619 de un solo mes. Crece ~600 ficheros al mes y no se poda nunca. Lo que se pierde es
+# un rastro que en la practica solo se consulta en la maquina que lo genero.
+applied/
+
+# QUE SI SE VERSIONA, a proposito: pending/ y quarantine/.
+# Las dos hacen falta para APLICAR en la otra maquina, no como rastro:
 #   - pending/: un evento emitido y aun sin aplicar llega a la otra maquina y se aplica alli,
 #     en vez de perderse. Re-aplicar es no-op (el compactador es idempotente), asi que no
 #     duplica nada si ambas lo aplican.
-#   - applied/ y quarantine/: rastro auditable. Un fichero por evento, nombre unico, sin
-#     conflictos posibles.
+#   - quarantine/: un evento cuya ancla no existia aqui puede existir en la otra copia, y desde
+#     2.22.0 el compactador lo rescata alli. Sin versionarlo no hay nada que rescatar.
 """
 
 
-def escribir_gitignore_journal(journal):
+# sha256 de CADA cuerpo de GITIGNORE_JOURNAL que se llego a publicar y que esta version deja
+# atras, con los saltos normalizados a \n. Medido sobre el historial, no de memoria: el literal
+# solo ha tenido dos cuerpos desde que existe (`git log -S GITIGNORE_JOURNAL`).
+#   9bfbd258...  2.21.0 a 2.22.1 — el bloque que versionaba applied/
+#   5a88eb4a...  2.21.3 unicamente — el mismo mas la linea de human-pending.txt, que 2.21.4 quito
+# Por que hashes y no el texto entero: la comparacion tiene que ser TODO-O-NADA. Si el fichero
+# del usuario coincide entero con algo que publicamos, no lo escribio el: lo escribimos nosotros,
+# y actualizarlo es nuestro. Si difiere en un byte, lo toco el, y "su version manda" sigue en pie
+# sin ninguna excepcion que razonar.
+GITIGNORE_JOURNAL_SUPERADOS = (
+    "9bfbd25838599ef37b7c30cd2d6794c9723760a0ab854a550312261f6a1844a8",
+    "5a88eb4a7cafae7cc8cb86137322c04550fc34cc9d94de15b09414ff02d65dac",
+)
+
+
+def _migrar_gitignore_journal(path, quiet=False):
+    """Actualiza un .journal/.gitignore que escribimos nosotros. Deja intacto el que toco alguien.
+
+    Por que hace falta: `escribir_gitignore_journal` es write-if-absent, asi que una linea nueva
+    del bloque NUNCA llegaba a quien ya tenia el fichero — o sea, a todas las instalaciones de
+    2.21.0 en adelante, que son justo las que tienen el problema. Un fichero generado si-falta es
+    inmutable en la practica, y esa era la deuda (p-a374ff1ece).
+
+    NORMALIZA CRLF ANTES DE COMPARAR, y no es cosmetico: en los repos que versionan `memory/`
+    este fichero esta TRACKEADO, asi que en Windows con `core.autocrlf` vuelve del checkout con
+    CRLF. Comparando bytes crudos, el compactador no reconoceria su propio bloque y la migracion
+    no llegaria jamas a la plataforma donde menos se mira.
+
+    Se publica con `os.replace`, no con `os.link`: aqui SI queremos pisar el destino, y `replace`
+    es atomico — o queda el fichero viejo entero, o el nuevo entero, nunca uno a medias."""
+    try:
+        with open(path, "rb") as fh:
+            crudo = fh.read()
+    except OSError:
+        return False          # no poder leerlo no es motivo para no compactar
+    digest = hashlib.sha256(crudo.replace(b"\r\n", b"\n")).hexdigest()
+    if digest not in GITIGNORE_JOURNAL_SUPERADOS:
+        return False          # o es el de hoy, o lo toco el usuario: en ambos casos, no se toca
+    if digest == hashlib.sha256(GITIGNORE_JOURNAL.encode("utf-8")).hexdigest():
+        # Cinturon: si una version futura cambia el bloque y se olvida de sacar su hash de la
+        # lista, esto evita reescribirlo en cada pasada (y con ello remover el mtime y la deriva).
+        return False
+    tmp = f"{path}.{os.getpid()}.mig"
+    try:
+        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(GITIGNORE_JOURNAL)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except OSError:
+        _descartar(tmp)
+        return False
+    if not quiet:
+        print(f"JOURNAL .gitignore actualizado: {path}")
+        print("  applied/ (eventos ya aplicados) pasa a NO versionarse: su efecto ya esta en los "
+              "indices, y el directorio crece ~600 ficheros al mes sin podarse.")
+        print("  Si ya lo tenias trackeado, anadirlo al .gitignore no lo des-trackea: "
+              "`git rm -r --cached memory/.journal/applied` y commit.")
+    return True
+
+
+def escribir_gitignore_journal(journal, quiet=False):
     """Deja claro que de .journal/ es estado local y que es registro compartido.
 
-    SE ESCRIBE SI FALTA, NUNCA SE SOBREESCRIBE: una instalacion existente ya tiene .journal/
-    creado, asi que colgar esto del makedirs inicial dejaria fuera justo a quien le hace falta.
-    Y si el usuario lo edito, su version manda.
+    SE ESCRIBE SI FALTA: una instalacion existente ya tiene .journal/ creado, asi que colgar
+    esto del makedirs inicial dejaria fuera justo a quien le hace falta.
+
+    Y SI YA ESTA, SE ACTUALIZA SOLO CUANDO LO ESCRIBIMOS NOSOTROS (2.23.0): si su contenido
+    coincide entero con un bloque que publicamos, es nuestro y la linea nueva le toca; si difiere
+    en un byte, lo edito el usuario y su version manda. Ver `_migrar_gitignore_journal`. Antes de
+    esto un bloque generado si-falta era inmutable, y una linea nueva no llegaba a nadie.
 
     Por que hace falta: sin esto el plugin no tenia postura sobre que de `.journal/` es estado
     por copia de trabajo y que es registro compartido, asi que `fingerprints.json` acababa
@@ -1734,7 +1806,9 @@ def escribir_gitignore_journal(journal):
     fichero completo, o no aparece nada. Las dos propiedades salen de la misma llamada."""
     path = os.path.join(journal, ".gitignore")
     if os.path.exists(path):
-        return False          # atajo barato; quien decide de verdad es el link de abajo
+        # Ya existe: no se crea, pero SI se actualiza cuando su contenido es, entero, un bloque
+        # que publicamos nosotros. Un fichero con una sola diferencia es del usuario y se respeta.
+        return _migrar_gitignore_journal(path, quiet)
     try:
         os.makedirs(journal, exist_ok=True)
     except OSError:
@@ -1856,7 +1930,7 @@ def compact(mem, budget, quiet):
     applied = quarantined = noop = rescued = 0
     # Bajo el lock, como toda escritura del compactador. Es O_EXCL, asi que seria seguro fuera
     # de el; va aqui para que no haya una segunda regla sobre que se escribe sin lock.
-    escribir_gitignore_journal(journal)
+    escribir_gitignore_journal(journal, quiet)
     # Antes de aplicar nada: si un indice no es el que dejo la pasada anterior, alguien escribio
     # fuera del journal. Tiene que ir AQUI — en cuanto el compactador escriba, su propio cambio
     # tapa la diferencia y ya no se puede distinguir.
