@@ -1730,7 +1730,7 @@ GITIGNORE_JOURNAL_SUPERADOS = (
 )
 
 
-def _migrar_gitignore_journal(path, quiet=False):
+def _migrar_gitignore_journal(path):
     """Actualiza un .journal/.gitignore que escribimos nosotros. Deja intacto el que toco alguien.
 
     Por que hace falta: `escribir_gitignore_journal` es write-if-absent, asi que una linea nueva
@@ -1779,16 +1779,21 @@ def _migrar_gitignore_journal(path, quiet=False):
     except OSError:
         _descartar(tmp)
         return False
-    if not quiet:
-        print(f"JOURNAL .gitignore actualizado: {path}")
-        print("  applied/ (eventos ya aplicados) pasa a NO versionarse: su efecto ya esta en los "
-              "indices, y el directorio crece con cada checkpoint sin podarse nunca.")
-        print("  Si ya lo tenias trackeado, anadirlo al .gitignore no lo des-trackea: "
-              "`git rm -r --cached memory/.journal/applied` y commit.")
+    # SE IMPRIME AUNQUE SEA --quiet, y no es una excepcion caprichosa: la ruta por la que esto
+    # le pasa a la gente de verdad es `session-start.sh`, que corre el compactador CON --quiet.
+    # Gatearlo aqui era reescribir un fichero del repo del usuario y no decirselo, ni a el ni al
+    # agente — y con ello perder el `git rm --cached`, sin el cual su repo queda a medias:
+    # ignorado y trackeado a la vez. `--quiet` calla la linea rutinaria de cada pasada; esto
+    # ocurre UNA vez en la vida de una instalacion.
+    print(f"JOURNAL .gitignore actualizado: {path}")
+    print("  applied/ (eventos ya aplicados) pasa a NO versionarse: su efecto ya esta en los "
+          "indices, y el directorio crece con cada checkpoint sin podarse nunca.")
+    print("  Si ya lo tenias trackeado, anadirlo al .gitignore no lo des-trackea: "
+          "`git rm -r --cached memory/.journal/applied` y commit.")
     return True
 
 
-def escribir_gitignore_journal(journal, quiet=False):
+def escribir_gitignore_journal(journal):
     """Deja claro que de .journal/ es estado local y que es registro compartido.
 
     SE ESCRIBE SI FALTA: una instalacion existente ya tiene .journal/ creado, asi que colgar
@@ -1820,7 +1825,7 @@ def escribir_gitignore_journal(journal, quiet=False):
     if os.path.exists(path):
         # Ya existe: no se crea, pero SI se actualiza cuando su contenido es, entero, un bloque
         # que publicamos nosotros. Un fichero con una sola diferencia es del usuario y se respeta.
-        return _migrar_gitignore_journal(path, quiet)
+        return _migrar_gitignore_journal(path)
     try:
         os.makedirs(journal, exist_ok=True)
     except OSError:
@@ -1942,7 +1947,7 @@ def compact(mem, budget, quiet):
     applied = quarantined = noop = rescued = 0
     # Bajo el lock, como toda escritura del compactador. Es O_EXCL, asi que seria seguro fuera
     # de el; va aqui para que no haya una segunda regla sobre que se escribe sin lock.
-    escribir_gitignore_journal(journal, quiet)
+    escribir_gitignore_journal(journal)
     # Antes de aplicar nada: si un indice no es el que dejo la pasada anterior, alguien escribio
     # fuera del journal. Tiene que ir AQUI — en cuanto el compactador escriba, su propio cambio
     # tapa la diferencia y ya no se puede distinguir.

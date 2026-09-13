@@ -160,6 +160,14 @@ if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] \
   if [ -n "$JOURNAL_OUT" ]; then
     out "$JOURNAL_OUT"
     out ""
+    # Y A LA PERSONA si el compactador acaba de reescribirle el .journal/.gitignore (2.23.0).
+    # `out` va a additionalContext: lo lee el agente y no lo lee nadie mas. Aqui eso no vale, por
+    # la misma razon que no valia para la deriva en 2.21.0 y para los pendientes en 2.17.0: ha
+    # cambiado un fichero DE SU REPO, y el `git rm --cached` que hace falta despues solo lo puede
+    # correr una persona. Sin esto, su repo queda ignorando applied/ y trackeandolo a la vez.
+    if printf '%s' "$JOURNAL_OUT" | grep -q '\.gitignore actualizado'; then
+      human "⚠ MEMORIA: se actualizo memory/.journal/.gitignore — applied/ (eventos ya aplicados) deja de versionarse desde 2.23.0. Si ya lo tenias en git, anadirlo al .gitignore NO lo des-trackea: corre \`git rm -r --cached memory/.journal/applied\` y haz commit."
+    fi
   fi
 fi
 # Deriva fuera del journal (v2.13.2): journal_strict solo cubre Edit/Write/MultiEdit — Bash no

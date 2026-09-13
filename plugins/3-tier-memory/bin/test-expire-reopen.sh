@@ -686,6 +686,19 @@ python3 "$BIN/journal-emit.py" --memory-dir "$MEMM" --type pendiente.add --text 
   --prioridad Media --origen "[[sessions/2026-01-01-x]]" --creado 2026-01-01 >/dev/null 2>&1
 M2=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMM" 2>&1)
 chk "no re-migra en la pasada siguiente"      "0" "$(printf '%s' "$M2" | grep -c 'gitignore actualizado')"
+# 2b) EL AVISO SOBREVIVE A --quiet. La ruta por la que esto le pasa a la gente es session-start.sh,
+#     que corre el compactador CON --quiet: gatear el aviso ahi era reescribirle un fichero del
+#     repo y no decirselo, y de paso perder el `git rm --cached` sin el cual su repo queda
+#     ignorando applied/ y trackeandolo a la vez. Medir el caso ruidoso no mide el caso real.
+MEMQ="$T/migquiet"; mkdir -p "$MEMQ/.journal" "$MEMQ/sessions"
+printf -- '---\ntype: index\n---\n# Pendientes\n\n## Media prioridad\n\n' > "$MEMQ/_pendientes.md"
+printf -- '---\ntype: session\n---\n# s\n' > "$MEMQ/sessions/2026-01-01-x.md"
+mig_fixture > "$MEMQ/.journal/.gitignore"
+python3 "$BIN/journal-emit.py" --memory-dir "$MEMQ" --type pendiente.add --text "uno" \
+  --prioridad Media --origen "[[sessions/2026-01-01-x]]" --creado 2026-01-01 >/dev/null 2>&1
+QOUT=$(python3 "$BIN/journal-compact.py" --memory-dir "$MEMQ" --quiet 2>&1)
+chk "con --quiet el aviso SIGUE saliendo"     "1" "$(printf '%s' "$QOUT" | grep -c 'gitignore actualizado')"
+chk "y el git rm --cached tambien"            "1" "$(printf '%s' "$QOUT" | grep -c 'rm -r --cached')"
 # 3) CRLF: este fichero esta TRACKEADO, asi que en Windows con core.autocrlf vuelve del checkout
 #    con CRLF. Sin normalizar, el compactador no reconoceria su propio bloque y la migracion no
 #    llegaria jamas a la plataforma donde menos se mira. Control de la normalizacion, no cosmetico.
@@ -714,6 +727,29 @@ chk "y por tanto no le mete applied/"         "0" "$(grep -c '^applied/$' "$MEMU
 printf 'mio\n' > "$MEMG/.journal/.gitignore"
 python3 "$BIN/journal-compact.py" --memory-dir "$MEMG" --quiet >/dev/null 2>&1
 chk "no sobreescribe un .gitignore propio"    "mio" "$(cat "$MEMG/.journal/.gitignore")"
+
+echo "== la migracion del .gitignore llega A LA PERSONA, no solo al agente =="
+# Hasta que un adversario lo marco, el aviso salia por `out` (additionalContext): lo lee el agente
+# y nadie mas. Mismo fallo que 2.17.0 arreglo para los pendientes y 2.21.0 para la deriva. Aqui
+# pesa igual: ha cambiado un fichero DE SU REPO y quien puede correr el `git rm --cached` es una
+# persona. El aserto le pregunta al CANAL (systemMessage), no a que la salida traiga algo.
+MEMH="$T/mighuman/memory"; mkdir -p "$MEMH/.journal" "$MEMH/sessions"
+printf -- '---\ntype: index\n---\n# Pendientes\n\n## Media prioridad\n\n' > "$MEMH/_pendientes.md"
+printf -- '---\ntype: session\n---\n# s\n' > "$MEMH/sessions/2026-01-01-x.md"
+mig_fixture > "$MEMH/.journal/.gitignore"
+python3 "$BIN/journal-emit.py" --memory-dir "$MEMH" --type pendiente.add --text "uno" \
+  --prioridad Media --origen "[[sessions/2026-01-01-x]]" --creado 2026-01-01 >/dev/null 2>&1
+HOUT=$(CLAUDE_PLUGIN_ROOT="$(cd "$BIN/.." && pwd)" CLAUDE_PROJECT_DIR="$T/mighuman" \
+  bash "$BIN/session-start.sh" 2>/dev/null <<J
+{"hook_event_name":"SessionStart","source":"startup","cwd":"$T/mighuman"}
+J
+)
+chk "el canal a la persona lo lleva"          "1" "$(printf '%s' "$HOUT" | python3 -c 'import sys,json
+try: d=json.loads(sys.stdin.read())
+except Exception: print(0); raise SystemExit
+m=json.dumps(d, ensure_ascii=False)
+print(1 if "systemMessage" in d and "rm -r --cached" in d["systemMessage"] else 0)')"
+chk "y el fichero quedo migrado de verdad"    "1" "$(grep -c '^applied/$' "$MEMH/.journal/.gitignore")"
 
 echo "== tras un git pull el aviso de deriva explica que hacer, en vez de acusar =="
 # El coste de NO versionar la linea base: los indices que llegan por git no son los que sello

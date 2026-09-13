@@ -69,6 +69,8 @@ caso "guarda de la migracion"   journal-compact.py      m_gitignore_migracion.py
 caso "CRLF de la migracion"     journal-compact.py      m_gitignore_crlf.py  test-expire-reopen.sh       "mismo bloque en CRLF"
 caso "applied/ fuera del bloque" journal-compact.py     m_gitignore_applied.py test-expire-reopen.sh     "git IGNORA applied"
 caso "re-migracion en bucle"    journal-compact.py      m_gitignore_remigra.py test-expire-reopen.sh     "no re-migra"
+caso "aviso bajo --quiet"       journal-compact.py      m_migracion_quiet.py test-expire-reopen.sh      "con --quiet el aviso"
+caso "aviso a la persona"       session-start.sh        m_migracion_humano.py test-expire-reopen.sh     "canal a la persona"
 
 echo
 if [ "$PEND" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $TOTAL)"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi

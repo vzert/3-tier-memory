@@ -27,12 +27,19 @@ fichero generado si-falta era inmutable en la practica.
   rastro de `applied/` no se aplica en ningun sitio: solo se consulta.
 - **El `.journal/.gitignore` que escribimos nosotros ahora se actualiza.** Si su contenido
   coincide **entero** con un bloque que este plugin publico —sha256 de los dos unicos cuerpos que
-  ha tenido: 2.21.0-2.22.1 y el de 2.21.3—, se reemplaza de forma atomica (`os.replace`) y el
-  compactador lo dice por pantalla, con el `git rm -r --cached` que hace falta despues. Si difiere
+  ha tenido: 2.21.0-2.22.1 y el de 2.21.3—, se reemplaza de forma atomica (`os.replace`). Si difiere
   **en un byte**, lo edito el usuario y su version manda: eso no cambia. La comparacion normaliza
   CRLF antes de mirar, porque este fichero esta **trackeado** y en Windows con `core.autocrlf`
   vuelve del checkout con CRLF — sin normalizar, la migracion no llegaria jamas a esa plataforma.
   Cierra la deuda abierta en 2.21.0.
+- **El aviso de esa migracion llega a la PERSONA, y sobrevive a `--quiet`.** Mismo fallo que
+  2.17.0 arreglo para los pendientes y 2.21.0 para la deriva, y aqui habia vuelto: la ruta por
+  la que esto le pasa a la gente de verdad es `session-start.sh`, que corre el compactador **con
+  `--quiet`** y manda su salida a `additionalContext` —que lee el agente y nadie mas—. Escrito
+  asi, el plugin reescribia un fichero del repo del usuario sin decirselo, y se tragaba el
+  `git rm -r --cached` sin el cual su repo queda ignorando `applied/` y trackeandolo a la vez.
+  Ahora el aviso se imprime aunque sea `--quiet` —ocurre UNA vez en la vida de una instalacion,
+  no es salida rutinaria— y `session-start.sh` lo entrega por `systemMessage`.
 
 ### Migration
 Anadir algo al `.gitignore` **no lo des-trackea**. Si ya tenias `applied/` versionado:
@@ -56,18 +63,20 @@ crecimiento, no lo revierte.
   codigo; queda anotado donde estaba.
 
 ### Tests
-- 130 asertos en `test-expire-reopen.sh` (eran 123). El fixture de la migracion es el cuerpo
+- 134 asertos en `test-expire-reopen.sh` (eran 123). El fixture de la migracion es el cuerpo
   **literal** de `GITIGNORE_JOURNAL` en 2.21.0, extraido del historial (`d71e45e`), no tecleado.
   Cubre: migra el bloque de 2.21.0, lo dice por pantalla, **no** re-migra en la pasada siguiente,
   migra tambien el mismo bloque en CRLF, y el control negativo — un byte distinto y no se toca.
-- **Cuatro** mutaciones nuevas (8 -> 12 casos en `tools/mutation-check.sh`), y las cuatro caen por
+- **Seis** mutaciones nuevas (8 -> 14 casos en `tools/mutation-check.sh`), y las seis caen por
   el aserto que les toca: quitar la guarda de la migracion (reescribir siempre) tiene que tirar el
   control negativo; quitar la normalizacion CRLF tiene que tirar el caso de Windows; quitar
   `applied/` del bloque tiene que tirar el aserto que le pregunta **a git** (`check-ignore`), no el
   que busca la cadena en el fichero; y meter el hash del bloque actual en la lista de superados
-  —el descuido que cometera la proxima version que lo cambie— tiene que tirar «no re-migra».
-  Quedan sin mutacion propia los dos asertos de los mensajes por pantalla y la carrera de la
-  migracion, que no se puede medir de forma determinista.
+  —el descuido que cometera la proxima version que lo cambie— tiene que tirar «no re-migra»;
+  devolver el aviso detras de `if not quiet` tiene que tirar el caso de `--quiet`; y quitar la
+  entrega por `systemMessage` tiene que tirar el aserto que mira **ese campo del JSON**, no que
+  la salida traiga algun texto. Queda sin mutacion propia la carrera de la migracion, que no se
+  puede medir de forma determinista.
 
 ## [2.22.1] - 2026-09-12
 `windows-latest` llevaba en rojo desde 2.20.0 con dos mutaciones diciendo "no discrimina". No era
