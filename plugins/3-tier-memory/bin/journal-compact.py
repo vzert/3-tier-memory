@@ -1700,9 +1700,9 @@ out-of-band.log
 .lock-steal/
 
 # Un evento YA APLICADO no le hace falta a nadie mas: su efecto es la fila del indice, y esa si
-# se versiona. Medido en una instalacion real (2026-09-12): 628 de 1230 ficheros del repo (51%),
-# 2.5 MB, 619 de un solo mes. Crece ~600 ficheros al mes y no se poda nunca. Lo que se pierde es
-# un rastro que en la practica solo se consulta en la maquina que lo genero.
+# se versiona. Cifra reportada por UNA instalacion (2026-09-12), no un promedio: 628 de 1230
+# ficheros del repo (51%), 2.5 MB, 619 de un solo mes. Crece con cada checkpoint y no se poda
+# nunca. Lo que se pierde es un rastro que solo se consulta en la maquina que lo genero.
 applied/
 
 # QUE SI SE VERSIONA, a proposito: pending/ y quarantine/.
@@ -1763,6 +1763,18 @@ def _migrar_gitignore_journal(path, quiet=False):
             fh.write(GITIGNORE_JOURNAL)
             fh.flush()
             os.fsync(fh.fileno())
+        # RELEER JUSTO ANTES DE PISAR, y no es paranoia de mas: entre el primer read y el replace
+        # hay una escritura con fsync, que puede tardar. Si el usuario guarda su edicion en ese
+        # hueco, la perderiamos — y "su version manda" es la propiedad que costo dos rondas
+        # adversariales en 2.21.x. Con la escritura ya hecha, lo que queda entre comprobar y
+        # publicar son dos syscalls.
+        # NO CIERRA LA VENTANA DEL TODO y no se puede: nuestro lock no lo toma el editor del
+        # usuario, y POSIX no da un "reemplaza solo si sigue siendo esto". Se reduce, se dice, y
+        # el contenido pisado seria un bloque generado por nosotros, no trabajo suyo.
+        with open(path, "rb") as fh:
+            if hashlib.sha256(fh.read().replace(b"\r\n", b"\n")).hexdigest() != digest:
+                _descartar(tmp)
+                return False   # cambio bajo nuestros pies: es del usuario, se queda como esta
         os.replace(tmp, path)
     except OSError:
         _descartar(tmp)

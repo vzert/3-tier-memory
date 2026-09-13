@@ -1,9 +1,17 @@
 # Changelog
 
 ## [2.23.0] - 2026-09-12
-La mitad de un repo real era rastro que nadie lee: `memory/.journal/applied/` son **628 de sus
-1230 ficheros (51%), 2.5 MB, 619 de un solo mes**. Crece ~600 ficheros al mes, cada `/checkpoint`
-anade varios y no se poda nunca. El efecto de un evento ya aplicado **es la fila del indice**, y
+La mitad de un repo real era rastro que nadie lee. Cifra reportada por **una** instalacion el
+2026-09-12 —no es un promedio, y no esta rederivable desde este repo, que no versiona `memory/`—:
+`memory/.journal/applied/` eran **628 de sus 1230 ficheros (51%), 2.5 MB, 619 de un solo mes**.
+Mide la tuya antes de creerte la cifra:
+
+```
+find memory/.journal/applied -name '*.json' | wc -l   # ficheros de rastro
+git ls-files | wc -l                                  # ficheros del repo
+```
+
+Crece con cada `/checkpoint` y no se poda nunca. El efecto de un evento ya aplicado **es la fila del indice**, y
 esa si se versiona, asi que el directorio entero es historial duplicado.
 
 Y habia una segunda mitad del problema, que es la que costaba: el bloque de `.journal/.gitignore`
@@ -33,8 +41,9 @@ Anadir algo al `.gitignore` **no lo des-trackea**. Si ya tenias `applied/` versi
 git rm -r --cached memory/.journal/applied && git commit -m "journal: applied/ deja de versionarse"
 ```
 
-Los ficheros siguen en tu disco (el compactador los necesita ahi) y siguen en el **historial** del
-repo: esto detiene el crecimiento, no lo revierte.
+Los ficheros siguen en tu disco —el compactador no los lee, solo usa `applied/` como destino, asi
+que puedes borrarlos si quieres— y siguen en el **historial** del repo: esto detiene el
+crecimiento, no lo revierte.
 
 ### Fixed
 - El aviso de deriva decia *"los cambios NO se pierden, vienen anclados en `applied/`"*. Tras un
