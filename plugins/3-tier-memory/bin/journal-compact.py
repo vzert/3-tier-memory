@@ -1782,7 +1782,7 @@ def _migrar_gitignore_journal(path, quiet=False):
     if not quiet:
         print(f"JOURNAL .gitignore actualizado: {path}")
         print("  applied/ (eventos ya aplicados) pasa a NO versionarse: su efecto ya esta en los "
-              "indices, y el directorio crece ~600 ficheros al mes sin podarse.")
+              "indices, y el directorio crece con cada checkpoint sin podarse nunca.")
         print("  Si ya lo tenias trackeado, anadirlo al .gitignore no lo des-trackea: "
               "`git rm -r --cached memory/.journal/applied` y commit.")
     return True

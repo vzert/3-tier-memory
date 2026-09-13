@@ -60,9 +60,14 @@ crecimiento, no lo revierte.
   **literal** de `GITIGNORE_JOURNAL` en 2.21.0, extraido del historial (`d71e45e`), no tecleado.
   Cubre: migra el bloque de 2.21.0, lo dice por pantalla, **no** re-migra en la pasada siguiente,
   migra tambien el mismo bloque en CRLF, y el control negativo — un byte distinto y no se toca.
-- Dos mutaciones nuevas (8 -> 10 casos en `tools/mutation-check.sh`): una quita la guarda de la
-  migracion (reescribir siempre) y tiene que tirar el control negativo; la otra quita la
-  normalizacion CRLF y tiene que tirar el caso de Windows. Las dos caen por el aserto que les toca.
+- **Cuatro** mutaciones nuevas (8 -> 12 casos en `tools/mutation-check.sh`), y las cuatro caen por
+  el aserto que les toca: quitar la guarda de la migracion (reescribir siempre) tiene que tirar el
+  control negativo; quitar la normalizacion CRLF tiene que tirar el caso de Windows; quitar
+  `applied/` del bloque tiene que tirar el aserto que le pregunta **a git** (`check-ignore`), no el
+  que busca la cadena en el fichero; y meter el hash del bloque actual en la lista de superados
+  —el descuido que cometera la proxima version que lo cambie— tiene que tirar «no re-migra».
+  Quedan sin mutacion propia los dos asertos de los mensajes por pantalla y la carrera de la
+  migracion, que no se puede medir de forma determinista.
 
 ## [2.22.1] - 2026-09-12
 `windows-latest` llevaba en rojo desde 2.20.0 con dos mutaciones diciendo "no discrimina". No era

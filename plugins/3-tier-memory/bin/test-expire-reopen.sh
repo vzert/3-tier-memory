@@ -628,7 +628,7 @@ if command -v git >/dev/null 2>&1; then
   chk "git IGNORA out-of-band.log"            "1" "$(gi memory/.journal/out-of-band.log)"
   chk "git IGNORA el lock"                    "1" "$(gi memory/.journal/.lock/owner)"
   # applied/ NO viaja desde 2.23.0: su efecto ya es la fila del indice, y el directorio crece
-  # ~600 ficheros al mes sin poda (medido: 628 de 1230 ficheros de un repo real).
+  # crece con cada checkpoint y no se poda nunca (una instalacion reporto 628 de 1230 ficheros).
   APL=$(ls "$MEMG/.journal/applied"/*/*.json 2>/dev/null | head -1)
   chk "hay un evento en applied/ que probar"  "1" "$([ -n "$APL" ] && echo 1 || echo 0)"
   chk "git IGNORA applied/ (ya aplicado)"     "1" "$(gi "${APL#"$T/gitrepo/"}")"
