@@ -31,6 +31,59 @@ out()   { _AGENT_BUF="${_AGENT_BUF}$1
 human() { _HUMAN_BUF="${_HUMAN_BUF}$1
 "; }
 
+# Reenvio generico de avisos "para persona" que journal-compact.py marca con una linea
+# `HUMAN-EVENT: <slug>` en su salida (p-bd9a53b794). Hasta 2.24.7 CADA punto de escalada de
+# este script traia su propio grep por CONTENIDO del mensaje (FUERA DEL JOURNAL, ILEGIBLE,
+# .gitignore actualizado) — anadir un aviso nuevo exigia acordarse de tocar el patron EN CADA
+# punto, y una vez no se hizo (la ronda adversarial de 2.24.7 lo caza, no el diseno). Ahora la
+# decision de QUE es persona-worthy vive en journal-compact.py (quien pone el rotulo); este
+# script solo tiene que reconocer el slug UNA vez, aqui, para que llegue desde cualquier punto
+# de escalada.
+#
+# El TEXTO que lee la persona sigue viviendo aqui (no en journal-compact.py) porque ese texto
+# ya aparece, palabra por palabra, dentro de los prints normales del compactador (o de otra
+# funcion que toca el mismo indice) — duplicarlo como texto en journal-compact.py le rompe a
+# `grep -c` los asertos que cuentan UNA sola aparicion de "corrupta"/"git pull"/"rm -r --cached"
+# en la salida cruda (test-expire-reopen.sh, test-linea-base-corrupta.sh). Medido, no supuesto.
+# El slug es el UNICO contrato entre los dos ficheros; el texto de cada entrada tiene que seguir
+# siendo BYTE A BYTE el que ya cubren esos asertos.
+# Se filtra la linea `HUMAN-EVENT: ` de lo que va a `out` (agente): nunca formo parte del texto
+# que el agente vio antes de este cambio.
+escalar_avisos_humanos() {
+  local salida="$1" linea slug
+  [ -z "$salida" ] && return 0
+  while IFS= read -r linea; do
+    # El grep-por-contenido que esto reemplazo era coincidencia de SUBCADENA: un CRLF (Windows,
+    # en la matriz bloqueante de CI) no lo afectaba. El `case` de abajo es coincidencia EXACTA
+    # contra el slug, y `read -r` con IFS vacio conserva el \r final si journal-compact.py
+    # imprimio con CRLF (stdout en modo texto de Python en Windows traduce \n a \r\n por
+    # defecto). Sin este strip, un slug con \r no matchea NINGUN brazo del case de abajo, no hay
+    # `*)` que avise, y el aviso desaparece en silencio — lo caza un adversario (Opus, ronda de
+    # verificacion de este mismo cambio), no un test: no hay fixture CRLF para este bloque.
+    linea="${linea%$'\r'}"
+    case "$linea" in
+      "HUMAN-EVENT: "*)
+        slug="${linea#HUMAN-EVENT: }"
+        case "$slug" in
+          gitignore-migrado)
+            human "⚠ MEMORIA: se actualizo memory/.journal/.gitignore — applied/ (eventos ya aplicados) deja de versionarse desde 2.23.0. Si ya lo tenias en git, anadirlo al .gitignore NO lo des-trackea: corre \`git rm -r --cached memory/.journal/applied\` y haz commit." ;;
+          fuera-de-banda)
+            human "⚠ MEMORIA: un indice de memory/ cambio sin pasar por el journal. Si acabas de hacer git pull/checkout/merge es esperado y no se pierde nada: corre \`python3 journal-compact.py --memory-dir memory --reseal\`. Si no, alguien lo edito a mano y ese cambio se pierde en la proxima compactacion." ;;
+          linea-base-ilegible)
+            human "⚠ MEMORIA: la linea base de memory/.journal/fingerprints.json estaba corrupta (no se pudo leer como JSON valido) y se acepto el estado actual como nueva linea base. Si esto no era lo esperado, revisa el fichero a mano." ;;
+          *)
+            # Un slug que journal-compact.py marco pero que esta tabla no reconoce (se anadio un
+            # HUMAN-EVENT nuevo alli sin anadir su entrada aqui). Que sea RUIDOSO para el agente
+            # en vez de desaparecer en silencio es la diferencia entre "un aviso mas para
+            # implementar" y "otro p-bd9a53b794" — exactamente la clase de perdida silenciosa que
+            # este cambio existe para cerrar.
+            out "⚠ MEMORIA: journal-compact.py marco un aviso persona-worthy (\"$slug\") que session-start.sh no reconoce — falta su entrada en escalar_avisos_humanos(). No llego a la persona." ;;
+        esac
+        ;;
+    esac
+  done < <(printf '%s\n' "$salida")
+}
+
 # ¿Hay una persona a la que dirigirse en esta sesion? UNA sola definicion, que usan tanto el
 # aviso de deriva como emit_output: dos copias de esta regla se separan y una de las dos se
 # queda rancia.
@@ -204,28 +257,15 @@ if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] \
              && [ -n "$(ls -A "$MEMORY_DIR/.journal/quarantine" 2>/dev/null)" ]; }; }; then
   JOURNAL_OUT=$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" --memory-dir "$MEMORY_DIR" --budget 1 --quiet 2>/dev/null)
   if [ -n "$JOURNAL_OUT" ]; then
-    out "$JOURNAL_OUT"
+    out "$(printf '%s\n' "$JOURNAL_OUT" | grep -v '^HUMAN-EVENT: ')"
     out ""
-    # Y A LA PERSONA si el compactador acaba de reescribirle el .journal/.gitignore (2.23.0).
-    # `out` va a additionalContext: lo lee el agente y no lo lee nadie mas. Aqui eso no vale, por
-    # la misma razon que no valia para la deriva en 2.21.0 y para los pendientes en 2.17.0: ha
-    # cambiado un fichero DE SU REPO, y el `git rm --cached` que hace falta despues solo lo puede
-    # correr una persona. Sin esto, su repo queda ignorando applied/ y trackeandolo a la vez.
-    if printf '%s' "$JOURNAL_OUT" | grep -q '\.gitignore actualizado'; then
-      human "⚠ MEMORIA: se actualizo memory/.journal/.gitignore — applied/ (eventos ya aplicados) deja de versionarse desde 2.23.0. Si ya lo tenias en git, anadirlo al .gitignore NO lo des-trackea: corre \`git rm -r --cached memory/.journal/applied\` y haz commit."
-    fi
-    # Y A LA PERSONA si esta pasada (aplicar pending/) tambien detecto deriva fuera de banda
-    # (p-c28bcb9c55): compact() normal resella SIEMPRE al terminar, asi que si el aviso solo
-    # fuera a `out` (agente), se perderia igual que se perdia por --quiet antes de este fix.
-    if printf '%s' "$JOURNAL_OUT" | grep -q 'FUERA DEL JOURNAL'; then
-      human "⚠ MEMORIA: un indice de memory/ cambio sin pasar por el journal. Si acabas de hacer git pull/checkout/merge es esperado y no se pierde nada: corre \`python3 journal-compact.py --memory-dir memory --reseal\`. Si no, alguien lo edito a mano y ese cambio se pierde en la proxima compactacion."
-    fi
-    # Y A LA PERSONA si la linea base de huellas (fingerprints.json) estaba corrupta (2.24.7):
-    # misma razon que el caso de arriba — el compactador ya la resello con el estado actual, y
-    # solo una persona puede revisar el fichero a mano o correr --reseal a sabiendas.
-    if printf '%s' "$JOURNAL_OUT" | grep -q 'ILEGIBLE'; then
-      human "⚠ MEMORIA: la linea base de memory/.journal/fingerprints.json estaba corrupta (no se pudo leer como JSON valido) y se acepto el estado actual como nueva linea base. Si esto no era lo esperado, revisa el fichero a mano."
-    fi
+    # Y A LA PERSONA: journal-compact.py marca sus propios avisos persona-worthy (gitignore
+    # migrado, deriva fuera de banda, linea base ilegible) con una linea HUMAN-EVENT: — ver
+    # escalar_avisos_humanos() mas arriba. La razon de fondo de por que estos avisos tienen que
+    # llegar a una persona (no solo al agente) sigue siendo la misma que en 2.17.0/2.21.0/2.23.0/
+    # 2.24.7: cambian ficheros del repo del usuario o sellan una linea base sin que nadie lo vea,
+    # y quien tiene que actuar (git rm --cached, revisar a mano, --reseal a sabiendas) es persona.
+    escalar_avisos_humanos "$JOURNAL_OUT"
   fi
 fi
 # Deriva fuera del journal (v2.13.2): journal_strict solo cubre Edit/Write/MultiEdit — Bash no
@@ -251,20 +291,12 @@ if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] && [ -d "$MEMORY_DIR/.j
   # THREET_SIN_LECTOR ya quedo puesto arriba, antes de las dos llamadas de este script.
   DRIFT_OUT=$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" --memory-dir "$MEMORY_DIR" --check-drift 2>/dev/null)
   if [ -n "$DRIFT_OUT" ]; then
-    out "$DRIFT_OUT"
+    out "$(printf '%s\n' "$DRIFT_OUT" | grep -v '^HUMAN-EVENT: ')"
     out ""
     # Y A LA PERSONA. Hasta 2.21.0 la deriva salia SOLO por additionalContext, o sea solo para
     # el agente — el mismo fallo que 2.17.0 arreglo para los pendientes y que aqui seguia vivo.
-    # Lo marco el adversario. Importa mas que en otros avisos: si la causa fue un `git pull`,
-    # quien lo hizo es la persona, y quien tiene que correr --reseal tambien.
-    DRIFT_N=$(printf '%s' "$DRIFT_OUT" | grep -c 'FUERA DEL JOURNAL')
-    if [ "${DRIFT_N:-0}" -gt 0 ] 2>/dev/null; then
-      human "⚠ MEMORIA: un indice de memory/ cambio sin pasar por el journal. Si acabas de hacer git pull/checkout/merge es esperado y no se pierde nada: corre \`python3 journal-compact.py --memory-dir memory --reseal\`. Si no, alguien lo edito a mano y ese cambio se pierde en la proxima compactacion."
-    fi
-    # Y A LA PERSONA si la linea base de huellas estaba corrupta (2.24.7) — mismo motivo que arriba.
-    if printf '%s' "$DRIFT_OUT" | grep -q 'ILEGIBLE'; then
-      human "⚠ MEMORIA: la linea base de memory/.journal/fingerprints.json estaba corrupta (no se pudo leer como JSON valido) y se acepto el estado actual como nueva linea base. Si esto no era lo esperado, revisa el fichero a mano."
-    fi
+    # Misma funcion compartida que el bloque de arriba — ver escalar_avisos_humanos().
+    escalar_avisos_humanos "$DRIFT_OUT"
   fi
 fi
 

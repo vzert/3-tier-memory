@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.24.8] - 2026-09-14
+Cierra p-bd9a53b794: session-start.sh decidia que avisos llegan a la persona (systemMessage)
+re-derivando por grep de texto literal en DOS puntos de escalada distintos — la misma clase de
+bug que 2.24.7 sufrio una vez (un aviso nuevo se olvida en uno de los dos sitios). Ahora
+journal-compact.py marca sus 3 avisos persona-worthy con una linea `HUMAN-EVENT: <slug>`
+(gitignore-migrado, fuera-de-banda, linea-base-ilegible); session-start.sh los reconoce con UNA
+funcion compartida (`escalar_avisos_humanos()`) en vez de 5 bloques `grep -q '<patron>'`
+duplicados. Texto que llega a la persona, byte a byte identico al de antes.
+
+Dos rondas de verificacion adversarial independiente (backend externo GPT-5/codex + subagente
+Opus 5), tres defectos reales encontrados y corregidos antes de comitear:
+- `case "$slug" in ...)` (coincidencia exacta) era fragil a CRLF donde el `grep` que sustituyo
+  (coincidencia de subcadena) era inmune — Windows esta en la matriz bloqueante de CI y Python
+  ahi traduce `\n`->`\r\n` en stdout. Arreglo: strip de `\r` tras el `read -r`.
+- El `case` no tenia brazo `*)`: un slug sin reconocer desaparecia en silencio, sin persona ni
+  rastro — exactamente la clase de perdida que este pendiente existia para cerrar.
+- El rotulo `HUMAN-EVENT: <slug>` se colaba literal al agente en `recall.sh` y `drift-gate.sh`
+  (los otros 2 consumidores de la salida cruda del compactador), inconsistente con el filtro que
+  si se aplico en session-start.sh.
+
+Ronda 2 (delta-scoped, mismo backend): `hold`, con fixtures CRLF reales ejecutadas, no leidas.
+
 ## [2.24.7] - 2026-09-14
 Cierra el limite documentado como "fuera de alcance" en 2.24.6 (hallazgo de codex/GPT-5, ronda 4):
 `leer_huellas()` devolvia `{}` igual para "fingerprints.json no existe" que para "existe pero es

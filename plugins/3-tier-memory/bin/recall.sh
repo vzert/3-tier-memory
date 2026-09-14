@@ -37,7 +37,12 @@ if [ -f "$CLAUDE_PLUGIN_ROOT/bin/journal-compact.py" ] && [ -d "$JOURNAL_PENDING
   # en la lista de UserPromptSubmit, este stdout llega al agente. Perderlo aqui era perder el
   # UNICO aviso posible, porque compact() ya resello los indices al terminar.
   JOURNAL_OUT=$(python3 "$CLAUDE_PLUGIN_ROOT/bin/journal-compact.py" --memory-dir "$MEMORY_DIR" --budget 1 --quiet 2>/dev/null)
-  [ -n "$JOURNAL_OUT" ] && printf '%s\n\n' "$JOURNAL_OUT"
+  # `HUMAN-EVENT: <slug>` (p-bd9a53b794) es un rotulo interno para session-start.sh, que si lo
+  # filtra de lo que ve el agente — nunca formo parte del texto que este hook mostraba antes.
+  # Sin este filtro se cuela literal en additionalContext, ruido de protocolo que este hook no
+  # tenia. Este script no tiene canal a persona (es UserPromptSubmit de solo agente): el rotulo
+  # no tiene a donde escalar aqui, asi que se descarta sin mas.
+  [ -n "$JOURNAL_OUT" ] && printf '%s\n\n' "$(printf '%s\n' "$JOURNAL_OUT" | grep -v '^HUMAN-EVENT: ')"
 fi
 
 # Derived recall index lives alongside other per-machine state (like

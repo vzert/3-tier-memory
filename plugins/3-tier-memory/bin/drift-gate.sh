@@ -52,6 +52,9 @@ drift_gate_check() {
     fi
     [ -z "$NEWER" ] && return 0
   fi
-  python3 "$BINDIR/journal-compact.py" --memory-dir "$MEMORY_DIR" --check-drift 2>/dev/null
+  # `HUMAN-EVENT: <slug>` (p-bd9a53b794) es un rotulo interno para session-start.sh; se filtra
+  # aqui por la misma razon que en recall.sh — journal-drift-nudge.sh (el unico llamante real)
+  # pasa esta salida cruda a UserPromptSubmit, solo agente, y el rotulo no tiene a donde escalar.
+  python3 "$BINDIR/journal-compact.py" --memory-dir "$MEMORY_DIR" --check-drift 2>/dev/null | grep -v '^HUMAN-EVENT: '
   return 0
 }

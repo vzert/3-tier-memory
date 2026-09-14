@@ -1780,6 +1780,15 @@ def avisar_linea_base_corrupta(journal):
     print("  La linea base anterior no es fiable — no se puede comparar contra ella. Se acepta "
           "el estado actual como nueva linea base. Si esto no era lo esperado, revisa el "
           "fichero a mano antes de seguir (o corre --reseal para aceptarlo explicitamente).")
+    # Marca persona-worthy (p-bd9a53b794): quien decide que esto llega a la PERSONA (no solo al
+    # agente) es este compactador, no el llamante. `HUMAN-EVENT: <slug>` es solo un rotulo — el
+    # TEXTO que la persona lee sigue viviendo en session-start.sh (escalar_avisos_humanos(), una
+    # tabla slug->mensaje), sin cambiar una palabra. No se movio el texto aqui adentro porque
+    # ya aparece, palabra por palabra, en los prints de arriba (o en los de otras funciones que
+    # tocan el mismo indice) — duplicarlo como texto literal le rompia a `grep -c` los asertos
+    # que cuentan UNA aparicion de "corrupta"/"git pull"/"rm -r --cached" en la salida cruda del
+    # compactador (medido: 3 FAILS reales al intentarlo, no una suposicion).
+    print("HUMAN-EVENT: linea-base-ilegible")
 
 
 def leer_huellas(journal):
@@ -2023,6 +2032,9 @@ def avisar_fuera_de_banda(fuera):
           "maquina. Los cambios NO se pierden —son el contenido que acabas de traer, ya "
           "aplicado en la otra copia—; corre "
           "`journal-compact.py --reseal` para aceptarlos como linea base.")
+    # Marca persona-worthy (p-bd9a53b794) — mismo motivo y mismo mecanismo que en
+    # avisar_linea_base_corrupta(): un rotulo, no el texto (ver esa nota para el porque).
+    print("HUMAN-EVENT: fuera-de-banda")
 
 
 GITIGNORE_JOURNAL = """\
@@ -2131,6 +2143,11 @@ def _migrar_gitignore_journal(path):
           "indices, y el directorio crece con cada checkpoint sin podarse nunca.")
     print("  Si ya lo tenias trackeado, anadirlo al .gitignore no lo des-trackea: "
           "`git rm -r --cached memory/.journal/applied` y commit.")
+    # Marca persona-worthy (p-bd9a53b794) — mismo mecanismo que avisar_fuera_de_banda() /
+    # avisar_linea_base_corrupta() (un rotulo, no el texto). Se imprime SIEMPRE (ver nota de
+    # arriba: aun con --quiet), porque el .gitignore cambiado es del repo del usuario y solo una
+    # persona puede correr el `git rm --cached` que hace falta despues.
+    print("HUMAN-EVENT: gitignore-migrado")
     return True
 
 
