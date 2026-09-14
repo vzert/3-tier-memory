@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.24.9] - 2026-09-14
+Tres ajustes al snippet de continuidad de `/checkpoint-3t` (Step 8), a partir de un caso real: el
+propio snippet de la sesion 2.24.8 tenia 5 lineas pegadas sin separacion y un `Proximo paso`
+inventado ("revisar si X respondio") en vez de admitir que la sesion no dejaba nada que retomar.
+
+- Linea en blanco entre cada campo del snippet (plantilla, ejemplo y bloque de terminal) — legible
+  de un vistazo en vez de leerse como un parrafo cortado por el fence.
+- Cuarto caso en la escalera de `<next-step>`: cuando la sesion genuinamente no dejo trabajo que
+  retomar, `Proximo paso: ninguno — <por que>` en vez de forzar el fallback generico
+  (`revisar _pendientes.md...`) o inventar contenido.
+- Advertencia explicita contra escribir un `<next-step>` del tipo "revisar si X respondio/actuo"
+  cuando X es un agente o persona fuera de la sesion — eso es una espera, no trabajo que una
+  sesion futura pueda avanzar.
+
 ## [2.24.8] - 2026-09-14
 Cierra p-bd9a53b794: session-start.sh decidia que avisos llegan a la persona (systemMessage)
 re-derivando por grep de texto literal en DOS puntos de escalada distintos — la misma clase de

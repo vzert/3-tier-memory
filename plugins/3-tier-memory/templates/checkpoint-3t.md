@@ -588,13 +588,25 @@ Genera un prompt breve y autosuficiente que el usuario pueda copiar y pegar al i
 
 ```
 Retomamos: <contexto-1-linea>.
+
 Lee memory/sessions/DATE-SLUG.md para el contexto completo.
+
 Proximo paso: <next-step>.
+
 Sigue abierto: <pendientes de esta sesion>.               <- omitir si no quedo ninguno mas
+
 No repitas: <callejones sin salida>.                      <- omitir si no hubo
+
 Terminas cuando: <done-bar>.                              <- omitir si no aplica
+
 Antes de actuar, dime en 3 lineas donde quedamos.
 ```
+
+**Linea en blanco entre cada campo, siempre** (2026-09-14, hallazgo del propio usuario sobre un
+snippet real): 5-7 lineas pegadas sin separacion se leen como un parrafo cortado por el fence, no
+como instrucciones distintas — cuesta el doble de alto pero se escanea de un vistazo, y un LLM lee
+igual de bien instrucciones separadas por blanco. Aplica a los TRES bloques de este step (8a, el
+ejemplo, y 8b) por la misma regla de "identicos" de mas abajo.
 
 Reglas para llenar los slots:
 
@@ -603,6 +615,22 @@ Reglas para llenar los slots:
   1. El pendiente nuevo de mayor prioridad creado en Step 3b de esta sesion.
   2. Si no hay nuevo, el pendiente existente de mayor prioridad relacionado con el trabajo de la sesion.
   3. Si tampoco aplica, escribir literalmente `revisar _pendientes.md y proponer siguiente prioridad`.
+  4. **Si la sesion genuinamente no dejo trabajo que retomar** (una sesion de reporte, de
+     verificacion puntual, o que se cerro sola) — no hay pendiente nuevo, no hay uno relacionado,
+     y "revisar _pendientes.md" seria un placeholder vacio, no una pista real — dilo tal cual:
+     `ninguno — <en media linea, por que esta sesion se cierra sola>`. Forzar el caso 3 cuando
+     aplica el 4 no es honesto: implica que hay algo que mirar, y manda a la sesion siguiente a
+     buscar una prioridad que no existe.
+
+  **No inventes un `<next-step>` de la forma "revisar si X respondio/actuo"** cuando X es un
+  agente, persona o proceso FUERA de esta sesion (un peer, un mantenedor ajeno, un PR de otro
+  repo). Eso no es trabajo que la sesion siguiente pueda avanzar — es una espera sobre una
+  decision ajena, y escribirlo como si fuera un paso accionable le hace perder tiempo a quien lo
+  lea despues (2026-09-14: paso en una sesion real — "revisar si goal-spec-skill-7d respondio" en
+  vez del caso 4, `ninguno`, que era la respuesta honesta). Si de verdad hace falta un
+  seguimiento programado mas adelante, eso es un recordatorio (`routine-followup` u otro
+  mecanismo de seguimiento), no una linea de este snippet.
+
   Incluye aqui los umbrales o criterios que ya se acordaron en esta sesion (un numero, un limite,
   una condicion de exito), si los hay. Sin ellos la sesion siguiente los vuelve a negociar contigo.
 - `<pendientes de esta sesion>`: **los pendientes que esta sesion dejo abiertos, ademas del que
@@ -652,11 +680,17 @@ Reemplaza el placeholder `<filled in Step 8>` de la seccion `## Como retomar` co
 
 ```
 Retomamos: <contexto-1-linea>.
+
 Lee memory/sessions/DATE-SLUG.md para el contexto completo.
+
 Proximo paso: <next-step>.
+
 Sigue abierto: <pendientes de esta sesion>.
+
 No repitas: <callejones sin salida>.
+
 Terminas cuando: <done-bar>.
+
 Antes de actuar, dime en 3 lineas donde quedamos.
 ```
 ````
@@ -666,11 +700,17 @@ Ejemplo real, con las 6 lineas:
 ````markdown
 ```
 Retomamos: plan v2.13.0 ratificado para que los pendientes dejen de ser un cementerio.
+
 Lee memory/sessions/2026-09-09-pendientes-cementerio-plan.md para el contexto completo.
+
 Proximo paso: medir en seco la precision del cierre por silencio sobre los 98 vencidos (umbrales ya acordados: >=90% de aciertos, cero cierres de items que pedian consultar un dato).
+
 Sigue abierto: mover measure-pendientes-v2.13.0.py a bin/ si el plan se implementa _id: p-ea5dab51be_ · falsificar los dos claims negativos de §3 _id: p-77c1a0b3e2_.
+
 No repitas: clasificar los pendientes con un regex sobre su texto — fallo tres veces y un revisor rompio las tres; leelos y clasifica con criterio declarado.
+
 Terminas cuando: haya un veredicto con numero (entra / no entra) y, si entra, el diseno de las tres senales de deteccion. Nada mas del plan en esa sesion.
+
 Antes de actuar, dime en 3 lineas donde quedamos.
 ```
 ````
@@ -684,11 +724,17 @@ Despues del reporte de Step 7, imprime el bloque al usuario con separadores visu
 Copia y pega esto al iniciar una nueva sesion de Claude Code:
 
 Retomamos: <contexto-1-linea>.
+
 Lee memory/sessions/DATE-SLUG.md para el contexto completo.
+
 Proximo paso: <next-step>.
+
 Sigue abierto: <pendientes de esta sesion>.
+
 No repitas: <callejones sin salida>.
+
 Terminas cuando: <done-bar>.
+
 Antes de actuar, dime en 3 lineas donde quedamos.
 ─────────────────────────────────────────────
 ```
