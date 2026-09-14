@@ -37,11 +37,11 @@ Create ALL of these files in `MEMORY_DIR/`. Use today's date for `created` and `
 
 **_pendientes.md** — Aggregator with Alta/Media/Baja prioridad sections, "Como usar" instructions, Related links. Each item uses format `- [ ] <texto> — _origen: [[sessions/...]]_ — _creado: YYYY-MM-DD_` so SessionStart can sort by age.
 
-**_session-index.md** — Table with columns: Fecha, Sesion, Status, Resumen, Commit. Empty rows. Convention section.
+**_session-index.md** — The table MUST start under a header that is the literal, exact text `## Sessions` (not a translation, not a reworded variant like "## Historial de Sesiones" — `bin/journal-compact.py` matches this string verbatim as its anchor). Since 2.24.0, if this exact header is missing entirely, the compactor creates it automatically the first time a `session.add` event is applied, so a wrong-worded header no longer quarantines anything — but it still leaves the wrong-worded section behind as dead, disconnected content, with a second "## Sessions" table appended after it holding every row from then on. Use the literal text from the start; there is no automatic migration of the old section's rows. Table with columns: Fecha, Sesion, Status, Resumen, Commit. Empty rows. Convention section.
 
 **_learnings.md** — Table with columns: Topic, File, When to consult. One initial topic file entry. Quick Reference section (empty initially).
 
-**_plans-index.md** — Table with columns: Plan, Status, Fecha, Sesion, Pendientes, Learnings. Lifecycle description. Como agregar section.
+**_plans-index.md** — The table MUST start under a header that is the literal, exact text `## Plans` (same reason and same 2.24.0 auto-create-if-missing behavior as `## Sessions` above). Table with columns: Plan, Status, Fecha, Sesion, Pendientes, Learnings. Lifecycle description. Como agregar section.
 
 **_research-index.md** — Active Research table and Completed Research table. Como agregar section.
 
@@ -57,11 +57,18 @@ All index files must have:
 > and the `## Quick Reference` section in `_learnings.md`; the `## Plans` table (Plan, Status, Fecha, Sesion,
 > Pendientes, Learnings); the `## Active Research` table (Tema, Next step, Origen, Archivo) and the
 > `## Completed Research` table (Tema, Resultado, Archivo). Keep them verbatim, each followed by its table
-> header + separator row; an event whose anchor is missing goes to `memory/.journal/quarantine/` instead
-> of being applied — with one exception since 2.22.0: a missing `## Alta/Media/Baja prioridad` header in
-> `_pendientes.md` is CREATED by the compactor and the event is applied, because a memory older than
-> 2.12.0 normally has its own headers and that is not a defect. `.journal/` itself is created by the
-> compactor on first use.
+> header + separator row. Since 2.22.0 (`## Alta/Media/Baja prioridad`) and 2.24.0 (`## Sessions`,
+> `## Plans`, `## Topic Files`, `## Active Research`, `## Completed Research` — five of the anchors
+> above, all of them table-shaped), a COMPLETELY MISSING anchor is created by the compactor itself
+> and the event still applies — a memory older than the anchor's introduction normally has its own
+> headers under a different name, and that is not a defect worth quarantining over. **`## Quick
+> Reference` is the one exception**: it holds a plain numbered list, not a table, and is NOT
+> auto-created — a missing one still quarantines, with a message telling you the rule already
+> landed in its topic file and to add the Quick Reference entry by hand. What else still goes to
+> `memory/.journal/quarantine/` is an anchor that exists but is malformed (the header is there with no
+> table under it, for instance) — that shape is left for a human to look at, on purpose, because
+> auto-repairing it risks moving column data. `.journal/` itself is created by the compactor on first
+> use.
 
 ## Step 3b: Write `memory/.memory-config` — `journal_strict=1` by default
 

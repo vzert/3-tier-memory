@@ -2,8 +2,11 @@
 # Regresiones de la guardia estricta del journal (bin/journal-guard.sh, PreToolUse, v2.12.0).
 #
 # El hook recibe por stdin el JSON de PreToolUse y debe:
-#   - no decir NADA (stdout vacio, stderr vacio, exit 0) cuando la guardia esta apagada o el
-#     archivo no es uno de los que pertenecen al compactador;
+#   - no decir NADA (stdout vacio, stderr vacio, exit 0) cuando el archivo no es uno de los que
+#     pertenecen al compactador (memory/_*.md o memory/pendientes/YYYY-MM.md);
+#   - imprimir un AVISO en texto plano (nunca JSON, nunca deny) cuando SI es uno de esos archivos
+#     pero journal_strict no esta en 1 — v2.24.0: antes de esto el hook callaba del todo en este
+#     caso, que es el comun (measured: casi ninguna instalacion tiene journal_strict=1);
 #   - imprimir un JSON con permissionDecision=deny (y solo eso) cuando journal_strict=1 y el
 #     archivo es memory/_*.md o memory/pendientes/YYYY-MM.md.
 # Un hook que muere con traceback se ve igual que "no bloquea": por eso stderr va aparte y se
@@ -35,14 +38,30 @@ expect_pass() { # nombre, tool, path
   if ! call "$2" "$3"; then fail "$1 (el hook murio o escribio en stderr)" "$(cat "$ERR")"; return; fi
   if [ -z "$OUT" ]; then PASS=$((PASS + 1)); else fail "$1: esperaba silencio, salio: '$OUT'"; fi
 }
+expect_warn() { # nombre, tool, path — aviso en texto plano, NUNCA JSON ni deny
+  if ! call "$2" "$3"; then fail "$1 (el hook murio o escribio en stderr)" "$(cat "$ERR")"; return; fi
+  if echo "$OUT" | grep -q 'AVISO' && echo "$OUT" | grep -q 'journal-emit' && ! echo "$OUT" | grep -q 'permissionDecision'; then
+    PASS=$((PASS + 1))
+  else
+    fail "$1: esperaba aviso en texto plano (sin deny), salio: '$OUT'"
+  fi
+}
 
-echo "guardia apagada (sin .memory-config):"
-expect_pass "sin config: _pendientes.md pasa" Edit "$P/memory/_pendientes.md"
-expect_pass "sin config: mensual pasa" Write "$P/memory/pendientes/2026-09.md"
+echo "guardia apagada (sin .memory-config) — avisa, no bloquea:"
+expect_warn "sin config: _pendientes.md avisa" Edit "$P/memory/_pendientes.md"
+expect_warn "sin config: mensual avisa" Write "$P/memory/pendientes/2026-09.md"
+expect_pass "sin config: sessions/ sigue en silencio" Write "$P/memory/sessions/x.md"
 
-echo "journal_strict=0:"
+echo "journal_strict=0 (equivalente a sin config) — avisa, no bloquea:"
 printf 'journal_strict=0\n' > "$P/memory/.memory-config"
-expect_pass "strict=0: _pendientes.md pasa" Edit "$P/memory/_pendientes.md"
+expect_warn "strict=0: _pendientes.md avisa" Edit "$P/memory/_pendientes.md"
+
+echo "el atajo de shell es generico, no una lista de 5 nombres (hallazgo del adversario, 2026-09-14):"
+rm -f "$P/memory/.memory-config"
+expect_warn "sin config: _custom.md (no es uno de los 5 indices conocidos) SI avisa" Write "$P/memory/_custom.md"
+printf '# config de memoria\njournal_strict = 1\n' > "$P/memory/.memory-config"
+expect_deny "strict=1: _custom.md tambien deniega" Write "$P/memory/_custom.md"
+rm -f "$P/memory/.memory-config"
 
 echo "journal_strict=1:"
 printf '# config de memoria\njournal_strict = 1\n' > "$P/memory/.memory-config"
@@ -80,6 +99,10 @@ echo "entrada rota:"
 printf 'journal_strict=1\n' > "$P/memory/.memory-config"
 : > "$ERR"; OUT=$(printf 'esto no es json' | CLAUDE_PROJECT_DIR="$P" bash "$HOOK" 2>"$ERR"); RC=$?
 if [ "$RC" -eq 0 ] && [ ! -s "$ERR" ] && [ -z "$OUT" ]; then PASS=$((PASS + 1)); else fail "json roto: debe callar (fail-open)" "$OUT $(cat "$ERR")"; fi
+# Igual, pero mencionando el nombre del indice a proposito: asi el filtro barato de shell SI
+# reenvia a python (que es quien realmente decide fail-open ante un json.loads roto).
+: > "$ERR"; OUT=$(printf 'esto no es json pero menciona "file_path":"_pendientes.md" igual' | CLAUDE_PROJECT_DIR="$P" bash "$HOOK" 2>"$ERR"); RC=$?
+if [ "$RC" -eq 0 ] && [ ! -s "$ERR" ] && [ -z "$OUT" ]; then PASS=$((PASS + 1)); else fail "json roto que menciona el indice: debe callar (fail-open en python)" "$OUT $(cat "$ERR")"; fi
 
 echo "RESULT: pass=$PASS fail=$FAIL"
 [ "$FAIL" -eq 0 ]

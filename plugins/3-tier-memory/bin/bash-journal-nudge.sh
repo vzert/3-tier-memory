@@ -61,50 +61,14 @@ case "$_HOOK_INPUT" in
 esac
 
 if [ "$EVENT" = "PostToolUse" ]; then
-  # Compuerta barata: solo llamar a python si algun indice es mas nuevo que la huella.
-  FP="$MEMORY_DIR/.journal/fingerprints.json"
-  [ -f "$FP" ] || exit 0
-  # `find -newer` exige marca ESTRICTAMENTE posterior, asi que en un sistema con mtime de 1 s una
-  # escritura en el mismo segundo que el sellado empata y no se ve. Se compara `>=` con stat.
-  # (Ronda 6.) Peor caso si stat no esta: se llama a python siempre, que es correcto y solo cuesta.
-  #
-  # (2026-09-12, primera corrida en Linux.) La version anterior era
-  #     stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null
-  # y en GNU NO caia al segundo: `-f` no toma argumento, asi que `%m` se lee como OTRO fichero.
-  # Ese falla —de ahi el exit distinto de 0 que disparaba el `||`— pero el fichero real SI se
-  # imprime, con la info del sistema de ficheros. `2>/dev/null` tapaba el error y la sustitucion se
-  # quedaba con las dos salidas pegadas. El `[ "$m" -ge "$FPM" ]` posterior no es un numero, falla,
-  # y NEWER nunca se ponia: el aviso no disparaba NUNCA en Linux. Silencioso, que es lo peor que
-  # puede hacer una barandilla.
-  #
-  # Ahora se prueba GNU primero (BSD no tiene `-c`, asi que alli falla y cae) y sobre todo se
-  # EXIGE QUE LA SALIDA SEA UN ENTERO: una utilidad que responde otra cosa vale lo mismo que no
-  # estar, y en ese caso se devuelve vacio, que el llamador ya sabe tratar.
-  _entero() { case "${1:-}" in ''|*[!0-9]*) return 1 ;; *) return 0 ;; esac; }
-  _mt() {
-    local m
-    m=$(stat -c %Y "$1" 2>/dev/null); _entero "$m" && { printf '%s' "$m"; return 0; }
-    m=$(stat -f %m "$1" 2>/dev/null); _entero "$m" && { printf '%s' "$m"; return 0; }
-    return 1
-  }
-  FPM=$(_mt "$FP")
-  if [ -n "$FPM" ]; then
-    NEWER=""
-    for f in "$MEMORY_DIR"/_*.md "$MEMORY_DIR"/pendientes/2*.md; do
-      [ -f "$f" ] || continue
-      m=$(_mt "$f"); [ -n "$m" ] || continue
-      [ "$m" -ge "$FPM" ] && { NEWER=1; break; }
-    done
-    # Un indice BORRADO no tiene mtime que comparar: si el numero de ficheros no cuadra con el de
-    # huellas selladas, hay que mirar igual.
-    if [ -z "$NEWER" ]; then
-      NF=$(ls "$MEMORY_DIR"/_*.md "$MEMORY_DIR"/pendientes/2*.md 2>/dev/null | wc -l | tr -d ' ')
-      NH=$(grep -c '": "' "$FP" 2>/dev/null || echo 0)
-      [ "$NF" != "$NH" ] && NEWER=1
-    fi
-    [ -z "$NEWER" ] && exit 0
-  fi
-  python3 "$(dirname "$0")/journal-compact.py" --memory-dir "$MEMORY_DIR" --check-drift 2>/dev/null
+  # La compuerta barata + el disparo de --check-drift viven en drift-gate.sh (v2.24.0), compartidos
+  # con bin/journal-drift-nudge.sh (UserPromptSubmit) — un solo sitio para esta logica, no dos
+  # copias que se desalinean. Lo que imprime AQUI (PreToolUse/PostToolUse) no llega al agente
+  # (medido con `claude -p`, 2026-09-14: ver la nota grande en journal-guard.sh) — el aviso REAL
+  # lo entrega journal-drift-nudge.sh en el siguiente prompt de la misma sesion. Esto se deja
+  # porque es inofensivo (nunca bloquea) y sirve para quien mire el log en modo debug.
+  source "$(dirname "$0")/drift-gate.sh"
+  drift_gate_check "$MEMORY_DIR" "$(dirname "$0")"
   exit 0
 fi
 

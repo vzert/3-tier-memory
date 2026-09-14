@@ -49,13 +49,20 @@ Que NO hace:
     blanco si el hueco dejaba dos). Todo lo demas de Tier 2 se lee, no se
     escribe. Por eso esto vive aqui y no en el hook SessionStart: mover datos del usuario solo es
     aceptable en el camino que acaba en un commit de git, que es /checkpoint-3t Step 3-pre;
-  - no recalcula ids. El id de un pendiente emitido por journal es sha1(texto+creado+origen),
-    pero una linea escrita a mano puede llevar un id inventado (31 de 118 en lo medido).
-    Recalcularlos obligaria a reescribir las citas de ese id en los session logs, que son
-    registro historico. El id vale por ser estable, no por ser reproducible, asi que se
-    conserva tal cual. Reemitir ese mismo texto por journal generaria el id canonico y una
-    fila duplicada; lo que cierra ese riesgo es no volver a escribir Tier 2 a mano
-    (`journal_strict=1` en `memory/.memory-config`).
+  - no recalcula ids POR DEFECTO. El id de un pendiente emitido por journal es
+    sha1(texto+creado+origen), pero una linea escrita a mano puede llevar un id inventado (31 de
+    118 en lo medido). El id vale por ser estable, no por ser reproducible, asi que por defecto
+    se conserva tal cual. Reemitir ese mismo texto por journal generaria el id canonico y una
+    fila duplicada; lo que cierra ese riesgo de raiz es no volver a escribir Tier 2 a mano
+    (`journal_strict=1` en `memory/.memory-config` — desde 2.24.0 el hook de Edit/Write avisa
+    aunque no este activado, ver journal-guard.sh).
+    Con `--fix-ids` (2.24.0, opt-in, solo con `--apply`) SI se recalculan: se renombra el id en
+    su linea de `_pendientes.md` y en su fila de `pendientes/YYYY-MM.md` — los dos lugares que
+    este archivo ya mantiene sincronizados. Deliberadamente NO toca `memory/sessions/*.md`: una
+    cita de un id en prosa de un log de sesion es registro historico, no una tabla que reescribir,
+    y es la misma razon de fondo por la que el recalculo era opt-in en primer lugar. Ante una
+    colision (el id canonico ya existe como otra fila) no renombra ni fusiona: lo reporta para que
+    un humano compare las dos filas. Detalle completo en `fix_invented_ids()`.
   - no borra ni reordena filas, y nunca cambia una celda ya escrita. Agrega al final de la
     tabla del mes. La UNICA excepcion es `--fix-pipes`, que si reescribe filas existentes:
     escapa su `|` para devolverlas a 7 celdas, sin tocar el contenido.
@@ -466,6 +473,35 @@ def header_issues(jc, mem):
     return out
 
 
+def _sub_id_tag(line, old, new):
+    """Reemplaza el `_id: <old>_` de una linea por `_id: <new>_`, tolerando el mismo espaciado
+    variable que ID_RE acepta al DETECTARLO (`_id:\\s*(p-...)_`).
+
+    Hallazgo adversarial (2026-09-14): la version anterior usaba `.replace(f"_id: {old}_", ...)`
+    — una subcadena con UN espacio fijo despues de los dos puntos. Con `_id:p-xxxxxxxxxx_` (sin
+    espacio, forma que ID_RE SI detecta) el `.replace` no encontraba nada, la linea salia
+    IDENTICA, y aun asi el codigo seguia adelante e imprimia 'RENOMBRADO' — un exito falso: se
+    reclamaba una escritura que nunca ocurrio. Aqui se construye el patron con el id VIEJO real
+    (no un texto generico), asi que cualquier linea que `id_to_lines` ya haya indexado para `old`
+    —que se indexo precisamente porque ID_RE encontro esa forma— tiene garantizado un match.
+    """
+    return re.sub(r"_id:\s*" + re.escape(old) + r"_", f"_id: {new}_", line, count=1)
+
+
+def _canonical_id(text, creado, origen):
+    """sha1(texto+creado+origen)[:10] con el mismo prefijo `p-` que journal-emit.py.
+
+    Unica formula del calculo: `ids_invented` (deteccion) y `fix_invented_ids` (--fix-ids,
+    2.24.0) llaman a esta misma funcion. Si el hash se retipeara en los dos sitios, un cambio
+    futuro (una clave nueva en META_RE, por ejemplo) los desalinearia en silencio: uno seguiria
+    detectando el id viejo como invalido y el otro calcularia un canonico distinto.
+    """
+    raw = "\n".join([re.sub(r"\s+", " ", unicodedata.normalize("NFC", text)).strip(),
+                      creado,
+                      re.sub(r"\s+", " ", unicodedata.normalize("NFC", origen)).strip()])
+    return "p-" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10]
+
+
 def ids_invented(idx_path):
     """Ids de Tier 2 que NO coinciden con `sha1(texto+creado+origen)[:10]` de su propia linea.
 
@@ -475,19 +511,118 @@ def ids_invented(idx_path):
     reemite ESE MISMO pendiente por journal, el emisor calcula el id canonico, no lo encuentra
     en el archivo y escribe una segunda linea y una segunda fila para el mismo pendiente.
 
-    Se reportan para que se vea venir; no se recalculan, porque ya estan citados en session logs.
+    Por defecto solo se reportan, no se recalculan: ver `fix_invented_ids` (--fix-ids) para el
+    porque y el alcance exacto de cuando SI se renombran.
     """
     out = []
-    prio_ignorada = None  # parse_tier2 ya valida los campos; aqui solo interesa el hash
     for pid, text, _p, creado, origen, faltan in parse_tier2(idx_path):
         if faltan or origen is None:
             continue   # sin origen no hay hash que comparar (linea anterior al journal)
-        raw = "\n".join([re.sub(r"\s+", " ", unicodedata.normalize("NFC", text)).strip(),
-                          creado,
-                          re.sub(r"\s+", " ", unicodedata.normalize("NFC", origen)).strip()])
-        if "p-" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10] != pid:
+        if _canonical_id(text, creado, origen) != pid:
             out.append(pid)
     return out
+
+
+def fix_invented_ids(jc, mem, idx_path, apply_):
+    """Renombra cada id inventado a su sha1 canonico en Tier 2 y en su fila mensual (--fix-ids).
+
+    Alcance deliberadamente MAS ESTRECHO que "las 3 referencias": rewrite SOLO los dos lugares
+    que el propio compactador posee y mantiene sincronizados (la linea de `_pendientes.md` y la
+    fila de `pendientes/YYYY-MM.md` — los mismos dos que describe el modulo de este archivo).
+    NO toca `memory/sessions/*.md`: esos logs son registro historico de lo que paso en cada
+    sesion (ids citados en prosa, no en una tabla que el compactador reescriba), y es la misma
+    razon por la que este archivo nunca recalculo ids de entrada (ver el modulo de arriba,
+    "no recalcula ids"). Renombrar ahi cambiaria una cita historica por una busqueda de texto a
+    ciegas sobre prosa libre — el mismo riesgo que ese parrafo ya rechaza, solo que aplicado con
+    --fix-ids en vez de sin el. Una cita de sesion que se queda con el id viejo no rompe nada: no
+    es una clave que nada vuelva a resolver, es una nota de que "en tal sesion se hablo de esto".
+
+    Colision (el id canonico YA EXISTE como otra fila, tal vez porque alguien lo reemitio por
+    journal mientras el invento seguia ahi): NO renombra, NO fusiona — fusionar dos filas que
+    pueden haber divergido (estado, fecha, texto editado a mano) sin que un humano las compare
+    primero es el riesgo que --fix-ids existe para evitar, no para introducir. Se reporta como
+    colision (ver el GRAVE en main()); ese aviso lo recoge SessionStart en cada arranque de
+    cualquier instalacion con .journal/ (v2.24.0), que es el mismo canal por el que ya llegan
+    `ids_invented`/filas rotas — no hace falta un mecanismo aparte para que un agente lo vea.
+
+    Duplicado (el MISMO id literal aparece en mas de una linea de Tier 2 — dano previo, no algo
+    que este archivo cause): NO se toca NINGUNA de las dos. Hallazgo de una revision adversarial
+    (2026-09-14): una version anterior indexaba `id_to_line` con un dict que se sobreescribe, asi
+    que solo la ULTIMA linea con ese id era alcanzable; `ids_invented` (que no deduplica) devolvia
+    el mismo id dos veces, y la segunda vez que el bucle lo procesaba encontraba su PROPIO
+    renombrado recien hecho como si fuera una colision — el resultado con --apply era una
+    reescritura PARCIAL: una de las dos lineas quedaba con el id nuevo y la otra con el viejo,
+    mas desincronizado que antes de correr la herramienta. Ahora se detecta ANTES de intentar
+    nada: un id con mas de una linea se excluye entero de `fixed` y de `collisions`, y se reporta
+    aparte (ver `duplicated` abajo) para que un humano decida cual de las dos filas es la real
+    antes de que nada las toque.
+
+    Devuelve (fixed, collisions, duplicated, monthly_missed): fixed = [(id_viejo, id_canonico)];
+    collisions = [(id_viejo, id_canonico, texto[:60])]; duplicated = [(id, n_apariciones)];
+    monthly_missed = [id_viejo] cuya fila de Tier 2 SI se renombro pero cuya fila mensual, contra
+    todo pronostico, no cambio (accion-marker veracity: mejor un reporte incompleto que uno que
+    reclama una escritura que no paso). Con apply_=False no escribe nada, y monthly_missed sale
+    siempre vacio (no se llega a escribir nada que verificar).
+    """
+    lines = jc.read_lines(idx_path)
+    id_to_lines = {}
+    for i, line in enumerate(lines):
+        m = ID_RE.search(line)
+        if m:
+            id_to_lines.setdefault(m.group(1), []).append(i)
+    known_ids = set(id_to_lines)
+    dup_ids = {pid for pid, idxs in id_to_lines.items() if len(idxs) > 1}
+    tier2 = {pid: (text, creado, origen) for pid, text, _p, creado, origen, faltan
+             in parse_tier2(idx_path) if not faltan and origen}
+
+    fixed = []
+    collisions = []
+    duplicated = []
+    seen = set()   # ids_invented() no deduplica: un id duplicado sale una vez por linea
+    for pid in ids_invented(idx_path):
+        if pid in seen:
+            continue
+        seen.add(pid)
+        if pid in dup_ids:
+            duplicated.append((pid, len(id_to_lines[pid])))
+            continue
+        info = tier2.get(pid)
+        if info is None:
+            continue
+        text, creado, origen = info
+        canon = _canonical_id(text, creado, origen)
+        if canon == pid:
+            continue
+        if canon in known_ids:
+            collisions.append((pid, canon, text[:60]))
+            continue
+        fixed.append((pid, canon))
+        # Se actualiza el conjunto DE TRABAJO (no el archivo, eso es abajo): asi un segundo id
+        # inventado que canonice al MISMO valor que este se detecta como colision tambien, en vez
+        # de renombrar los dos al mismo id y crear la duplicacion que --fix-ids existe para evitar.
+        known_ids.discard(pid)
+        known_ids.add(canon)
+
+    if not apply_:
+        return fixed, collisions, duplicated, []
+
+    monthly_missed = []
+    for old, new in fixed:
+        i = id_to_lines[old][0]   # invariante: old no esta en dup_ids, asi que hay exactamente una
+        lines[i] = _sub_id_tag(lines[i], old, new)
+        found = jc.find_monthly_row(mem, old)
+        if found:
+            mpath, mlines, mi, _cells, _cmap = found
+            nueva = _sub_id_tag(mlines[mi], old, new)
+            if nueva == mlines[mi]:
+                # No deberia pasar (find_monthly_row encontro la fila buscando ESTE id en su
+                # celda de texto), pero si pasa no se reclama un cambio que no ocurrio.
+                monthly_missed.append(old)
+            else:
+                mlines[mi] = nueva
+                jc.atomic_write(mpath, mlines)
+    jc.atomic_write(idx_path, lines)
+    return fixed, collisions, duplicated, monthly_missed
 
 
 def main():
@@ -496,6 +631,9 @@ def main():
     ap.add_argument("--apply", action="store_true")
     ap.add_argument("--fix-pipes", action="store_true",
                     help="reescribe con `|` escapado las filas que hoy no se pueden cerrar")
+    ap.add_argument("--fix-ids", action="store_true",
+                    help="renombra los ids inventados a su sha1 canonico en Tier 2 y en su fila "
+                         "mensual (no toca session logs); sin colision, y solo con --apply")
     ap.add_argument("--quiet", action="store_true")
     ap.add_argument("--budget", type=float, default=2.0)
     a = ap.parse_args()
@@ -536,6 +674,13 @@ def main():
         # La adopcion va ANTES de cualquier lectura de Tier 2: mueve lineas, y tanto
         # `ids_invented` como el reparto por mes tienen que ver el archivo ya adoptado.
         adoptados_todos = adopt_orphans(jc, mem, a.apply)
+
+        # --fix-ids TAMBIEN va antes de `existing_ids`/`have`, y por la misma razon que la
+        # adopcion: renombra el id de una fila que YA tiene fila mensual, y `have` (calculado con
+        # el id VIEJO) no reconoceria al NUEVO como "ya tiene Tier 3" — el reparto de mas abajo le
+        # anadiria una fila mensual duplicada al pendiente que se acababa de arreglar.
+        ids_fixed, id_collisions, id_duplicates, id_monthly_missed = \
+            fix_invented_ids(jc, mem, idx, a.apply) if a.fix_ids else ([], [], [], [])
 
         have = existing_ids(jc, mem)
         # Un huerfano CERRADO no se mueve nunca, asi que seguiria saliendo en cada corrida una vez
@@ -608,12 +753,17 @@ def main():
             # REPARADO. Al reves, un consumidor en dry-run (el check 14 de /audit-3t) leeria
             # siempre 0 y daria por sana una memoria con filas irresolubles.
             fixed = len(pipes) if (a.fix_pipes and a.apply) else 0
+            # ids_fixed/id_collisions solo se anaden a la linea cuando se pidio --fix-ids: un
+            # consumidor que ya parsea esta salida (audit-3t, checkpoint-3t) no ve campos nuevos
+            # aparecer sin haberlos pedido.
+            idsuf = (f" ids_fixed={len(ids_fixed)} id_collisions={len(id_collisions)} "
+                     f"id_duplicates={len(id_duplicates)}") if a.fix_ids else ""
             print(f"adopted={sum(1 for x in adoptados if x[3])} "
                   f"rows_added={added} pipes_broken={len(pipes)} pipes_fixed={fixed} "
                   f"unaligned_rows={len(desalineadas)} unrepairable={len(unrepairable)} "
                   f"odd_values={len(valores_raros)} header_issues={len(cabeceras)} "
                   f"ids_invented={len(inventados)} "
-                  f"missing_data={len(broken)}{sufijo}")
+                  f"missing_data={len(broken)}{idsuf}{sufijo}")
             for pid, prio, motivo, movido in adoptados:
                 if movido:
                     verbo = "movido" if a.apply else "se moveria"
@@ -654,10 +804,30 @@ def main():
                 print(f"  AVISO {fn}: {problema}. El compactador le escribe filas de 7 columnas "
                       f"encima y las filas cortas se leen igual; {extra}. Arreglar la cabecera "
                       f"es una migracion y no se hace desde aqui.")
-            if inventados:
+            if inventados and not a.fix_ids:
                 print(f"  AVISO {len(inventados)} ids de Tier 2 no coinciden con el sha1 de su "
                       f"linea. Si alguien reemite ese mismo pendiente por journal saldra el id "
-                      f"canonico y una fila duplicada: {inventados[0]} ...")
+                      f"canonico y una fila duplicada: {inventados[0]} ... (usa --fix-ids para "
+                      f"renombrarlos)")
+            missed = set(id_monthly_missed)
+            for old, new in ids_fixed:
+                verbo = "renombrado" if a.apply else "se renombraria"
+                print(f"  {verbo.upper()} {old} -> {new} en _pendientes.md y su fila mensual "
+                      f"(sessions/*.md que lo citen en prosa se quedan con el id viejo: es "
+                      f"registro historico, no una tabla que reescribir).")
+                if old in missed:
+                    print(f"  GRAVE {old} -> {new}: la fila de Tier 2 SI se renombro, pero su "
+                          f"fila mensual NO cambio (no se encontro el id ahi con la misma forma). "
+                          f"Revisala a mano: los dos tiers pueden haber quedado con ids distintos.")
+            for old, new, texto in id_collisions:
+                print(f"  GRAVE colision de id: {old} recalcula a {new}, que YA EXISTE como otra "
+                      f"fila ('{texto}...'). No se renombra ni se fusiona — compara las dos filas "
+                      f"a mano y decide si son el mismo pendiente.")
+            for pid, n in id_duplicates:
+                print(f"  GRAVE {pid} aparece en {n} lineas de _pendientes.md (dano previo, no "
+                      f"causado por --fix-ids). No se toca ninguna: renombrar una sin saber cual "
+                      f"es la real dejaria la otra huerfana. Decide a mano cual conservar antes de "
+                      f"volver a correr --fix-ids.")
             for pid, motivo in broken:
                 print(f"  NO REPARABLE {pid}: {motivo}")
         return 0

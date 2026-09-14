@@ -142,6 +142,46 @@ if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/normalize-pendientes.py" ]; then
   fi
 fi
 
+# Diagnostico de dual-write (v2.24.0): ids inventados, filas de pendientes/YYYY-MM.md mal
+# formadas, cabeceras incompletas. SOLO dry-run — nunca --apply aqui: repair-dualwrite.py --apply
+# MUEVE datos del usuario (adopta huerfanos fuera de los headers de prioridad), y el unico camino
+# que deja eso junto a un commit de git —reversible— es /checkpoint-3t Step 3-pre, no un hook que
+# corre en cada arranque. Se lee solo la LINEA RESUMEN (siempre la primera) y se compone un aviso
+# propio y corto: la salida completa imprime un parrafo por cada fila rota, y eso no cabe aqui.
+#
+# Antes de esto, esta clase de dano (measured 2026-09-12 en cloudflare-expert: 12 ids no
+# canonicos + 4 filas rotas + 86 con prioridad en emoji, todo de una migracion escrita a mano) solo
+# se veia si alguien corria /audit-3t o /checkpoint-3t por su cuenta — la misma leccion que ya
+# esta en memory/learnings/3tier-memory-system de este propio proyecto: una deteccion que solo
+# vive en un comando opt-in no llega a las instalaciones que mas la necesitan.
+if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/repair-dualwrite.py" ]; then
+  # La linea resumen (la unica que interesa aqui) NO es siempre la primera: en dry-run, cada
+  # fila que se anadiria imprime "  <id> -> pendientes/YYYY-MM.md" ANTES del resumen. Se ancla por
+  # contenido (`^adopted=`), no por posicion.
+  RD_SUMMARY=$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/repair-dualwrite.py" "$MEMORY_DIR" 2>/dev/null | grep -m1 '^adopted=')
+  if [ -n "$RD_SUMMARY" ]; then
+    RD_MSG=$(printf '%s' "$RD_SUMMARY" | python3 -c "
+import re, sys
+s = sys.stdin.read()
+def n(k):
+    m = re.search(k + r'=(\d+)', s)
+    return int(m.group(1)) if m else 0
+partes = []
+if n('ids_invented'): partes.append(f\"{n('ids_invented')} pendiente(s) con id no-canonico\")
+if n('unrepairable'): partes.append(f\"{n('unrepairable')} fila(s) de pendientes/ con celdas de mas\")
+if n('unaligned_rows'): partes.append(f\"{n('unaligned_rows')} fila(s) de pendientes/ desalineadas\")
+if n('odd_values'): partes.append(f\"{n('odd_values')} fila(s) con Prioridad no canonica\")
+if n('header_issues'): partes.append(f\"{n('header_issues')} mensual(es) con cabecera incompleta\")
+if partes:
+    print('; '.join(partes))
+" 2>/dev/null)
+    if [ -n "$RD_MSG" ]; then
+      out "DUAL-WRITE: $RD_MSG. Corre /audit-3t para el detalle (repair-dualwrite.py --apply repara lo mecanico; algunas filas piden revision a mano)."
+      out ""
+    fi
+  fi
+fi
+
 # Journal (v2.12.0): aplicar los eventos que otros agentes dejaron en pending/ ANTES de leer
 # los indices, para que lo que se inyecta abajo este fresco. Fast path: solo si pending/
 # tiene algo (un listado de directorio). Presupuesto corto (1 s esperando el lock): si otro

@@ -296,6 +296,91 @@ check "las dos secciones del usuario y su contenido siguen" \
 check "su fila mensual tiene el | escapado" \
   "$(grep -c 'sort \\| uniq -c' "$M14/pendientes/2026-09.md")" "1"
 
+echo "17. --fix-ids renombra Tier 2 y su fila mensual al sha1 canonico (2.24.0)"
+M15="$TMP/m15"; nuevo_memory "$M15"
+python3 "$BIN/repair-dualwrite.py" "$M15" --apply --quiet   # deja las filas mensuales con el id VIEJO
+check "fila mensual con id viejo antes de --fix-ids" "$(grep -c 'p-aaaaaaaaaa' "$M15/pendientes/2026-09.md")" "1"
+OUT=$(python3 "$BIN/repair-dualwrite.py" "$M15" --apply --fix-ids)
+check "reporta ids_fixed=2" "$(echo "$OUT" | grep -o 'ids_fixed=[0-9]*')" "ids_fixed=2"
+check "reporta id_collisions=0" "$(echo "$OUT" | grep -o 'id_collisions=[0-9]*')" "id_collisions=0"
+check "Tier 2 tiene el canonico de 'Pendiente con sort|uniq'" \
+  "$(grep -c '_id: p-0f87e5b093_' "$M15/_pendientes.md")" "1"
+check "Tier 2 tiene el canonico de 'Pendiente normal'" \
+  "$(grep -c '_id: p-0ae06deea6_' "$M15/_pendientes.md")" "1"
+check "Tier 2 ya no tiene ningun id inventado" \
+  "$(grep -c -e 'p-aaaaaaaaaa' -e 'p-bbbbbbbbbb' "$M15/_pendientes.md")" "0"
+check "fila mensual de septiembre con el canonico" \
+  "$(grep -c 'p-0f87e5b093' "$M15/pendientes/2026-09.md")" "1"
+check "fila mensual de agosto con el canonico" \
+  "$(grep -c 'p-0ae06deea6' "$M15/pendientes/2026-08.md")" "1"
+check "una segunda corrida ya no encuentra ids inventados" \
+  "$(python3 "$BIN/repair-dualwrite.py" "$M15" --fix-ids | grep -o 'ids_invented=[0-9]*')" "ids_invented=0"
+
+echo "18. sin --apply, --fix-ids informa pero no escribe (dry-run)"
+M16="$TMP/m16"; nuevo_memory "$M16"
+python3 "$BIN/repair-dualwrite.py" "$M16" --apply --quiet
+OUT=$(python3 "$BIN/repair-dualwrite.py" "$M16" --fix-ids)
+check "dry-run tambien reporta ids_fixed=2" "$(echo "$OUT" | grep -o 'ids_fixed=[0-9]*')" "ids_fixed=2"
+check "pero Tier 2 sigue con el id viejo" "$(grep -c 'p-aaaaaaaaaa' "$M16/_pendientes.md")" "1"
+check "y la fila mensual tambien" "$(grep -c 'p-aaaaaaaaaa' "$M16/pendientes/2026-09.md")" "1"
+
+echo "19. colision de id: no renombra, no fusiona, solo reporta"
+M17="$TMP/m17"; mkdir -p "$M17/pendientes" "$M17/.journal/pending"
+cat > "$M17/_pendientes.md" <<'EOF'
+# Pendientes
+
+## Media prioridad
+
+- [ ] Colision de prueba — _origen: [[sessions/col]]_ — _creado: 2026-09-05_ — _id: p-1111111111_
+- [ ] Fila que ya ocupa el canonico de la de arriba, sin creado/origen para no entrar ella misma en ids_invented — _id: p-bd74074783_
+
+## Related
+EOF
+OUT=$(python3 "$BIN/repair-dualwrite.py" "$M17" --apply --fix-ids)
+check "reporta id_collisions=1" "$(echo "$OUT" | grep -o 'id_collisions=[0-9]*')" "id_collisions=1"
+check "avisa GRAVE de la colision" "$(echo "$OUT" | grep -c 'GRAVE colision de id')" "1"
+check "el id en colision NO se renombro" "$(grep -c 'p-1111111111' "$M17/_pendientes.md")" "1"
+check "el id que ya ocupaba el canonico sigue ahi (no se fusiono ni se borro)" \
+  "$(grep -c 'p-bd74074783' "$M17/_pendientes.md")" "1"
+
+echo "20. --fix-ids no toca un id DUPLICADO (dano previo): ni renombrado parcial ni fusion (hallazgo del adversario, 2026-09-14)"
+M18="$TMP/m18"; mkdir -p "$M18/pendientes" "$M18/.journal/pending"
+cat > "$M18/_pendientes.md" <<'EOF'
+# Pendientes
+
+## Media prioridad
+
+- [ ] Primera fila con id duplicado — _origen: [[sessions/x]]_ — _creado: 2026-09-05_ — _id: p-2222222222_
+- [ ] Segunda fila, DISTINTO texto, mismo id por error — _origen: [[sessions/y]]_ — _creado: 2026-09-06_ — _id: p-2222222222_
+
+## Related
+EOF
+cp "$M18/_pendientes.md" "$TMP/m18.orig"
+OUT=$(python3 "$BIN/repair-dualwrite.py" "$M18" --apply --fix-ids)
+check "reporta id_duplicates=1" "$(echo "$OUT" | grep -o 'id_duplicates=[0-9]*')" "id_duplicates=1"
+check "reporta ids_fixed=0 (no toca nada de ese id)" "$(echo "$OUT" | grep -o 'ids_fixed=[0-9]*')" "ids_fixed=0"
+check "avisa GRAVE del duplicado" "$(echo "$OUT" | grep -c 'aparece en 2 lineas')" "1"
+check "el archivo no cambio ni una fila (bytes identicos salvo la adopcion/filas mensuales, que aqui no aplica)" \
+  "$(diff -q "$TMP/m18.orig" "$M18/_pendientes.md" >/dev/null && echo same || echo diff)" "same"
+
+echo "21. --fix-ids renombra un _id: SIN espacio (_id:p-xxxx_) y no reclama exito si no escribio nada (hallazgo del adversario, 2026-09-14)"
+M19="$TMP/m19"; mkdir -p "$M19/pendientes" "$M19/.journal/pending"
+cat > "$M19/_pendientes.md" <<'EOF'
+# Pendientes
+
+## Media prioridad
+
+- [ ] Pendiente normal — _origen: [[sessions/y]]_ — _creado: 2026-08-02_ — _id:p-bbbbbbbbbb_
+
+## Related
+EOF
+OUT=$(python3 "$BIN/repair-dualwrite.py" "$M19" --apply --fix-ids)
+check "reporta ids_fixed=1" "$(echo "$OUT" | grep -o 'ids_fixed=[0-9]*')" "ids_fixed=1"
+check "el id SIN espacio SI se renombro de verdad" "$(grep -c '_id: p-0ae06deea6_' "$M19/_pendientes.md")" "1"
+check "el id viejo ya no esta" "$(grep -c 'p-bbbbbbbbbb' "$M19/_pendientes.md")" "0"
+check "sin GRAVE de fila mensual no actualizada (aqui no habia fila mensual aun)" \
+  "$(echo "$OUT" | grep -c 'la fila de Tier 2 SI se renombro, pero su')" "0"
+
 echo
 [ $FAIL -eq 0 ] && echo "TODO VERDE" || echo "HAY FALLOS"
 exit $FAIL

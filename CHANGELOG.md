@@ -1,5 +1,96 @@
 # Changelog
 
+## [2.24.0] - 2026-09-14
+Un agente en cloudflare-expert (2026-09-12) escribio pendientes a mano durante una migracion —12
+ids no canonicos, filas duplicadas— y nadie lo avisó. Causa raiz: `journal-guard.sh` (el hook de
+Edit/Write) sale en silencio total si `journal_strict` no esta en 1 en `.memory-config`, y no lo
+esta en casi ninguna instalacion existente (measured 2026-09-11: 64 de 65 proyectos). Su hermano
+`bash-journal-nudge.sh` (Bash) ya habia aprendido esa leccion y avisaba sin depender de la config;
+este hook se habia quedado atras. La misma instalacion tenia ademas `_session-index.md` y
+`_plans-index.md` sin las anclas `## Sessions`/`## Plans` que el compactador exige — defecto
+estructural de cualquier instalacion cuyo Step 3 de `/setup-memory` las genero con otro texto —,
+asi que el primer `session.add`/`plan.upsert` de la sesion se iba a cuarentena en silencio.
+
+Medido en este mismo repo entre el 2026-09-11 y el 2026-09-14 (dry-run de `repair-dualwrite.py`):
+pendientes sin fila de Tier 3 bajaron de 51/120 a 0. Esa bajada la produjo `repair-dualwrite.py`
+adoptando huerfanos durante estas mismas sesiones, no el aviso del guard — una revision
+adversarial marco la atribucion anterior de este parrafo ("el guard cumple su proposito") como
+una causal que la evidencia no sostiene, y tenia razon: nada aqui midio si el aviso en si llega a
+alguien (ver el punto de `journal-drift-nudge.sh` abajo, que es la correccion real de ESO). Lo que
+si se midio en el mismo periodo: +2 ids no canonicos, de sesiones escribiendo a mano mientras se
+corregia esto mismo — el costo era real, la mejora de fondo (0 huerfanos) tambien, pero por una
+causa distinta a la que se afirmaba.
+
+### Fixed
+- **`journal-guard.sh` avisa siempre, no solo con `journal_strict=1`.** Antes: sin esa config, un
+  Edit/Write directo a un indice del journal no generaba NINGUNA señal. Ahora imprime el mismo
+  aviso (texto plano, nunca bloqueo) que ya usaba el hook de Bash; el `deny` duro sigue siendo
+  opt-in. El atajo de shell que evita arrancar python en el caso comun es generico
+  (`^_[^/\\]*\.md$`), no una lista de 5 nombres — una revision adversarial encontro que la
+  primera version de este mismo cambio dejaba pasar sin aviso cualquier `_otro.md` fuera de esos
+  5.
+- **Ese aviso de PreToolUse/PostToolUse NO llegaba al agente, y nunca se habia medido.** Medido
+  con `claude -p` (un hook de prueba con un centinela, corrido dos veces): un `PreToolUse` o
+  `PostToolUse` que solo imprime texto plano y sale 0 va al log de depuracion, no al contexto del
+  modelo ni al canal de la persona — el mismo defecto, no introducido hoy, que ya tenia
+  `bash-journal-nudge.sh` desde que existe. Se deja el print (es inofensivo) pero la entrega REAL
+  ahora es `bin/journal-drift-nudge.sh`, un hook `UserPromptSubmit` nuevo — el mismo canal que ya
+  usa `bin/recall.sh` — que corre `journal-compact.py --check-drift` (ya existia, antes solo se
+  invocaba desde `SessionStart`) en cada prompt de la sesion. La compuerta barata de mtime que
+  antes solo tenia `bash-journal-nudge.sh` se extrajo a `bin/drift-gate.sh`, compartida por los
+  dos. Con esto el aviso llega en la MISMA sesion donde paso la escritura a mano, no una sesion
+  despues — que es cuando de verdad importa: un `/checkpoint-3t` en esa misma sesion resella la
+  linea base antes de que el aviso del arranque siguiente llegue a ver nada.
+- **`journal-compact.py` crea el ancla que falta en vez de cuarentenar** para `## Sessions`,
+  `## Plans`, `## Topic Files`, `## Active Research` y `## Completed Research` — mismo criterio
+  que ya existia desde 2.22.0 para `## Alta/Media/Baja prioridad` en `_pendientes.md`. Un evento
+  que una version anterior ya habia cuarentenado por esta razon se rescata solo al actualizar.
+  Si ya existia una tabla con esa forma (mismo numero de columnas) bajo OTRO nombre de header, se
+  ADOPTA — se renombra su header in-place, filas incluidas — en vez de crear una segunda tabla
+  vacia al lado: una revision adversarial reprodujo, contra datos reales de 5 instalaciones, que
+  la primera version de este cambio partia el indice en dos tablas con la misma fila la primera
+  vez que esa fila se actualizaba, porque la busqueda de duplicados solo miraba la tabla nueva.
+  Con DOS O MAS tablas candidatas (ambiguo: paperclip y scalar-api-docs, cada una con dos tablas
+  de 6 columnas bajo headers distintos) la adopcion sigue sin adivinar cual usar, pero la busqueda
+  de duplicados de `apply_session_add`/`apply_plan_upsert`/`apply_research_upsert` ahora mira
+  TODAS las tablas del archivo (`find_row_anywhere`), no solo la que crea `need_table` — una
+  segunda ronda adversarial reprodujo la misma particion con 2+ candidatas (70 planes bajo
+  `## Active Plans` en paperclip) y este era el arreglo que la cerraba entera, no el reposo en
+  cuarentena. Ese ensanche NO incluye el fallback por titulo plano (para un plan/research
+  `--inline`, sin wikilink) — una tercera ronda construyo una tabla `## Inventory` ajena, del mismo
+  ancho, con una fila cuyo titulo coincidia por casualidad, y el ensanche completo la enganchaba.
+  El fallback por titulo se quedo acotado a la tabla canonica en cada llamante; solo la busqueda
+  por wikilink (exacta, sin ese riesgo) se ensancho a todo el archivo. Una CUARTA ronda, sobre
+  datos reales de `paperclip`, encontro el limite de fondo de toda esta familia de arreglos: 98
+  filas de tabla HUERFANAS en 4 instalaciones — lineas `|...|` sin cabecera ni separador encima,
+  invisibles para `find_tables`/`find_row_anywhere` por construccion. Antes de 2.24.0 un archivo
+  asi nunca podia recibir un evento sin ancla (iba a cuarentena, visible); con la adopcion/creacion
+  automatica, un upsert futuro para una de esas filas la duplicaria en silencio — un cambio de
+  comportamiento real sobre datos ya danados. Se cierra deteniendose ANTES de tocar nada: si el
+  archivo tiene filas huerfanas, `need_table` cuarentena (mismo criterio que existia antes de esta
+  version) en vez de adoptar o crear.
+- **La afirmacion de que `UserPromptSubmit` SI entrega al agente (y `PreToolUse`/`PostToolUse`
+  no) quedo como script repetible**, no solo como medicion de una conversacion: `bin/verify-hook-
+  delivery.sh` (manual, cuesta tokens de API, no vive en `bin/test-*.sh`) monta un proyecto con
+  los tres tipos de hook, cada uno con un centinela distinto, y pregunta al modelo cual vio.
+- **`repair-dualwrite.py --fix-ids`** (opt-in, requiere `--apply`): renombra un id inventado a su
+  sha1 canonico en `_pendientes.md` y su fila de `pendientes/YYYY-MM.md`. Deliberadamente NO toca
+  `memory/sessions/*.md` (una cita de id en prosa de sesion es registro historico, no una tabla).
+  Ante colision (el canonico ya existe como otra fila) o ante un id DUPLICADO (el mismo id en mas
+  de una linea, dano previo) no toca nada y lo reporta — una revision adversarial encontro que la
+  primera version de este flag hacia un renombrado PARCIAL en el caso duplicado, dejando una fila
+  con el id nuevo y la otra huerfana con el viejo. Otra revision encontro que el reemplazo de texto
+  usaba un espacio fijo (`_id: {viejo}_`) mientras la deteccion tolera espacio variable
+  (`_id:{viejo}_` sin espacio no se reescribia, y aun asi se reportaba como renombrado) — ahora
+  usa el mismo patron tolerante para detectar y para reemplazar.
+- **`SessionStart` reporta ids inventados y filas rotas de `pendientes/` en cada arranque**
+  (solo lectura, nunca `--apply`) para que una instalacion vieja con este tipo de daño se entere
+  sin tener que correr `/audit-3t` por su cuenta.
+- **`setup-memory.md`** deja explicito que `## Sessions`/`## Plans` deben ser el texto literal
+  exacto, y corrige una afirmacion que ya no era cierta tras el punto anterior (un header con otro
+  texto ya no manda el evento a cuarentena para siempre; crea una segunda seccion, mecanicamente,
+  y la vieja queda como contenido muerto).
+
 ## [2.23.0] - 2026-09-12
 La mitad de un repo real era rastro que nadie lee. Cifra reportada por **una** instalacion el
 2026-09-12 —no es un promedio, y no esta rederivable desde este repo, que no versiona `memory/`—:

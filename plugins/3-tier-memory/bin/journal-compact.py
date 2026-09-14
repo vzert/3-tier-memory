@@ -1042,10 +1042,136 @@ def table_in(lines, start, end):
     return None
 
 
+# Columnas de cada tabla-ancla que `need_table` sabe crear si el header falta DEL TODO. Mismo
+# texto que documenta setup-memory.md Step 3 — si un dia difieren, el header nuevo sale con las
+# columnas de aqui, no las de ahi, asi que hay que mantenerlos iguales a mano.
+TABLE_COLUMNS = {
+    "## Sessions": ["Fecha", "Sesion", "Status", "Resumen", "Commit"],
+    "## Plans": ["Plan", "Status", "Fecha", "Sesion", "Pendientes", "Learnings"],
+    "## Topic Files": ["Topic", "File", "When to consult"],
+    "## Active Research": ["Tema", "Next step", "Origen", "Archivo"],
+    "## Completed Research": ["Tema", "Resultado", "Archivo"],
+}
+
+# fname que need_table recibe para cada header de arriba — RESCATABLE_RE (mas abajo) lo usa para
+# generar, sin duplicar el texto a mano, el motivo exacto que este archivo ya no cuarentena.
+ANCHOR_FILES = {
+    "## Sessions": "_session-index.md",
+    "## Plans": "_plans-index.md",
+    "## Topic Files": "_learnings.md",
+    "## Active Research": "_research-index.md",
+    "## Completed Research": "_research-index.md",
+}
+
+
+def find_tables(lines):
+    """Todas las tablas markdown del archivo (no solo bajo un header dado).
+
+    [(indice_del_header_de_seccion_o_None, hdr, sep, [filas])]. `indice_del_header_de_seccion` es
+    la linea `## ...` que precede a la tabla (saltando lineas en blanco), o None si la tabla no
+    esta bajo ningun `## `. Lo usa `need_table` para ADOPTAR una tabla ya existente con otro
+    nombre de header, en vez de crear una segunda tabla vacia al lado de la real.
+    """
+    out = []
+    i, n = 0, len(lines)
+    while i + 1 < n:
+        if lines[i].strip().startswith("|") and is_separator(lines[i + 1]):
+            hdr, sep = i, i + 1
+            rows = []
+            k = sep + 1
+            while k < n and lines[k].strip().startswith("|"):
+                rows.append(k)
+                k += 1
+            j = hdr - 1
+            while j >= 0 and lines[j].strip() == "":
+                j -= 1
+            sec_header = j if (j >= 0 and lines[j].startswith("## ")) else None
+            out.append((sec_header, hdr, sep, rows))
+            i = k
+        else:
+            i += 1
+    return out
+
+
+def orphan_pipe_rows(lines):
+    """Cuenta lineas que empiezan por `|` y NO pertenecen a NINGUNA tabla que `find_tables`
+    reconozca (necesita cabecera + fila separadora encima). Medido en 4 instalaciones reales
+    (2026-09-14, revision adversarial): 98 filas asi, la mayoria en `paperclip` — filas de tabla
+    sueltas de una version anterior a este formato, sin cabecera ni separador. Son invisibles
+    para `find_row_anywhere`, asi que `need_table` las trata como una señal de dano previo, no
+    como algo que auto-crear o adoptar pueda ver de forma segura.
+    """
+    cubiertas = set()
+    for _sec, hdr, sep, rows in find_tables(lines):
+        cubiertas.add(hdr)
+        cubiertas.add(sep)
+        cubiertas.update(rows)
+    return sum(1 for i, line in enumerate(lines)
+               if i not in cubiertas and line.strip().startswith("|"))
+
+
 def need_table(lines, header, fname):
     sec = section_bounds(lines, header)
     if not sec:
-        raise Quarantine(f"no-anchor: falta '{header}' en {fname}")
+        columns = TABLE_COLUMNS.get(header)
+        if columns is None:
+            raise Quarantine(f"no-anchor: falta '{header}' en {fname}")
+        # Ancla ausente del todo — no un dato roto, un header que nunca se creo (instalacion
+        # anterior a este anexo, o generada con otro texto: '## Historial de Sesiones' en vez de
+        # '## Sessions'). Mismo criterio que ensure_header() para '## Alta/Media/Baja prioridad'
+        # desde 2.22.0: el compactador crea el ancla que falta al aplicar, en vez de mandar el
+        # evento a cuarentena.
+        #
+        # ADOPTAR, no duplicar (hallazgo adversarial 2026-09-14, reproducido contra datos reales
+        # de 5 instalaciones): la primera version de este anexo creaba la tabla VACIA al final del
+        # archivo cuando el header no aparecia, dejando la tabla vieja (con sus filas) intacta
+        # PERO INVISIBLE para el resto de este modulo — `apply_session_add`/`apply_plan_upsert`
+        # buscan duplicados SOLO en las filas de la tabla que devuelve `need_table`, asi que un
+        # evento para una fila que ya existia en la tabla vieja no la encontraba y la insertaba
+        # OTRA VEZ en la tabla nueva: el indice se partia en dos tablas con la misma fila, en
+        # silencio. Antes de este anexo eso iba a cuarentena — visible y recuperable —, asi que la
+        # version anterior de este mismo cambio dejaba el archivo PEOR que antes de tocarlo.
+        #
+        # Filas de tabla HUERFANAS (dano previo, no causado por este anexo): lineas que empiezan
+        # por `|` pero no pertenecen a NINGUNA tabla que `find_tables` reconozca, porque no tienen
+        # cabecera ni separador encima (medido en 4 instalaciones reales: 98 filas asi, la mayoria
+        # en paperclip). Ni adoptar ni crear vacio es seguro aqui: esas filas son INVISIBLES para
+        # `find_row_anywhere`, asi que un upsert futuro para una de ellas las duplicaria en
+        # silencio. Antes de 2.24.0 esta instalacion no podia recibir NADA sin ancla — el evento
+        # se cuarentenaba, visible y recuperable — asi que crear la tabla aqui seria PEOR que antes
+        # para un archivo que ya esta danado. Se preserva esa misma seguridad: cuarentena, no
+        # adivinar. Hallazgo adversarial, 2026-09-14 (ronda 4, sobre datos reales de paperclip).
+        huerfanas = orphan_pipe_rows(lines)
+        if huerfanas:
+            raise Quarantine(
+                f"no-anchor: falta '{header}' en {fname} y el archivo tiene {huerfanas} fila(s) "
+                f"de tabla sin cabecera reconocible (dano previo) — crear o adoptar una tabla aqui "
+                f"arriesga duplicar una de esas filas la proxima vez que se actualice. Repara esas "
+                f"filas a mano antes de que esto se aplique solo.")
+
+        # Cada uno de estos 5 archivos existe para UN SOLO tipo de tabla (o dos en
+        # _research-index.md, distinguibles por su numero de columnas), asi que si hay EXACTAMENTE
+        # una tabla en el archivo con el mismo numero de columnas que el ancla canonica, esa tabla
+        # ES la tabla real con otro nombre — se renombra su header IN PLACE (o se le antepone el
+        # header canonico si no tenia ninguno) y sus filas quedan, intactas, bajo el ancla correcta.
+        # Solo cuando hay CERO o MAS DE UNA candidata (ambiguo: no se puede saber cual es, o de
+        # verdad no hay ninguna) se crea una tabla vacia nueva, que es el unico caso donde la
+        # version anterior de este cambio era correcta.
+        candidatas = [t for t in find_tables(lines) if len(split_cells(lines[t[1]])) == len(columns)]
+        if len(candidatas) == 1:
+            sec_header, hdr, _sep, _rows = candidatas[0]
+            if sec_header is not None:
+                lines[sec_header] = header
+            else:
+                lines[hdr:hdr] = [header, ""]
+        else:
+            if lines and lines[-1].strip() != "":
+                lines.append("")
+            lines.append(header)
+            lines.append("")
+            lines.append("| " + " | ".join(columns) + " |")
+            lines.append("|" + "|".join("---" for _ in columns) + "|")
+        sec = section_bounds(lines, header)
     tab = table_in(lines, *sec)
     if not tab:
         raise Quarantine(f"no-anchor: '{header}' de {fname} no tiene tabla")
@@ -1073,6 +1199,40 @@ def link_re(prefix, slug):
     return re.compile(r"\[\[" + re.escape(prefix + slug) + r"(\\\||\||\]\])")
 
 
+def find_row_anywhere(lines, ncols, key_re):
+    """Busca una fila que ya cite `key_re` (un wikilink EXACTO: `[[prefijo-slug]]`) en CUALQUIER
+    tabla de `ncols` columnas del archivo — no solo en la que devuelve `need_table`.
+
+    Hallazgo adversarial (2026-09-14): cuando el ancla falta y hay MAS de una tabla candidata del
+    mismo ancho (ambiguo), `need_table` crea una tabla vacia nueva en vez de adivinar cual de las
+    viejas adoptar — correcto, no se puede saber cual es sin ambiguedad. Pero la busqueda de
+    duplicados de `apply_session_add`/`apply_plan_upsert` solo miraba las filas de ESA tabla
+    (vacia), asi que una fila que ya vivia en una de las tablas viejas (paperclip: 70 planes bajo
+    '## Active Plans'; scalar-api-docs: bajo '## Active/Completed Plans') quedaba invisible y se
+    insertaba OTRA VEZ en la nueva — la misma duplicacion silenciosa que el ancla-adopcion (2.24.0,
+    misma noche) ya arreglo para el caso de UNA sola candidata. Aqui se cierra para N candidatas:
+    la busqueda de duplicados mira TODO el archivo, la insercion de una fila nueva sigue yendo solo
+    a la tabla canonica.
+
+    DELIBERADAMENTE sin el fallback por titulo plano (`tplain`) que si usan `apply_plan_upsert`/
+    `apply_research_upsert` para un item `--inline` (sin wikilink). Una segunda ronda adversarial
+    encontro que ampliar TAMBIEN ese fallback a todo el archivo enganchaba, por coincidencia de
+    texto, una tabla ajena del mismo ancho de columnas que no tenia nada que ver (un ejemplo
+    construido: una tabla '## Inventory' de 6 columnas con una fila 'Same Title') — pisando una
+    celda que no era la del plan/research real. El wikilink es una cita EXACTA de un slug (`p-`,
+    `[[plans/plan-<slug>]]`, etc.) y no tiene ese riesgo; el titulo plano si, porque solo depende
+    de que el texto coincida. Por eso el fallback por titulo se queda ACOTADO a la tabla canonica
+    en cada llamante (ver apply_plan_upsert / apply_research_upsert), como antes de esta ronda.
+    """
+    for _sec_header, hdr, _sep, rows in find_tables(lines):
+        if len(split_cells(lines[hdr])) != ncols:
+            continue
+        for i in rows:
+            if key_re.search(lines[i]):
+                return i
+    return None
+
+
 def delete_rows(lines, idxs):
     for i in sorted(idxs, reverse=True):
         del lines[i]
@@ -1097,7 +1257,7 @@ def apply_session_add(mem, p):
     orig = list(lines)
     (start, end), (hdr, sep, rows) = need_table(lines, "## Sessions", "_session-index.md")
     key = link_re("sessions/", p["slug"])
-    hit = next((i for i in rows if key.search(lines[i])), None)
+    hit = find_row_anywhere(lines, 5, key)
     if hit is not None:
         cells = pad(split_cells(lines[hit]), 5)
         new = list(cells)
@@ -1254,8 +1414,12 @@ def apply_plan_upsert(mem, p):
     _, (hdr, sep, rows) = need_table(lines, "## Plans", "_plans-index.md")
     key = link_re("plans/plan-", slug)
     tplain = plain(p["title"])
-    hit = next((i for i in rows if key.search(lines[i])
-                or plain(split_cells(lines[i])[0]) == tplain), None)
+    hit = find_row_anywhere(lines, 6, key)
+    if hit is None:
+        # Fallback por titulo plano SOLO en la tabla canonica (no en todo el archivo): es para un
+        # plan `--inline` (sin wikilink que buscar), y ampliarlo a cualquier tabla del mismo ancho
+        # arriesga enganchar una fila ajena por coincidencia de texto. Ver find_row_anywhere.
+        hit = next((i for i in rows if plain(split_cells(lines[i])[0]) == tplain), None)
     if hit is not None:
         cells = pad(split_cells(lines[hit]), 6)
         new = list(cells)
@@ -1301,8 +1465,14 @@ ACTIVE_PLACEHOLDER = "<!-- Sin research activo -->"
 
 def find_research_row(lines, header, key, tplain):
     _, (hdr, sep, rows) = need_table(lines, header, "_research-index.md")
-    hit = next((i for i in rows if key.search(lines[i])
-                or plain(split_cells(lines[i])[0]) == tplain), None)
+    # find_row_anywhere, no solo `rows`: mismo motivo que apply_session_add/apply_plan_upsert
+    # (hallazgo adversarial 2026-09-14) — con 2+ tablas candidatas del mismo ancho, `need_table`
+    # crea una nueva y una fila que ya vivia en una vieja quedaba invisible para el duplicado.
+    hit = find_row_anywhere(lines, len(TABLE_COLUMNS[header]), key)
+    if hit is None:
+        # Fallback por titulo plano SOLO en la tabla canonica: mismo riesgo de colision ajena que
+        # en apply_plan_upsert si se ampliara a todo el archivo. Ver find_row_anywhere.
+        hit = next((i for i in rows if plain(split_cells(lines[i])[0]) == tplain), None)
     return sep, rows, hit
 
 
@@ -1892,9 +2062,18 @@ def _gitignore_por_o_excl(path):
 # guarda exactamente el texto de la Quarantine— pero el motivo es lo UNICO que decide si un evento
 # vuelve a aplicarse, y una coincidencia parcial ahi es un evento aplicado por el parecido de su
 # prefijo.
+# v2.24.0: need_table() ahora crea '## Sessions', '## Plans', '## Topic Files', '## Active
+# Research' y '## Completed Research' cuando faltan del todo (mismo criterio que el header de
+# prioridad desde 2.22.0) — un evento que una version anterior cuarenteno por esa ausencia se
+# rescata igual. El motivo se genera desde TABLE_COLUMNS/ANCHOR_FILES, no se retipea a mano: asi
+# no puede desalinearse del texto que need_table() realmente escribe en el .reason.
+_ANCHOR_RESCUE_REASONS = [
+    re.escape(f"no-anchor: falta '{h}' en {ANCHOR_FILES[h]}") for h in TABLE_COLUMNS
+]
 RESCATABLE_RE = re.compile(
-    r"^no-anchor: (?:falta el header '## (?:Alta|Media|Baja) prioridad'"
-    r"|_pendientes\.md sin header de prioridad donde reinsertar)\s*$", re.I)
+    r"^(?:no-anchor: (?:falta el header '## (?:Alta|Media|Baja) prioridad'"
+    r"|_pendientes\.md sin header de prioridad donde reinsertar)"
+    r"|" + "|".join(_ANCHOR_RESCUE_REASONS) + r")\s*$", re.I)
 
 
 def rescatar_cuarentena(journal):
