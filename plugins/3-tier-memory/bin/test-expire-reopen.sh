@@ -723,6 +723,47 @@ python3 "$BIN/journal-compact.py" --memory-dir "$MEMU" --quiet >/dev/null 2>&1
 chk "NO toca el del usuario (un byte basta)"  "0" "$(cmp -s "$T/migusr-antes" "$MEMU/.journal/.gitignore" && echo 0 || echo 1)"
 chk "y por tanto no le mete applied/"         "0" "$(grep -c '^applied/$' "$MEMU/.journal/.gitignore")"
 
+# 5) el OTRO cuerpo superado: 2.21.3 (commit 38670c0), sha256 5a88eb4a...: tambien extraido del
+#    historial, no tecleado. GITIGNORE_JOURNAL_SUPERADOS tiene DOS hashes desde 2.23.0, pero hasta
+#    aqui la suite solo ejercitaba el primero (2.21.0-2.22.1). Un byte que se pierda en el segundo
+#    -una entrada de la tupla borrada por descuido en una edicion futura- pasaba la suite en verde.
+mig_fixture_2213() { cat <<'GI_2213'
+# Lo escribe journal-compact.py cuando falta. Puedes editarlo: no se sobreescribe.
+#
+# QUE NO SE VERSIONA — estado por copia de trabajo. La deteccion de escrituras fuera del
+# journal compara contra lo que sello EL COMPACTADOR DE ESTA MAQUINA, asi que la linea base
+# no significa nada en otra. Versionarla ademas da un conflicto de merge garantizado: cambia
+# en cada compactacion, y dos maquinas tocan las mismas claves del JSON.
+fingerprints.json
+# Append de dos maquinas = conflicto que git no sabe fusionar. Y lo que se anoto aqui es lo
+# que se toco a mano EN ESTA copia.
+out-of-band.log
+# Estado vivo de un proceso. Nunca tiene sentido fuera de la maquina que lo tomo.
+.lock/
+.lock-steal/
+# Aviso que ESTA maquina detecto y no pudo entregar todavia, esperando a un arranque con persona
+# delante. En otra maquina no significa nada, y a diferencia de pending/ no tiene la propiedad de
+# re-aplicar sin efecto: es texto, y dos maquinas apendando dan conflicto.
+human-pending.txt
+
+# QUE SI SE VERSIONA, a proposito: pending/, applied/ y quarantine/.
+# Son el registro de eventos, y es lo que hace que la memoria viaje entre maquinas.
+#   - pending/: un evento emitido y aun sin aplicar llega a la otra maquina y se aplica alli,
+#     en vez de perderse. Re-aplicar es no-op (el compactador es idempotente), asi que no
+#     duplica nada si ambas lo aplican.
+#   - applied/ y quarantine/: rastro auditable. Un fichero por evento, nombre unico, sin
+#     conflictos posibles.
+GI_2213
+}
+MEM213="$T/mig213"; mkdir -p "$MEM213/.journal" "$MEM213/sessions"
+printf -- '---\ntype: index\n---\n# Pendientes\n\n## Media prioridad\n\n' > "$MEM213/_pendientes.md"
+printf -- '---\ntype: session\n---\n# s\n' > "$MEM213/sessions/2026-01-01-x.md"
+mig_fixture_2213 > "$MEM213/.journal/.gitignore"
+python3 "$BIN/journal-emit.py" --memory-dir "$MEM213" --type pendiente.add --text "uno" \
+  --prioridad Media --origen "[[sessions/2026-01-01-x]]" --creado 2026-01-01 >/dev/null 2>&1
+python3 "$BIN/journal-compact.py" --memory-dir "$MEM213" --quiet >/dev/null 2>&1
+chk "migra el bloque de 2.21.3"               "1" "$(grep -c '^applied/$' "$MEM213/.journal/.gitignore")"
+
 # No se pisa lo que el usuario haya puesto
 printf 'mio\n' > "$MEMG/.journal/.gitignore"
 python3 "$BIN/journal-compact.py" --memory-dir "$MEMG" --quiet >/dev/null 2>&1
