@@ -1770,10 +1770,17 @@ def hay_lector():
     nadie lee ese aviso, el re-sellado lo borra para siempre: visto una vez, a nadie, y no vuelve.
 
     2.21.4 puso la guarda en `session-start.sh`. El adversario encontro el agujero en una frase:
-    **hay DOS llamantes**. `bash-journal-nudge.sh` corre esto en CADA PostToolUse de Bash y no
-    sabe nada de quien mira, asi que la deriva se consumia igual por ese lado. Poner la guarda
+    **hay DOS llamantes**. `bash-journal-nudge.sh` corria esto en CADA PostToolUse de Bash y no
+    sabia nada de quien mira, asi que la deriva se consumia igual por ese lado. Poner la guarda
     tambien alli habria sido la misma forma por tercera vez — la decision pertenece a donde esta
     el EFECTO (el re-sellado), no a cada sitio que llama.
+
+    2.24.1: esa cita ya no aplica tal cual. `bash-journal-nudge.sh` dejo de llamar a esta ruta
+    (su PostToolUse resellaba SIEMPRE que hay_lector()==True, que es el caso comun de una sesion
+    interactiva, ganando la carrera contra journal-drift-nudge.sh y comiendose el aviso real antes
+    de que existiera turno siguiente para entregarlo). La leccion de fondo sigue en pie: hoy hay
+    DOS llamantes reales de --check-drift que SI entregan (`session-start.sh` por SessionStart,
+    `journal-drift-nudge.sh` por UserPromptSubmit), y la guarda sigue viviendo aqui, no en ellos.
 
     Dos senales de entorno y una explicita:
       - PAPERCLIP_RUN_ID: agente de Paperclip, no hay pantalla.

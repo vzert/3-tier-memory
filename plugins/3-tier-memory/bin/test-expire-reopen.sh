@@ -919,10 +919,15 @@ S2=$(arranque startup)
 chk "y ya no se repite"                        "0" "$(dice "$S2")"
 chk "no se crea ningun fichero de avisos"      "0" "$(ls -1 "$MEMD/.journal"/human-pending* 2>/dev/null | wc -l | tr -d ' ')"
 
-# LOS DOS LLAMANTES, no solo uno. 2.21.4 puso la guarda en session-start.sh y el adversario la
-# rompio en una frase: bash-journal-nudge.sh corre --check-drift en CADA PostToolUse de Bash y no
-# sabia nada de quien mira. Por eso la guarda vive ahora en el compactador, y por eso esto lo
-# comprueba por LOS DOS caminos.
+# UN SOLO LLAMANTE AHORA, no dos. 2.21.4 puso la guarda en session-start.sh y el adversario la
+# rompio en una frase: bash-journal-nudge.sh corria --check-drift en CADA PostToolUse de Bash y no
+# sabia nada de quien mira, asi que la deriva se consumia igual por ese lado aunque hay_lector()
+# dijera que si habia alguien mirando — porque ESE llamante en concreto nunca entrega su salida al
+# agente (PostToolUse no llega, medido con `claude -p`). 2.24.1 quito esa llamada por completo en
+# vez de intentar que hay_lector() supiera distinguir "sesion atendida" de "este caller entrega":
+# bash-journal-nudge.sh ya no toca la linea base bajo NINGUN valor de estas variables. La entrega
+# real vive solo en session-start.sh (SessionStart) y journal-drift-nudge.sh (UserPromptSubmit),
+# que si la guardan con hay_lector() porque si entregan lo que --check-drift imprime.
 printf -- '- [ ] otra deriva\n' >> "$MEMD/_pendientes.md"
 H1=$(sello)
 MEMORY_DIR="$MEMD" PAPERCLIP_RUN_ID=run-9 bash "$BIN/bash-journal-nudge.sh" >/dev/null 2>&1 <<'J'
@@ -933,13 +938,16 @@ MEMORY_DIR="$MEMD" CLAUDE_CODE_SESSION_ATTENDED=0 bash "$BIN/bash-journal-nudge.
 {"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"echo x"}}
 J
 chk "el hook de Bash sin sesion atendida: tampoco" "$H1" "$(sello)"
-# control positivo: con lector, ese mismo hook SI detecta y re-sella
+# el mismo hook, con lector (sesion interactiva normal, el caso comun): TAMPOCO consume ahora.
+# Antes de 2.24.1 este era el control positivo (SI avisaba y re-sellaba); ahora es la prueba de
+# que el arreglo se queda quieto: si vuelve a avisar aqui, la carrera con journal-drift-nudge.sh
+# volvio.
 NUD=$(MEMORY_DIR="$MEMD" bash "$BIN/bash-journal-nudge.sh" 2>&1 <<'J'
 {"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"echo x"}}
 J
 )
-chk "con lector, el hook de Bash SI avisa"       "1" "$(printf '%s' "$NUD" | grep -c 'FUERA DEL JOURNAL')"
-chk "y ahi si re-sella"                          "1" "$([ "$(sello)" != "$H1" ] && echo 1 || echo 0)"
+chk "con lector, el hook de Bash NO avisa (2.24.1)" "" "$NUD"
+chk "y NO re-sella (el aviso real lo deja para journal-drift-nudge.sh)" "$H1" "$(sello)"
 
 echo "RESULT pass=$pass fail=$fail skip=$skip"
 [ "$fail" -eq 0 ]

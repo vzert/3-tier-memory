@@ -26,12 +26,22 @@ export PYTHONUTF8=1 PYTHONIOENCODING=utf-8
 # memory/ no tienen config ninguna, asi que condicionarlo a journal_strict lo dejaria inerte justo
 # donde mas falta hace. Quien no use el journal no tiene .journal/ y no ve nada.
 #
-# DOS EVENTOS, dos exactitudes distintas:
-#   PreToolUse  — mira el TEXTO del comando. Aproximado: no ve una ruta en variable ni un `eval`.
-#                 Llega ANTES, que es cuando sirve.
-#   PostToolUse — compara BYTES contra la huella que dejo el compactador. Exacto, cero falsos
-#                 positivos, llega un turno tarde. Compuerta de mtime en shell para no pagar el
-#                 arranque de python (~30 ms) en cada Bash: sin cambios, no se llama a python.
+# UN SOLO EVENTO HACE ALGO: PreToolUse mira el TEXTO del comando (aproximado: no ve una ruta en
+# variable ni un `eval`) y llega ANTES, que es cuando sirve para el desarrollador que mira el log.
+#
+# PostToolUse YA NO llama a --check-drift (quitado en 2.24.1). Lo hacia desde 2.13.4 comparando
+# BYTES contra la huella del compactador, pero `--check-drift` DETECTA Y RESELLA en la misma
+# llamada — y PostToolUse es un hook cuyo stdout no llega al agente (medido con `claude -p`,
+# ver journal-guard.sh). Consecuencia real, no teorica: en una sesion interactiva normal
+# (hay_lector()==True, el caso comun) este PostToolUse ganaba SIEMPRE la carrera contra
+# journal-drift-nudge.sh (UserPromptSubmit, el turno siguiente, que SI entrega) porque corre en
+# el MISMO turno que la escritura, antes de que exista un turno siguiente. Resellaba la linea
+# base y el aviso real nunca salia. Esto no era un defecto de 2.24.0 (journal-drift-nudge.sh):
+# bash-journal-nudge.sh tiene este PostToolUse desde v2.13.4, asi que es plausible que el aviso de
+# deriva por escritura de Bash nunca haya llegado a nadie desde que el mecanismo existe.
+# Ver memory/_pendientes.md (2026-09-14) y memory/sessions/2026-09-14-*.md para el analisis
+# completo, y bin/test-drift-nudge.sh para la prueba que reproduce el orden real.
+#
 # Sin `set -u`, como los demas hooks del plugin. Ya NO es obligatorio: resolve-project-dir.sh
 # protege sus variables desde 2.14.3 y se puede sourcear con -u (bin/test-resolve-project-dir.sh).
 # Encenderlo aqui es otra revision — la del camino de ~10 ms — y no se ha hecho.
@@ -61,14 +71,9 @@ case "$_HOOK_INPUT" in
 esac
 
 if [ "$EVENT" = "PostToolUse" ]; then
-  # La compuerta barata + el disparo de --check-drift viven en drift-gate.sh (v2.24.0), compartidos
-  # con bin/journal-drift-nudge.sh (UserPromptSubmit) — un solo sitio para esta logica, no dos
-  # copias que se desalinean. Lo que imprime AQUI (PreToolUse/PostToolUse) no llega al agente
-  # (medido con `claude -p`, 2026-09-14: ver la nota grande en journal-guard.sh) — el aviso REAL
-  # lo entrega journal-drift-nudge.sh en el siguiente prompt de la misma sesion. Esto se deja
-  # porque es inofensivo (nunca bloquea) y sirve para quien mire el log en modo debug.
-  source "$(dirname "$0")/drift-gate.sh"
-  drift_gate_check "$MEMORY_DIR" "$(dirname "$0")"
+  # 2.24.1 tambien quito el registro de este evento en hooks.json (el harness ya no invoca este
+  # script con PostToolUse). Esta rama se deja como contrato inerte, probado en test-bash-nudge.sh
+  # y test-expire-reopen.sh, por si algo lo sigue invocando asi directamente.
   exit 0
 fi
 

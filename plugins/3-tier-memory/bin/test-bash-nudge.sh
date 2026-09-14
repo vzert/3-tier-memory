@@ -55,7 +55,8 @@ J=$(python3 -c "import json,sys;print(json.dumps({'hook_event_name':'PreToolUse'
 O=$(printf '%s' "$J" | CLAUDE_PROJECT_DIR="$Q" bash "$BIN/bash-journal-nudge.sh" 2>/dev/null)
 chk "sin .journal/ -> callado" callado "$([ -n "$O" ] && echo AVISA || echo callado)"
 
-echo "== PostToolUse: exacto, por bytes, no por texto del comando =="
+echo "== PostToolUse: 2.24.1 le quito la llamada a --check-drift (ganaba la carrera y se comia el aviso real) =="
+sello() { python3 -c "import json,sys;print(json.dumps(json.load(open(sys.argv[1])),sort_keys=True))" "$P/memory/.journal/fingerprints.json" 2>/dev/null; }
 python3 "$BIN/journal-compact.py" --memory-dir "$P/memory" --check-drift >/dev/null 2>&1
 post() {
   J=$(python3 -c "import json,sys;print(json.dumps({'hook_event_name':'PostToolUse','tool_name':'Bash','cwd':sys.argv[1],'tool_input':{'command':'x'}}))" "$P")
@@ -64,14 +65,16 @@ post() {
 }
 chk "sin cambios -> callado"                callado "$(post)"
 printf -- '- [ ] a mano\n' >> "$P/memory/_pendientes.md"
-chk "tras escritura a mano -> AVISA"        AVISA   "$(post)"
-chk "y no se repite (se re-sello)"          callado "$(post)"
+H1=$(sello)
+chk "tras escritura a mano -> sigue callado (ya NO detecta)" callado "$(post)"
+chk "y la linea base NO se toca (no resella, no come el aviso real)" "$H1" "$(sello)"
+# limpiar la deriva que dejo esta seccion para no contaminar lo que sigue
+python3 "$BIN/journal-compact.py" --memory-dir "$P/memory" --reseal >/dev/null 2>&1
 
 echo "== --reseal: el camino sancionado para una reparacion manual =="
 printf -- '- [ ] reparacion manual deliberada\n' >> "$P/memory/_pendientes.md"
 R=$(python3 "$BIN/journal-compact.py" --memory-dir "$P/memory" --reseal 2>&1)
 chk "reseal acepta el cambio"  "1" "$(printf '%s' "$R" | grep -c 'aceptados como linea base')"
-chk "y despues no hay deriva"  callado "$(post)"
 
 echo "== y el comportamiento, no solo la forma: enrich-memory no dispara el aviso =="
 E="$T/enr"; mkdir -p "$E/pendientes" "$E/sessions"

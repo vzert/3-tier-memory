@@ -1,18 +1,23 @@
 #!/bin/bash
 # sella-huellas: no (compuerta de solo lectura; el sellado real lo hace journal-compact.py
 # --check-drift, invocado desde aqui, que ya declara el suyo)
-# Compuerta barata + disparo de `journal-compact.py --check-drift`, compartida por
-# bin/bash-journal-nudge.sh (PostToolUse) y bin/journal-drift-nudge.sh (UserPromptSubmit, v2.24.0).
+# Compuerta barata + disparo de `journal-compact.py --check-drift`, usada por
+# bin/journal-drift-nudge.sh (UserPromptSubmit, v2.24.0) — la entrega REAL del aviso.
 #
-# Un solo sitio para esta logica en vez de dos copias: antes vivia solo en bash-journal-nudge.sh,
-# y una correccion ahi (como la de la ronda 6: exigir que `stat` devuelva un entero, ver el
-# comentario historico en bash-journal-nudge.sh) no llegaba a ningun otro llamante. Se sourcea,
-# no se ejecuta solo.
+# HASTA 2.24.1 tambien la llamaba bin/bash-journal-nudge.sh en su PostToolUse de Bash. Se quito:
+# ese PostToolUse corre en el MISMO turno que la escritura a mano, antes de que exista el turno
+# siguiente donde journal-drift-nudge.sh entrega de verdad — y `--check-drift` resella la linea
+# base al detectar. Ganaba la carrera y se comia el aviso sin que nadie lo viera. Ver la nota
+# grande en bash-journal-nudge.sh y bin/test-drift-nudge.sh para la prueba del orden real.
+#
+# Sigue siendo un fichero aparte (no inline en journal-drift-nudge.sh) porque session-start.sh
+# tiene su propia llamada a --check-drift con su propia compuerta (SessionStart, no PostToolUse:
+# no comparte el problema de entrega) y separar deteccion barata de disparo evita una tercera
+# copia si algun dia hace falta.
 #
 # Uso: `source drift-gate.sh` y luego `drift_gate_check "$MEMORY_DIR" "$(dirname "$0")"`.
 # Imprime lo que `--check-drift` imprima (puede ser nada) y no hace nada mas — el llamador decide
-# que hacer con la salida; los dos llamantes actuales simplemente la dejan pasar a stdout y
-# `exit 0` despues.
+# que hacer con la salida; journal-drift-nudge.sh la deja pasar a stdout y hace `exit 0` despues.
 drift_gate_check() {
   local MEMORY_DIR="$1" BINDIR="$2"
   local FP="$MEMORY_DIR/.journal/fingerprints.json"

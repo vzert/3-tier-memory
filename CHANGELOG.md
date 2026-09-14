@@ -1,5 +1,49 @@
 # Changelog
 
+## [2.24.1] - 2026-09-14
+2.24.0 arreglo que el aviso de escritura a mano llegara a alguien anadiendo
+`bin/journal-drift-nudge.sh` (`UserPromptSubmit`, que SI entrega). Pero dejo vivo un tercer
+llamante que ya llevaba desde 2.13.4 llamando a la misma ruta: `bash-journal-nudge.sh` en su
+`PostToolUse` de Bash. Ese `PostToolUse` corre EN EL MISMO TURNO que la escritura, antes de que
+exista turno siguiente — y `journal-compact.py --check-drift` detecta Y RESELLA la linea base en
+la misma llamada, a proposito, para que el aviso salga una vez y no en cada sesion. `hay_lector()`
+decide si se resella mirando si la sesion esta atendida, no que LLAMANTE concreto esta preguntando
+— y en una sesion interactiva normal (el caso comun) siempre dice que si hay lector. Resultado: el
+`PostToolUse` de Bash ganaba SIEMPRE la carrera contra `journal-drift-nudge.sh`, resellaba la
+linea base, y el aviso real nunca llegaba a nadie. Esto no es un defecto nuevo: es plausible que el
+aviso de deriva por escritura de Bash nunca haya llegado a nadie desde que el mecanismo existe
+(v2.13.4). Verificado leyendo el codigo (`journal-compact.py:1765` `hay_lector()`,
+`bash-journal-nudge.sh:71` de la 2.24.0), no con hipotesis.
+
+Ninguna de las dos suites existentes ejercitaba la carrera: `test-drift-nudge.sh` nunca corria el
+`PostToolUse` de Bash, y `test-bash-nudge.sh` nunca corria `journal-drift-nudge.sh` despues. Cada
+una probaba su hook aislado.
+
+### Fixed
+- **`bash-journal-nudge.sh` ya no llama a `--check-drift` desde su `PostToolUse` de Bash.** Se
+  quito la llamada por completo en vez de intentar que `hay_lector()` supiera distinguir "sesion
+  atendida" de "este caller entrega" — la entrega real ya vive en `session-start.sh` (SessionStart)
+  y `journal-drift-nudge.sh` (UserPromptSubmit), los dos unicos llamantes que de verdad hacen
+  llegar lo que `--check-drift` imprime. El `PreToolUse` de Bash (deteccion aproximada por texto
+  del comando, para quien mira el log) sigue igual.
+- **`hooks/hooks.json` ya no registra `bash-journal-nudge.sh` en `PostToolUse`.** Con la llamada
+  quitada esa rama solo hacia `exit 0` tras resolver `MEMORY_DIR` — configuracion muerta que se
+  pagaba en CADA llamada a Bash sin hacer nada. Se deja la rama `PostToolUse` en el script (inerte,
+  probada) por si algo lo invoca directamente con ese evento; el harness ya no lo hace.
+- **Nueva prueba que reproduce el orden real de una sesion**, no cada hook aislado:
+  `test-drift-nudge.sh` (seccion "ronda 8") escribe con Bash, corre el `PostToolUse` de
+  `bash-journal-nudge.sh` en ese mismo turno, y SOLO DESPUES corre `journal-drift-nudge.sh` como
+  si fuera el prompt siguiente — confirmando que el aviso llega ahi y no se lo comio el paso
+  anterior. Verificado que la prueba discrimina de verdad: corrida contra el codigo de 2.24.0
+  (`git show HEAD:.../bash-journal-nudge.sh`) falla en los 3 casos esperados; contra el codigo
+  arreglado, pasa. `test-bash-nudge.sh` y `test-expire-reopen.sh` se actualizaron para reflejar que
+  el `PostToolUse` de Bash ya no toca la linea base bajo ningun valor de `PAPERCLIP_RUN_ID` /
+  `CLAUDE_CODE_SESSION_ATTENDED`. Se enumeraron todos los llamantes de `--check-drift` cruzando con
+  `hooks.json`: los unicos dos que quedan (`session-start.sh` en `SessionStart`,
+  `journal-drift-nudge.sh` en `UserPromptSubmit`) entregan de verdad; ningun otro hook registrado
+  (`journal-guard.sh`, `check-index-registration.sh`, `recall.sh`, `pre-compact.sh`,
+  `session-end.sh`) llama a esta ruta.
+
 ## [2.24.0] - 2026-09-14
 Un agente en cloudflare-expert (2026-09-12) escribio pendientes a mano durante una migracion —12
 ids no canonicos, filas duplicadas— y nadie lo avisó. Causa raiz: `journal-guard.sh` (el hook de

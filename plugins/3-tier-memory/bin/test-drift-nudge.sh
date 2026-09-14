@@ -59,9 +59,40 @@ set -e
 chk "exit 0"            "0" "$RC"
 chk "sin salida"         ""  "$O"
 
-echo "== drift-gate.sh es la MISMA logica que ya usaba bash-journal-nudge.sh (comparten archivo) =="
-chk "bash-journal-nudge.sh sourcea drift-gate.sh" "1" "$(grep -c 'source.*drift-gate.sh' "$BIN/bash-journal-nudge.sh")"
+echo "== bash-journal-nudge.sh (PostToolUse) YA NO comparte esta ruta: 2.24.1 le quito la llamada =="
+# Antes (2.13.4-2.24.0) los dos hooks compartian drift-gate.sh. Ganaba SIEMPRE el de PostToolUse
+# porque corre en el mismo turno que la escritura, antes de que exista turno siguiente — y
+# --check-drift resella al detectar, asi que el aviso real nunca llegaba a nadie. Se prueba lo
+# contrario de lo que probaba esta seccion hasta 2.24.0: que ya NO lo sourcea.
+chk "bash-journal-nudge.sh YA NO sourcea drift-gate.sh" "0" "$(grep -c 'source.*drift-gate.sh' "$BIN/bash-journal-nudge.sh")"
 chk "journal-drift-nudge.sh sourcea drift-gate.sh" "1" "$(grep -c 'source.*drift-gate.sh' "$BIN/journal-drift-nudge.sh")"
+
+echo "== ronda 8: el orden REAL de una sesion — escritura por Bash, su PostToolUse, y el prompt siguiente =="
+# Esto es lo que ninguna de las dos suites anteriores ejercitaba: test-drift-nudge.sh nunca corria
+# el PostToolUse de Bash, y test-bash-nudge.sh nunca corria journal-drift-nudge.sh despues. Cada
+# una probaba su hook aislado. La carrera solo aparece con las DOS, en este orden, sobre el MISMO
+# proyecto — que es exactamente como pasa en una sesion real.
+W="$T/carrera"; mkdir -p "$W/memory/pendientes" "$W/memory/.journal"
+printf -- '---\ntype: index\n---\n# Pendientes\n\n## Media prioridad\n\n' > "$W/memory/_pendientes.md"
+python3 "$BIN/journal-compact.py" --memory-dir "$W/memory" --check-drift >/dev/null 2>&1
+
+# 1) Bash escribe un indice a mano.
+printf -- '- [ ] a mano, en medio de la sesion\n' >> "$W/memory/_pendientes.md"
+
+# 2) Su PostToolUse corre EN EL MISMO TURNO, antes de que exista un turno siguiente.
+JPOST=$(python3 -c "import json,sys;print(json.dumps({'hook_event_name':'PostToolUse','tool_name':'Bash','cwd':sys.argv[1],'tool_input':{'command':'echo x >> memory/_pendientes.md'}}))" "$W")
+OPOST=$(printf '%s' "$JPOST" | CLAUDE_PROJECT_DIR="$W" bash "$BIN/bash-journal-nudge.sh" 2>/dev/null)
+chk "el PostToolUse de Bash no dice nada (no entrega igual)" "" "$OPOST"
+
+# 3) El prompt SIGUIENTE de la misma sesion dispara journal-drift-nudge.sh (UserPromptSubmit).
+JPROMPT=$(python3 -c "import json,sys;print(json.dumps({'hook_event_name':'UserPromptSubmit','cwd':sys.argv[1],'prompt':'hola'}))" "$W")
+OPROMPT=$(printf '%s' "$JPROMPT" | CLAUDE_PROJECT_DIR="$W" bash "$BIN/journal-drift-nudge.sh" 2>/dev/null)
+chk "el prompt siguiente SI avisa (el PostToolUse no se lo comio)" "1" "$([ -n "$OPROMPT" ] && echo 1 || echo 0)"
+
+# Control: si se repitiera el prompt, ya no deberia avisar (se resello en el paso 3).
+JPROMPT2=$(python3 -c "import json,sys;print(json.dumps({'hook_event_name':'UserPromptSubmit','cwd':sys.argv[1],'prompt':'hola de nuevo'}))" "$W")
+OPROMPT2=$(printf '%s' "$JPROMPT2" | CLAUDE_PROJECT_DIR="$W" bash "$BIN/journal-drift-nudge.sh" 2>/dev/null)
+chk "y no se repite en el prompt de despues" "" "$OPROMPT2"
 
 echo
 echo "pass=$pass fail=$fail"
