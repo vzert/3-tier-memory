@@ -112,8 +112,14 @@ def main():
             # Re-sellar: anadir una cabecera que falta es una escritura LEGITIMA del plugin. Sin
             # esto, el detector de deriva de journal-compact (2.13.2) la denunciaria como
             # "fuera del journal" y el aviso perderia todo su valor por cansancio.
+            #
+            # `escritos=[path]`: sin esto, guardar_huellas(estado=None) resellaba TODOS los
+            # indices con su estado actual de disco, no solo `path` — una escritura fuera de banda
+            # a OTRO indice en la misma ventana quedaba sellada en silencio junto con esta
+            # insercion legitima (2026-09-14, ver journal-compact.py:guardar_huellas).
             try:
-                jc.guardar_huellas(a.memory_dir, os.path.join(a.memory_dir, ".journal"))
+                jc.guardar_huellas(a.memory_dir, os.path.join(a.memory_dir, ".journal"),
+                                    escritos=[path])
             except AttributeError:
                 pass   # compactador anterior a 2.13.2
             print(f"headers_added={len(plan)} ({names})")

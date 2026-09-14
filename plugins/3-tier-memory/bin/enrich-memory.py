@@ -378,20 +378,29 @@ def main():
                 print(f"       {name}")
         print()
 
-    if apply:
+    if apply and (p_stats["creado_added"] or id_stats["id_added"]):
         # Re-sellar la linea base de huellas: enrich_pendientes y enrich_ids escriben
         # _pendientes.md de forma LEGITIMA, y el template de /triage-3t manda correr esto antes
         # del barrido. Sin re-sellar, seguir mi propia instruccion produce un aviso de "escritura
         # fuera del journal". Tercera herramienta con este fallo tras repair-dualwrite y
         # normalize-pendientes (2.13.3): arreglar las que encuentras no es enumerarlas, que es
         # literalmente la regla 114 de learnings/3tier-memory-system.
+        #
+        # `escritos=[...]`: sin esto, guardar_huellas(estado=None) resellaba TODOS los indices
+        # con su estado actual de disco, no solo _pendientes.md (el unico que enrich_pendientes/
+        # enrich_ids tocan — enrich_importance escribe archivos Tier-3, que no son indices
+        # protegidos). Una escritura fuera de banda a OTRO indice en la misma ventana quedaba
+        # sellada en silencio junto con este enriquecimiento legitimo (2026-09-14). El guard de
+        # arriba (solo si de verdad se escribio algo) evita caer en el re-sellado completo que
+        # este fix elimina cuando `escritos` estaria vacio.
         try:
             import importlib.util as _ilu
             _sp = _ilu.spec_from_file_location(
                 "jc", os.path.join(os.path.dirname(os.path.abspath(__file__)), "journal-compact.py"))
             _jc = _ilu.module_from_spec(_sp)
             _sp.loader.exec_module(_jc)
-            _jc.guardar_huellas(memory_dir, os.path.join(memory_dir, ".journal"))
+            _jc.guardar_huellas(memory_dir, os.path.join(memory_dir, ".journal"),
+                                 escritos=[os.path.join(memory_dir, "_pendientes.md")])
         except Exception:
             pass   # sin compactador al lado, o anterior a 2.13.2: no hay huellas que sellar
     if not apply:

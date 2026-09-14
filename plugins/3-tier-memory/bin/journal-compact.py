@@ -1737,7 +1737,7 @@ def leer_estado(mem):
             if (h := huella(os.path.join(mem, rel))) is not None}
 
 
-def guardar_huellas(mem, journal, estado=None):
+def guardar_huellas(mem, journal, estado=None, escritos=None):
     """Re-sella la linea base con `estado`, o releyendo el disco si no se da.
 
     PASAR `estado` ES LO QUE CIERRA LA VENTANA, y costo dos intentos. La ronda 6 marco que
@@ -1746,8 +1746,83 @@ def guardar_huellas(mem, journal, estado=None):
     la hace esperar. La ventana real no estaba entre dos `acquire`, sino entre las DOS LECTURAS DE
     BYTES — la de detectar y la de sellar — estuviera el lock libre o tomado. Lo que se sella tiene
     que ser exactamente lo que se comparo: una sola lectura, reusada. Si algo se escribe despues,
-    queda FUERA de la linea base y la comprobacion siguiente lo ve."""
-    d = leer_estado(mem) if estado is None else dict(estado)
+    queda FUERA de la linea base y la comprobacion siguiente lo ve.
+
+    `escritos`: rutas que ESTE llamante acaba de escribir de forma legitima, cuando no tiene un
+    `estado` YA COMPARADO a mano (el caso de --check-drift/--reseal, arriba). Cada entrada debe
+    ser EXACTAMENTE lo que el llamante paso al abrir/escribir el fichero — tipicamente
+    `os.path.join(mem, <nombre_de_indice>)`, resuelto con `os.path.abspath()` usando el cwd
+    del proceso. Eso es identico a como `indices_protegidos(mem)`/`os.path.join(mem, rel)` se
+    resuelven aqui abajo, asi que coincide sin importar si `mem` es absoluto o relativo — SIEMPRE
+    que el llamante no cambie de cwd entre construir la ruta y llamar aqui (ninguno de los 4
+    llamadores lo hace). Reportado por otra sesion Claude (2026-09-14) y confirmado aqui:
+    scan-secrets.py, enrich-memory.py, normalize-pendientes.py y repair-dualwrite.py llaman esto
+    tras escribir UN indice, sin `estado`. Antes de `escritos`, `estado is None` releia TODO el
+    estado de disco (`leer_estado(mem)`) para la linea base nueva — no solo lo que ESE llamante
+    escribio. Una escritura fuera de banda a OTRO indice YA SELLADO en la misma ventana quedaba
+    sellada en silencio junto con la escritura legitima, y --check-drift dejaba de verla para
+    siempre.
+
+    Con `escritos`, hay DOS casos segun si YA HABIA linea base en esta copia de trabajo
+    (`fingerprints.json` — gitignored, por-maquina, ver GITIGNORE_JOURNAL):
+      - SIN linea base previa (clon nuevo, o primera vez que corre journal_strict aqui): no hay
+        nada que proteger todavia, asi que se sella TODO lo que hay en disco ahora — igual que el
+        default sin `escritos`. Sin este caso, CUALQUIER indice preexistente pero nunca sellado
+        por ESTA maquina se veia como "nuevo, no lo creo el compactador" en el primer
+        --check-drift tras un /checkpoint-3t temprano (normalize-pendientes/enrich-memory/
+        repair-dualwrite corren en el Step 3-pre, ANTES de que el compactador mismo establezca
+        linea base — camino real, no hipotetico: session-start.sh en `source` de clear/compact, o
+        comandos slash bajo Paperclip, dejan `hay_lector()==False`, y ahi --check-drift sale sin
+        sellar).
+      - CON linea base previa: la nueva parte de la YA SELLADA (`leer_huellas`, no el disco) y
+        SOLO los indices en `escritos` toman el hash fresco de disco — un indice SIN sello previo
+        que este llamante no escribio se queda FUERA de `d` a proposito, para que la comprobacion
+        siguiente lo vea como "nuevo, no lo creo el compactador" (mismo camino que ya usa
+        detectar_fuera_de_banda para eso, sin caso especial aqui).
+
+    Tres rondas adversariales sobre este fix (2.24.6), cada una encontro un defecto real en el
+    intento anterior, todos ya corregidos: (a) codex/GPT-5 — un `os.path.abspath(p)` a secas no
+    resolvia una ruta relativa-a-mem si el cwd no era `mem`; (b) Opus, ronda 1 — el arreglo de (a)
+    asumio un contrato (bare relativo a mem) que NINGUN llamador real usa y doblaba el prefijo
+    cuando `mem` es relativo — el caso REAL de produccion, via `templates/*.md`
+    (`MEMORY_DIR="memory"`); (c) Opus, ronda 2 (delta) — el arreglo de (b), al quitar el
+    auto-sellado de "cualquier indice nunca visto", tambien quito el caso de sin-linea-base-previa
+    (arriba), volviendo "nuevo" a TODO indice preexistente en un clon nuevo. NO cambia el default
+    sin `escritos`: el compactador mismo llama asi a proposito (compact(), re-sellar TODO tras
+    aplicar, ver hay_lector()) y ese contrato no se toca.
+
+    LIMITE CONOCIDO, FUERA DE ALCANCE AQUI (codex/GPT-5, ronda 4): `not prev` no distingue
+    "fingerprints.json no existe" (cold start real) de "existe pero esta vacio o es JSON
+    invalido" (posible corrupcion o manipulacion del propio journal). Esta ambiguedad es
+    PREEXISTENTE y COMPARTIDA — `detectar_fuera_de_banda()` (mas abajo, sin tocar por este fix)
+    usa el mismo `if not prev: return []` desde la ronda 6, asi que el sistema entero YA confiaba
+    en esa señal antes de este cambio. Distinguir "ausente" de "corrupto" con una respuesta
+    correcta (ni confiar en todo, ni marcar TODO indice preexistente como "nuevo" — la trampa que
+    la ronda 2/3 ya mostro) exige logica nueva en leer_huellas/detectar_fuera_de_banda, fuera del
+    alcance ratificado para este fix (el kwarg `escritos`, no un rediseño del formato de linea
+    base). Nota, no arreglo aqui."""
+    if estado is not None:
+        d = dict(estado)
+    elif escritos:
+        actual = leer_estado(mem)          # UNA lectura de disco, ya con la escritura adentro
+        prev = leer_huellas(journal)       # linea base YA SELLADA en esta copia de trabajo
+        if not prev:
+            # Sin linea base previa (fingerprints.json no existe: clon nuevo, o primera vez que
+            # se ve journal_strict aqui). Nada que proteger todavia: sellar TODO lo de disco es
+            # la unica linea base razonable — ver docstring, caso "SIN linea base previa".
+            d = dict(actual)
+        else:
+            d = dict(prev)
+            # Misma resolucion que usan los 4 llamadores para construir `escritos`
+            # (os.path.join(mem, nombre), luego abspath sobre el cwd del proceso) — NO una
+            # resolucion propia distinta. Doblar el prefijo con os.path.join(mem, p) aqui fue el
+            # defecto que rompio el caso real (mem relativo) en un intento anterior de este fix.
+            escritos_abs = {os.path.abspath(p) for p in escritos}
+            for rel in indices_protegidos(mem):
+                if os.path.abspath(os.path.join(mem, rel)) in escritos_abs and rel in actual:
+                    d[rel] = actual[rel]
+    else:
+        d = leer_estado(mem)
     # Para los ficheros que ESTE proceso escribio, vale mas lo que escribio que lo que hay en
     # disco: si alguien los toco despues, esa escritura debe quedar FUERA de la linea base para
     # que la comprobacion siguiente la vea.

@@ -1,5 +1,69 @@
 # Changelog
 
+## [2.24.6] - 2026-09-14
+Reportado y verificado con evidencia por otra sesion Claude (via cross-session-message): las
+4 herramientas del plugin que re-sellan la linea base de huellas tras su propia escritura
+legitima — `scan-secrets.py --apply`, `enrich-memory.py --apply`, `normalize-pendientes.py
+--apply`, `repair-dualwrite.py --apply` — llamaban `guardar_huellas(mem, journal)` sin
+`estado`. Con `estado is None`, esa funcion releia TODO el estado de disco (`leer_estado(mem)`)
+para la linea base nueva, no solo el indice que la herramienta acababa de escribir. Si en la
+misma ventana habia una escritura fuera de banda a OTRO indice YA SELLADO, quedaba sellada en
+silencio junto con la escritura legitima: `--check-drift` dejaba de verla para siempre. Es
+upstream — vale para cualquier instalacion con `journal_strict=1`, no solo este repo.
+
+Cuatro rondas adversariales, tres encontraron un defecto real (corregido) en el intento
+anterior; la cuarta encontro un limite real pero PREEXISTENTE, dejado fuera de alcance a
+proposito (ver "Known limitation" abajo):
+- **codex/GPT-5 (backend externo)**: el docstring prometia que `escritos` aceptaba rutas
+  relativas a `mem`, pero el codigo solo resolvia relativas al cwd del proceso.
+- **Opus (subagent), ronda 1**: el arreglo al hallazgo anterior asumio un contrato que NINGUN
+  llamador real usa (ruta bare relativa a `mem`, independiente del cwd) y de paso ROMPIA el caso
+  real de produccion — `mem` RELATIVO, que es como `templates/*.md` invocan estos scripts
+  (`MEMORY_DIR="memory"`). Tambien encontro un hueco preexistente (no introducido por este fix,
+  tampoco cerrado por el primer intento): un indice protegido NUNCA sellado, creado fuera de
+  banda en la misma ventana que una escritura legitima a otro indice, se sellaba en silencio en
+  vez de seguir viendose como "nuevo, no lo creo el compactador" (la clase que
+  `detectar_fuera_de_banda()` ya distingue desde la ronda 6).
+- **Opus (subagent), ronda delta-scoped**: el arreglo al hueco preexistente, al quitar el
+  auto-sellado de "cualquier indice nunca visto", tambien quito el caso de un clon SIN linea base
+  previa (`fingerprints.json` esta gitignored, es por-copia-de-trabajo): TODO indice preexistente
+  se veia como "nuevo" en el primer `--check-drift` tras una herramienta legitima corrida en un
+  clon fresco — camino real, `/checkpoint-3t` Step 3-pre corre normalize-pendientes/
+  enrich-memory/repair-dualwrite ANTES de que el compactador mismo establezca linea base.
+- **codex/GPT-5, ronda 4 (delta-scoped)**: `leer_huellas()` no distingue "fingerprints.json no
+  existe" de "existe pero esta vacio o es JSON invalido" — ambos casos devuelven `{}`. El fix de
+  la ronda delta trata los dos como "sin linea base, sellar todo". Verificado: `detectar_fuera_
+  de_banda()` (sin tocar por este fix) ya usa el mismo `if not prev: return []` desde la ronda 6
+  — el sistema entero YA confiaba en esa señal antes de este cambio. Es un limite real pero
+  PREEXISTENTE Y COMPARTIDO, no una regresion de este fix; corregirlo exige logica nueva en
+  `leer_huellas`/`detectar_fuera_de_banda` (distinguir "ausente" de "corrupto" sin caer en
+  ninguno de los dos extremos ya descartados por las rondas 2/3), fuera del alcance ratificado
+  para este cambio. Documentado como limite conocido en el docstring de `guardar_huellas()`, no
+  arreglado aqui — decision del usuario si se aborda como cambio separado.
+
+### Fixed
+- `journal-compact.py:guardar_huellas()`: nuevo kwarg opcional `escritos` (rutas, EXACTAMENTE
+  como el llamante las construyo — tipicamente `os.path.join(mem, nombre)` — nunca un contrato
+  distinto resuelto contra `mem` por separado). Cuando `estado is None` y `escritos` no esta
+  vacio, hay dos casos: SIN linea base previa en esta copia de trabajo (clon nuevo), se sella
+  TODO lo que hay en disco — igual que el default sin `escritos`; CON linea base previa, la nueva
+  parte de la YA SELLADA (`leer_huellas(journal)`, no el disco) y SOLO los indices en `escritos`
+  toman el hash fresco — un indice sin sello previo que este llamante no escribio se queda fuera
+  a proposito, para que la comprobacion siguiente lo vea como nuevo. El default sin `escritos` NO
+  cambia — el compactador mismo lo usa asi a proposito (3 llamadas internas, ninguna pasa
+  `escritos`; re-sellar TODO tras aplicar, ver `hay_lector()`), y ese contrato costo 5 rondas
+  adversariales previas.
+- Los 4 llamadores externos ahora pasan `escritos=[...]` con las rutas que de verdad escribieron
+  (ya en la forma `os.path.join(mem, nombre)` que construian de por si), y solo llaman a
+  `guardar_huellas()` cuando `escritos` no esta vacio.
+- `test-guardar-huellas-escritos.sh` (nuevo, 13 asertos): reproduce el escenario original con
+  `scan-secrets.py`; el caso con `mem` RELATIVO (el camino real de produccion, via
+  `templates/*.md`); el caso del indice nunca sellado creado fuera de banda; y el caso de un clon
+  SIN linea base previa. Los cuatro, confirmados rojo contra la variante defectuosa
+  correspondiente (el codigo original sin `escritos`; el primer intento con doble-join; una
+  auto-adopcion silenciosa de indices sin sello previo; y esa misma auto-adopcion quitada sin
+  distinguir el caso de clon nuevo) antes de confirmarlos verdes contra el fix final.
+
 ## [2.24.5] - 2026-09-14
 Una segunda verificacion adversarial de 2.24.4 (independiente de la que lo motivo, corrida sobre
 una copia limpia del repo) encontro que el caso nuevo de prueba de p-c28bcb9c55 era en parte
@@ -29,7 +93,7 @@ session-start.sh/recall.sh -que si piden `--quiet`-, aunque nadie se lo pidio a 
 `--quiet`, con `PAPERCLIP_RUN_ID`): el codigo de 5763457 avisaba, el de 2.24.3 no.
 
 ### Fixed
-- `journal-compact.py:2175`: el gate pasa de `hay_lector()` a `hay_lector() or not quiet`. Un
+- `journal-compact.py:2217`: el gate pasa de `hay_lector()` a `hay_lector() or not quiet`. Un
   llamante que no pide `--quiet` sigue avisando siempre (como antes de 2.24.3); uno que si lo
   pide (`session-start.sh`, `recall.sh`) solo calla si ademas no hay lector.
 - Nuevo caso en `test-expire-reopen.sh` que invoca `journal-compact.py` sin `--quiet` bajo
@@ -92,7 +156,7 @@ decide si se resella mirando si la sesion esta atendida, no que LLAMANTE concret
 `PostToolUse` de Bash ganaba SIEMPRE la carrera contra `journal-drift-nudge.sh`, resellaba la
 linea base, y el aviso real nunca llegaba a nadie. Esto no es un defecto nuevo: es plausible que el
 aviso de deriva por escritura de Bash nunca haya llegado a nadie desde que el mecanismo existe
-(v2.13.4). Verificado leyendo el codigo (`journal-compact.py:1765` `hay_lector()`,
+(v2.13.4). Verificado leyendo el codigo (`journal-compact.py:1807` `hay_lector()`,
 `bash-journal-nudge.sh:71` de la 2.24.0), no con hipotesis.
 
 Ninguna de las dos suites existentes ejercitaba la carrera: `test-drift-nudge.sh` nunca corria el

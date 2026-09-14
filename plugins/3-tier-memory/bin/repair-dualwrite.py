@@ -715,6 +715,7 @@ def main():
         for item in pending:
             por_mes.setdefault(item[3][:7], []).append(item)
 
+        escritos = []
         for ym in sorted(por_mes):
             path = os.path.join(mem, "pendientes", ym + ".md")
             lines = jc.ensure_monthly(path, ym) if not os.path.isfile(path) else jc.read_lines(path)
@@ -733,6 +734,7 @@ def main():
             if a.apply:
                 lines[at + 1:at + 1] = nuevas
                 jc.atomic_write(path, lines)
+                escritos.append(path)
             elif not a.quiet:
                 for pid, *_ in por_mes[ym]:
                     print(f"  {pid} -> pendientes/{ym}.md")
@@ -742,9 +744,15 @@ def main():
         # detector de deriva de journal-compact avisaria de "escritura fuera del journal" en
         # cada reparacion: un falso positivo en un camino sancionado, que es justo lo que
         # haria que nadie volviera a hacer caso del aviso.
-        if a.apply:
+        #
+        # `escritos=escritos`: sin esto, guardar_huellas(estado=None) resellaba TODOS los indices
+        # con su estado actual de disco, no solo los mensuales que este script toco — una
+        # escritura fuera de banda a OTRO indice en la misma ventana quedaba sellada en silencio
+        # junto con esta reparacion legitima (2026-09-14). Solo se llama si de verdad se escribio
+        # algo: con `escritos` vacio caeria en el mismo re-sellado completo que este fix elimina.
+        if a.apply and escritos:
             try:
-                jc.guardar_huellas(mem, os.path.join(mem, ".journal"))
+                jc.guardar_huellas(mem, os.path.join(mem, ".journal"), escritos=escritos)
             except AttributeError:
                 pass   # compactador anterior a 2.13.2: no tiene huellas que sellar
         if not a.quiet:

@@ -213,7 +213,7 @@ def main():
     if not os.path.isdir(memory_dir):
         sys.exit(f"not a directory: {memory_dir}")
 
-    total, files_hit, report = 0, 0, []
+    total, files_hit, report, written = 0, 0, [], []
     for p in iter_files(memory_dir):
         try:
             with open(p, encoding="utf-8") as f:
@@ -237,8 +237,9 @@ def main():
             report.append(f"   ! {rel}:{lineno}  {lbl} — {mk}")
         if apply and changed:
             escribir_preservando(p, "".join(lines))
+            written.append(p)
 
-    if apply and total:
+    if apply and written:
         # Re-sellar la huella. iter_files() recorre TODO el arbol de memory/ filtrando solo por
         # extension .md, asi que con --apply puede reescribir `_pendientes.md` o un mensual —
         # legitimamente, porque este script es el gate de /checkpoint-3t Step 6 (redact-then-commit).
@@ -246,13 +247,19 @@ def main():
         # edicion manual no auditada, y ademas le decia "usa journal-emit.py", que para una
         # redaccion es un consejo imposible. Lo encontro el adversario local en la ronda 7; era
         # invisible para check-index-writers.py porque nunca nombra un indice como literal.
+        #
+        # `escritos=written`: sin esto, guardar_huellas(estado=None) resellaba TODOS los indices
+        # con su estado ACTUAL de disco — no solo los que este script toco — y una escritura fuera
+        # de banda a OTRO indice en la misma ventana quedaba sellada en silencio junto con esta
+        # redaccion legitima. Reportado por otra sesion Claude (2026-09-14), verificado con test
+        # en test-guardar-huellas-escritos.sh.
         try:
             import importlib.util as _ilu
             _sp = _ilu.spec_from_file_location(
                 "jc", os.path.join(os.path.dirname(os.path.abspath(__file__)), "journal-compact.py"))
             _jc = _ilu.module_from_spec(_sp)
             _sp.loader.exec_module(_jc)
-            _jc.guardar_huellas(memory_dir, os.path.join(memory_dir, ".journal"))
+            _jc.guardar_huellas(memory_dir, os.path.join(memory_dir, ".journal"), escritos=written)
         except Exception:
             pass
     if count_only:
