@@ -1,5 +1,114 @@
 # Changelog
 
+## [2.24.7] - 2026-09-14
+Cierra el limite documentado como "fuera de alcance" en 2.24.6 (hallazgo de codex/GPT-5, ronda 4):
+`leer_huellas()` devolvia `{}` igual para "fingerprints.json no existe" que para "existe pero es
+JSON invalido o no es un dict" — corrupcion accidental (disco danado, escritura interrumpida a
+mano). Una copia de trabajo MADURA cuyo fingerprints.json se corrompiera perdia proteccion en
+silencio: la linea base corrupta se resellaba sin aviso, y una escritura fuera de banda en la
+misma ventana quedaba absorbida con ella.
+
+**Modelo de amenaza, explicito para no sobreclamar**: esto detecta corrupcion ACCIDENTAL. NO
+detecta el BORRADO deliberado de fingerprints.json (esta funcion solo mira si el fichero existe;
+no audita senales adyacentes en `.journal/` que podrian distinguirlo — ver "Ronda adversarial"
+abajo) ni una manipulacion sofisticada por alguien con permiso de escritura en `.journal/`
+(podria forjar un JSON valido-pero-falso). Nota, no una promesa mas amplia.
+
+**Ronda adversarial (codex/GPT-5) sobre el primer intento, dos hallazgos reales, ambos
+corregidos**:
+1. La afirmacion "el borrado es indistinguible de un arranque en frio" no estaba auditada contra
+   el espacio de opciones: `.journal/applied/`, `pending/` u `out-of-band.log` con contenido
+   previo SI podrian distinguir "esto ya se uso antes" de una instalacion genuinamente nueva.
+   Corregido: la afirmacion ahora se acota explicitamente a "esta funcion, que solo mira
+   existencia del fichero" — detectar borrado via esas senales adyacentes es heuristico y queda
+   FUERA de alcance a proposito, no analizado ni descartado.
+2. La rama `escritos` de `guardar_huellas()` hacia un NO-OP silencioso ante corrupcion, confiando
+   en que `compact()`/`--check-drift` avisaran en una pasada posterior. Si ninguno de los dos
+   vuelve a correr (los 4 scripts usados sueltos, sin una sesion detras), la escritura legitima
+   quedaba sin sellar PARA SIEMPRE y la corrupcion sin avisar NUNCA — el mismo error de fondo del
+   fix de 2.24.6 reintroducido de otra forma. Primer intento de correccion: avisar (anotar + print)
+   de inmediato en esa misma rama, sin depender de ninguna pasada posterior — ese intento tenia a
+   su vez el defecto de abajo (ronda de Opus).
+
+**Ronda adversarial (Opus, subagent), sobre el fix de arriba, cuatro hallazgos reales, los
+cuatro corregidos**:
+1. **ungrounded** — el print que el primer intento anadio a la rama `escritos` de
+   `guardar_huellas()` es incondicional, pero esa funcion la comparten 4 llamadores y AL MENOS
+   UNO (`normalize-pendientes.py`) tiene contrato de salida propio con `--quiet`
+   (`session-start.sh:138` lo invoca asi). El print se colaba igual, rompiendo ese contrato — la
+   afirmacion "los 4 llamadores ya imprimen sin mirar `hay_lector()`" que justificaba el print
+   ahi era falsa, probado con el propio codigo de `normalize-pendientes.py` (gatea cada print con
+   `if not a.quiet`). Corregido: el print se quito de `guardar_huellas()`; esa rama solo ANOTA en
+   `out-of-band.log` de inmediato (eso no tiene contrato de salida que romper). El aviso humano
+   quedo exclusivamente en `compact()`/`--check-drift`, que ya respetaban `hay_lector()`/`--quiet`
+   correctamente.
+2. **incompleto** — el aviso de corrupcion nunca llegaba a una PERSONA real, solo al agente:
+   `session-start.sh` escala a `systemMessage` (el canal que lee la persona) solo cuando su
+   salida capturada matchea `grep 'FUERA DEL JOURNAL'`, y el nuevo texto de "linea base ILEGIBLE"
+   no matcheaba ese grep en ninguno de los dos puntos de escalada (el bloque que aplica
+   `pending/` y el de `--check-drift`). Corregido: `session-start.sh` anade un segundo grep
+   (`'ILEGIBLE'`) en ambos puntos, cada uno con su propio mensaje a `human()`.
+3. **incompleto** — `templates/audit-3t.md` (paso 15, deriva fuera del journal) documentaba solo
+   dos salidas posibles de `--check-drift` (silencio, o `FUERA DEL JOURNAL`) y un formato de
+   `out-of-band.log` que siempre nombra un fichero. Corregido: se anadio la tercera salida
+   (`LINEA BASE DE HUELLAS ILEGIBLE`) y se aclaro que su linea en el log NO lleva fichero
+   asociado, a diferencia de las de deriva.
+4. **unfalsified** — la primera version de esta entrada y del checkpoint afirmaba conteos de
+   asertos sin haber corrido el suite final. Corregido aqui abajo con los numeros reales.
+
+**Ronda delta-scoped (mismo subagent Opus), sobre los 4 fixes de arriba, 1 hallazgo nuevo,
+corregido**: re-derivo los 4 fixes desde el codigo (no desde esta prosa) y los dio por cerrados.
+Encontro que el delta de arriba desplazo +20 lineas el area de `guardar_huellas()`, y dejo
+desactualizado un puntero de una entrada ANTERIOR de este changelog (2.24.4): apuntaba al gate
+original de fuera-de-banda en `journal-compact.py:2309`, y esa linea ahora tiene el gate NUEVO de
+corrupcion (mismo texto literal `if hay_lector() or not quiet:`, por eso no saltaba a la vista) —
+el gate original quedo en `2329`. Corregido ahi mismo (ver entrada de 2.24.4, abajo).
+
+### Fixed
+- `journal-compact.py`: nuevo helper `estado_huellas(journal)`, UNA lectura de
+  `fingerprints.json`, tri-estado: `"ausente"` (no existe — arranque en frio real, sellar todo es
+  correcto), `"corrupta"` (existe pero no parsea como dict — JSON invalido o no-objeto), `"ok"`
+  (dict valido, SEA O NO VACIO — un `{}` legitimo, p.ej. tras un BORRADO de todos los indices
+  protegidos, NO es corrupcion; tratarlo como tal reabriria el falso positivo masivo que las
+  rondas 2/3 de 2.24.6 ya descartaron). `leer_huellas()` queda como wrapper sin cambiar su firma
+  (tiene mas llamadores).
+- `compact()` y `--check-drift`: detectan la corrupcion en el mismo momento y con el mismo gate
+  que ya usan para el aviso de deriva fuera de banda (`hay_lector() or not quiet` en compact();
+  siempre bajo `hay_lector()` en --check-drift, sin tocar las dos lineas de ese guard — las
+  sustituye literalmente `tools/mutaciones/m_drift_humano.py`), anotan en `out-of-band.log`
+  (linea propia, no mezclada con la lista de indices) y avisan ANTES de que el resellado
+  incondicional que ya existia sobrescriba la corrupcion en silencio.
+- `--reseal`: su mensaje ahora dice explicitamente si la linea base anterior estaba corrupta.
+- `guardar_huellas()`, rama `escritos`: si la linea base esta corrupta, la funcion NO ESCRIBE —
+  deja el fichero corrupto tal cual — y ANOTA de inmediato en `out-of-band.log`, sin esperar a
+  que `compact()`/`--check-drift` corran despues (regla 181, una guarda va donde esta el EFECTO).
+  NO imprime nada: esta funcion es compartida por 4 llamadores y al menos uno tiene su propio
+  contrato con `--quiet` (ver ronda de Opus, hallazgo 1). El aviso humano vive solo en
+  `compact()`/`--check-drift`.
+- `session-start.sh`: los dos puntos que ya escalaban la deriva fuera del journal a `systemMessage`
+  (la persona) ahora tambien escalan el aviso de linea base ILEGIBLE, con su propio texto.
+- `templates/audit-3t.md`: el paso 15 documenta la tercera salida de `--check-drift` y el formato
+  sin fichero de su linea en `out-of-band.log`.
+- `test-linea-base-corrupta.sh` (nuevo, 18 asertos): JSON ilegible detectado y NO sobrescrito por
+  la rama `escritos` (y sin imprimir nada ahi — solo anota); `--check-drift` avisa una vez y
+  resella; control negativo con `{}` valido (no dispara el aviso); `compact()` con y sin
+  lector/`--quiet`; `--reseal` reporta la corrupcion; `normalize-pendientes.py --apply --quiet`
+  reporta su propio contrato (`headers_added=N`) sin que se le mezcle el aviso de corrupcion;
+  `session-start.sh` entrega el aviso a `systemMessage` cuando hay persona. Confirmado rojo (8 de
+  18 asertos fallan, verificado corriendo el suite contra el `journal-compact.py`/`session-start.sh`
+  de 2.24.6 sin tocar) antes del fix completo, verde (18/18) despues.
+
+**Limites conocidos, documentados y no cerrados en este ciclo (alcance explicito, no
+descartados por omision)**:
+- El aviso de linea base ILEGIBLE puede no llegar a la persona en la MISMA sesion si el unico
+  camino que lo entregaria es el hook `UserPromptSubmit` (`drift-gate.sh`) y este usa una
+  heuristica basada en mtime para decidir si hay algo "nuevo" que mostrar — un archivo truncado y
+  reescrito puede no disparar esa heuristica. `session-start.sh` (el camino cubierto por los
+  tests de este ciclo) si lo entrega siempre que hay persona.
+- Cuando la misma corrupcion pasa por `guardar_huellas()` (anota) y luego por `compact()`/
+  `--check-drift` (anota otra vez), `out-of-band.log` recibe N+1 lineas para un solo evento de
+  corrupcion. Ruido, no perdida de senal — queda como design smell, no arreglado aqui.
+
 ## [2.24.6] - 2026-09-14
 Reportado y verificado con evidencia por otra sesion Claude (via cross-session-message): las
 4 herramientas del plugin que re-sellan la linea base de huellas tras su propia escritura
@@ -93,7 +202,7 @@ session-start.sh/recall.sh -que si piden `--quiet`-, aunque nadie se lo pidio a 
 `--quiet`, con `PAPERCLIP_RUN_ID`): el codigo de 5763457 avisaba, el de 2.24.3 no.
 
 ### Fixed
-- `journal-compact.py:2217`: el gate pasa de `hay_lector()` a `hay_lector() or not quiet`. Un
+- `journal-compact.py:2329`: el gate pasa de `hay_lector()` a `hay_lector() or not quiet`. Un
   llamante que no pide `--quiet` sigue avisando siempre (como antes de 2.24.3); uno que si lo
   pide (`session-start.sh`, `recall.sh`) solo calla si ademas no hay lector.
 - Nuevo caso en `test-expire-reopen.sh` que invoca `journal-compact.py` sin `--quiet` bajo
@@ -156,7 +265,7 @@ decide si se resella mirando si la sesion esta atendida, no que LLAMANTE concret
 `PostToolUse` de Bash ganaba SIEMPRE la carrera contra `journal-drift-nudge.sh`, resellaba la
 linea base, y el aviso real nunca llegaba a nadie. Esto no es un defecto nuevo: es plausible que el
 aviso de deriva por escritura de Bash nunca haya llegado a nadie desde que el mecanismo existe
-(v2.13.4). Verificado leyendo el codigo (`journal-compact.py:1807` `hay_lector()`,
+(v2.13.4). Verificado leyendo el codigo (`journal-compact.py:1912` `hay_lector()`,
 `bash-journal-nudge.sh:71` de la 2.24.0), no con hipotesis.
 
 Ninguna de las dos suites existentes ejercitaba la carrera: `test-drift-nudge.sh` nunca corria el

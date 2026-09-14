@@ -1722,13 +1722,69 @@ def _ruta_huellas(journal):
     return os.path.join(journal, "fingerprints.json")
 
 
-def leer_huellas(journal):
+def estado_huellas(journal):
+    """Tri-estado de UNA lectura de fingerprints.json: ('ausente', {}) si el fichero no existe
+    (arranque en frio real: nada que proteger todavia); ('corrupta', {}) si existe pero no se
+    pudo leer como dict (JSON invalido, o un JSON valido que no es un objeto — danado, NO es
+    fiable); ('ok', d) si existe y es un dict valido, SEA O NO VACIO.
+
+    Un `{}` valido NO es corrupcion — scope-out deliberado (2.24.7, hallazgo de codex/GPT-5
+    ronda 4 de 2.24.6): es exactamente lo que --check-drift sella legitimamente tras acusar
+    BORRADO de TODOS los indices protegidos (ver detectar_fuera_de_banda). Tratar un `{}` valido
+    como corrupcion reabriria el falso positivo masivo que las rondas 2/3 de 2.24.6 ya
+    descartaron (marcar TODO indice preexistente como "nuevo").
+
+    MODELO DE AMENAZA: esto detecta corrupcion ACCIDENTAL (fichero ilegible o mal formado — disco
+    danado, escritura interrumpida a mano, edicion parcial). NO detecta el BORRADO de
+    fingerprints.json: ESTA FUNCION solo mira si el fichero existe, asi que para ELLA un borrado
+    y un arranque en frio real leen igual ('ausente') — afirmacion acotada al alcance de esta
+    funcion, no una auditoria del espacio de senales completo (codex/GPT-5 lo marco en la ronda
+    de verificacion de 2.24.7: `.journal/applied/`, `pending/` u `out-of-band.log` con contenido
+    previo SI podrian distinguir "esto ya se uso antes" de "instalacion genuinamente nueva" —
+    detectarlo asi es heuristico (que umbral de contenido cuenta como "maduro"?) y queda FUERA de
+    alcance aqui a proposito, no analizado ni descartado). Tampoco detecta la manipulacion
+    DELIBERADA por alguien con permiso de escritura en `.journal/` (quien puede escribir ahi
+    puede forjar un fingerprints.json valido-pero-falso, o borrarlo). No sobreclamar
+    "manipulacion" fuera de este comentario — es deteccion de corrupcion, no un control de
+    acceso."""
+    ruta = _ruta_huellas(journal)
+    if not os.path.isfile(ruta):
+        return "ausente", {}
     try:
-        with open(_ruta_huellas(journal), encoding="utf-8") as fh:
+        with open(ruta, encoding="utf-8") as fh:
             d = json.load(fh)
-        return d if isinstance(d, dict) else {}
     except (OSError, ValueError):
-        return {}
+        return "corrupta", {}
+    if not isinstance(d, dict):
+        return "corrupta", {}
+    return "ok", d
+
+
+def anotar_linea_base_corrupta(journal):
+    """Deja rastro con fecha de que fingerprints.json estaba corrupto/ilegible al detectarlo.
+    Mismo fichero y formato que anotar_fuera_de_banda, pero una linea propia — NO se mezcla con
+    la lista de indices, que rompería 'N indice(s)' de avisar_fuera_de_banda."""
+    os.makedirs(journal, exist_ok=True)
+    ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    try:
+        with open(os.path.join(journal, "out-of-band.log"), "a",
+                  encoding="utf-8", newline="\n") as fh:
+            fh.write(f"{ts}\tLINEA_BASE_CORRUPTA (fingerprints.json ilegible)\n")
+    except OSError:
+        pass
+
+
+def avisar_linea_base_corrupta(journal):
+    print(f"⚠ LINEA BASE DE HUELLAS ILEGIBLE: {_ruta_huellas(journal)} existe pero no se pudo "
+          "leer como JSON valido (dict).")
+    print("  La linea base anterior no es fiable — no se puede comparar contra ella. Se acepta "
+          "el estado actual como nueva linea base. Si esto no era lo esperado, revisa el "
+          "fichero a mano antes de seguir (o corre --reseal para aceptarlo explicitamente).")
+
+
+def leer_huellas(journal):
+    _, d = estado_huellas(journal)
+    return d
 
 
 def leer_estado(mem):
@@ -1791,21 +1847,37 @@ def guardar_huellas(mem, journal, estado=None, escritos=None):
     sin `escritos`: el compactador mismo llama asi a proposito (compact(), re-sellar TODO tras
     aplicar, ver hay_lector()) y ese contrato no se toca.
 
-    LIMITE CONOCIDO, FUERA DE ALCANCE AQUI (codex/GPT-5, ronda 4): `not prev` no distingue
-    "fingerprints.json no existe" (cold start real) de "existe pero esta vacio o es JSON
-    invalido" (posible corrupcion o manipulacion del propio journal). Esta ambiguedad es
-    PREEXISTENTE y COMPARTIDA — `detectar_fuera_de_banda()` (mas abajo, sin tocar por este fix)
-    usa el mismo `if not prev: return []` desde la ronda 6, asi que el sistema entero YA confiaba
-    en esa señal antes de este cambio. Distinguir "ausente" de "corrupto" con una respuesta
-    correcta (ni confiar en todo, ni marcar TODO indice preexistente como "nuevo" — la trampa que
-    la ronda 2/3 ya mostro) exige logica nueva en leer_huellas/detectar_fuera_de_banda, fuera del
-    alcance ratificado para este fix (el kwarg `escritos`, no un rediseño del formato de linea
-    base). Nota, no arreglo aqui."""
+    2.24.7 (codex/GPT-5, ronda 4 de 2.24.6): `not prev` conflaba "fingerprints.json no existe"
+    (cold start real) con "existe pero esta corrupto" (JSON invalido o no-dict). Ahora la rama
+    `escritos` distingue las tres marcas de `estado_huellas()` (ver ahi el modelo de amenaza): si
+    esta corrupta, esta funcion NO ESCRIBE — deja el fichero corrupto tal cual — y ANOTA de
+    inmediato en out-of-band.log, no solo al proximo `compact()`/`--check-drift`. La primera
+    version de este fix tambien IMPRIMIA aqui mismo (asumiendo que los 4 llamadores no miran
+    hay_lector()); Opus, ronda de verificacion de 2.24.7, probo ese supuesto falso —
+    normalize-pendientes.py SI tiene contrato de salida propio con --quiet (session-start.sh:138
+    lo invoca asi) — asi que el print se movio a compact()/--check-drift, que ya respetan
+    hay_lector()/--quiet. El aviso humano puede entonces esperar a la proxima pasada de esos dos;
+    lo que NO puede esperar es el rastro en el log, para que esa proxima pasada tenga algo que
+    encontrar."""
     if estado is not None:
         d = dict(estado)
     elif escritos:
+        marca, prev = estado_huellas(journal)  # UNA lectura de fingerprints.json
+        if marca == "corrupta":
+            # No escribe: deja la corrupcion visible en disco. Pero NO basta con eso — hallazgo
+            # de codex/GPT-5 en la ronda de verificacion de 2.24.7: si nadie corre compact()/
+            # --check-drift despues (p.ej. estos 4 scripts corriendo sueltos, sin sesion de
+            # Claude Code detras), el no-op silencioso dejaba la escritura legitima sin sellar
+            # PARA SIEMPRE y la corrupcion sin avisar NUNCA. Anotar aqui mismo, de inmediato, no
+            # depende de que corra ninguna otra pasada. Pero NO imprimir aqui: esta funcion es
+            # compartida por 4 llamadores, y AL MENOS UNO (normalize-pendientes.py) tiene un
+            # contrato de salida propio con --quiet que un print incondicional rompe (hallazgo de
+            # Opus, ronda de verificacion de 2.24.7 — session-start.sh:138 lo llama con --quiet, y
+            # el aviso se colaba igual). El aviso humano vive solo en compact()/--check-drift, que
+            # ya respetan hay_lector()/--quiet correctamente.
+            anotar_linea_base_corrupta(journal)
+            return
         actual = leer_estado(mem)          # UNA lectura de disco, ya con la escritura adentro
-        prev = leer_huellas(journal)       # linea base YA SELLADA en esta copia de trabajo
         if not prev:
             # Sin linea base previa (fingerprints.json no existe: clon nuevo, o primera vez que
             # se ve journal_strict aqui). Nada que proteger todavia: sellar TODO lo de disco es
@@ -2229,6 +2301,13 @@ def compact(mem, budget, quiet):
     # Antes de aplicar nada: si un indice no es el que dejo la pasada anterior, alguien escribio
     # fuera del journal. Tiene que ir AQUI — en cuanto el compactador escriba, su propio cambio
     # tapa la diferencia y ya no se puede distinguir.
+    # Mismo momento y mismo gate para la linea base CORRUPTA (2.24.7): si no se avisa aqui, el
+    # resellado incondicional de compact() (mas abajo) la sobrescribe sin que nadie la vea.
+    marca_fp, _ = estado_huellas(journal)
+    if marca_fp == "corrupta":
+        anotar_linea_base_corrupta(journal)
+        if hay_lector() or not quiet:
+            avisar_linea_base_corrupta(journal)
     fuera = detectar_fuera_de_banda(mem, journal)
     if fuera:
         anotar_fuera_de_banda(journal, fuera)
@@ -2327,11 +2406,17 @@ def main():
             sys.exit("journal-compact: el journal esta ocupado; reintenta el --reseal en un momento")
         try:
             estado = leer_estado(mem)
+            marca_fp, _ = estado_huellas(journal)  # 2.24.7: reportar si la anterior era corrupta
             antes = detectar_fuera_de_banda(mem, journal, estado)
             guardar_huellas(mem, journal, estado)
         finally:
             lock.release()
-        if antes:
+        if marca_fp == "corrupta":
+            # detectar_fuera_de_banda() no puede comparar contra una linea base corrupta (su
+            # propio leer_huellas() la ve como {} -> "sin linea base", `antes` siempre vacio aqui.
+            print("resellado: la linea base anterior estaba corrupta o era ilegible; se acepta "
+                  "el estado actual como nueva linea base")
+        elif antes:
             print(f"resellado: {len(antes)} indice(s) aceptados como linea base nueva: "
                   + ", ".join(antes))
         else:
@@ -2366,6 +2451,13 @@ def main():
             sys.exit(0)
         try:
             estado = leer_estado(mem)                      # UNA lectura de bytes
+            # 2.24.7: si fingerprints.json esta corrupto, avisar ANTES de que el resellado de
+            # mas abajo (`not leer_huellas(journal)`, ya lo hacia sin este aviso) lo sobrescriba
+            # en silencio con un estado valido — la corrupcion se perderia sin que nadie la viera.
+            marca_fp, _ = estado_huellas(journal)
+            if marca_fp == "corrupta":
+                anotar_linea_base_corrupta(journal)
+                avisar_linea_base_corrupta(journal)
             fuera = detectar_fuera_de_banda(mem, journal, estado)
             if fuera:
                 anotar_fuera_de_banda(journal, fuera)

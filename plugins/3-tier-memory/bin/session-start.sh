@@ -220,6 +220,12 @@ if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] \
     if printf '%s' "$JOURNAL_OUT" | grep -q 'FUERA DEL JOURNAL'; then
       human "⚠ MEMORIA: un indice de memory/ cambio sin pasar por el journal. Si acabas de hacer git pull/checkout/merge es esperado y no se pierde nada: corre \`python3 journal-compact.py --memory-dir memory --reseal\`. Si no, alguien lo edito a mano y ese cambio se pierde en la proxima compactacion."
     fi
+    # Y A LA PERSONA si la linea base de huellas (fingerprints.json) estaba corrupta (2.24.7):
+    # misma razon que el caso de arriba — el compactador ya la resello con el estado actual, y
+    # solo una persona puede revisar el fichero a mano o correr --reseal a sabiendas.
+    if printf '%s' "$JOURNAL_OUT" | grep -q 'ILEGIBLE'; then
+      human "⚠ MEMORIA: la linea base de memory/.journal/fingerprints.json estaba corrupta (no se pudo leer como JSON valido) y se acepto el estado actual como nueva linea base. Si esto no era lo esperado, revisa el fichero a mano."
+    fi
   fi
 fi
 # Deriva fuera del journal (v2.13.2): journal_strict solo cubre Edit/Write/MultiEdit — Bash no
@@ -254,6 +260,10 @@ if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] && [ -d "$MEMORY_DIR/.j
     DRIFT_N=$(printf '%s' "$DRIFT_OUT" | grep -c 'FUERA DEL JOURNAL')
     if [ "${DRIFT_N:-0}" -gt 0 ] 2>/dev/null; then
       human "⚠ MEMORIA: un indice de memory/ cambio sin pasar por el journal. Si acabas de hacer git pull/checkout/merge es esperado y no se pierde nada: corre \`python3 journal-compact.py --memory-dir memory --reseal\`. Si no, alguien lo edito a mano y ese cambio se pierde en la proxima compactacion."
+    fi
+    # Y A LA PERSONA si la linea base de huellas estaba corrupta (2.24.7) — mismo motivo que arriba.
+    if printf '%s' "$DRIFT_OUT" | grep -q 'ILEGIBLE'; then
+      human "⚠ MEMORIA: la linea base de memory/.journal/fingerprints.json estaba corrupta (no se pudo leer como JSON valido) y se acepto el estado actual como nueva linea base. Si esto no era lo esperado, revisa el fichero a mano."
     fi
   fi
 fi
