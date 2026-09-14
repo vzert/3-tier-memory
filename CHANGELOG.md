@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.24.5] - 2026-09-14
+Una segunda verificacion adversarial de 2.24.4 (independiente de la que lo motivo, corrida sobre
+una copia limpia del repo) encontro que el caso nuevo de prueba de p-c28bcb9c55 era en parte
+vacuo: el aserto "sin lector: compact() no avisa de la deriva" miraba `systemMessage`, pero
+`session-start.sh` vacia `_HUMAN_BUF` -que alimenta `systemMessage`- SIEMPRE que no hay persona
+(`emit_output`, "hay_persona || _HUMAN_BUF=\"\""), avise o no avise `compact()`. El aserto no
+podia fallar nunca: neutralizando el gate a "avisa siempre" (`if True:`), la suite seguia en
+verde. La mitad "con lector SI avisa" si discriminaba (el control negativo con el gate viejo
+fallaba), asi que solo la mitad "sin lector" era ciega.
+
+### Fixed
+- `test-expire-reopen.sh`: `avisa_fob()` ahora mira `additionalContext`, no `systemMessage`.
+  `additionalContext` lleva el `JOURNAL_OUT` completo siempre (via `out`), con o sin persona, y
+  es la unica senal que dice si `compact()` avisó de verdad. Verificado que discrimina: con el
+  gate neutralizado a "avisa siempre", el aserto ahora SI falla; con el gate real (2.24.4), pasa.
+
 ## [2.24.4] - 2026-09-14
 Verificacion adversarial de 2.24.3 (antes de publicarla) encontro que el gate `if hay_lector()`
 no solo ensanchaba el aviso de deriva de `compact()` -tambien lo ESTRECHABA, en un camino que

@@ -961,10 +961,18 @@ arranque_f(){ CLAUDE_PLUGIN_ROOT="$PR" CLAUDE_PROJECT_DIR="$T/fob_proj" \
 {"hook_event_name":"SessionStart","source":"$1","cwd":"$T/fob_proj"}
 J
 }
+# Mira additionalContext (hookSpecificOutput), NO systemMessage: session-start.sh vacia
+# _HUMAN_BUF SIEMPRE que no hay persona (emit_output, "hay_persona || _HUMAN_BUF=\"\""),
+# pase lo que pase con la deriva -- ese vaciado es correcto (nadie a quien avisar), pero
+# significa que systemMessage esta vacio en AMBOS casos (avise o no avise compact()) cuando
+# PAPERCLIP_RUN_ID esta puesto. Un aserto que solo mirara systemMessage no discriminaria ahi:
+# adversario, ronda sobre 972f45f. additionalContext SI lleva el JOURNAL_OUT completo siempre
+# (via `out`), con o sin persona, y es lo unico que puede decir si compact() avisó de verdad.
 avisa_fob(){ printf '%s' "$1" | python3 -c 'import json,sys
 try: d=json.load(sys.stdin)
 except Exception: print(0); raise SystemExit
-print(1 if "un indice de memory" in d.get("systemMessage","") else 0)' 2>/dev/null || echo 0; }
+ctx = d.get("hookSpecificOutput", {}).get("additionalContext", "")
+print(1 if "FUERA DEL JOURNAL" in ctx else 0)' 2>/dev/null || echo 0; }
 selloF(){ huella "$MEMF/.journal/fingerprints.json"; }
 
 arranque_f startup >/dev/null 2>&1              # estabiliza y sella la linea base
