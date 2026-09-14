@@ -64,7 +64,7 @@ caso "cr_lineas (mensual)"      journal-compact.py      m_crlf_compact.py    tes
 caso "huella / md5"             journal-compact.py      m_compact.py         test-expire-reopen.sh       "byte a byte"
 caso "norm + SYSTEMROOT"        resolve-project-dir.sh  m_projdir.py         test-resolve-project-dir.sh "el respaldo de python3"
 caso "publicacion del .gitignore" journal-compact.py    m_gitignore_publicacion.py test-expire-reopen.sh "fichero ENTERO"
-caso "deriva sin lector"        journal-compact.py      m_drift_humano.py    test-expire-reopen.sh       "no consume"
+caso "deriva sin lector"        journal-compact.py      m_drift_humano.py    test-expire-reopen.sh       "no se consume"
 caso "guarda de la migracion"   journal-compact.py      m_gitignore_migracion.py test-expire-reopen.sh    "NO toca el del usuario"
 caso "CRLF de la migracion"     journal-compact.py      m_gitignore_crlf.py  test-expire-reopen.sh       "mismo bloque en CRLF"
 caso "applied/ fuera del bloque" journal-compact.py     m_gitignore_applied.py test-expire-reopen.sh     "git IGNORA applied"

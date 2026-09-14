@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.24.2] - 2026-09-14
+El arnes de mutacion (`tools/mutation-check.sh`) dejo de discriminar el caso "deriva sin lector"
+en el CI de 2.24.1, en las tres plataformas: la mutacion SI se aplicaba y la suite SI caia, pero
+por un texto distinto al que el arnes esperaba. Causa: antes de 2.24.1, `bash-journal-nudge.sh`
+llamaba a `--check-drift` en su `PostToolUse`, y el aserto `"el hook de Bash con Paperclip: no
+consume"` (que SI contenia el string literal `"no consume"`) fallaba con la mutacion aplicada.
+2.24.1 quito esa llamada — ese camino ya no ejecuta el codigo mutado — y con el se fue el UNICO
+punto de la suite cuyo texto de fallo coincidia literal con el string del arnes. El aserto que
+sigue cayendo con la mutacion (`"y la linea base NO se toca (no se consume)"`, en
+`test-expire-reopen.sh`) siempre dijo "no SE consume", no "no consume": el desajuste de texto
+existio desde que se agrego este caso, y solo salio a la luz cuando 2.24.1 le quito al arnes su
+unica coincidencia de casualidad.
+
+### Fixed
+- **`tools/mutation-check.sh`: el string esperado del caso "deriva sin lector" pasa de `"no
+  consume"` a `"no se consume"`**, para que coincida con el aserto real que la mutacion sigue
+  tumbando tras 2.24.1.
+- Comentario de `tools/mutaciones/m_drift_humano.py` actualizado: ya no dice "tumbar los asertos
+  de LOS DOS caminos" — desde 2.24.1 solo queda uno.
+
 ## [2.24.1] - 2026-09-14
 2.24.0 arreglo que el aviso de escritura a mano llegara a alguien anadiendo
 `bin/journal-drift-nudge.sh` (`UserPromptSubmit`, que SI entrega). Pero dejo vivo un tercer
