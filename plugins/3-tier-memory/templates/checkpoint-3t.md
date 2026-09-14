@@ -357,7 +357,7 @@ Do NOT skip this step. Actively scan the conversation for these signals:
   ```bash
   python3 "$JBIN/journal-emit.py" --type plan.upsert --slug <slug> --title "<Plan title>" \
     --status draft|active|testing|completed|abandoned --date DATE --sesion "[[sessions/DATE-SLUG]]" \
-    [--pendientes N] [--learnings "N rules"] [--inline]
+    [--pendientes N] [--learnings "N rules"] [--inline] [--parent <parent-slug>]
   ```
   New plan → row `| [[plans/plan-<slug>\|<title>]] | <status> | DATE | <sesion> | ... |` at the top of
   `## Plans` (`--inline` writes `<title> (inline)` instead of the link). Existing plan (matched by
@@ -366,6 +366,60 @@ Do NOT skip this step. Actively scan the conversation for these signals:
 - Add wikilink in session log ## Plans section and ## Related
 
 **Fallback (no JBIN)**: add/update the row in memory/_plans-index.md by hand.
+
+### Plan multi-sesión — bloque `## Estado` (Step 8 lo lee)
+
+**Cuándo aplica.** Solo si el plan de esta sesión va a cruzar varias sesiones (tiene fases, o ya
+es un plan `active` que otra sesión va a retomar). Un plan de una sola sesión (`completed` al
+cerrar, o un `(inline)` de una línea) no lo necesita — no le des la ceremonia a algo que no la
+usa.
+
+**Por qué existe.** Medido 2026-09-14 sobre las sesiones reales del port 3-tier al VPS: aun cuando
+el snippet de Step 8 ya nombraba el archivo del plan activo, `Proximo paso` seguía sin leer ningún
+estado — caía a `revisar _pendientes.md y proponer siguiente prioridad`, que es la misma prosa
+genérica de una sesión sin plan. El plan sí tenía el big picture (fases, fechas, orden); lo que
+faltaba era que Step 8 lo leyera. Por eso este bloque no es narrativa nueva — es la MISMA
+información que ya escribes en el plan, movida a una forma que un agente pueda leer sin
+re-derivarla de 300 líneas de prosa.
+
+**Qué escribir.** Justo debajo del título del plan, ANTES de la narrativa, cuatro campos fijos:
+
+```markdown
+## Estado
+
+Fase actual: <N> — <nombre corto de la fase>
+Próxima acción: <lo más concreto posible — qué, con qué criterio o fecha si ya se acordó>
+Bloqueado por: <qué lo detiene, o "nada">
+Actualizado: <DATE>
+```
+
+Actualízalo en CADA checkpoint que toque este plan — es el único campo de todo el plan que se
+reescribe en vez de acumularse; el historial de cómo llegó ahí ya vive en la narrativa de abajo,
+que sigue creciendo como siempre. Si `Próxima acción` no cambia respecto al último checkpoint,
+escribe la misma línea — no la omitas ni la vacíes; un `## Estado` ausente y uno que no cambió se
+leen distinto para quien lo consulta después.
+
+**La prueba de que sirve.** Tapa el resto del plan y lee solo `Fase actual` + `Próxima acción`. Si
+con eso no sabes qué hacer la próxima sesión sin abrir la narrativa, no está lo bastante concreto
+— es el mismo criterio que la línea `<next-step>` de Step 8 ya exige, aplicado un nivel arriba.
+
+### Plan padre/hijo — cuando un esfuerzo se fragmenta en varios planes
+
+**Cuándo aplica.** Un esfuerzo grande a veces nace como un plan y luego se parte en sub-planes por
+bloque o por fase (medido: el port 3-tier al VPS terminó con 5 filas en `_plans-index.md` para el
+mismo esfuerzo, sin relación visible entre ellas — dos con el mismo alcance, una activa y otra ya
+completed el mismo día). Si vas a crear un plan que es una fase o un bloque de un plan más grande
+que YA existe, decláralo como hijo en vez de dejarlo suelto.
+
+- Al emitir su `plan.upsert`, pasa `--parent <slug-del-plan-padre>`. El compactor anota la celda
+  `Status` del hijo como `<status> (fase de plan-<parent>)` — sin ampliar la tabla ni migrar filas
+  viejas: es la misma celda de siempre, con la fase visible en el texto.
+- En el plan PADRE, mantén una sección `## Sub-planes` (tabla de 3 columnas: Sub-plan, Estado,
+  Fase actual) con una fila por hijo, actualizada a mano en cada checkpoint que toque alguno —
+  Tier 3, escritura directa, igual que el resto del cuerpo del plan.
+- Un plan que reemplaza a otro (no es hijo, lo sustituye entero) no lleva `--parent`: cierra el
+  viejo con `--status "superseded — reemplazado por plan-<nuevo>"` y dilo también en la narrativa
+  del nuevo. `superseded` cuenta como cerrado para la poda (mismo criterio que `completed`).
 
 ### Research signals — if ANY found, register the research:
 - Web searches or web fetches were performed
@@ -617,17 +671,40 @@ ejemplo, y 8b) por la misma regla de "identicos" de mas abajo.
 
 Reglas para llenar los slots:
 
-- `<contexto-1-linea>`: una frase que describa el trabajo principal de la sesion (max 90 chars). Toma como base la primera linea de ## Contexto del session file.
+- `<contexto-1-linea>`: una frase que describa el trabajo principal de la sesion (max 90 chars).
+  Toma como base la primera linea de ## Contexto del session file. **Si aplica el caso 1 de
+  `<next-step>`** (plan activo con `## Estado`), la frase nombra el PLAN y la fase en vez de la
+  sesion de hoy: `<titulo del plan> — Fase <N> (<nombre de la fase>)`. Es la primera linea que se
+  lee, y en una tarea de fases es la que responde "que estabamos haciendo" y "es parte de un plan
+  mayor" de un vistazo — sin esto, un humano que solo lee `Retomamos:` (no el resto del snippet)
+  ve el recorte de HOY, no el trabajo completo del que es parte. Mismo principio que el `Titulo:`
+  de los recordatorios de calendario (Step 8c): legible sin abrir nada mas.
 - `<next-step>`: la accion mas inmediata pendiente, en orden de preferencia:
-  1. El pendiente nuevo de mayor prioridad creado en Step 3b de esta sesion.
-  2. Si no hay nuevo, el pendiente existente de mayor prioridad relacionado con el trabajo de la sesion.
-  3. Si tampoco aplica, escribir literalmente `revisar _pendientes.md y proponer siguiente prioridad`.
-  4. **Si la sesion genuinamente no dejo trabajo que retomar** (una sesion de reporte, de
+  1. **Si esta sesion toco un plan `active` que tiene bloque `## Estado`** (ver Step 5), el
+     `<next-step>` es `Fase actual: <N> — <nombre>. <Proxima accion del bloque>`, ya actualizado
+     con lo que esta sesion resolvio — NO el pendiente suelto de mayor prioridad, aunque exista
+     uno. Por que va primero: medido 2026-09-14, un pendiente suelto relacionado con un plan de
+     fases es casi siempre UN PASO de la fase, no la fase completa — anteponerlo pierde el orden
+     que el plan ya tiene. Si el plan no tiene `## Estado` todavia (uno viejo, sin retro-adaptar),
+     cae al caso 2 como cualquier sesion sin plan.
+  2. El pendiente nuevo de mayor prioridad creado en Step 3b de esta sesion.
+  3. Si no hay nuevo, el pendiente existente de mayor prioridad relacionado con el trabajo de la sesion.
+  4. Si tampoco aplica, escribir literalmente `revisar _pendientes.md y proponer siguiente prioridad`.
+  5. **Si la sesion genuinamente no dejo trabajo que retomar** (una sesion de reporte, de
      verificacion puntual, o que se cerro sola) — no hay pendiente nuevo, no hay uno relacionado,
      y "revisar _pendientes.md" seria un placeholder vacio, no una pista real — dilo tal cual:
-     `ninguno — <en media linea, por que esta sesion se cierra sola>`. Forzar el caso 3 cuando
-     aplica el 4 no es honesto: implica que hay algo que mirar, y manda a la sesion siguiente a
+     `ninguno — <en media linea, por que esta sesion se cierra sola>`. Forzar el caso 4 cuando
+     aplica el 5 no es honesto: implica que hay algo que mirar, y manda a la sesion siguiente a
      buscar una prioridad que no existe.
+
+  **Cuando aplica el caso 1**, la linea `Lee memory/sessions/DATE-SLUG.md para el contexto
+  completo.` de la plantilla (mas abajo) se extiende con la ruta del plan:
+  `Lee memory/sessions/DATE-SLUG.md para el contexto completo, y memory/plans/plan-<slug>.md
+  para el resto de las fases.` — el snippet ya probo (sesion 2026-09-14-bloque-b, medida en la
+  entrevista que origino este cambio) que nombrar el archivo del plan sin que `<next-step>`
+  leyera su estado no bastaba; ahora que si lo lee, la referencia al archivo completo sigue
+  haciendo falta para el resto de las fases que no caben en una linea. Fuera del caso 1, la
+  linea queda como siempre, sin la segunda clausula.
 
   **No inventes un `<next-step>` de la forma "revisar si X respondio/actuo"** cuando X es un
   agente, persona o proceso FUERA de esta sesion (un peer, un mantenedor ajeno, un PR de otro

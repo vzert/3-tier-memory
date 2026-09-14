@@ -30,8 +30,9 @@ Tipos de evento:
                     corta al Quick Reference (numerada, max+1). Sin --text solo registra el
                     topic. Imprime l-<10 hex> (o l-topic-<topic>).
   plan.upsert       --slug S --title T --status ST [--date D] [--sesion [[sessions/..]]]
-                    [--pendientes N] [--learnings N] [--inline]                         (Fase 2)
+                    [--pendientes N] [--learnings N] [--inline] [--parent P]            (Fase 2)
                     Fila en _plans-index.md por slug (o titulo); actualiza celdas dadas.
+                    --parent anota la celda Status como '<status> (fase de plan-P)'.
   research.upsert   --slug S --tema T --status active|completed [--date D] [--next-step N]
                     [--resultado R] [--origen O] [--inline]                             (Fase 2)
                     Fila en Active o Completed de _research-index.md; completed la mueve y
@@ -301,6 +302,7 @@ def main():
     ap.add_argument("--pendientes", default="")
     ap.add_argument("--learnings", default="")
     ap.add_argument("--inline", action="store_true")
+    ap.add_argument("--parent")
     ap.add_argument("--tema")
     ap.add_argument("--next-step", default="")
     ap.add_argument("--resultado", default="")
@@ -389,6 +391,9 @@ def main():
 
     if a.type == "plan.upsert":
         slug = check_slug(a.slug, "--slug")
+        parent = check_slug(a.parent, "--parent") if a.parent else ""
+        if parent == slug:
+            sys.exit("journal-emit: --parent no puede ser el propio plan")
         base["payload"] = {
             "slug": slug,
             "title": cell(need(a.title, "plan.upsert necesita --title")),
@@ -398,6 +403,7 @@ def main():
             "pendientes": cell(a.pendientes),
             "learnings": cell(a.learnings),
             "inline": bool(a.inline),
+            "parent": parent,
         }
         avisar_origen_colgante(a.sesion, memory_dir)   # en plan.upsert el campo se llama --sesion
         write_event(memory_dir, base)

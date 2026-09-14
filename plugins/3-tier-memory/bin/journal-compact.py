@@ -37,7 +37,10 @@ Fase 2 (sesiones, reglas, planes, research) — mismo principio, anclas de tabla
                    Idempotente por texto normalizado.
   plan.upsert      fila en '## Plans' por [[plans/plan-<slug>]] o titulo; actualiza Status,
                    Sesion, Pendientes, Learnings (Fecha no cambia en updates); poda
-                   completed/abandoned a los 5 mas recientes por Fecha.
+                   completed/abandoned/superseded a los 5 mas recientes por Fecha.
+                   --parent <slug> anota la celda Status como '<status> (fase de
+                   plan-<slug>)' sin ampliar la tabla; la jerarquia real vive en el
+                   propio plan (frontmatter/narrativa), no en el indice.
   research.upsert  fila en '## Active Research' o '## Completed Research' por
                    [[research/<slug>]] o Tema; completed la mueve de Active a Completed y un
                    research completado no vuelve a Active (monotono: reabrir es a mano). La celda
@@ -1406,6 +1409,12 @@ def apply_learning_add(mem, p):
 # ----------------------------------------------------------------------------- _plans-index.md
 def apply_plan_upsert(mem, p):
     slug = check_slug(p["slug"], "slug")
+    parent = p.get("parent")
+    if parent:
+        parent = check_slug(parent, "--parent")
+    status = p.get("status")
+    if status and parent:
+        status = f"{status} (fase de plan-{parent})"
     path = os.path.join(mem, "_plans-index.md")
     if not os.path.isfile(path):
         raise Quarantine("no-index: _plans-index.md no existe")
@@ -1423,9 +1432,11 @@ def apply_plan_upsert(mem, p):
     if hit is not None:
         cells = pad(split_cells(lines[hit]), 6)
         new = list(cells)
-        for idx, k in ((1, "status"), (3, "sesion"), (4, "pendientes"), (5, "learnings")):
+        for idx, k in ((3, "sesion"), (4, "pendientes"), (5, "learnings")):
             if p.get(k):
                 new[idx] = p[k]
+        if status:
+            new[1] = status
         # La celda 0 tambien: `--title` se aceptaba y se ignoraba en silencio al actualizar, asi
         # que el indice conservaba el titulo con el que nacio el plan aunque su contenido ya dijera
         # otra cosa. Campo sin lector. Se reconstruye respetando la forma que tenia la celda
@@ -1440,14 +1451,14 @@ def apply_plan_upsert(mem, p):
     else:
         plan_cell = f"{p['title']} (inline)" if p.get("inline") \
             else f"[[plans/plan-{slug}\\|{p['title']}]]"
-        lines.insert(sep + 1, join_cells([plan_cell, p["status"], p["date"], p.get("sesion") or "",
+        lines.insert(sep + 1, join_cells([plan_cell, status or p["status"], p["date"], p.get("sesion") or "",
                                           p.get("pendientes") or "", p.get("learnings") or ""]))
     _, (hdr, sep, rows) = need_table(lines, "## Plans", "_plans-index.md")
     done = []
     for i in rows:
         c = pad(split_cells(lines[i]), 3)
         st = c[1].lower().split()
-        if st and st[0] in ("completed", "abandoned") and DATE_RE.match(c[2]):
+        if st and st[0] in ("completed", "abandoned", "superseded") and DATE_RE.match(c[2]):
             done.append((i, c[2]))
     if len(done) > MAX_PLANS_DONE:
         done.sort(key=lambda x: (x[1], -x[0]), reverse=True)

@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.25.0] - 2026-09-14
+El snippet de continuidad (`/checkpoint-3t` Step 8) no veia el big picture en tareas con fases
+que cruzan muchas sesiones: aun cuando ya nombraba el archivo del plan activo, `Proximo paso`
+seguia sin leer ningun estado — caia al fallback generico de `_pendientes.md`, y el usuario
+terminaba pidiendo a mano "dame el prompt completo para retomar" ademas de correr el checkpoint.
+Medido en al menos 8 esfuerzos multi-sesion distintos.
+
+- **Bloque `## Estado` en los planes** (Step 5): fase actual, proxima accion, bloqueado por,
+  actualizado — se reescribe en cada checkpoint que toque el plan, en vez de acumularse como el
+  resto de la narrativa.
+- **Step 8, nuevo caso 1 de la escalera de `<next-step>`**: si la sesion toco un plan activo con
+  `## Estado`, el proximo paso sale de ahi (fase + accion concreta), antes que cualquier pendiente
+  suelto — un pendiente suelto de un plan de fases suele ser un paso de la fase, no la fase entera.
+  La primera linea del snippet (`Retomamos:`) tambien nombra el plan y la fase en ese caso, no la
+  sesion de hoy — legible sin abrir el resto del snippet, mismo principio que el `Titulo:` de los
+  recordatorios de calendario (Step 8c).
+- **Jerarquia padre/hijo entre planes**: `plan.upsert` gana `--parent <slug>`; el compactor anota
+  la celda Status del hijo (`<status> (fase de plan-<parent>)`) sin ampliar la tabla de
+  `_plans-index.md`. `superseded` se suma a `completed`/`abandoned` para la poda de planes cerrados.
+- Suite nueva `test-plan-parent.sh`.
+
 ## [2.24.10] - 2026-09-14
 El snippet de continuidad de `/checkpoint-3t` (Step 8) omite el bloque ENTERO cuando el caso 4
 de `<next-step>` (2.24.9) aplica, en vez de imprimir un bloque completo diciendo "ninguno" en
