@@ -1763,11 +1763,17 @@ def guardar_huellas(mem, journal, estado=None):
 
 
 def hay_lector():
-    """¿Va a leer alguien lo que --check-drift imprima?
+    """¿Va a leer alguien lo que el compactador avise de deriva fuera de banda?
 
     AQUI Y NO EN EL LLAMANTE, y costo cinco rondas adversariales aprenderlo. `--check-drift`
     RE-SELLA la linea base al detectar, para que el aviso salga una vez y no en cada sesion. Si
     nadie lee ese aviso, el re-sellado lo borra para siempre: visto una vez, a nadie, y no vuelve.
+
+    DOS consumidores desde p-c28bcb9c55: la rama `--check-drift` de mas abajo, y el aviso de
+    fuera-de-banda dentro de `compact()` normal (aplicar pending/). Este ultimo resella SIEMPRE
+    al terminar (es su trabajo: dejar sellado lo que acaba de aplicar), asi que si su aviso se
+    callara por otra razon —antes lo callaba `--quiet`, el flag que pasan session-start.sh:199 y
+    recall.sh:35 al aplicar pending/— la deriva se perdia exactamente igual que aqui abajo.
 
     2.21.4 puso la guarda en `session-start.sh`. El adversario encontro el agujero en una frase:
     **hay DOS llamantes**. `bash-journal-nudge.sh` corria esto en CADA PostToolUse de Bash y no
@@ -2142,7 +2148,13 @@ def compact(mem, budget, quiet):
         anotar_fuera_de_banda(journal, fuera)
         for rel in fuera:
             log(f"OUT-OF-BAND {rel}")
-        if not quiet:
+        # `quiet` solo calla el resumen rutinario ("JOURNAL applied=..."). Este aviso usa
+        # hay_lector(), el mismo criterio que --check-drift (p-c28bcb9c55): compact() normal
+        # resella los indices SIEMPRE al terminar (guardar_huellas, mas abajo), incluidos los
+        # que llegaron con deriva fuera de banda. Si el aviso se callara por `quiet` -como antes-
+        # ese resellado se comia la deriva en silencio: session-start.sh:199 y recall.sh:35 llaman
+        # a compact() normal con --quiet cuando pending/ tiene algo, y ahi es donde se perdia.
+        if hay_lector():
             avisar_fuera_de_banda(fuera)
     try:
         # Bajo el lock y antes de re-listar: lo rescatado entra en ESTA pasada.

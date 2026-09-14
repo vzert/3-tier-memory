@@ -949,5 +949,43 @@ J
 chk "con lector, el hook de Bash NO avisa (2.24.1)" "" "$NUD"
 chk "y NO re-sella (el aviso real lo deja para journal-drift-nudge.sh)" "$H1" "$(sello)"
 
+echo "== p-c28bcb9c55: compact() normal (aplicar pending/) tambien avisa segun hay_lector() =="
+# compact() normal (sin --check-drift) resella SIEMPRE al terminar -es su trabajo: sellar lo que
+# acaba de aplicar-, asi que si detecta deriva fuera de banda A LA VEZ que aplica pending/, el
+# aviso es la UNICA senal que puede sobrevivir. session-start.sh:199 y recall.sh:35 lo llaman con
+# --quiet; antes de este fix ese flag apagaba tambien el aviso de deriva, no solo el resumen.
+mkdir -p "$T/fob_proj"; cp -R "$MEMH" "$T/fob_proj/memory"
+MEMF="$T/fob_proj/memory"
+arranque_f(){ CLAUDE_PLUGIN_ROOT="$PR" CLAUDE_PROJECT_DIR="$T/fob_proj" \
+  PAPERCLIP_RUN_ID="${2:-}" bash "$BIN/session-start.sh" 2>/dev/null <<J
+{"hook_event_name":"SessionStart","source":"$1","cwd":"$T/fob_proj"}
+J
+}
+avisa_fob(){ printf '%s' "$1" | python3 -c 'import json,sys
+try: d=json.load(sys.stdin)
+except Exception: print(0); raise SystemExit
+print(1 if "un indice de memory" in d.get("systemMessage","") else 0)' 2>/dev/null || echo 0; }
+selloF(){ huella "$MEMF/.journal/fingerprints.json"; }
+
+arranque_f startup >/dev/null 2>&1              # estabiliza y sella la linea base
+# deriva fuera de banda: edicion a mano, sin pasar por el journal
+printf -- '- [ ] editado a mano\n' >> "$MEMF/_pendientes.md"
+# y un evento pendiente, para que compact() normal (no --check-drift) sea el que corra primero
+python3 "$BIN/journal-emit.py" --memory-dir "$MEMF" --type pendiente.add --text "via journal" --origen "[[sessions/2026-01-01-x]]" \
+  --prioridad Baja >/dev/null 2>&1
+HF0=$(selloF)
+F1=$(arranque_f startup "run-fob")              # Paperclip: sin lector
+chk "sin lector: compact() no avisa de la deriva"  "0" "$(avisa_fob "$F1")"
+chk "pero SI aplico el evento pendiente"           "1" "$(ls -1 "$MEMF/.journal/applied" 2>/dev/null | wc -l | tr -d ' ' | awk '{print ($1>0)?1:0}')"
+chk "y la linea base SI se resella (compact() normal siempre sella lo que aplica)" \
+  "1" "$([ "$(selloF)" != "$HF0" ] && echo 1 || echo 0)"
+
+# segunda ronda: otra deriva + otro evento, ahora CON lector
+printf -- '- [ ] editado a mano otra vez\n' >> "$MEMF/_pendientes.md"
+python3 "$BIN/journal-emit.py" --memory-dir "$MEMF" --type pendiente.add --text "via journal 2" --origen "[[sessions/2026-01-01-x]]" \
+  --prioridad Baja >/dev/null 2>&1
+F2=$(arranque_f startup)                        # sesion normal: con lector
+chk "con lector: compact() SI avisa de la deriva"  "1" "$(avisa_fob "$F2")"
+
 echo "RESULT pass=$pass fail=$fail skip=$skip"
 [ "$fail" -eq 0 ]

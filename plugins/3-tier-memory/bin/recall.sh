@@ -32,7 +32,12 @@ fi
 JOURNAL_PENDING="$MEMORY_DIR/.journal/pending"
 if [ -f "$CLAUDE_PLUGIN_ROOT/bin/journal-compact.py" ] && [ -d "$JOURNAL_PENDING" ] \
    && [ -n "$(ls -A "$JOURNAL_PENDING" 2>/dev/null)" ]; then
-  python3 "$CLAUDE_PLUGIN_ROOT/bin/journal-compact.py" --memory-dir "$MEMORY_DIR" --budget 1 --quiet >/dev/null 2>&1
+  # No tirar stdout a /dev/null (p-c28bcb9c55): compact() puede detectar deriva fuera de banda
+  # al aplicar pending/ y avisar (si hay_lector()) — igual que journal-drift-nudge.sh mas abajo
+  # en la lista de UserPromptSubmit, este stdout llega al agente. Perderlo aqui era perder el
+  # UNICO aviso posible, porque compact() ya resello los indices al terminar.
+  JOURNAL_OUT=$(python3 "$CLAUDE_PLUGIN_ROOT/bin/journal-compact.py" --memory-dir "$MEMORY_DIR" --budget 1 --quiet 2>/dev/null)
+  [ -n "$JOURNAL_OUT" ] && printf '%s\n\n' "$JOURNAL_OUT"
 fi
 
 # Derived recall index lives alongside other per-machine state (like

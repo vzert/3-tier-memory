@@ -191,6 +191,12 @@ fi
 # y el aviso de cuarentena de mas abajo —que va a la PERSONA— tiene que contar lo que quede
 # despues, no antes. Sin esto, actualizar el plugin dejaba el aviso pidiendo un trabajo manual que
 # ya no existe hasta el siguiente /checkpoint-3t.
+# `THREET_SIN_LECTOR` se pone AQUI, antes de las dos llamadas de este script a compact() que
+# consultan hay_lector() (esta y --check-drift mas abajo): en un `source` de clear/compact hay
+# agente pero no persona, y esa senal no la da el entorno. Si se pusiera solo antes de
+# --check-drift (como antes de p-c28bcb9c55), el compact() normal de aqui abajo la veria como
+# hay_lector()==True y avisaria de mas en esa misma sesion sin persona.
+hay_persona || export THREET_SIN_LECTOR=1
 JOURNAL_PENDING="$MEMORY_DIR/.journal/pending"
 if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] \
    && { { [ -d "$JOURNAL_PENDING" ] && [ -n "$(ls -A "$JOURNAL_PENDING" 2>/dev/null)" ]; } \
@@ -207,6 +213,12 @@ if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] \
     # correr una persona. Sin esto, su repo queda ignorando applied/ y trackeandolo a la vez.
     if printf '%s' "$JOURNAL_OUT" | grep -q '\.gitignore actualizado'; then
       human "⚠ MEMORIA: se actualizo memory/.journal/.gitignore — applied/ (eventos ya aplicados) deja de versionarse desde 2.23.0. Si ya lo tenias en git, anadirlo al .gitignore NO lo des-trackea: corre \`git rm -r --cached memory/.journal/applied\` y haz commit."
+    fi
+    # Y A LA PERSONA si esta pasada (aplicar pending/) tambien detecto deriva fuera de banda
+    # (p-c28bcb9c55): compact() normal resella SIEMPRE al terminar, asi que si el aviso solo
+    # fuera a `out` (agente), se perderia igual que se perdia por --quiet antes de este fix.
+    if printf '%s' "$JOURNAL_OUT" | grep -q 'FUERA DEL JOURNAL'; then
+      human "⚠ MEMORIA: un indice de memory/ cambio sin pasar por el journal. Si acabas de hacer git pull/checkout/merge es esperado y no se pierde nada: corre \`python3 journal-compact.py --memory-dir memory --reseal\`. Si no, alguien lo edito a mano y ese cambio se pierde en la proxima compactacion."
     fi
   fi
 fi
@@ -229,10 +241,8 @@ fi
 # Lo que se pierde: en una sesion sin persona el AGENTE tampoco ve el aviso. Es el precio, y es
 # barato — en esas sesiones no hay nadie que pueda correr `--reseal` de todos modos.
 if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] && [ -d "$MEMORY_DIR/.journal" ]; then
-  # Quien decide si se consume la deriva es el compactador (`hay_lector()`), no este script: hay
-  # otro llamante —el PostToolUse de Bash— y una regla en dos sitios se separa. Aqui solo se le
-  # pasa lo que el entorno NO dice: que en un `clear`/`compact` hay agente pero no persona.
-  hay_persona || export THREET_SIN_LECTOR=1
+  # Quien decide si se consume la deriva es el compactador (`hay_lector()`), no este script.
+  # THREET_SIN_LECTOR ya quedo puesto arriba, antes de las dos llamadas de este script.
   DRIFT_OUT=$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" --memory-dir "$MEMORY_DIR" --check-drift 2>/dev/null)
   if [ -n "$DRIFT_OUT" ]; then
     out "$DRIFT_OUT"

@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.24.3] - 2026-09-14
+`hay_lector()` protegia el aviso de deriva de `--check-drift`, pero `compact()` normal (aplicar
+`pending/`) tenia el mismo aviso detras de `if not quiet` — y `session-start.sh:199` y
+`recall.sh:35` lo llaman siempre con `--quiet`. `compact()` resella la linea base SIEMPRE al
+terminar (es su trabajo: sellar lo que acaba de aplicar), asi que si detectaba deriva fuera de
+banda A LA VEZ que aplicaba `pending/`, el aviso era la unica senal que podia sobrevivir — y ese
+aviso se callaba por `--quiet`, no por falta de lector. Mismo patron de fondo que 2.24.1
+(`p-c28bcb9c55`), en otra interseccion de llamantes.
+
+### Fixed
+- **El aviso de fuera de banda dentro de `compact()` ahora depende de `hay_lector()`, no de
+  `quiet`.** `--quiet` sigue silenciando solo el resumen rutinario (`JOURNAL applied=...`).
+- **`session-start.sh` avisa a la persona (no solo al agente)** cuando la pasada de `compact()`
+  normal detecta deriva fuera de banda, igual que ya hacia para `--check-drift`. Se movio el
+  `export THREET_SIN_LECTOR` para que cubra las DOS llamadas del script, no solo la de
+  `--check-drift`: sin esto, un `source=clear/compact` (agente sin persona) habria visto
+  `hay_lector()==True` en la primera llamada y avisado de mas.
+- **`recall.sh` ya no tira a `/dev/null` la salida de `compact()`** al aplicar `pending/`: era el
+  unico punto donde ese aviso podia llegar, porque `compact()` ya resello los indices para
+  entonces.
+- Nuevo caso en `test-expire-reopen.sh` que fuerza deriva fuera de banda a la vez que un evento
+  pendiente, y confirma que el aviso sale con lector y calla sin el (Paperclip). El arnes de
+  mutacion `mutation-check.sh` confirma que el caso "deriva sin lector" sigue discriminando.
+
 ## [2.24.2] - 2026-09-14
 El arnes de mutacion (`tools/mutation-check.sh`) dejo de discriminar el caso "deriva sin lector"
 en el CI de 2.24.1, en las tres plataformas: la mutacion SI se aplicaba y la suite SI caia, pero
