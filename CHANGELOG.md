@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.24.4] - 2026-09-14
+Verificacion adversarial de 2.24.3 (antes de publicarla) encontro que el gate `if hay_lector()`
+no solo ensanchaba el aviso de deriva de `compact()` -tambien lo ESTRECHABA, en un camino que
+2.24.3 no considero. Los comandos slash (`checkpoint-3t`, `save-learning`, `triage-3t`,
+`consolidate-3t`, `backfill-3t`, `migrate`) llaman a `compact()` SIN `--quiet`, y corren bajo
+agentes de Paperclip donde `hay_lector()` es `False`. Antes de 2.24.3, esos llamantes SI recibian
+el aviso (nadie les pidio silencio); con `hay_lector()` a secas, se callaban igual que
+session-start.sh/recall.sh -que si piden `--quiet`-, aunque nadie se lo pidio a ellos.
+`compact()` resella siempre, asi que ese silencio no compraba nada: exactamente el defecto que
+2.24.3 arreglaba, reabierto por la otra puerta. Medido empiricamente (misma deriva, sin
+`--quiet`, con `PAPERCLIP_RUN_ID`): el codigo de 5763457 avisaba, el de 2.24.3 no.
+
+### Fixed
+- `journal-compact.py:2158`: el gate pasa de `hay_lector()` a `hay_lector() or not quiet`. Un
+  llamante que no pide `--quiet` sigue avisando siempre (como antes de 2.24.3); uno que si lo
+  pide (`session-start.sh`, `recall.sh`) solo calla si ademas no hay lector.
+- Nuevo caso en `test-expire-reopen.sh` que invoca `journal-compact.py` sin `--quiet` bajo
+  `PAPERCLIP_RUN_ID` y confirma que avisa. Verificado que discrimina: falla contra el gate de
+  2.24.3 (`hay_lector()` a secas), pasa contra este.
+
 ## [2.24.3] - 2026-09-14
 `hay_lector()` protegia el aviso de deriva de `--check-drift`, pero `compact()` normal (aplicar
 `pending/`) tenia el mismo aviso detras de `if not quiet` — y `session-start.sh:199` y

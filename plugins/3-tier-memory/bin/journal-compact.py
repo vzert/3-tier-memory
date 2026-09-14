@@ -1775,6 +1775,17 @@ def hay_lector():
     callara por otra razon —antes lo callaba `--quiet`, el flag que pasan session-start.sh:199 y
     recall.sh:35 al aplicar pending/— la deriva se perdia exactamente igual que aqui abajo.
 
+    En `compact()` el consumo es `hay_lector() or not quiet`, NO `hay_lector()` a secas —lo
+    marco un adversario tras el primer intento de este fix. `--check-drift` solo tiene UN
+    llamante que pide silencio real (nadie lo llama con un flag equivalente a "no avises
+    aunque puedas"), asi que ahi `hay_lector()` solo basta. `compact()` normal tiene DOS clases
+    de llamante: session-start.sh/recall.sh, que SI piden `--quiet` (call sin lector, `--quiet`
+    debe seguir callando), y los comandos slash (checkpoint-3t, save-learning, triage-3t,
+    consolidate-3t, backfill-3t, migrate), que NO piden `--quiet` y corren bajo Paperclip
+    (`hay_lector()==False`). Con solo `hay_lector()`, ese segundo grupo se quedaba mudo aunque
+    nunca pidio silencio — el mismo defecto que este pendiente arreglaba, reabierto por la otra
+    puerta. El OR devuelve ese camino a como estaba sin reabrir el original.
+
     2.21.4 puso la guarda en `session-start.sh`. El adversario encontro el agujero en una frase:
     **hay DOS llamantes**. `bash-journal-nudge.sh` corria esto en CADA PostToolUse de Bash y no
     sabia nada de quien mira, asi que la deriva se consumia igual por ese lado. Poner la guarda
@@ -2148,13 +2159,20 @@ def compact(mem, budget, quiet):
         anotar_fuera_de_banda(journal, fuera)
         for rel in fuera:
             log(f"OUT-OF-BAND {rel}")
-        # `quiet` solo calla el resumen rutinario ("JOURNAL applied=..."). Este aviso usa
-        # hay_lector(), el mismo criterio que --check-drift (p-c28bcb9c55): compact() normal
-        # resella los indices SIEMPRE al terminar (guardar_huellas, mas abajo), incluidos los
-        # que llegaron con deriva fuera de banda. Si el aviso se callara por `quiet` -como antes-
-        # ese resellado se comia la deriva en silencio: session-start.sh:199 y recall.sh:35 llaman
-        # a compact() normal con --quiet cuando pending/ tiene algo, y ahi es donde se perdia.
-        if hay_lector():
+        # OR, no reemplazo (p-c28bcb9c55, corregido tras verificacion adversarial): `not quiet`
+        # solo no bastaba porque session-start.sh:199 y recall.sh:35 llaman a compact() normal
+        # con --quiet cuando pending/ tiene algo, y ahi el aviso se perdia sin que `quiet` lo
+        # pidiera nadie que fuera a leerlo. Pero cambiar el gate a SOLO `hay_lector()` (primera
+        # version de este fix) rompia el caso contrario: los comandos slash de checkpoint-3t,
+        # save-learning, triage-3t, consolidate-3t, backfill-3t y migrate llaman a compact() SIN
+        # --quiet, y bajo un agente de Paperclip hay_lector()==False -- con SOLO hay_lector(), el
+        # aviso se callaba tambien ahi, aunque nadie pidio silencio con --quiet. compact() resella
+        # SIEMPRE (guardar_huellas, mas abajo), asi que ese silencio no compraba nada: ni persona
+        # ni agente lo veian, y la deriva se perdia igual. El OR devuelve ese camino a como
+        # estaba (avisa salvo que el llamante pida --quiet Y ademas no haya lector) sin reabrir
+        # el original: session-start.sh/recall.sh siguen pidiendo --quiet, asi que sin lector
+        # siguen callados.
+        if hay_lector() or not quiet:
             avisar_fuera_de_banda(fuera)
     try:
         # Bajo el lock y antes de re-listar: lo rescatado entra en ESTA pasada.

@@ -987,5 +987,17 @@ python3 "$BIN/journal-emit.py" --memory-dir "$MEMF" --type pendiente.add --text 
 F2=$(arranque_f startup)                        # sesion normal: con lector
 chk "con lector: compact() SI avisa de la deriva"  "1" "$(avisa_fob "$F2")"
 
+# adversario (ronda 1 de este mismo pendiente): "hay_lector()" a secas rompia el camino de
+# los comandos slash (checkpoint-3t, save-learning, triage-3t, consolidate-3t, backfill-3t,
+# migrate), que llaman a compact() SIN --quiet y corren bajo Paperclip (sin lector). Antes de
+# este fix esos SI recibian el aviso (no pedian --quiet); con solo hay_lector() se callaban
+# igual que session-start.sh/recall.sh, que si lo piden. El gate real es
+# "hay_lector() or not quiet".
+printf -- '- [ ] editado a mano, tercera vez\n' >> "$MEMF/_pendientes.md"
+DIRECTO=$(MEMORY_DIR="$MEMF" PAPERCLIP_RUN_ID="run-slash" python3 "$BIN/journal-compact.py" \
+  --memory-dir "$MEMF" 2>&1)
+chk "comando slash (sin --quiet) bajo Paperclip SI avisa" \
+  "1" "$(printf '%s' "$DIRECTO" | grep -q 'FUERA DEL JOURNAL' && echo 1 || echo 0)"
+
 echo "RESULT pass=$pass fail=$fail skip=$skip"
 [ "$fail" -eq 0 ]
