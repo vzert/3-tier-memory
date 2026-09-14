@@ -952,7 +952,7 @@ chk "y NO re-sella (el aviso real lo deja para journal-drift-nudge.sh)" "$H1" "$
 echo "== p-c28bcb9c55: compact() normal (aplicar pending/) tambien avisa segun hay_lector() =="
 # compact() normal (sin --check-drift) resella SIEMPRE al terminar -es su trabajo: sellar lo que
 # acaba de aplicar-, asi que si detecta deriva fuera de banda A LA VEZ que aplica pending/, el
-# aviso es la UNICA senal que puede sobrevivir. session-start.sh:199 y recall.sh:35 lo llaman con
+# aviso es la UNICA senal que puede sobrevivir. session-start.sh:205 y recall.sh:39 lo llaman con
 # --quiet; antes de este fix ese flag apagaba tambien el aviso de deriva, no solo el resumen.
 mkdir -p "$T/fob_proj"; cp -R "$MEMH" "$T/fob_proj/memory"
 MEMF="$T/fob_proj/memory"

@@ -29,7 +29,7 @@ session-start.sh/recall.sh -que si piden `--quiet`-, aunque nadie se lo pidio a 
 `--quiet`, con `PAPERCLIP_RUN_ID`): el codigo de 5763457 avisaba, el de 2.24.3 no.
 
 ### Fixed
-- `journal-compact.py:2158`: el gate pasa de `hay_lector()` a `hay_lector() or not quiet`. Un
+- `journal-compact.py:2175`: el gate pasa de `hay_lector()` a `hay_lector() or not quiet`. Un
   llamante que no pide `--quiet` sigue avisando siempre (como antes de 2.24.3); uno que si lo
   pide (`session-start.sh`, `recall.sh`) solo calla si ademas no hay lector.
 - Nuevo caso en `test-expire-reopen.sh` que invoca `journal-compact.py` sin `--quiet` bajo
@@ -38,8 +38,8 @@ session-start.sh/recall.sh -que si piden `--quiet`-, aunque nadie se lo pidio a 
 
 ## [2.24.3] - 2026-09-14
 `hay_lector()` protegia el aviso de deriva de `--check-drift`, pero `compact()` normal (aplicar
-`pending/`) tenia el mismo aviso detras de `if not quiet` — y `session-start.sh:199` y
-`recall.sh:35` lo llaman siempre con `--quiet`. `compact()` resella la linea base SIEMPRE al
+`pending/`) tenia el mismo aviso detras de `if not quiet` — y `session-start.sh:205` y
+`recall.sh:39` lo llaman siempre con `--quiet`. `compact()` resella la linea base SIEMPRE al
 terminar (es su trabajo: sellar lo que acaba de aplicar), asi que si detectaba deriva fuera de
 banda A LA VEZ que aplicaba `pending/`, el aviso era la unica senal que podia sobrevivir — y ese
 aviso se callaba por `--quiet`, no por falta de lector. Mismo patron de fondo que 2.24.1

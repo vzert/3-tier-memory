@@ -1772,8 +1772,8 @@ def hay_lector():
     DOS consumidores desde p-c28bcb9c55: la rama `--check-drift` de mas abajo, y el aviso de
     fuera-de-banda dentro de `compact()` normal (aplicar pending/). Este ultimo resella SIEMPRE
     al terminar (es su trabajo: dejar sellado lo que acaba de aplicar), asi que si su aviso se
-    callara por otra razon —antes lo callaba `--quiet`, el flag que pasan session-start.sh:199 y
-    recall.sh:35 al aplicar pending/— la deriva se perdia exactamente igual que aqui abajo.
+    callara por otra razon —antes lo callaba `--quiet`, el flag que pasan session-start.sh:205 y
+    recall.sh:39 al aplicar pending/— la deriva se perdia exactamente igual que aqui abajo.
 
     En `compact()` el consumo es `hay_lector() or not quiet`, NO `hay_lector()` a secas —lo
     marco un adversario tras el primer intento de este fix. `--check-drift` solo tiene UN
@@ -2160,7 +2160,7 @@ def compact(mem, budget, quiet):
         for rel in fuera:
             log(f"OUT-OF-BAND {rel}")
         # OR, no reemplazo (p-c28bcb9c55, corregido tras verificacion adversarial): `not quiet`
-        # solo no bastaba porque session-start.sh:199 y recall.sh:35 llaman a compact() normal
+        # solo no bastaba porque session-start.sh:205 y recall.sh:39 llaman a compact() normal
         # con --quiet cuando pending/ tiene algo, y ahi el aviso se perdia sin que `quiet` lo
         # pidiera nadie que fuera a leerlo. Pero cambiar el gate a SOLO `hay_lector()` (primera
         # version de este fix) rompia el caso contrario: los comandos slash de checkpoint-3t,
