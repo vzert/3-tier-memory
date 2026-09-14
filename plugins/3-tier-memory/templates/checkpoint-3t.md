@@ -584,6 +584,13 @@ says so explicitly.
 
 Genera un prompt breve y autosuficiente que el usuario pueda copiar y pegar al iniciar la proxima sesion (despues de `/exit` o `/clear`) para retomar contexto sin pensar.
 
+**Si el caso 4 de `<next-step>` aplica (mas abajo), NO generes el bloque — mismo principio que
+Step 8c con los recordatorios de calendario: una seccion condicional que no aplica se omite
+entera, no se rellena con placeholders.** 2026-09-14, el propio usuario lo senalo sobre un caso
+real: un bloque con `Retomamos: ninguno` / `Proximo paso: ninguno` / `Antes de actuar...` para
+una sesion que no dejo nada que retomar es la misma ceremonia vacia que el bloque de calendario
+existe para evitar — mas ruido que senal. Ver la instruccion alternativa en 8a y 8b.
+
 **Plantilla de 6 lineas: 4 obligatorias y 2 condicionales**:
 
 ```
@@ -673,7 +680,16 @@ condicionales, no opcionales: si la informacion existe, la linea va.
 
 **8a. Persistir en el session file**:
 
-Reemplaza el placeholder `<filled in Step 8>` de la seccion `## Como retomar` con el snippet dentro de un bloque de codigo (aqui con las dos condicionales presentes; omite la linea entera cuando no apliquen):
+**Si el caso 4 aplica** (la sesion no dejo trabajo que retomar), reemplaza el placeholder
+`<filled in Step 8>` con UNA linea, sin bloque de codigo:
+
+```markdown
+## Como retomar
+
+Ninguno — <la misma media-linea del caso 4: por que esta sesion se cierra sola>.
+```
+
+**En cualquier otro caso**, reemplaza el placeholder `<filled in Step 8>` de la seccion `## Como retomar` con el snippet dentro de un bloque de codigo (aqui con las dos condicionales presentes; omite la linea entera cuando no apliquen):
 
 ````markdown
 ## Como retomar
@@ -717,7 +733,14 @@ Antes de actuar, dime en 3 lineas donde quedamos.
 
 **8b. Imprimir al terminal**:
 
-Despues del reporte de Step 7, imprime el bloque al usuario con separadores visuales para que sea facil de identificar y copiar:
+**Si el caso 4 aplica**, no imprimas el bloque con separadores — una sola linea, dentro del
+reporte de Step 7, junto al resto del resumen:
+
+```
+Como retomar: ninguno — <la misma media-linea del caso 4>.
+```
+
+**En cualquier otro caso**, despues del reporte de Step 7, imprime el bloque al usuario con separadores visuales para que sea facil de identificar y copiar:
 
 ```
 ─── ¿Como retomar en la siguiente sesion? ───

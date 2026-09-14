@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.24.10] - 2026-09-14
+El snippet de continuidad de `/checkpoint-3t` (Step 8) omite el bloque ENTERO cuando el caso 4
+de `<next-step>` (2.24.9) aplica, en vez de imprimir un bloque completo diciendo "ninguno" en
+cada campo. Mismo principio que ya regia los recordatorios de calendario (Step 8c): una seccion
+condicional que no aplica se omite entera, no se rellena con placeholders. El usuario lo senalo
+sobre un caso real de la propia sesion anterior (2.24.9): `Retomamos: ninguno` / `Proximo paso:
+ninguno` / `Antes de actuar...` para una sesion sin nada que retomar era la misma ceremonia
+vacia que el bloque de calendario ya existia para evitar.
+
+En su lugar: una sola linea (`## Como retomar` -> `Ninguno — <por que>` en el session file;
+`Como retomar: ninguno — <por que>` en el reporte de terminal, sin el bloque de separadores).
+
 ## [2.24.9] - 2026-09-14
 Tres ajustes al snippet de continuidad de `/checkpoint-3t` (Step 8), a partir de un caso real: el
 propio snippet de la sesion 2.24.8 tenia 5 lineas pegadas sin separacion y un `Proximo paso`
