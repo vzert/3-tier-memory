@@ -4,21 +4,23 @@
 Reportado por el usuario (vía `/goalspec:interview`, sobre un caso real en otro proyecto que usa
 este plugin): el snippet `## Como retomar` cerró una sesión con `ninguno`, aunque esa misma sesión
 había registrado un pendiente Alta prioridad en su propia sección `## Pendientes`. Verificado con
-la sesión siguiente: tampoco lo mencionó, porque el caso 3 de la escalera exige relación temática
-con el trabajo del día. Dos huecos distintos en el Step 8 de `checkpoint-3t.md`, confirmados los
-dos con transcripts reales:
+la sesión siguiente: tampoco lo mencionó, porque el campo `Sigue abierto` solo miraba los
+pendientes de la sesión misma. Dos huecos distintos en el Step 8 de `checkpoint-3t.md`, confirmados
+los dos con transcripts reales:
 
-- **Caso "ninguno" (ahora caso 6) gana una guarda**: antes de declararlo, releer la sección
+- **Caso "ninguno" (caso 5) gana una guarda**: antes de declararlo, releer la sección
   `## Pendientes` que el mismo Step ya escribió (3a/3b) — si queda un `- [ ]` sin marcar, no aplica
-  este caso, aplica el 2 o el 3. Cierra el atajo que se saltó el caso 2 directo al 6 con el
+  este caso, aplica el 2 o el 3. Cierra el atajo que se saltó el caso 2 directo al 5 con el
   pendiente nuevo a la vista.
-- **Caso nuevo (4) en la escalera**: si el 3 no aplica pero hay un pendiente ABIERTO de prioridad
-  Alta en `_pendientes.md` — sin importar el tema de la sesión de hoy — se usa como `<next-step>`,
-  antes del fallback genérico (ahora caso 5) y antes de `ninguno` (ahora caso 6). Cierra el hueco
-  cross-sesión: una prioridad Alta ya no depende de que la próxima sesión elija justo ese tema para
-  sobrevivir en el snippet.
-- Renumerada toda la escalera y sus referencias cruzadas en el archivo (antes: 1-5 con un caso 4/5
-  inconsistente en distintos puntos del doc; ahora: 1-6 consistente en todo el archivo).
+- **`Sigue abierto` gana alcance cross-sesión**: además de los pendientes de la sesión, ahora
+  incluye cualquier pendiente ABIERTO de prioridad Alta en `_pendientes.md` que no sea ya el
+  `<next-step>` — sin importar el tema del día. Va en `Sigue abierto`, nunca reemplaza
+  `<next-step>`: un pendiente Alta ajeno al trabajo de hoy no es un paso accionable de esa sesión
+  (misma razón por la que el Step 8 ya prohíbe un `<next-step>` tipo "revisar si X respondió"). El
+  bloque completo ahora se genera aunque `<next-step>` caiga en `ninguno`, si hay un Alta que
+  mostrar en `Sigue abierto`.
+- Fijada una inconsistencia de numeración preexistente en el archivo (varias referencias cruzadas
+  llamaban "caso 4" al caso `ninguno`, que la lista real define como caso 5).
 - `checkpoint-3t.md` (template + comando local, sincronizados).
 
 ## [2.25.5] - 2026-09-15
