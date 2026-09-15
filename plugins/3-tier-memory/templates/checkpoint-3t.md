@@ -867,6 +867,13 @@ Reglas para llenar los slots:
   la sesion siguiente porque no tocaba el mismo tema y este campo solo miraba los pendientes de
   la sesion misma.
 
+  **Orden cuando hay mas de 3 candidatos (los de esta sesion mas los Alta cross-sesion)**:
+  primero los de esta sesion (regla ya existente arriba), despues los Alta cross-sesion por
+  `_creado` mas reciente primero — no el mas antiguo. Un backlog de Alta viejas sin triar no debe
+  enterrar el hallazgo que acaba de salir; ese es justo el caso que esta regla existe para
+  resolver. Elegir un orden sin decirlo es la misma eleccion no determinista que el criterio de
+  hijos de plan ya prohibe mas arriba (ver la regla de `<next-step>` caso 1, ultimo parrafo).
+
   **Por que existe esta linea.** Medido sobre **491 pendientes de 176 sesiones** (2026-09-11,
   salidas congeladas en `.goalspec/snippet-rows-empate-*.json`): los que el snippet mencionaba
   cerraron el **35%**; los que solo quedaron en la lista, el **19%**. Son **16 puntos**, con umbral

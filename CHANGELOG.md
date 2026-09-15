@@ -18,7 +18,9 @@ los dos con transcripts reales:
   `<next-step>`: un pendiente Alta ajeno al trabajo de hoy no es un paso accionable de esa sesión
   (misma razón por la que el Step 8 ya prohíbe un `<next-step>` tipo "revisar si X respondió"). El
   bloque completo ahora se genera aunque `<next-step>` caiga en `ninguno`, si hay un Alta que
-  mostrar en `Sigue abierto`.
+  mostrar en `Sigue abierto`. Con más de 3 candidatos (tope existente), el orden es explícito:
+  primero los de esta sesión, luego los Alta cross-sesión por `_creado` más reciente primero — no
+  el más antiguo, para que un backlog viejo no entierre el hallazgo que acaba de salir.
 - Fijada una inconsistencia de numeración preexistente en el archivo (varias referencias cruzadas
   llamaban "caso 4" al caso `ninguno`, que la lista real define como caso 5).
 - `checkpoint-3t.md` (template + comando local, sincronizados).
