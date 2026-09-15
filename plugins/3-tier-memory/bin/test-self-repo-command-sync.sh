@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Prueba del check de p-d72c123065: cuando CLAUDE_PROJECT_DIR ES el repo del propio plugin
-# 3-tier-memory (tiene plugins/3-tier-memory/templates/), session-start.sh tiene que comparar
-# .claude/commands/*.md contra ESE arbol de trabajo — no solo contra el plugin INSTALADO
-# ($CLAUDE_PLUGIN_ROOT/templates), que es lo unico que el auto-update de mas arriba mira.
+# 3-tier-memory, session-start.sh tiene que comparar .claude/commands/*.md contra ESE arbol de
+# trabajo — no solo contra el plugin INSTALADO ($CLAUDE_PLUGIN_ROOT/templates), que es lo unico
+# que el auto-update de mas arriba mira.
 #
 # El bloque de auto-update EXISTENTE (mas arriba en session-start.sh) sincroniza
 # .claude/commands/<cmd>.md con $CLAUDE_PLUGIN_ROOT/templates/<cmd>.md ANTES de que corra el check
@@ -11,10 +11,14 @@
 # que termina .claude/commands/checkpoint-3t.md en cada prueba es el contenido REAL del plugin, no
 # un texto inventado — las pruebas de mas abajo se apoyan en eso a proposito, no lo evitan.
 #
+# Deteccion de "es el repo del propio plugin" (v2): NO basta con que exista
+# plugins/3-tier-memory/templates/ (hallazgo de un adversario externo, ronda 1: esa sola carpeta
+# no prueba identidad — cualquier proyecto que por lo que sea tenga esa ruta pasaria el gate).
+# Hace falta ADEMAS plugins/3-tier-memory/.claude-plugin/plugin.json con `"name": "3-tier-memory"`.
+#
 # Lo que esta prueba defiende:
-#   A. sin plugins/3-tier-memory/templates/ en el proyecto (instalacion normal), el check nuevo
-#      no dispara nunca — eso ya lo cubre (o no) el auto-update viejo, no este;
-#   B. CON ese marcador, un comando local que termina desincronizado del arbol de trabajo (tras el
+#   A. sin ninguno de los dos marcadores (instalacion normal), el check nuevo no dispara nunca;
+#   B. CON los dos marcadores, un comando que termina desincronizado del arbol de trabajo (tras el
 #      auto-update contra el plugin instalado) dispara un aviso nombrando el comando, en
 #      additionalContext Y en systemMessage;
 #   C. cuando el arbol de trabajo lleva el MISMO contenido que el plugin instalado, no hay aviso
@@ -22,7 +26,10 @@
 #   D. un comando que no existia localmente y se instala desde un plugin instalado desactualizado
 #      SI cuenta como desincronizado si el resultado no coincide con el arbol — es exactamente el
 #      caso real (checkpoint-3t se instalo/sincronizo desde el plugin en 2.24.7 mientras el arbol
-#      ya iba en 2.25.1) y es el que este check existe para atrapar.
+#      ya iba en 2.25.1) y es el que este check existe para atrapar;
+#   E. con SOLO plugins/3-tier-memory/templates/ pero SIN el manifiesto (o con un manifiesto de
+#      otro nombre), el check NO dispara — el caso exacto que el adversario reprodujo contra la
+#      version anterior de este check (un directorio con esa ruta, sin identidad real de repo).
 #
 # Uso: test-self-repo-command-sync.sh   (exit 0 = todo verde)
 set -u
@@ -56,6 +63,14 @@ type: index
 EOF
 }
 
+# Anade el manifiesto que declara identidad real de "repo del propio plugin". $2 opcional: el
+# valor de "name" (por defecto el correcto, "3-tier-memory"; una prueba lo pisa con otro valor).
+marcar_repo_propio() {
+  local d="$1" nombre="${2:-3-tier-memory}"
+  mkdir -p "$d/plugins/3-tier-memory/.claude-plugin"
+  printf '{"name": "%s"}\n' "$nombre" > "$d/plugins/3-tier-memory/.claude-plugin/plugin.json"
+}
+
 correr() {
   local proj="$1"
   printf '%s' "{\"cwd\":\"$proj\",\"source\":\"startup\",\"hook_event_name\":\"SessionStart\"}" \
@@ -72,16 +87,17 @@ else:
     print(d.get("hookSpecificOutput", {}).get("additionalContext", ""))
 PYEOF
 
-echo "1. sin plugins/3-tier-memory/templates/ (instalacion normal), no dispara el check nuevo"
+echo "1. sin ninguno de los dos marcadores (instalacion normal), no dispara el check nuevo"
 P1="$TMP/p1"; nuevo_proyecto "$P1"
 echo "version vieja local" > "$P1/.claude/commands/checkpoint-3t.md"
 correr "$P1" > "$TMP/o1"
 AC1=$(python3 "$TMP/leer.py" "$TMP/o1" additionalContext)
 check "sin aviso DESINCRONIZADO (repo del propio plugin)" "$(printf '%s' "$AC1" | grep -c '⚠ DESINCRONIZADO')" "0"
 
-echo "2. CON el marcador propio del repo, un comando que termina desincronizado del arbol dispara aviso"
+echo "2. CON los dos marcadores, un comando que termina desincronizado del arbol dispara aviso"
 P2="$TMP/p2"; nuevo_proyecto "$P2"
 mkdir -p "$P2/plugins/3-tier-memory/templates"
+marcar_repo_propio "$P2"
 # El arbol de trabajo va MAS ADELANTE que el plugin instalado: el auto-update de arriba deja el
 # comando local con el contenido REAL del plugin instalado, que no es este texto.
 echo "contenido version 2.25.1 (arbol de trabajo, mas nuevo que el plugin instalado)" \
@@ -99,6 +115,7 @@ check "systemMessage tambien avisa a la persona" \
 echo "3. cuando el arbol de trabajo lleva el MISMO contenido que el plugin instalado, no hay aviso"
 P3="$TMP/p3"; nuevo_proyecto "$P3"
 mkdir -p "$P3/plugins/3-tier-memory/templates"
+marcar_repo_propio "$P3"
 cp "$REAL_TEMPLATE" "$P3/plugins/3-tier-memory/templates/checkpoint-3t.md"
 # El local arranca vacio a proposito: el auto-update lo instala desde el plugin real (que es
 # BYTE A BYTE el mismo contenido que acabamos de copiar al arbol), asi que al terminar coinciden.
@@ -111,6 +128,7 @@ check "el comando SI se instalo (confirma que de verdad se comparo, no que el ch
 echo "4. un comando recien instalado desde un plugin instalado desactualizado SI cuenta como desincronizado"
 P4="$TMP/p4"; nuevo_proyecto "$P4"
 mkdir -p "$P4/plugins/3-tier-memory/templates"
+marcar_repo_propio "$P4"
 echo "contenido del arbol, mas nuevo que lo que trae el plugin instalado" \
   > "$P4/plugins/3-tier-memory/templates/checkpoint-3t.md"
 # checkpoint-3t.md NO existe en .claude/commands/: el bloque de auto-update lo instala desde el
@@ -120,6 +138,26 @@ echo "contenido del arbol, mas nuevo que lo que trae el plugin instalado" \
 correr "$P4" > "$TMP/o4"
 AC4=$(python3 "$TMP/leer.py" "$TMP/o4" additionalContext)
 check "SI avisa aunque el comando se acabe de instalar" "$(printf '%s' "$AC4" | grep -c '⚠ DESINCRONIZADO')" "1"
+
+echo "5. con templates/ pero SIN el manifiesto (o con uno de otro nombre), NO dispara — no basta la carpeta sola"
+P5="$TMP/p5"; nuevo_proyecto "$P5"
+mkdir -p "$P5/plugins/3-tier-memory/templates"
+echo "contenido cualquiera, distinto del local" > "$P5/plugins/3-tier-memory/templates/checkpoint-3t.md"
+echo "local distinto" > "$P5/.claude/commands/checkpoint-3t.md"
+# Sin marcar_repo_propio: el directorio existe, pero no hay .claude-plugin/plugin.json.
+correr "$P5" > "$TMP/o5"
+AC5=$(python3 "$TMP/leer.py" "$TMP/o5" additionalContext)
+check "sin manifiesto, sin aviso (la carpeta sola no prueba identidad)" \
+  "$(printf '%s' "$AC5" | grep -c '⚠ DESINCRONIZADO')" "0"
+
+P5B="$TMP/p5b"; nuevo_proyecto "$P5B"
+mkdir -p "$P5B/plugins/3-tier-memory/templates"
+marcar_repo_propio "$P5B" "otro-plugin-cualquiera"
+echo "contenido cualquiera, distinto del local" > "$P5B/plugins/3-tier-memory/templates/checkpoint-3t.md"
+echo "local distinto" > "$P5B/.claude/commands/checkpoint-3t.md"
+correr "$P5B" > "$TMP/o5b"
+AC5B=$(python3 "$TMP/leer.py" "$TMP/o5b" additionalContext)
+check "manifiesto de OTRO nombre, sin aviso" "$(printf '%s' "$AC5B" | grep -c '⚠ DESINCRONIZADO')" "0"
 
 echo
 [ $FAIL -eq 0 ] && echo "TODO VERDE" || echo "HAY FALLOS"

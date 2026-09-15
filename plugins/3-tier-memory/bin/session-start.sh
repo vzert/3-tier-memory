@@ -839,13 +839,30 @@ fi
 # 2.25.1 sin pushear, /checkpoint-3t corrio con el comando local sincronizado a 2.24.7 (identico
 # byte a byte al plugin instalado, no al arbol) durante ese tramo, y nadie lo vio hasta una
 # auditoria manual.
-# Deteccion: la presencia de plugins/3-tier-memory/templates/ DENTRO de CLAUDE_PROJECT_DIR es un
-# marcador propio de este repo (ninguna instalacion normal del plugin lo tiene ahi) — no depende
-# de CLAUDE_PLUGIN_ROOT, que en produccion apunta al cache del marketplace y en el propio repo de
-# este plugin coincide con este mismo arbol solo quien lo sourcea a mano (los tests de este
-# fichero).
+# Deteccion: NO basta con que exista plugins/3-tier-memory/templates/ dentro de CLAUDE_PROJECT_DIR
+# (hallazgo de un adversario externo, ronda 1: esa sola carpeta no prueba identidad — cualquier
+# proyecto que por lo que sea tenga esa ruta pasaria el gate). Se exige ADEMAS que
+# plugins/3-tier-memory/.claude-plugin/plugin.json exista y declare `"name": "3-tier-memory"` — el
+# manifiesto propio de ESTE plugin, que ningun otro repo tiene motivo para replicar con ese nombre
+# exacto. Los dos juntos si identifican el repo del propio plugin; no depende de CLAUDE_PLUGIN_ROOT,
+# que en produccion apunta al cache del marketplace y en el propio repo de este plugin coincide con
+# este mismo arbol solo quien lo sourcea a mano (los tests de este fichero).
 SELF_TEMPLATES_DIR="$CLAUDE_PROJECT_DIR/plugins/3-tier-memory/templates"
-if [ -z "${SKIP_CMD_INSTALL:-}" ] && [ -d "$SELF_TEMPLATES_DIR" ]; then
+SELF_MANIFEST="$CLAUDE_PROJECT_DIR/plugins/3-tier-memory/.claude-plugin/plugin.json"
+IS_SELF_REPO=0
+if [ -d "$SELF_TEMPLATES_DIR" ] && [ -f "$SELF_MANIFEST" ]; then
+  if python3 -c "
+import json, sys
+try:
+    d = json.load(open(sys.argv[1], encoding='utf-8'))
+    sys.exit(0 if d.get('name') == '3-tier-memory' else 1)
+except Exception:
+    sys.exit(1)
+" "$SELF_MANIFEST" 2>/dev/null; then
+    IS_SELF_REPO=1
+  fi
+fi
+if [ -z "${SKIP_CMD_INSTALL:-}" ] && [ "$IS_SELF_REPO" = "1" ]; then
   DESYNC=""
   for cmd in checkpoint-3t status-3t audit-3t backfill-3t save-learning consolidate-3t enrich-3t triage-3t; do
     LOCAL_CMD="$CMDS_DIR/$cmd.md"

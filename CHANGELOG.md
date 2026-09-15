@@ -9,13 +9,17 @@ nada avise (medido: `/checkpoint-3t` corrió sincronizado a 2.24.7 mientras el r
 2.25.1, por 6 commits sin pushear).
 
 - `session-start.sh`: nuevo bloque, después del auto-update existente, que detecta "este proyecto
-  ES el repo del propio plugin" por la presencia de `plugins/3-tier-memory/templates/` dentro de
-  `$CLAUDE_PROJECT_DIR`, y compara cada comando final en `.claude/commands/` contra esa plantilla
-  del árbol de trabajo — avisando por los dos canales (agente y persona) si difieren.
-- `test-self-repo-command-sync.sh` (nuevo): 4 casos — sin marcador de repo propio no dispara;
-  con marcador, un comando desincronizado avisa nombrándolo; con el mismo contenido no hay falso
-  positivo; un comando recién instalado desde un plugin desactualizado también avisa (el caso real
-  del incidente).
+  ES el repo del propio plugin" y compara cada comando final en `.claude/commands/` contra la
+  plantilla del árbol de trabajo — avisando por los dos canales (agente y persona) si difieren.
+  La detección exige DOS marcadores, no solo uno: `plugins/3-tier-memory/templates/` dentro de
+  `$CLAUDE_PROJECT_DIR` Y un `plugins/3-tier-memory/.claude-plugin/plugin.json` que declare
+  `"name": "3-tier-memory"` — un adversario externo (GPT-5, verificación independiente antes del
+  push) encontró que la sola carpeta no prueba identidad de repo; el manifiesto sí.
+- `test-self-repo-command-sync.sh` (nuevo): 6 casos — sin ninguno de los dos marcadores no
+  dispara; con los dos, un comando desincronizado avisa nombrándolo; con el mismo contenido no hay
+  falso positivo; un comando recién instalado desde un plugin desactualizado también avisa (el
+  caso real del incidente); y con solo la carpeta (sin manifiesto, o con uno de otro nombre) no
+  dispara — el caso exacto que el adversario reprodujo.
 
 ## [2.25.2] - 2026-09-14
 `p-d05b70d364`: el `systemMessage` de `session-start.sh` (desde 2.17.0) ya avisaba a la persona en
