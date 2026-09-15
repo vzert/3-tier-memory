@@ -104,6 +104,23 @@ type: index
 EOF
 check "count=1 (la fila no se parte en mas columnas de las que tiene)" "$(correr "$P4" --count)" "1"
 
+echo "5. un _plans-index.md ILEGIBLE (no inexistente) avisa, no se confunde con 'sin planes'"
+# Hallazgo de un adversario externo (ronda 2): un solo 'except Exception' trataba "no existe" y
+# "existe pero no se pudo leer" IGUAL — silencio en los dos casos. Aqui _plans-index.md es un
+# DIRECTORIO en vez de un archivo, asi que abrirlo lanza IsADirectoryError — cualquier excepcion
+# que NO sea FileNotFoundError debe avisar por stderr y salir con rc!=0, nunca contar como "0
+# planes" silencioso.
+P5="$TMP/p5/memory"; mkdir -p "$P5"
+mkdir -p "$P5/_plans-index.md"
+python3 "$BIN/check-active-plans.py" "$P5" >"$TMP/o5.out" 2>"$TMP/o5.err"; RC5=$?
+check "sale con error (no exit 0 silencioso)" "$([ "$RC5" -ne 0 ] && echo si || echo no)" "si"
+check "avisa por stderr, no se calla" "$(grep -c 'no se pudo leer' "$TMP/o5.err")" "1"
+check "stdout normal queda vacio (no imprime un 0 disfrazado de conteo)" "$([ -s "$TMP/o5.out" ] && echo tiene || echo vacio)" "vacio"
+RC5B=0
+python3 "$BIN/check-active-plans.py" "$P5" --count >"$TMP/o5b.out" 2>/dev/null || RC5B=$?
+check "--count tambien sale con error, no imprime 0" "$([ "$RC5B" -ne 0 ] && echo si || echo no)" "si"
+check "--count no imprime un 0 que se confunda con 'sin planes'" "$(grep -c '^0$' "$TMP/o5b.out")" "0"
+
 echo
 [ $FAIL -eq 0 ] && echo "TODO VERDE" || echo "HAY FALLOS"
 exit $FAIL

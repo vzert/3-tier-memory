@@ -97,9 +97,23 @@ def main():
     try:
         with open(path, encoding="utf-8") as fh:
             text = fh.read()
-    except Exception:
-        print(0 if args.count else "", end="" if not args.count else "\n")
+    except FileNotFoundError:
+        # El caso normal: un proyecto sin planes registrados todavia, o sin 3-tier-memory. No hay
+        # nada que recordar, silencio correcto.
+        if args.count:
+            print(0)
         return
+    except Exception as exc:
+        # CUALQUIER OTRO fallo (permisos, decodificacion, es un directorio) NO es "no hay planes"
+        # — es "no se pudo mirar", y callarse ahi es exactamente la falla silenciosa que este
+        # script existe para evitar (hallazgo de un adversario externo, ronda 2: un `except
+        # Exception` unico trataba un fichero corrupto igual que uno inexistente, cero avisos en
+        # los dos casos). Se avisa por stderr y --count devuelve un error visible, nunca un 0
+        # que se confunda con "sin planes".
+        print(f"⚠ check-active-plans.py: no se pudo leer {path}: {exc}", file=sys.stderr)
+        if args.count:
+            print("ERROR", file=sys.stdout)
+        sys.exit(1)
 
     plans = find_active_plans(text)
 
