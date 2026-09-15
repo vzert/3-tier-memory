@@ -717,7 +717,7 @@ says so explicitly.
 
 Genera un prompt breve y autosuficiente que el usuario pueda copiar y pegar al iniciar la proxima sesion (despues de `/exit` o `/clear`) para retomar contexto sin pensar.
 
-**Si el caso 4 de `<next-step>` aplica (mas abajo), NO generes el bloque — mismo principio que
+**Si el caso 6 de `<next-step>` aplica (mas abajo), NO generes el bloque — mismo principio que
 Step 8c con los recordatorios de calendario: una seccion condicional que no aplica se omite
 entera, no se rellena con placeholders.** 2026-09-14, el propio usuario lo senalo sobre un caso
 real: un bloque con `Retomamos: ninguno` / `Proximo paso: ninguno` / `Antes de actuar...` para
@@ -787,7 +787,7 @@ Reglas para llenar los slots:
      **Si el plan que da el `<next-step>` quedo sin trabajo propio Y tiene `--parent`** (subiste
      al padre en Step 5 y no encontraste otro hijo abierto ahi tampoco todavia), sube otra vez y
      usa el `## Estado` de ESE padre. Repite mientras haga falta — es la misma regla de Step 5,
-     aplicada al armar el snippet en vez de al cerrar el evento. El caso 5 (`ninguno`) solo aplica
+     aplicada al armar el snippet en vez de al cerrar el evento. El caso 6 (`ninguno`) solo aplica
      si subiste hasta la raiz y la raiz tambien esta sin trabajo abierto, nunca porque el hijo de
      hoy ya cerro.
 
@@ -808,13 +808,27 @@ Reglas para llenar los slots:
      regla de `<contexto-1-linea>`, arriba — no se repite aqui.)
   2. El pendiente nuevo de mayor prioridad creado en Step 3b de esta sesion.
   3. Si no hay nuevo, el pendiente existente de mayor prioridad relacionado con el trabajo de la sesion.
-  4. Si tampoco aplica, escribir literalmente `revisar _pendientes.md y proponer siguiente prioridad`.
-  5. **Si la sesion genuinamente no dejo trabajo que retomar** (una sesion de reporte, de
+  4. **Si el 3 no aplica pero hay un pendiente ABIERTO de prioridad Alta en `_pendientes.md`** —
+     sin importar si esta relacionado con el trabajo de hoy — usalo como `<next-step>`. Caso real
+     (2026-09-15): un pendiente Alta creado en una sesion no aparecio en el snippet de la sesion
+     siguiente porque el caso 3 exige relacion tematica, y una prioridad Alta sin resolver no
+     deberia depender de que la proxima sesion elija justo ese tema para sobrevivir en el snippet.
+     Nombralo en media linea con su `_id`; si hay mas de uno Alta abierto, el de `_creado` mas
+     antigua.
+  5. Si tampoco aplica, escribir literalmente `revisar _pendientes.md y proponer siguiente prioridad`.
+  6. **Si la sesion genuinamente no dejo trabajo que retomar** (una sesion de reporte, de
      verificacion puntual, o que se cerro sola) — no hay pendiente nuevo, no hay uno relacionado,
-     y "revisar _pendientes.md" seria un placeholder vacio, no una pista real — dilo tal cual:
-     `ninguno — <en media linea, por que esta sesion se cierra sola>`. Forzar el caso 4 cuando
-     aplica el 5 no es honesto: implica que hay algo que mirar, y manda a la sesion siguiente a
-     buscar una prioridad que no existe.
+     no hay uno Alta suelto, y "revisar _pendientes.md" seria un placeholder vacio, no una pista
+     real — dilo tal cual: `ninguno — <en media linea, por que esta sesion se cierra sola>`.
+     Forzar el caso 5 cuando aplica el 6 no es honesto: implica que hay algo que mirar, y manda a
+     la sesion siguiente a buscar una prioridad que no existe.
+
+     **Antes de declarar este caso, relee la seccion `## Pendientes` que este mismo Step ya
+     escribio (3a/3b) de ESTE archivo.** Si queda algun `- [ ]` sin marcar ahi, este caso no
+     aplica — es el 2 o el 3. Caso real (2026-09-15): una sesion declaro `ninguno` con un
+     pendiente Alta recien creado a la vista en su propia seccion `## Pendientes` — el atajo
+     salto directo al caso 6 sin pasar por el 2, y el pendiente se perdio del snippet
+     hasta que se audito el jsonl a mano en una sesion posterior.
 
   **Cuando aplica el caso 1**, la linea `Lee memory/sessions/DATE-SLUG.md para el contexto
   completo.` de la plantilla (mas abajo) se extiende con la ruta del plan:
@@ -830,7 +844,7 @@ Reglas para llenar los slots:
   repo). Eso no es trabajo que la sesion siguiente pueda avanzar — es una espera sobre una
   decision ajena, y escribirlo como si fuera un paso accionable le hace perder tiempo a quien lo
   lea despues (2026-09-14: paso en una sesion real — "revisar si goal-spec-skill-7d respondio" en
-  vez del caso 4, `ninguno`, que era la respuesta honesta). Si de verdad hace falta un
+  vez del caso 6, `ninguno`, que era la respuesta honesta). Si de verdad hace falta un
   seguimiento programado mas adelante, eso es un recordatorio (`routine-followup` u otro
   mecanismo de seguimiento), no una linea de este snippet.
 
@@ -876,13 +890,13 @@ condicionales, no opcionales: si la informacion existe, la linea va.
 
 **8a. Persistir en el session file**:
 
-**Si el caso 4 aplica** (la sesion no dejo trabajo que retomar), reemplaza el placeholder
+**Si el caso 6 aplica** (la sesion no dejo trabajo que retomar), reemplaza el placeholder
 `<filled in Step 8>` con UNA linea, sin bloque de codigo:
 
 ```markdown
 ## Como retomar
 
-Ninguno — <la misma media-linea del caso 4: por que esta sesion se cierra sola>.
+Ninguno — <la misma media-linea del caso 6: por que esta sesion se cierra sola>.
 ```
 
 **En cualquier otro caso**, reemplaza el placeholder `<filled in Step 8>` de la seccion `## Como retomar` con el snippet dentro de un bloque de codigo (aqui con las dos condicionales presentes; omite la linea entera cuando no apliquen):
@@ -929,11 +943,11 @@ Antes de actuar, dime en 3 lineas donde quedamos.
 
 **8b. Imprimir al terminal**:
 
-**Si el caso 4 aplica**, no imprimas el bloque con separadores — una sola linea, dentro del
+**Si el caso 6 aplica**, no imprimas el bloque con separadores — una sola linea, dentro del
 reporte de Step 7, junto al resto del resumen:
 
 ```
-Como retomar: ninguno — <la misma media-linea del caso 4>.
+Como retomar: ninguno — <la misma media-linea del caso 6>.
 ```
 
 **En cualquier otro caso**, despues del reporte de Step 7, imprime el bloque al usuario con separadores visuales para que sea facil de identificar y copiar:
