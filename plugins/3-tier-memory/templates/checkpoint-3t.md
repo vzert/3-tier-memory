@@ -964,43 +964,30 @@ Antes de actuar, dime en 3 lineas donde quedamos.
 ```
 ````
 
-**8b. Imprimir al terminal**:
+**8b. Imprimir al terminal — corre el script, no redactes el bloque otra vez**:
 
-**Si el caso 5 aplica y no hay pendiente Alta que agregar**, no imprimas el bloque con
-separadores — una sola linea, dentro del reporte de Step 7, junto al resto del resumen:
-
-```
-Como retomar: ninguno — <la misma media-linea del caso 5>.
+```bash
+python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"
 ```
 
-**Si el caso 5 aplica pero SI hay un pendiente Alta**, imprime el bloque completo con
-separadores, igual que en cualquier otro caso.
+**Pega su salida tal cual, sin resumirla ni reformularla**, como el ultimo bloque de tu respuesta
+(despues del reporte de Step 7). El script ya decide el formato correcto por ti — linea unica sin
+separadores si el caso 5 aplica sin pendiente Alta, bloque completo con separadores en cualquier
+otro caso — leyendo el MISMO `## Como retomar` que acabas de escribir en 8a. No existe una segunda
+redaccion que pueda divergir de la primera, porque no hay una segunda redaccion: hay una lectura.
 
-**En cualquier otro caso**, despues del reporte de Step 7, imprime el bloque al usuario con separadores visuales para que sea facil de identificar y copiar:
+**Por que un script y no "redacta lo mismo otra vez".** Medido en vivo (2026-09-15, este mismo
+repo): el agente que acababa de escribir el bloque en 8a, en el turno siguiente, no lo repitio —
+escribio su propio resumen en prosa en su lugar, con la instruccion de 8b (idéntica a esta,
+antes de este cambio) presente y leida segundos antes. La instruccion en prosa "imprime lo mismo
+que en 8a" no impidio que el agente sustituyera el bloque exigido por su propia sintesis, bajo la
+idea de que un resumen mas legible era mas util. Comparar 8a contra 8b despues del hecho tampoco
+sirve — un comparador a mano es un proxy, no el instrumento (ya diverge en este mismo repo el
+contador de backfill, justo donde importaba). La unica version que no se puede saltar por
+sustitucion es la que no le da al agente nada que redactar: correr el script y pegar su stdout.
 
-```
-─── ¿Como retomar en la siguiente sesion? ───
-Copia y pega esto al iniciar una nueva sesion de Claude Code:
-
-Retomamos: <contexto-1-linea>.
-
-Lee memory/sessions/DATE-SLUG.md para el contexto completo.
-
-Proximo paso: <next-step>.
-
-Sigue abierto: <pendientes de esta sesion>.
-
-No repitas: <callejones sin salida>.
-
-Terminas cuando: <done-bar>.
-
-Antes de actuar, dime en 3 lineas donde quedamos.
-─────────────────────────────────────────────
-```
-
-Imprime exactamente las mismas lineas que escribiste en 8a — si ahi omitiste una condicional, aqui
-tambien. El usuario copia de la terminal; un snippet que no coincide con el del session file crea
-dos versiones de la verdad.
+Si el script sale con codigo 1 (`Step 8a todavia no lleno esta seccion`), 8a no corrio — vuelve
+ahi antes de continuar, no improvises el bloque a mano.
 
 **8c. Recordatorio de calendario para los pendientes con fecha futura**:
 

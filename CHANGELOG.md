@@ -23,6 +23,14 @@ los dos con transcripts reales:
   el más antiguo, para que un backlog viejo no entierre el hallazgo que acaba de salir.
 - Fijada una inconsistencia de numeración preexistente en el archivo (varias referencias cruzadas
   llamaban "caso 4" al caso `ninguno`, que la lista real define como caso 5).
+- **`print-como-retomar.py` (nuevo)**: Step 8b (imprimir el snippet en la terminal) dejó de pedir
+  "redacta el mismo bloque otra vez" y pasó a "corre este script y pega su salida". Motivo, medido
+  en vivo en este mismo repo mientras se verificaba el fix de arriba: el agente que acababa de
+  escribir el bloque en 8a, en el turno siguiente, lo sustituyó por su propio resumen en prosa —
+  con la instrucción "imprime lo mismo que en 8a" presente y leída segundos antes. Dos redacciones
+  independientes del mismo contenido eran dos oportunidades de divergir o de saltarse una; el
+  script elimina la segunda redacción en vez de intentar compararlas después (un comparador a
+  mano es un proxy, no el instrumento).
 - `checkpoint-3t.md` (template + comando local, sincronizados).
 
 ## [2.25.5] - 2026-09-15
