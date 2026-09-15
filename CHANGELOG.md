@@ -21,6 +21,12 @@ los dos con transcripts reales:
   mostrar en `Sigue abierto`. Con más de 3 candidatos (tope existente), el orden es explícito:
   primero los de esta sesión, luego los Alta cross-sesión por `_creado` más reciente primero — no
   el más antiguo, para que un backlog viejo no entierre el hallazgo que acaba de salir.
+  **Desempate cuando `_creado` coincide** (el campo no lleva hora — verificado: los 6 Alta de
+  este mismo repo comparten fecha): orden de las filas bajo `## Alta prioridad`, de arriba hacia
+  abajo — el compactador siempre inserta lo nuevo justo debajo del header, así que dentro del
+  mismo día la fila de más arriba es la más reciente de las que empatan. Hallazgo de dos
+  adversarios independientes (subagente interno + backend externo codex/GPT-5) sobre la primera
+  versión de esta regla, que dejaba el empate sin resolver.
 - Fijada una inconsistencia de numeración preexistente en el archivo (varias referencias cruzadas
   llamaban "caso 4" al caso `ninguno`, que la lista real define como caso 5).
 - **`print-como-retomar.py` (nuevo)**: Step 8b (imprimir el snippet en la terminal) dejó de pedir
@@ -30,7 +36,15 @@ los dos con transcripts reales:
   con la instrucción "imprime lo mismo que en 8a" presente y leída segundos antes. Dos redacciones
   independientes del mismo contenido eran dos oportunidades de divergir o de saltarse una; el
   script elimina la segunda redacción en vez de intentar compararlas después (un comparador a
-  mano es un proxy, no el instrumento).
+  mano es un proxy, no el instrumento). **Límite honesto, documentado en el propio Step 8b**:
+  esto elimina la sustitución (redactar un bloque distinto), no la omisión (no correr el script
+  y devolver un resumen igual) — hallazgo del adversario externo sobre el primer commit, que
+  sobreclamaba "no se puede saltar" sin esa distinción.
+- **`print-como-retomar.py` arreglado** (adversario externo, reproducido contra un archivo real
+  de este repo): la forma de una línea del caso 5 (`Ninguno — ...`), cuando el markdown de origen
+  la envolvía en varios renglones físicos, salía partida en dos líneas en la terminal en vez de
+  colapsada a una. `test-print-como-retomar.sh` (nuevo, 6 casos) — el script no tenía cobertura
+  automática y por eso el bug pasó sin que nada lo cachara.
 - `checkpoint-3t.md` (template + comando local, sincronizados).
 
 ## [2.25.5] - 2026-09-15

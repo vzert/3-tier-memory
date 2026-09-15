@@ -874,6 +874,15 @@ Reglas para llenar los slots:
   resolver. Elegir un orden sin decirlo es la misma eleccion no determinista que el criterio de
   hijos de plan ya prohibe mas arriba (ver la regla de `<next-step>` caso 1, ultimo parrafo).
 
+  **Empate de `_creado`** (mismo dia — el campo no lleva hora): usa el orden de las FILAS bajo
+  `## Alta prioridad` en `_pendientes.md`, de arriba hacia abajo. No es arbitrario: el compactador
+  (Step 3b) inserta cada pendiente nuevo justo debajo del header de prioridad, asi que dentro del
+  mismo dia la fila mas arriba es, de las que empatan, la insertada mas tarde — la misma señal de
+  "mas reciente primero" que la regla de arriba ya pide, a la resolucion que `_creado` si tiene.
+  Verificado (2026-09-15): los 6 Alta de este mismo repo comparten `_creado: 2026-09-12` — sin
+  este desempate, "el mas reciente primero" no tiene con que decidir y cae de vuelta en el silencio
+  que la regla dice que existe para evitar.
+
   **Por que existe esta linea.** Medido sobre **491 pendientes de 176 sesiones** (2026-09-11,
   salidas congeladas en `.goalspec/snippet-rows-empate-*.json`): los que el snippet mencionaba
   cerraron el **35%**; los que solo quedaron en la lista, el **19%**. Son **16 puntos**, con umbral
@@ -988,6 +997,19 @@ sustitucion es la que no le da al agente nada que redactar: correr el script y p
 
 Si el script sale con codigo 1 (`Step 8a todavia no lleno esta seccion`), 8a no corrio — vuelve
 ahi antes de continuar, no improvises el bloque a mano.
+
+**Limite honesto de lo que esto arregla.** Elimina la SUSTITUCION (redactar un bloque distinto al
+de 8a) — no puede pasar porque no hay nada que redactar. No elimina la OMISION: nada impide que
+el agente no corra el script y devuelva su propio resumen igual, sin pasar por 8b en absoluto. Eso
+requeriria un chequeo fuera de este agente (un hook que audite la respuesta final), que no es lo
+que este cambio construye — verificado por un adversario externo (2026-09-15) sobre este mismo
+commit. Decilo asi si el usuario pregunta que tan a prueba de fallos queda esto: cierra una forma
+del problema, no las dos.
+
+**Fallback (no JBIN)**: si `print-como-retomar.py` no existe (instalacion mas vieja que esta
+version, o el sync de comandos aun no llego), redacta el bloque a mano copiando literalmente lo
+que ya escribiste en 8a — el riesgo de divergencia por sustitucion de mas arriba aplica en ese
+caso, asi que revisalo dos veces contra el session file antes de imprimirlo.
 
 **8c. Recordatorio de calendario para los pendientes con fecha futura**:
 

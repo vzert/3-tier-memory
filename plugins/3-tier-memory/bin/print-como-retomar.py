@@ -87,8 +87,11 @@ def main():
         print(SEP_BOTTOM)
         return 0
 
-    # forma de una linea: "Ninguno — <media-linea>." (caso 5 sin pendiente Alta que agregar)
-    print(f"Como retomar: {body}")
+    # forma de una linea: "Ninguno — <media-linea>." (caso 5 sin pendiente Alta que agregar).
+    # El markdown de origen a veces envuelve esta "una linea" en varios renglones fisicos (editor,
+    # o una sesion anterior a esta convencion) — colapsar a una sola linea real antes de imprimir,
+    # o "Como retomar: " queda pegado al primer renglon y el resto sale suelto debajo, partido.
+    print(f"Como retomar: {' '.join(body.split())}")
     return 0
 
 
