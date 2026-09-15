@@ -70,11 +70,75 @@ correr "$P" startup > "$TMP/o1"
 check "parsea como JSON" "$(python3 -c "import json,sys;json.load(open(sys.argv[1]));print('si')" "$TMP/o1" 2>/dev/null)" "si"
 check "lleva los dos campos" "$(python3 "$TMP/leer.py" "$TMP/o1" claves)" "hookSpecificOutput,systemMessage"
 
-echo "2. el mensaje a la persona trae conteo, los mas antiguos y que hacer"
+echo "2. el mensaje a la persona rotula el ALTA viejo Y conserva el listado generico (aditivo, no reemplaza)"
 SM=$(python3 "$TMP/leer.py" "$TMP/o1" systemMessage)
 check "cuenta los 3 pendientes" "$(printf '%s' "$SM" | grep -c '3 pendientes abiertos')" "1"
-check "nombra el mas antiguo" "$(printf '%s' "$SM" | grep -c 'Item de media viejisimo')" "1"
+check "nombra el ALTA viejo (aparece en las dos secciones: rotulado y en el generico)" \
+  "$(printf '%s' "$SM" | grep -c 'Item de alta que lleva abierto')" "2"
+check "lo rotula como ALTA" \
+  "$(printf '%s' "$SM" | grep -c 'de prioridad ALTA sin cerrar')" "1"
+check "el Media viejo NO queda tapado por el ALTA (regresion que encontro el adversario, ronda 2)" \
+  "$(printf '%s' "$SM" | grep -c 'Item de media viejisimo')" "1"
 check "dice el comando" "$(printf '%s' "$SM" | grep -c '/triage-3t')" "1"
+
+echo "2b. sin ALTA viejo (umbral propio, mas corto que el generico), no se rotula ALTA pero el generico sigue"
+# Fecha calculada en el momento de correr el test (no un literal fijo): un literal cercano al
+# umbral se vuelve un item viejo por su cuenta con el paso de los dias y el test empieza a fallar
+# solo — lo encontro un adversario (subagente en Opus) reproduciendo el mismo fixture con una
+# fecha ya vieja. ALTA_STALE_DAYS=7: "ayer" esta comodamente por debajo para cualquier fecha futura.
+FECHA_ALTA_RECIENTE=$(python3 -c "import datetime;print((datetime.date.today()-datetime.timedelta(days=1)).isoformat())")
+P1B="$TMP/p1b"
+mkdir -p "$P1B/memory/sessions" "$P1B/memory/.journal/pending"
+cat > "$P1B/memory/_pendientes.md" <<EOF
+---
+type: index
+---
+# Pendientes
+
+## Alta prioridad
+
+- [ ] Item de alta reciente — _origen: [[sessions/x]]_ — _creado: ${FECHA_ALTA_RECIENTE}_
+
+## Media prioridad
+
+- [ ] Item de media viejisimo — _origen: [[sessions/x]]_ — _creado: 2026-01-02_
+
+## Related
+EOF
+correr "$P1B" startup > "$TMP/o1b"
+SM1B=$(python3 "$TMP/leer.py" "$TMP/o1b" systemMessage)
+check "sin ALTA viejo no se rotula ALTA" "$(printf '%s' "$SM1B" | grep -c 'de prioridad ALTA sin cerrar')" "0"
+check "el listado generico sigue (siempre, no solo sin ALTA viejo)" "$(printf '%s' "$SM1B" | grep -c 'Los mas antiguos:')" "1"
+check "y nombra el Media viejo ahi" "$(printf '%s' "$SM1B" | grep -c 'Item de media viejisimo')" "1"
+
+echo "2c. un pendiente SIN clasificar (bucket 'otros', header fuera del esquema) no se esconde por un ALTA viejo"
+# Reproduce el segundo hallazgo del adversario: con `elif` (version anterior) un item bajo un
+# header custom (ni Alta/Media/Baja) desaparecia del canal de la persona en cuanto aparecia un
+# ALTA viejo, porque `altas_viejas` solo mira la seccion "alta" y el listado generico dejaba de
+# imprimirse. Ahora el generico es incondicional, asi que sigue apareciendo.
+P1C="$TMP/p1c"
+mkdir -p "$P1C/memory/sessions" "$P1C/memory/.journal/pending"
+cat > "$P1C/memory/_pendientes.md" <<'EOF'
+---
+type: index
+---
+# Pendientes
+
+## Alta prioridad
+
+- [ ] Item de alta viejo — _origen: [[sessions/x]]_ — _creado: 2026-01-05_
+
+## Bloqueadores del port
+
+- [ ] Item sin clasificar viejisimo — _origen: [[sessions/x]]_ — _creado: 2026-01-01_
+
+## Related
+EOF
+correr "$P1C" startup > "$TMP/o1c"
+SM1C=$(python3 "$TMP/leer.py" "$TMP/o1c" systemMessage)
+check "rotula el ALTA viejo" "$(printf '%s' "$SM1C" | grep -c 'de prioridad ALTA sin cerrar')" "1"
+check "el item sin clasificar NO desaparece (regresion que encontro el adversario, ronda 2)" \
+  "$(printf '%s' "$SM1C" | grep -c 'Item sin clasificar viejisimo')" "1"
 
 echo "3. el bloque del agente lleva ALTA inline y NO lista MEDIA"
 AC=$(python3 "$TMP/leer.py" "$TMP/o1" additionalContext)

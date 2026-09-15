@@ -510,6 +510,13 @@ try: sys.stdout.reconfigure(encoding="utf-8")
 except Exception: pass
 
 STALE_DAYS = 30  # a pendiente older than this is flagged as suspect-stale
+# Umbral propio para ALTA (p-d05b70d364), mas corto que STALE_DAYS a proposito: un adversario
+# (subagente en Opus, ronda 1) midio contra el caso real que motivo este pendiente — un Alta
+# creado el mismo dia que se escribio el pendiente — y con STALE_DAYS=30 ese caso no habria
+# avisado a la persona hasta un mes despues, justo el defecto que este cambio existe para cerrar.
+# 7 dias: una semana sin que el agente lo cierre por su cuenta es la senal de que hace falta la
+# persona, sin ahogar el aviso en cada sesion con Altas que llevan uno o dos dias abiertos.
+ALTA_STALE_DAYS = 7
 
 def days_old(created):
     m = re.match(r"(\d{4})-(\d{2})-(\d{2})", created or "")
@@ -706,9 +713,27 @@ hpath = os.environ.get("HUMANO_FILE", "")
 if hpath:
     viejos = sorted([(c, t) for _p, (c, t) in selected if c != "9999"], key=lambda x: x[0])
     stale_n = sum(1 for c, _t in viejos if (days_old(c) or 0) > STALE_DAYS)
+    # Pendientes ALTA que llevan abiertos mas de ALTA_STALE_DAYS (p-d05b70d364): ADITIVO sobre
+    # "los mas antiguos" de abajo, nunca lo reemplaza. Una version anterior de este bloque usaba
+    # `elif` — si habia algun Alta viejo, el listado generico (cualquier prioridad) desaparecia
+    # entero, incluyendo pendientes SIN clasificar (bucket "otros") y pendientes Media/Baja de
+    # cientos de dias. Un adversario (subagente en Opus) lo reprodujo: un pendiente de 255 dias
+    # se volvia invisible para la persona en cuanto aparecia un solo Alta de 44 dias. La
+    # duplicacion ocasional (un mismo item en las dos listas) se acepta a cambio de no esconder
+    # nunca un pendiente que ya se estaba avisando antes de este cambio.
+    altas_viejas = sorted(
+        [(c, t) for _p, (c, t) in selected if _p == "alta" and c != "9999" and (days_old(c) or 0) > ALTA_STALE_DAYS],
+        key=lambda x: x[0],
+    )
     cab = f"MEMORIA 3T — {total} pendientes abiertos"
     cab += f", {stale_n} sin cerrar desde hace mas de {STALE_DAYS} dias." if stale_n else "."
     lineas = [cab]
+    if altas_viejas:
+        lineas.append(f"{len(altas_viejas)} de prioridad ALTA sin cerrar desde hace mas de {ALTA_STALE_DAYS} dias:")
+        for c, t in altas_viejas[:3]:
+            lineas.append(f"  · {shorten(t)}  ({c}, {days_old(c)} dias)")
+        if len(altas_viejas) > 3:
+            lineas.append(f"  [+ {len(altas_viejas) - 3} mas de ALTA]")
     if viejos[:3]:
         lineas.append("Los mas antiguos:")
         for c, t in viejos[:3]:

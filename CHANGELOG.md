@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.25.2] - 2026-09-14
+`p-d05b70d364`: el `systemMessage` de `session-start.sh` (desde 2.17.0) ya avisaba a la persona en
+cada sesión con el total de pendientes y los 3 más viejos — pero sin distinguir prioridad, un Alta
+reciente-pero-estancado podía quedar tapado por uno Baja más viejo en ese listado.
+
+- El aviso a la persona ahora agrega (no reemplaza) un rótulo propio para los pendientes ALTA que
+  llevan más de `ALTA_STALE_DAYS` (7 días — umbral propio, más corto que `STALE_DAYS`=30: un
+  adversario midió contra el caso real que motivó el pendiente y con 30 días no habría avisado
+  hasta un mes después) sin cerrar. El listado genérico de "más antiguos" (cualquier prioridad,
+  incluida sección sin clasificar) se sigue mostrando siempre — una versión intermedia lo
+  reemplazaba con `elif` cuando había un Alta viejo, y eso escondía pendientes de cientos de días
+  de otras prioridades; un segundo adversario (subagente, modelo distinto) lo encontró y se
+  corrigió antes de cerrar.
+- `test-session-start-json.sh`: caso 2 actualizado (ambas secciones aparecen, aditivo); caso 2b
+  con fecha calculada en el momento de correr el test, no un literal fijo (el literal anterior se
+  habría vuelto stale por su cuenta el 2026-10-11 — reproducido por el mismo adversario); caso 2c
+  nuevo cubre que un pendiente sin clasificar no desaparece cuando hay un Alta viejo.
+
 ## [2.25.1] - 2026-09-14
 2.25.0 resolvía un nivel de jerarquía entre planes (un padre con hijos sueltos), pero se quedaba
 callado sobre el caso real que la motivó: una sombrilla de varios niveles (el port al VPS, con

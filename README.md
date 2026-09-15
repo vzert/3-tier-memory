@@ -91,8 +91,11 @@ That's it. `/checkpoint` saves your session, extracts action items, captures lea
 - **Two readers, two channels** — since 2.17.0 the SessionStart hook emits one JSON object: the
   agent gets `additionalContext` (high-priority and unclassified action items, counts, warnings),
   and **you** get a short `systemMessage` — how many items are open, how many are over 30 days
-  old, the three oldest, and `/triage-3t`. Plain stdout at SessionStart only ever reached the
-  agent, which is why open items piled up: closing one is a human decision
+  old, the three oldest, and `/triage-3t`. Since 2.25.2, any High-priority item open more than 7
+  days also gets its own labeled line (High needs a shorter fuse than the general 30-day
+  staleness flag), added on top of — never instead of — the three-oldest listing. Plain stdout
+  at SessionStart only ever reached the agent, which is why open items piled up: closing one is a
+  human decision
 - **Hooks** — auto-inject open action items + learnings at session start, apply pending journal events, surface relevant memory per prompt, detect unregistered files, optional strict guard on the indexes
 
 ### Commands
