@@ -171,9 +171,21 @@ python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"       # apply what
 python3 "$JBIN/normalize-pendientes.py" "$MEMORY_DIR" --apply --quiet    # the three priority headers exist; idempotent
 python3 "$JBIN/enrich-memory.py" "$MEMORY_DIR" --apply --only creado,id   # legacy lines get `_creado` (if missing) and `_id: p-…_`; idempotent
 python3 "$JBIN/repair-dualwrite.py" "$MEMORY_DIR" --apply --fix-pipes    # adopts orphan lines; Tier 2 lines with no Tier 3 row; rows a `|` made unclosable; idempotent
+python3 "$JBIN/check-active-plans.py" "$MEMORY_DIR"    # read-only; lists active/draft/testing plans, if any
 ```
 
 `repair-dualwrite` prints `adopted=N rows_added=N pipes_broken=N pipes_fixed=N unaligned_rows=N unrepairable=N odd_values=N header_issues=N ids_invented=N missing_data=N`.
+
+**`check-active-plans.py` is not a repair — it is a reminder, and it exists because reading Step 5
+carefully was not enough once (measured 2026-09-15, this same repo): a pendiente born while
+auditing a plan's phase got closed standalone, never connected to the plan, even though the plan
+itself said "if a new finding shows up, add it here as a new phase instead of leaving it loose"
+and the agent had that exact instruction in front of it. If it prints any plans, read them NOW,
+before Step 3a — Step 5 will ask you to act on this, but by then the pendientes are already
+reconciled and it is easy to answer "## Plans: Ninguno" out of habit. It does not try to detect
+the connection for you (that needs following `_origen` → "Continuacion de" → plan chains across
+session files, and a wrong guess there is worse than no guess) — it only makes sure you cannot
+say you never saw the list.
 
 **Read `adopted` and `rows_added` before you call anything broken — on the FIRST checkpoint of a
 memory that predates 2.12.0 they are both expected and non-zero, and nothing is wrong.** Such a
@@ -350,6 +362,12 @@ Do NOT skip this step. Actively scan the conversation for these signals:
 - A plan file exists in `~/.claude/plans/` from this session
 - Implementation steps were discussed or executed
 - User said "plan", "diseño", "arquitectura", "implementacion"
+- **A pendiente you resolved in Step 3a traces back (via its `_origen`, or a "Continuacion de"
+  chain across session files) to one of the plans `check-active-plans.py` printed in Step 3-pre.**
+  This is a signal even if THIS session did no planning of its own — the work still belongs to an
+  existing plan's lineage, and per that plan's own convention a new finding gets added as a new
+  phase, not left standalone (see the note under Step 3-pre for the incident that made this
+  explicit).
 
 **If plan signals found:**
 - Tier 3: create/update memory/plans/plan-<slug>.md with context, decisions, steps, outcome (direct write: one writer per file)

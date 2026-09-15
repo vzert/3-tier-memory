@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.25.4] - 2026-09-15
+`p-9c035cd2db`: cerrar un pendiente en `/checkpoint-3t` nunca verificaba si su sesión de origen
+trazaba a un plan activo — un hallazgo nacido auditando la fase de un plan podía cerrarse suelto,
+sin conectarlo, aunque ese plan dijera explícitamente "agrega hallazgos nuevos aquí en vez de
+dejarlos sueltos" (incidente real: pasó exactamente eso con `p-d72c123065` y
+`plan-hallazgos-piloto-2.25.0` el día anterior — el agente corrió `/checkpoint-3t` completo, con
+esa instrucción delante, y aun así escribió "## Plans: Ninguno").
+
+- `check-active-plans.py` (nuevo): lee `_plans-index.md`, lista los planes `active`/`draft`/
+  `testing` (incluida la forma "active (fase de plan-X)"), corre en checkpoint-3t Step 3-pre —
+  siempre que existan, ANTES de que el agente reconcilie pendientes o conteste "## Plans". No
+  intenta adivinar la conexión (seguir cadenas de wikilinks sesión→sesión→plan es frágil); solo
+  se asegura de que el agente no pueda decir que nunca los vio.
+- `checkpoint-3t.md` (template + comando local): Step 3-pre llama al script nuevo; Step 5 gana un
+  cuarto "plan signal" explícito — un pendiente resuelto en Step 3a que traza a un plan activo
+  cuenta como señal, aunque la sesión no haya planeado nada nuevo.
+- `test-check-active-plans.sh` (nuevo): 6 casos, incluido que un `\|` dentro de una celda no
+  desalinea la tabla y que el título de un wikilink-alias se imprime limpio, no la ruta cruda.
+
 ## [2.25.3] - 2026-09-14
 `p-d72c123065`: el auto-update de `session-start.sh` (instalado vs local) nunca comparaba contra
 el árbol de trabajo del propio repo del plugin — solo contra `$CLAUDE_PLUGIN_ROOT/templates`, el
