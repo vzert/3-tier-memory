@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.25.5] - 2026-09-15
+`p-baa546ddac` (Fase 2 de `plan-hallazgos-piloto-2.25.0`): `_plans-index.md` no tenía un reparador
+equivalente a `repair-dualwrite.py`/`normalize-pendientes.py` (que solo cubren `_pendientes.md`).
+Medido en producción (claude-vzert): una cabecera vieja de 4 columnas (`Fecha|Plan|Status|Resumen`,
+formato pre-journal) convivía con filas nuevas de 6 (`Plan|Status|Fecha|Sesion|Pendientes|
+Learnings`) que `apply_plan_upsert` escribe desde v2.12.0 sin mirar la cabecera existente — un
+humano leyendo la tabla malinterpretaba las columnas de cualquier fila nueva, y `apply_plan_upsert`
+ya documentaba el riesgo de duplicar una fila legacy invisible para `find_plan_rows`. `/migrate`
+tampoco lo resolvía: solo convierte filas al absorber auto-memoria por primera vez.
+
+- `repair-plans-index.py` (nuevo): en la tabla de `## Plans`, migra una fila legacy de 4 columnas
+  (ancla por forma: fecha en la celda 0, mismo criterio que `align_row`/`row_cells` en
+  journal-compact.py/repair-dualwrite.py — nunca adivina) a la forma canónica de 6, anexando
+  `Resumen` a `Status` (sin columna propia en el esquema nuevo; decisión confirmada con el usuario).
+  Re-cabecea a la forma canónica SOLO cuando la cabecera de hoy es exactamente la legacy
+  reconocida. Una fila de ancho ambiguo, o una migración que duplicaría el título de una fila
+  canónica ya existente, se reporta y no se toca. Idempotente, dry-run por defecto.
+- `checkpoint-3t.md` (template + comando local, sincronizados): Step 3-pre corre el reparador
+  nuevo con `--apply`, antes de `check-active-plans.py` — una tabla con el formato viejo hace que
+  ese lector también interprete mal las columnas.
+- `test-repair-plans-index.sh` (nuevo): 9 casos, incluidas las dos direcciones de cabecera mixta
+  medidas en producción, una fila de ancho ambiguo, un `\|` dentro de una celda, una posible
+  duplicación de título, y que solo se toca la tabla de `## Plans`.
+
 ## [2.25.4] - 2026-09-15
 `p-9c035cd2db`: cerrar un pendiente en `/checkpoint-3t` nunca verificaba si su sesión de origen
 trazaba a un plan activo — un hallazgo nacido auditando la fase de un plan podía cerrarse suelto,

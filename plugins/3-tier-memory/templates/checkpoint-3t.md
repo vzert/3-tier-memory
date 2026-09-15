@@ -171,8 +171,11 @@ python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"       # apply what
 python3 "$JBIN/normalize-pendientes.py" "$MEMORY_DIR" --apply --quiet    # the three priority headers exist; idempotent
 python3 "$JBIN/enrich-memory.py" "$MEMORY_DIR" --apply --only creado,id   # legacy lines get `_creado` (if missing) and `_id: p-…_`; idempotent
 python3 "$JBIN/repair-dualwrite.py" "$MEMORY_DIR" --apply --fix-pipes    # adopts orphan lines; Tier 2 lines with no Tier 3 row; rows a `|` made unclosable; idempotent
+python3 "$JBIN/repair-plans-index.py" "$MEMORY_DIR" --apply    # migrates legacy 4-col plan rows to the canonical 6-col shape, re-headers if needed; idempotent
 python3 "$JBIN/check-active-plans.py" "$MEMORY_DIR"    # read-only; lists active/draft/testing plans, if any
 ```
+
+`repair-plans-index.py` prints `legacy_rows_migrated=N header_rewritten=si|no unrepairable_rows=N possible_duplicates=N no_plans_table=0|1 header_unrecognized=0|1`. It runs BEFORE `check-active-plans.py` on purpose: a `_plans-index.md` still carrying the pre-journal 4-column shape (`Fecha|Plan|Status|Resumen`) under a legacy or mixed header reads its Plan/Status columns in the wrong order, so fixing the shape first is what makes the plan list `check-active-plans.py` prints trustworthy. `unrepairable_rows>0` or `possible_duplicates>0` means a row could not be migrated safely (ambiguous width, or a title collision with an existing canonical row) — read it and fix by hand; this script never guesses.
 
 `repair-dualwrite` prints `adopted=N rows_added=N pipes_broken=N pipes_fixed=N unaligned_rows=N unrepairable=N odd_values=N header_issues=N ids_invented=N missing_data=N`.
 
