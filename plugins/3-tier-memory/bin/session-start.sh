@@ -842,11 +842,17 @@ fi
 # Deteccion: NO basta con que exista plugins/3-tier-memory/templates/ dentro de CLAUDE_PROJECT_DIR
 # (hallazgo de un adversario externo, ronda 1: esa sola carpeta no prueba identidad — cualquier
 # proyecto que por lo que sea tenga esa ruta pasaria el gate). Se exige ADEMAS que
-# plugins/3-tier-memory/.claude-plugin/plugin.json exista y declare `"name": "3-tier-memory"` — el
-# manifiesto propio de ESTE plugin, que ningun otro repo tiene motivo para replicar con ese nombre
-# exacto. Los dos juntos si identifican el repo del propio plugin; no depende de CLAUDE_PLUGIN_ROOT,
-# que en produccion apunta al cache del marketplace y en el propio repo de este plugin coincide con
-# este mismo arbol solo quien lo sourcea a mano (los tests de este fichero).
+# plugins/3-tier-memory/.claude-plugin/plugin.json exista y declare `"name": "3-tier-memory"`.
+# Esto es una heuristica, NO una prueba criptografica de identidad (un segundo adversario, misma
+# ronda delta, lo señalo correctamente: un proyecto que copie a proposito los dos artefactos con
+# ese nombre exacto pasaria el gate igual — no hay forma de probar identidad de repo desde
+# contenido de archivo sin firmar). Se acepta ese residuo a proposito: el costo de un falso
+# positivo aqui es un aviso de mas (nunca una mutacion, nunca un dato perdido — ver el bloque de
+# abajo, solo emite `out`/`human`), y exigir una señal mas fuerte (ej. el remote de git) rompe
+# falsos NEGATIVOS reales en un fork legitimo sin `origin` estandar, que es peor para el proposito
+# del check. No depende de CLAUDE_PLUGIN_ROOT, que en produccion apunta al cache del marketplace y
+# en el propio repo de este plugin coincide con este mismo arbol solo quien lo sourcea a mano (los
+# tests de este fichero).
 SELF_TEMPLATES_DIR="$CLAUDE_PROJECT_DIR/plugins/3-tier-memory/templates"
 SELF_MANIFEST="$CLAUDE_PROJECT_DIR/plugins/3-tier-memory/.claude-plugin/plugin.json"
 IS_SELF_REPO=0

@@ -159,6 +159,22 @@ correr "$P5B" > "$TMP/o5b"
 AC5B=$(python3 "$TMP/leer.py" "$TMP/o5b" additionalContext)
 check "manifiesto de OTRO nombre, sin aviso" "$(printf '%s' "$AC5B" | grep -c '⚠ DESINCRONIZADO')" "0"
 
+echo "6. residuo aceptado a proposito (documentado, no arreglado): un proyecto ajeno que copie A"
+echo "   PROPOSITO los dos artefactos con el nombre exacto SI pasa el gate — es una heuristica de"
+echo "   contenido, no una prueba criptografica de identidad. El costo de ese falso positivo es un"
+echo "   aviso de mas (nunca una mutacion); exigir una senal mas fuerte (git remote) rompe falsos"
+echo "   NEGATIVOS reales en forks legitimos sin 'origin' estandar. Ver el comentario en"
+echo "   session-start.sh junto a IS_SELF_REPO."
+P6="$TMP/p6"; nuevo_proyecto "$P6"
+mkdir -p "$P6/plugins/3-tier-memory/templates"
+marcar_repo_propio "$P6"
+echo "contenido cualquiera, distinto del local" > "$P6/plugins/3-tier-memory/templates/checkpoint-3t.md"
+echo "local distinto" > "$P6/.claude/commands/checkpoint-3t.md"
+correr "$P6" > "$TMP/o6"
+AC6=$(python3 "$TMP/leer.py" "$TMP/o6" additionalContext)
+check "con los dos artefactos copiados, SI dispara (residuo aceptado, no un bug)" \
+  "$(printf '%s' "$AC6" | grep -c '⚠ DESINCRONIZADO')" "1"
+
 echo
 [ $FAIL -eq 0 ] && echo "TODO VERDE" || echo "HAY FALLOS"
 exit $FAIL
