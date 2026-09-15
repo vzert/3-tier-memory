@@ -830,6 +830,42 @@ if [ -n "$UPDATED" ]; then
   out ""
 fi
 
+# Desincronizacion en el repo del PROPIO plugin (p-d72c123065). El bloque de arriba compara
+# .claude/commands/*.md contra el plugin INSTALADO ($TEMPLATES_DIR = $CLAUDE_PLUGIN_ROOT/templates),
+# nunca contra el arbol de trabajo de ESTE repo — asi que si $CLAUDE_PROJECT_DIR es el repo del
+# propio plugin 3-tier-memory, un comando local puede llevar N versiones de atraso sobre el arbol
+# sin que nada avise: el plugin instalado (marketplace cache) puede el mismo ir por detras del
+# arbol si hay commits sin pushear o sin `git pull`. Medido 2026-09-14: 6 commits de 2.24.8 a
+# 2.25.1 sin pushear, /checkpoint-3t corrio con el comando local sincronizado a 2.24.7 (identico
+# byte a byte al plugin instalado, no al arbol) durante ese tramo, y nadie lo vio hasta una
+# auditoria manual.
+# Deteccion: la presencia de plugins/3-tier-memory/templates/ DENTRO de CLAUDE_PROJECT_DIR es un
+# marcador propio de este repo (ninguna instalacion normal del plugin lo tiene ahi) — no depende
+# de CLAUDE_PLUGIN_ROOT, que en produccion apunta al cache del marketplace y en el propio repo de
+# este plugin coincide con este mismo arbol solo quien lo sourcea a mano (los tests de este
+# fichero).
+SELF_TEMPLATES_DIR="$CLAUDE_PROJECT_DIR/plugins/3-tier-memory/templates"
+if [ -z "${SKIP_CMD_INSTALL:-}" ] && [ -d "$SELF_TEMPLATES_DIR" ]; then
+  DESYNC=""
+  for cmd in checkpoint-3t status-3t audit-3t backfill-3t save-learning consolidate-3t enrich-3t triage-3t; do
+    LOCAL_CMD="$CMDS_DIR/$cmd.md"
+    TREE_CMD="$SELF_TEMPLATES_DIR/$cmd.md"
+    # Corre DESPUES del auto-update de arriba, que ya dejo LOCAL_CMD igual al plugin INSTALADO
+    # (lo instalo si faltaba, lo actualizo si difería) — asi que esta comparacion es siempre
+    # "plugin instalado" vs "arbol de trabajo", nunca "nada" vs "arbol". Solo se salta si
+    # LOCAL_CMD sigue sin existir (SKIP_CMD_INSTALL, o el plugin instalado ni siquiera trae
+    # PLUGIN_CMD) o si el arbol no versiona ese comando (TREE_CMD ausente).
+    if [ -f "$LOCAL_CMD" ] && [ -f "$TREE_CMD" ] && ! diff -q "$LOCAL_CMD" "$TREE_CMD" >/dev/null 2>&1; then
+      DESYNC="$DESYNC /$cmd"
+    fi
+  done
+  if [ -n "$DESYNC" ]; then
+    out "⚠ DESINCRONIZADO (repo del propio plugin):$DESYNC — .claude/commands/ no coincide con plugins/3-tier-memory/templates/ del arbol de trabajo. El bloque de auto-update de arriba solo compara contra el plugin INSTALADO, que puede ir por detras del arbol si faltan git push/pull. Corre: cp plugins/3-tier-memory/templates/<cmd>.md .claude/commands/<cmd>.md — y si el arbol mismo esta atrasado, git pull/push primero."
+    human "⚠ MEMORIA: .claude/commands/ no coincide con plugins/3-tier-memory/templates/ de este repo ($DESYNC) — puede faltar un git push/pull, o el comando local necesita re-sincronizarse a mano."
+    out ""
+  fi
+fi
+
 # Notify if JSONL backfill is pending
 #
 # El contador cuenta FICHEROS QUE SIGUEN EN DISCO Y NO ESTAN RESUELTOS. No es una resta de totales.

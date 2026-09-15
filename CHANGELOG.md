@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.25.3] - 2026-09-14
+`p-d72c123065`: el auto-update de `session-start.sh` (instalado vs local) nunca comparaba contra
+el árbol de trabajo del propio repo del plugin — solo contra `$CLAUDE_PLUGIN_ROOT/templates`, el
+plugin INSTALADO. En el repo del propio 3-tier-memory eso es un punto ciego real: si hay commits
+sin pushear o sin `git pull`, el comando local puede quedar N versiones atrás del árbol sin que
+nada avise (medido: `/checkpoint-3t` corrió sincronizado a 2.24.7 mientras el repo ya iba en
+2.25.1, por 6 commits sin pushear).
+
+- `session-start.sh`: nuevo bloque, después del auto-update existente, que detecta "este proyecto
+  ES el repo del propio plugin" por la presencia de `plugins/3-tier-memory/templates/` dentro de
+  `$CLAUDE_PROJECT_DIR`, y compara cada comando final en `.claude/commands/` contra esa plantilla
+  del árbol de trabajo — avisando por los dos canales (agente y persona) si difieren.
+- `test-self-repo-command-sync.sh` (nuevo): 4 casos — sin marcador de repo propio no dispara;
+  con marcador, un comando desincronizado avisa nombrándolo; con el mismo contenido no hay falso
+  positivo; un comando recién instalado desde un plugin desactualizado también avisa (el caso real
+  del incidente).
+
 ## [2.25.2] - 2026-09-14
 `p-d05b70d364`: el `systemMessage` de `session-start.sh` (desde 2.17.0) ya avisaba a la persona en
 cada sesión con el total de pendientes y los 3 más viejos — pero sin distinguir prioridad, un Alta
