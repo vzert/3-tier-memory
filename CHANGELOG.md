@@ -1,5 +1,80 @@
 # Changelog
 
+## [2.25.1] - 2026-09-14
+2.25.0 resolvía un nivel de jerarquía entre planes (un padre con hijos sueltos), pero se quedaba
+callado sobre el caso real que la motivó: una sombrilla de varios niveles (el port al VPS, con
+bloques que a su vez abren su propio trabajo) donde cerrar una rama no dice nada de las demás.
+
+- **Anidamiento explícito**: `--parent` ya era recursivo por construcción; ahora el template lo
+  dice — un plan puede ser hijo de uno y padre de otros a la vez, con su propio `## Estado` y su
+  propia `## Sub-planes`.
+- **Subir en el árbol al cerrar un hijo**: al marcar un hijo `completed`/`abandoned`/`superseded`,
+  revisar el `## Estado` del padre — si queda otro hijo abierto, ese es el siguiente `<next-step>`
+  de la sombrilla entera; si no queda ninguno, el padre se evalúa para cerrar y la subida se repite
+  un nivel más arriba, hasta la raíz.
+- **Guard de ciclos, en código, no solo en prosa** (`journal-compact.py`): `plan.upsert --parent`
+  se rechaza (`Quarantine`, `parent-cycle:`) si crearía un ciclo — que `X` sea padre de `Y` cuando
+  `Y` ya es ancestro de `X`. `journal-emit.py` solo rechazaba `parent == slug`; la cadena
+  transitiva se lee de las anotaciones `(fase de plan-…)` ya escritas en `_plans-index.md`.
+  Encontrado por un adversario externo (`codex exec`) al revisar el delta: la instrucción de
+  "subir hasta la raíz" no tenía freno si el grafo no era un árbol.
+- **La anotación de padre se preserva al cerrar un hijo, aunque el evento no traiga `--parent`**
+  (`journal-compact.py`): el guard de ciclos recién agregado dependía por completo de esa
+  anotación, y `--status completed` sola (justo lo que Step 5 manda al cerrar un hijo) la
+  borraba — dejando ciego al propio guard un evento después. Encontrado por un segundo adversario
+  (subagente en Opus, contexto fresco) con repro de tres niveles: cerrar el eslabón intermedio de
+  una cadena y reintentar el mismo ciclo pasaba sin cuarentena.
+- **Desempate determinista**: si hay más de un hijo abierto, el orden es el de las filas de
+  `## Sub-planes` (la de más arriba sigue); si el padre no las ordenó a propósito, decirlo en vez
+  de elegir en silencio.
+- **`## Sub-planes` (Tier 3, a mano) se cruza contra `_plans-index.md`** antes de decidir "no
+  queda ningún hijo abierto" — la tabla puede quedar incompleta si un hijo nació en una sesión que
+  nunca tocó al padre; el índice, mantenido por el compactor, no tiene ese problema.
+- Condición de parada explícita al subir: un padre sin `## Estado` (uno viejo, sin retro-adaptar)
+  detiene la subida y cae al fallback de pendiente suelto, en vez de seguir subiendo a ciegas.
+- El breadcrumb "hijo de \<padre\>" vive en una sola regla (`<contexto-1-linea>`), no en dos que se
+  contradecían sobre si era una línea nueva o una extensión de `Retomamos:`.
+- **Un plan `--inline` no puede tener `--parent`**, en el mismo evento ni en uno posterior
+  (`journal-emit.py` rechaza el primer caso; `journal-compact.py` el segundo, comparando contra la
+  fila real). Un `--inline` no lleva wikilink en `_plans-index.md`, así que nunca se vuelve llave
+  de `build_parent_map` — si se le permitía `--parent`, su lugar en la cadena quedaba invisible
+  para el guard de ciclos, dejando pasar sin cuarentena un ciclo que pasara por ese eslabón.
+  Segundo hallazgo del mismo adversario (Opus, misma ronda), tras confirmar que el primer fix
+  (preservar la anotación al cerrar) sí funcionaba contra su propio repro.
+- **`--parent` valida que el plan destino EXISTA** (con su propio wikilink, en cualquier tabla del
+  archivo) antes de aceptarlo — antes escribía la anotación apuntando a un slug inventado sin
+  avisar, y el roll-up de Step 5 nunca podría abrir ese padre. La búsqueda es deliberadamente
+  ancha (no exige que la tabla contenedora declare el mismo ancho de columnas que la fila): un
+  `_plans-index.md` de formato mixto — cabecera vieja de 4 columnas con filas nuevas de 6, el
+  caso real medido en producción — no debe dar un falso "no existe" sobre un padre que sí está ahí.
+- **Una fila con anotación de padre pero sin wikilink reconocible (formato viejo, o tocada a mano
+  fuera del journal) bloquea CUALQUIER `--parent` nuevo en ese índice**, no solo el que la
+  involucra — es la misma clase de agujero que `--inline`+`--parent` (invisible para
+  `build_parent_map`), pero de datos preexistentes en vez de un evento de hoy. Mecaniza, para
+  cualquier proyecto, la misma cautela que ya pedía en prosa un pendiente existente sobre un
+  índice de columnas mixtas.
+- **Causa raíz de las rondas 2-4, cerrada de una vez: el código tenía TRES definiciones distintas
+  de "la fila de este plan"** (la que resolvía qué fila actualizar, la que decidía si un padre
+  existía, la que construía el mapa para el guard de ciclos), y podían discrepar entre sí. Un
+  evento que no encontraba la fila de un plan en un índice de formato mixto insertaba una fila
+  duplicada en vez de actualizar la existente; el mapa de ciclos se quedaba con la versión que
+  fuera última en el archivo (sin desempate), que podía ser la obsoleta — permitiendo escribir un
+  ciclo real (`A → B → A`) sin cuarentena. Unificadas en `find_plan_rows`, usada por las tres
+  operaciones. Quinto hallazgo del mismo adversario externo, pedido explícito de buscar una
+  "quinta clase" tras cerrar las cuatro anteriores — encontró una de verdad, con repro end-to-end.
+  Ahora también: escribir sobre un plan sabiendo que tiene más de una fila en el índice se
+  rechaza, igual que una fila huérfana.
+- Documentado el límite real: en un índice con tablas de formato legacy (columnas en otro orden),
+  `--parent` puede rechazar operaciones sobre planes que sí existen — deliberado, misma cautela
+  que el pendiente ya abierto sobre unificar ese índice, ahora mecánica en vez de en prosa.
+- Tercer y cuarto hallazgo del mismo adversario externo (codex/GPT-5) que encontró la falta de
+  guard de ciclos en la primera ronda — pedido explícito: buscar una "cuarta clase" de evasión
+  después de que las dos primeras (borrado al cerrar, filas inline) ya estaban corregidas.
+- Suite `test-plan-parent.sh` +10 casos (ciclo transitivo, preservación al cerrar, guard tras
+  cierre, rechazo de `--inline`+`--parent` en el mismo evento y en uno posterior, padre
+  inexistente, padre real hallado pese a header desajustado, fila huérfana bloqueando, re-emparentar
+  sin duplicar, ciclo sobre tabla legacy bloqueado, fila duplicada preexistente bloqueando).
+
 ## [2.25.0] - 2026-09-14
 El snippet de continuidad (`/checkpoint-3t` Step 8) no veia el big picture en tareas con fases
 que cruzan muchas sesiones: aun cuando ya nombraba el archivo del plan activo, `Proximo paso`

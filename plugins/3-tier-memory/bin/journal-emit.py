@@ -394,6 +394,11 @@ def main():
         parent = check_slug(a.parent, "--parent") if a.parent else ""
         if parent == slug:
             sys.exit("journal-emit: --parent no puede ser el propio plan")
+        if parent and a.inline:
+            sys.exit("journal-emit: --parent y --inline no se pueden combinar en el mismo evento "
+                      "-- un plan --inline no lleva wikilink en el indice y el guardian de ciclos "
+                      "no lo puede rastrear como eslabon (compact.py lo rechaza igual si ya era "
+                      "--inline de un evento anterior)")
         base["payload"] = {
             "slug": slug,
             "title": cell(need(a.title, "plan.upsert necesita --title")),

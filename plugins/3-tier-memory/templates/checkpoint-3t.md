@@ -413,13 +413,71 @@ que YA existe, decláralo como hijo en vez de dejarlo suelto.
 
 - Al emitir su `plan.upsert`, pasa `--parent <slug-del-plan-padre>`. El compactor anota la celda
   `Status` del hijo como `<status> (fase de plan-<parent>)` — sin ampliar la tabla ni migrar filas
-  viejas: es la misma celda de siempre, con la fase visible en el texto.
+  viejas: es la misma celda de siempre, con la fase visible en el texto. El compactor rechaza
+  (`Quarantine`) un `--parent` que cerraría un ciclo — que `X` sea padre de `Y` cuando `Y` ya es
+  ancestro de `X`, directa o transitivamente — leyendo las anotaciones `(fase de plan-…)` ya
+  escritas en el índice; si lo ves rechazado con `parent-cycle:`, revisa la cadena antes de
+  reintentar, no vuelvas a emitir el mismo evento. También rechaza `--parent` cuando el destino no
+  tiene fila propia identificable, cuando el plan que estás escribiendo tiene más de una fila en el
+  índice, o cuando el índice trae alguna fila con anotación de padre sin wikilink reconocible — las
+  tres son la misma familia de problema (una fila que el guardián no puede verificar) y la salida
+  es siempre la misma: arreglar el índice a mano antes de reintentar. **En un índice con tablas
+  legacy (columnas en otro orden, el caso real de un `_plans-index.md` sin migrar) `--parent`
+  puede rechazar operaciones sobre planes que sí existen** — es deliberado: el guardián solo
+  reconoce una fila por su wikilink en la primera celda (el formato que escribe el propio
+  compactor), y adivinar la identidad de una fila con las columnas en otro orden es exactamente el
+  riesgo que este mecanismo existe para no correr. Mismo criterio que el pendiente ya abierto sobre
+  unificar ese índice: la jerarquía de planes no se puede usar de forma confiable ahí hasta que se
+  unifique, y el compactor ahora lo hace cumplir en vez de dejarlo en prosa.
 - En el plan PADRE, mantén una sección `## Sub-planes` (tabla de 3 columnas: Sub-plan, Estado,
-  Fase actual) con una fila por hijo, actualizada a mano en cada checkpoint que toque alguno —
-  Tier 3, escritura directa, igual que el resto del cuerpo del plan.
+  Fase actual) con una fila por hijo, **en el orden en que se deben atacar** (la fila de más
+  arriba es la que sigue cuando haya que elegir entre varios hijos abiertos — Step 8 lo usa como
+  criterio de desempate). Actualizada a mano en cada checkpoint que toque alguno — Tier 3,
+  escritura directa, igual que el resto del cuerpo del plan.
 - Un plan que reemplaza a otro (no es hijo, lo sustituye entero) no lleva `--parent`: cierra el
   viejo con `--status "superseded — reemplazado por plan-<nuevo>"` y dilo también en la narrativa
   del nuevo. `superseded` cuenta como cerrado para la poda (mismo criterio que `completed`).
+
+**Anidamiento — un hijo puede tener sus propios hijos, sin límite de profundidad.** `--parent`
+apunta a CUALQUIER plan, y ese plan puede a su vez tener su propio `--parent`: la cadena es
+recursiva por construcción, no hace falta un campo ni un esquema nuevo por nivel. Un plan que es
+hijo de uno y padre de otros lleva las dos piezas a la vez: su propio `## Estado` (Step 5, arriba)
+Y su propia `## Sub-planes` con SUS hijos. No trates "hijo" y "padre" como roles excluyentes.
+
+**Subir en el árbol al cerrar un hijo — el paso que falta si solo emites el evento y sigues.**
+Sin esto, `--parent` resuelve un nivel (un plan con varios hijos sueltos) pero no el caso real que
+lo motivó: una sombrilla de varios niveles (el port al VPS: plan → Bloque A/B/D → lo que cada uno
+abrió dentro) donde cerrar UNA rama no dice nada sobre las demás, y la persona termina preguntando
+"¿qué sigue?" sesión tras sesión porque nadie sube a mirar el padre. Regla, en el mismo `plan.upsert`
+que cierra un hijo (`--status completed|abandoned|superseded`):
+
+1. Si ese hijo tiene `--parent`, abre el plan PADRE y revisa su `## Sub-planes`.
+2. **Antes de confiar en esa tabla, crúzala contra `_plans-index.md`.** `## Sub-planes` es Tier 3
+   a mano — solo se actualiza "en cada checkpoint que toque alguno", así que un hijo creado en una
+   sesión que nunca tocó al padre la deja incompleta. El índice no tiene ese problema: cada fila
+   con `(fase de plan-<padre>)` en su Status es un hijo suyo, y esa anotación sobrevive mientras
+   el hijo siga abierto (se preserva automáticamente al cerrar otros campos — ver la nota del
+   compactor más abajo). `grep '(fase de plan-<slug-del-padre>)' _plans-index.md` te da los hijos
+   reales; si difiere de `## Sub-planes`, el índice manda y actualizas la tabla para que coincida.
+3. **Si queda otro hijo `active` o `draft`** (por el índice, no solo por la tabla), la fila MÁS
+   ARRIBA de esos en `## Sub-planes` es el candidato a `<next-step>` de la sombrilla entera —
+   aunque esta sesión no lo haya tocado (si el padre no ordenó las filas a propósito, dilo en el
+   `## Estado` en vez de elegir en silencio). Actualiza el `## Estado` del padre para que su
+   `Próxima acción` lo nombre (Step 8 lo lee de ahí, no hace falta que tú lo repitas en el snippet
+   de hoy).
+4. **Si no queda ninguno abierto**, el padre pasa a evaluarse para cerrar él mismo — no se cierra
+   solo porque sus hijos cerraron (puede tener trabajo propio, fuera de los hijos: mide contra su
+   propio `## Estado` y su narrativa). Si en efecto ya no queda nada, ciérralo con el mismo
+   `plan.upsert --status completed|abandoned|superseded`, y si ESE padre tiene a su vez un padre,
+   repite el paso 1 un nivel más arriba. La subida termina cuando encuentras un padre con otro hijo
+   abierto, o cuando llegas a la raíz (un plan sin `--parent`) y esa también queda cerrada.
+
+**El compactor preserva `(fase de plan-<padre>)` aunque el evento que cierra al hijo no traiga
+`--parent`.** No hace falta reafirmarlo al cerrar (`--status completed` sola basta) — el
+compactor mira la celda existente antes de sobreescribirla y conserva la anotación si la había.
+Sin esto, cerrar un hijo borraba en silencio el único registro legible por máquina de su lugar en
+el árbol, y con él la entrada de `build_parent_map`/`would_cycle` (el guardián de ciclos de abajo)
+quedaba ciega para ese eslabón — hallazgo adversarial (2026-09-14), con repro de tres niveles.
 
 ### Research signals — if ANY found, register the research:
 - Web searches or web fetches were performed
@@ -679,6 +737,14 @@ Reglas para llenar los slots:
   mayor" de un vistazo — sin esto, un humano que solo lee `Retomamos:` (no el resto del snippet)
   ve el recorte de HOY, no el trabajo completo del que es parte. Mismo principio que el `Titulo:`
   de los recordatorios de calendario (Step 8c): legible sin abrir nada mas.
+
+  **Si ADEMAS ese plan tiene `--parent`** (es hijo de otro, sin importar cuantos niveles subiste
+  para llegar a el — ver el caso 1 de `<next-step>`, mas abajo), la frase suma el padre inmediato:
+  `<titulo del plan> — Fase <N> (<nombre>) — hijo de <titulo del plan padre>`. Una sola linea seguia
+  siendo una sola linea — esto NO agrega una linea nueva al snippet de 6, extiende la misma
+  `Retomamos:` que ya existia. Si sumar el padre rompe el limite de ~90 caracteres, el que se
+  acorta es el nombre del padre (o se omite entero), nunca el nombre del plan propio ni la fase:
+  esos son los que el lector necesita para actuar hoy.
 - `<next-step>`: la accion mas inmediata pendiente, en orden de preferencia:
   1. **Si esta sesion toco un plan `active` que tiene bloque `## Estado`** (ver Step 5), el
      `<next-step>` es `Fase actual: <N> — <nombre>. <Proxima accion del bloque>`, ya actualizado
@@ -687,6 +753,38 @@ Reglas para llenar los slots:
      fases es casi siempre UN PASO de la fase, no la fase completa — anteponerlo pierde el orden
      que el plan ya tiene. Si el plan no tiene `## Estado` todavia (uno viejo, sin retro-adaptar),
      cae al caso 2 como cualquier sesion sin plan.
+
+     **"Toco" incluye el plan padre que actualizaste por la regla de subir de Step 5, no solo el
+     plan que era el tema explicito de la sesion.** Hallazgo adversarial (2026-09-14): si el
+     trabajo de hoy fue CERRAR un hijo, ese hijo mismo ya no esta `active` — leer el caso 1 en
+     sentido literal ("el plan que la sesion toco") sobre el hijo cerrado hace que el caso NO
+     aplique justo cuando mas hace falta. El plan correcto a leer es el PADRE: dejo de estar
+     `active` con `## Estado` viejo para estarlo con `## Estado` actualizado por el paso 2 de la
+     regla de subir — ese conteo como "el plan que esta sesion toco" para este caso, tan valido
+     como si hubieras trabajado en el directamente.
+
+     **Si el plan que da el `<next-step>` quedo sin trabajo propio Y tiene `--parent`** (subiste
+     al padre en Step 5 y no encontraste otro hijo abierto ahi tampoco todavia), sube otra vez y
+     usa el `## Estado` de ESE padre. Repite mientras haga falta — es la misma regla de Step 5,
+     aplicada al armar el snippet en vez de al cerrar el evento. El caso 5 (`ninguno`) solo aplica
+     si subiste hasta la raiz y la raiz tambien esta sin trabajo abierto, nunca porque el hijo de
+     hoy ya cerro.
+
+     **Si al subir encuentras un padre SIN bloque `## Estado`** (uno viejo, sin retro-adaptar —
+     el caso real de varios planes del port al VPS), NO sigas subiendo asumiendo que esta bien:
+     no hay forma de leer su estado con confianza. Detente ahi y cae al caso 2 de esta misma
+     escalera (pendiente suelto), igual que si nunca hubiera habido plan. Seguir subiendo mas alla
+     de un eslabon sin `## Estado` es la misma apuesta que inventar un `<next-step>` — mejor admitir
+     el limite que fingir que se leyo algo que no estaba.
+
+     **Si el padre (o cualquier nivel al que subiste) tiene mas de un hijo `active`/`draft`**, no
+     elijas en silencio cual sigue — el orden es el de las FILAS de `## Sub-planes`, de arriba
+     hacia abajo (esa tabla ya declara prioridad al escribirse: la fila mas arriba es la que sigue,
+     como en `plan-hallazgos-piloto-2.25.0`). Si el padre no ordeno sus filas a proposito, dilo tal
+     cual en el `<next-step>` (`hay N hijos abiertos sin orden declarado — decide cual primero`) en
+     vez de escoger uno sin decirlo: una eleccion no determinista silenciosa es peor que admitir que
+     falta el criterio. (El breadcrumb "hijo de <padre>" para este mismo plan ya se resuelve en la
+     regla de `<contexto-1-linea>`, arriba — no se repite aqui.)
   2. El pendiente nuevo de mayor prioridad creado en Step 3b de esta sesion.
   3. Si no hay nuevo, el pendiente existente de mayor prioridad relacionado con el trabajo de la sesion.
   4. Si tampoco aplica, escribir literalmente `revisar _pendientes.md y proponer siguiente prioridad`.

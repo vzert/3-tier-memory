@@ -1406,6 +1406,108 @@ def apply_learning_add(mem, p):
     return changed
 
 
+PARENT_ANNOTATION_RE = re.compile(r"\(fase de plan-([A-Za-z0-9._-]+)\)")
+
+
+def find_plan_rows(lines, slug):
+    """TODOS los indices de fila cuya celda 0 es el wikilink `[[plans/plan-<slug>|...]]`, en
+    CUALQUIER tabla del archivo — sin el filtro de ancho de columnas de `find_row_anywhere` (que
+    exige que la cabecera declare el mismo ancho que la fila real; un `_plans-index.md` de formato
+    mixto, cabecera vieja de 4 columnas con filas nuevas de 6 que escribe el journal, rompe ese
+    filtro: es el caso real medido en produccion).
+
+    Hallazgo adversarial de quinta ronda (2026-09-14), causa raiz de las rondas 2-4: el codigo
+    tenia TRES definiciones distintas de "la fila de este plan" (la resolucion de `hit` para
+    actualizar, esta funcion para existencia, `build_parent_map` para el recorrido), y podian
+    discrepar. Repro: un evento sin --parent que no encontraba la fila legacy de un plan (por la
+    busqueda angosta de antes) insertaba una fila NUEVA en vez de actualizar la vieja, dejando dos
+    filas del mismo plan con `--parent` distinto — `build_parent_map` se quedaba con la que fuera
+    ULTIMA en el archivo (sin desemparate), que podia ser la obsoleta, y un ciclo real se escribia
+    sin cuarentena caminando la arista vieja. Unificar en una sola funcion, usada por las tres
+    operaciones (resolver que fila actualizar, decidir si un padre existe, construir el mapa para
+    el guard de ciclos), es lo que cierra la clase entera en vez de otro parche puntual.
+
+    Devuelve una LISTA: mas de un indice es una duplicacion real del indice (dos filas del mismo
+    plan), no ambiguedad de busqueda — el llamante decide, normalmente rechazando en vez de
+    adivinar cual fila es la buena."""
+    key = link_re("plans/plan-", slug)
+    out = []
+    for i, ln in enumerate(lines):
+        if not ln.lstrip().startswith("|"):
+            continue
+        cells = split_cells(ln)
+        if cells and key.search(cells[0]):
+            out.append(i)
+    return out
+
+
+def build_parent_map(lines):
+    """slug -> parent slug de cada fila de planes que ya trae `(fase de plan-<parent>)`. Lee TODO
+    el archivo — un ciclo puede involucrar una fila que vive en una tabla vieja, no solo la
+    canonica de `## Plans`.
+
+    Devuelve `(mapa, huerfanos, duplicados)`:
+    - `huerfanos`: filas con la anotacion pero sin wikilink reconocible en la celda 0 (ni
+      `--inline`, que ya no puede tener `--parent`) — tipicamente un indice de formato viejo o
+      tocado a mano. Invisibles para este mapa, el mismo agujero que `--inline`: nunca se vuelven
+      llave, asi que un ciclo que pasa por ellas no se detecta.
+    - `duplicados`: slugs que aparecen con wikilink en MAS de una fila. Ver `find_plan_rows` — es
+      la causa raiz medida de la quinta ronda: sin desempate, este mapa se quedaba con la version
+      del slug que fuera ultima en el archivo, y esa fila podia tener un `--parent` obsoleto."""
+    m = {}
+    orphans = []
+    first_seen = {}
+    duplicates = set()
+    for i, ln in enumerate(lines):
+        if not ln.lstrip().startswith("|"):
+            continue
+        cells = split_cells(ln)
+        if len(cells) < 2:
+            continue
+        # La anotacion se busca en TODA la linea, no solo en cells[1]: el compactor siempre la
+        # escribe ahi, pero una fila de un formato viejo (columnas en otro orden) puede traerla
+        # en otra posicion, y el patron `(fase de plan-…)` es lo bastante distintivo (solo este
+        # mecanismo lo escribe) para no arriesgar un falso positivo buscandolo mas ancho.
+        parent_m = PARENT_ANNOTATION_RE.search(ln)
+        pm = re.search(r"\[\[plans/plan-([A-Za-z0-9._-]+)(?:\\\|[^\]]*)?\]\]", cells[0])
+        if pm:
+            s = pm.group(1)
+            if s in first_seen:
+                duplicates.add(s)
+            else:
+                first_seen[s] = i
+            if parent_m:
+                m[s] = parent_m.group(1)
+        elif parent_m:
+            orphans.append((plain(cells[0]) or cells[0].strip(), parent_m.group(1)))
+    return m, orphans, duplicates
+
+
+def parent_row_exists(lines, parent_slug):
+    """True si `plan-<parent_slug>` tiene una fila propia (wikilink en la celda 0) en el indice,
+    en cualquier tabla. Ahora es un alias fino de `find_plan_rows` — antes buscaba el wikilink en
+    la linea entera (no solo la celda 0), lo que aceptaba un padre cuyo wikilink solo aparecia en
+    una celda ajena (p.ej. Sesion) de OTRA fila, sin fila propia. Hallazgo adversarial, quinta
+    ronda (secundario): escribia una anotacion apuntando a un plan sin fila real."""
+    return bool(find_plan_rows(lines, parent_slug))
+
+
+def would_cycle(parent_map, slug, new_parent):
+    """True si asignar `new_parent` como padre de `slug` cierra un ciclo: significa que
+    `new_parent` ya es descendiente de `slug` (subiendo desde `new_parent` se vuelve a llegar a
+    `slug`). `seen` corta si el mapa YA trae un ciclo ajeno, para no colgarse verificando este."""
+    seen = set()
+    cur = new_parent
+    while cur is not None:
+        if cur == slug:
+            return True
+        if cur in seen:
+            return False
+        seen.add(cur)
+        cur = parent_map.get(cur)
+    return False
+
+
 # ----------------------------------------------------------------------------- _plans-index.md
 def apply_plan_upsert(mem, p):
     slug = check_slug(p["slug"], "slug")
@@ -1413,28 +1515,120 @@ def apply_plan_upsert(mem, p):
     if parent:
         parent = check_slug(parent, "--parent")
     status = p.get("status")
-    if status and parent:
-        status = f"{status} (fase de plan-{parent})"
     path = os.path.join(mem, "_plans-index.md")
     if not os.path.isfile(path):
         raise Quarantine("no-index: _plans-index.md no existe")
     lines = read_lines(path)
     orig = list(lines)
     _, (hdr, sep, rows) = need_table(lines, "## Plans", "_plans-index.md")
-    key = link_re("plans/plan-", slug)
     tplain = plain(p["title"])
-    hit = find_row_anywhere(lines, 6, key)
+    # find_plan_rows, no find_row_anywhere: esta ultima exige que la tabla contenedora declare el
+    # mismo ancho de columnas que la fila real, y un indice de formato mixto (cabecera vieja de 4
+    # columnas, filas nuevas de 6) la deja ciega a una fila legacy que SI existe — el evento
+    # entonces insertaba una fila duplicada en vez de actualizar la vieja. Hallazgo adversarial,
+    # quinta ronda: esa duplicacion es la causa raiz de un ciclo que se escribio sin cuarentena.
+    own_rows = find_plan_rows(lines, slug)
+    if len(own_rows) > 1:
+        raise Quarantine(
+            f"parent-cycle: plan-{slug} tiene {len(own_rows)} filas en _plans-index.md — "
+            f"unificalas a mano (misma fila, un solo wikilink) antes de escribir mas eventos "
+            f"sobre este plan; con mas de una fila no hay forma segura de saber cual es la buena"
+        )
+    hit = own_rows[0] if own_rows else None
     if hit is None:
         # Fallback por titulo plano SOLO en la tabla canonica (no en todo el archivo): es para un
         # plan `--inline` (sin wikilink que buscar), y ampliarlo a cualquier tabla del mismo ancho
-        # arriesga enganchar una fila ajena por coincidencia de texto. Ver find_row_anywhere.
+        # arriesga enganchar una fila ajena por coincidencia de texto.
         hit = next((i for i in rows if plain(split_cells(lines[i])[0]) == tplain), None)
+    is_inline_row = (
+        split_cells(lines[hit])[0].rstrip().endswith("(inline)")
+        if hit is not None else bool(p.get("inline"))
+    )
+    if parent:
+        # Defensa en profundidad: journal-emit.py ya rechaza parent==slug antes de emitir el
+        # evento, pero compact es el limite de confianza real (un evento a mano puede saltarselo)
+        # y es el unico lugar que puede ver la cadena completa de padres ya registrados.
+        if parent == slug:
+            raise Quarantine(f"parent-cycle: plan-{slug} no puede ser su propio padre")
+        if is_inline_row:
+            # Hallazgo adversarial (2026-09-14): build_parent_map solo indexa filas con wikilink
+            # en la celda 0 (`[[plans/plan-<slug>|...]]`); una fila `--inline` no lo tiene y nunca
+            # se vuelve llave del mapa. Si a esa fila SI se le asigna --parent, su anotacion queda
+            # "huerfana": nadie puede recorrerla hacia arriba, y un ciclo que pasa por ella (X es
+            # hijo del inline, el inline es hijo de Y, Y intenta ser hijo de X) se aplica sin
+            # cuarentena porque el recorrido se corta ahi como si el inline no tuviera padre.
+            # Se comprueba con is_inline_row (la fila REAL, no solo el flag de este evento) porque
+            # un plan ya creado --inline puede recibir --parent en un evento posterior que no
+            # repite --inline.
+            raise Quarantine(
+                f"parent-cycle: plan-{slug} es --inline y no puede tener --parent — su fila no "
+                f"lleva wikilink, el guardian de ciclos no puede rastrearla como eslabon"
+            )
+        if not parent_row_exists(lines, parent):
+            # Hallazgo adversarial (2026-09-14): --parent no validaba que el destino existiera.
+            # Un slug inventado (o un --inline, que nunca lleva wikilink propio) se aceptaba
+            # igual: la anotacion se escribia apuntando a un padre que Step 5 nunca podria abrir
+            # para hacer el roll-up. La misma comprobacion excluye a los --inline como destino de
+            # --parent, sin necesitar una regla aparte: un --inline nunca tiene este wikilink.
+            raise Quarantine(
+                f"parent-cycle: plan-{parent} no existe en _plans-index.md con su propio "
+                f"wikilink — no puede ser padre (si es --inline, tampoco: una fila inline no "
+                f"tiene identidad rastreable para el guardian de ciclos)"
+            )
+        pmap, orphans, duplicates = build_parent_map(lines)
+        if orphans:
+            # Filas con anotacion de padre pero sin wikilink reconocible (tipicamente un indice
+            # de formato viejo, tocado a mano fuera del journal). Son el mismo agujero que un
+            # --inline con --parent, pero de datos preexistentes en vez de un evento de hoy:
+            # serian invisibles para would_cycle. Se bloquea CUALQUIER --parent nuevo mientras
+            # existan, en vez de intentar adivinar si esta fila en particular esta en el camino
+            # — la certeza de que no lo esta requeriria el mismo recorrido que no se puede hacer
+            # con una fila sin identidad. Mismo criterio que p-6687b07b2d (no emitir plan.upsert
+            # en un indice de columnas mixtas hasta unificarlo): aqui queda mecanico, no en prosa.
+            nombres = ", ".join(f"'{o[0]}'->plan-{o[1]}" for o in orphans[:3])
+            mas = f" (+{len(orphans) - 3} mas)" if len(orphans) > 3 else ""
+            raise Quarantine(
+                f"parent-cycle: _plans-index.md tiene fila(s) con anotacion de padre sin "
+                f"wikilink propio ({nombres}{mas}) — invisibles para el guardian de ciclos. "
+                f"Arreglalas (dales wikilink, o confirma que su padre esta bien) antes de "
+                f"asignar mas --parent en este indice."
+            )
+        if duplicates:
+            # Defensa en profundidad, ya cerrado en el origen por `own_rows` de arriba (un evento
+            # ya no puede CREAR un duplicado del plan que esta escribiendo) — esto cubre un
+            # duplicado PREEXISTENTE de OTRO plan (tipicamente `parent`) que quedo del indice antes
+            # de este fix. build_parent_map se queda con la version que sea ultima en el archivo
+            # sin desempate: es exactamente la ambiguedad que permitio escribir un ciclo real en
+            # la quinta ronda adversarial.
+            raise Quarantine(
+                f"parent-cycle: _plans-index.md tiene fila(s) duplicadas para: "
+                f"{', '.join(sorted(duplicates))} — unificalas antes de asignar mas --parent, "
+                f"no hay forma segura de saber cual version de esa fila es la buena"
+            )
+        if would_cycle(pmap, slug, parent):
+            raise Quarantine(
+                f"parent-cycle: plan-{parent} ya es descendiente de plan-{slug} — "
+                f"asignarlo como padre cerraria un ciclo ({slug} -> {parent} -> ... -> {slug})"
+            )
+    if status and parent:
+        status = f"{status} (fase de plan-{parent})"
     if hit is not None:
         cells = pad(split_cells(lines[hit]), 6)
         new = list(cells)
         for idx, k in ((3, "sesion"), (4, "pendientes"), (5, "learnings")):
             if p.get(k):
                 new[idx] = p[k]
+        if status and not parent:
+            # Este evento no trae --parent: si la fila YA tenia "(fase de plan-X)", se preserva.
+            # Sin esto, cerrar un hijo con --status completed (Step 5 no pide reafirmar --parent
+            # al cerrar) borraba la anotacion en silencio, y con ella el unico insumo de
+            # build_parent_map/would_cycle: un ciclo que el guardian rechazaba con la cadena
+            # intacta pasaba sin cuarentena en cuanto un eslabon intermedio cerraba. Hallazgo
+            # adversarial (2026-09-14), repro: abuelo<-padre<-nieto, cerrar "padre" sin --parent,
+            # reintentar abuelo--parent nieto -> aplicado en vez de cuarentena.
+            existing_parent = PARENT_ANNOTATION_RE.search(cells[1]) if len(cells) > 1 else None
+            if existing_parent:
+                status = f"{status} (fase de plan-{existing_parent.group(1)})"
         if status:
             new[1] = status
         # La celda 0 tambien: `--title` se aceptaba y se ignoraba en silencio al actualizar, asi
