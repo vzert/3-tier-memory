@@ -288,8 +288,13 @@ acumulada, no de una condicion o decision) **el texto debe nombrar un intervalo 
 emitir el evento** — nunca lo dejes en prosa abierta como "revisar periodicamente" o "monitorear
 que no falle". Dos reglas fijas, sin criterio intermedio (para que dos agentes lleguen siempre a la
 misma fecha):
-1. **Si el propio usuario o la sesion ya dijeron un numero** ("en una semana", "el viernes",
-   "T+7") — conviertelo a fecha, igual que ya haces con "T+7".
+1. **Si el propio usuario o la sesion ya dijeron UN SOLO numero de dias o UNA SOLA fecha
+   inequivoca, sin condicion** ("en una semana", "T+7", "el 2026-09-30") — conviertelo a fecha,
+   igual que ya haces con "T+7". Una fecha relativa a un dia de la semana ("el viernes") cae aqui
+   solo si el texto ya dice a cual viernes se refiere (p.ej. "el viernes que viene"); si no lo
+   dice, no es "un solo numero inequivoco" y cae en la regla 2. **Cualquier otra forma —
+   mas de un numero mencionado ("3 o 7 dias segun X"), una condicion ("si sigue igual, en una
+   semana"), o un rango— tampoco cuenta como "un numero ya dicho": cae en la regla 2.**
 2. **En cualquier otro caso, usa literalmente 5 dias** — mismo numero que ya uso el usuario en el
    caso real de abajo. No hay un tercer criterio ("razona el intervalo del mecanismo"): ese
    tercer criterio es el que dejaba a dos agentes eligiendo fechas distintas (hallazgo de
