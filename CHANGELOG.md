@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.25.8] - 2026-09-16
+Reportado por el usuario (vía `/goalspec:interview`, sobre un caso real en `claude-vzert`,
+commit `1d04248`): `p-fd5c8cccb7` ("revisar el log del cron por PUSH FAILED", prioridad Alta, sin
+`_revisar`) ganó `<next-step>` por prioridad pura el mismo día que el cron se implementó — no podía
+haber ninguna aparición de PUSH FAILED todavía — y reapareció dateless en `Sigue abierto` de una
+sesión posterior (`2026-09-16-verificar-backfill-tier3-no-aplicado`). El fix de 2.25.7 solo excluye
+`_revisar` futuro explícito; un pendiente "esperar y luego revisar" sin ese campo no caía en ninguna
+exclusión y competía por prioridad como cualquier otro.
+
+- **Step 3b (creación) exige fecha concreta para un pendiente "esperar y luego revisar"**: si el
+  texto es del tipo "revisar periódicamente" / "confirmar en unos días" sin fecha explícita, el
+  agente resuelve la fecha concreta ANTES de emitir el evento — misma disciplina que ya aplica para
+  convertir "T+7" en fecha real. No aplica a un pendiente bloqueado por una condición o decisión,
+  solo al que depende de que pase tiempo o actividad.
+- **Step 8 gana una red de seguridad** para un pendiente de este tipo que se coló sin `_revisar`
+  (uno viejo, o un agente que no aplicó la regla anterior): si su `_creado` no es de hoy (ya
+  sobrevivió una sesión sin fecharse — la misma señal que ya usa "Alta cross-sesión") y es
+  "esperar y luego revisar" por naturaleza, se le fija `_revisar` ahora vía
+  `journal-emit.py --type pendiente.window` en vez de repetirlo tal cual otra vez.
+
 ## [2.25.7] - 2026-09-16
 Reportado por el usuario (vía `/goalspec:interview`, sobre un caso real en otro proyecto:
 `cloudflare-expert/memory/sessions/2026-09-08-snapshots-n8n-digitalocean.md`): el `<next-step>` del

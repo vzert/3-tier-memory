@@ -283,6 +283,20 @@ prosa y ningun codigo la miro nunca**. Con el campo tiene dos consumidores: `exp
 (no toca un item cuya ventana no ha vencido; caduca el que si) y el Step 8c, que imprime el
 recordatorio de calendario. `--revisar` no cambia el `_id`: la ventana no es parte de la identidad.
 
+**Si el pendiente es del tipo "esperar y luego revisar" pero el texto no trae una fecha explicita**
+(`revisar periodicamente`, `monitorear que no falle`, `confirmar en unos dias`) — resuelve tu mismo
+la fecha concreta ANTES de emitir el evento, la misma disciplina que ya aplicas para convertir
+"T+7" en una fecha. Un pendiente asi sin `--revisar` no es accionable ni hoy ni en la proxima
+sesion (nadie puede revisar el log de un mecanismo que arranco hace minutos), pero sin el campo
+tampoco cae en la exclusion de Step 8 — se queda flotando indefinidamente como candidato de
+`<next-step>`/`Sigue abierto` por pura prioridad. Caso real (2026-09-16, proyecto `claude-vzert`):
+`p-fd5c8cccb7` ("revisar el log del cron por PUSH FAILED", prioridad Alta, sin `--revisar`) gano
+`<next-step>` el mismo dia que se implemento el cron — no podia haber ninguna aparicion de PUSH
+FAILED todavia — y siguio reapareciendo dateless en `Sigue abierto` de una sesion posterior
+(`2026-09-16-verificar-backfill-tier3-no-aplicado`) sin que nada lo corrigiera. Si el pendiente de
+verdad no depende del tiempo sino de una condicion o decision, no le pongas `--revisar` — esta
+regla es solo para el que su unico bloqueo real es "que pase tiempo o actividad".
+
 It prints the id. Do NOT also edit the files. The compactor (Step 3c) writes both tiers:
 **Tier 2** the line `- [ ] <texto> — _origen: [[sessions/DATE-SLUG]]_ — _creado: <today>_ — _id: p-…_`
 right under the priority header of `memory/_pendientes.md`; **Tier 3** a row in
@@ -825,6 +839,22 @@ Reglas para llenar los slots:
   fuera a decir ya, y un usuario despistado copia el snippet y arranca una sesion sin nada que
   hacer hoy. No excluye un `_revisar` YA VENCIDO (fecha igual o anterior a hoy) — eso ya paso su
   ventana y vuelve a ser un pendiente normal para el caso 3.
+
+  **Red de seguridad para un pendiente de este mismo tipo que se colo sin `_revisar`** (Step 3b ya
+  deberia haberselo puesto al crearlo, pero uno viejo pudo nacer antes de esa regla, o el agente
+  que lo creo no la aplico). Senal para reconocerlo sin clasificar por prosa: **su `_creado` no es
+  de hoy** — ya sobrevivio al menos una sesion anterior sin resolverse ni fecharse, la misma señal
+  que la regla de `Sigue abierto` de mas abajo ya usa para "Alta cross-sesion". Si un candidato asi
+  es "esperar y luego revisar" por naturaleza (depende de que pase tiempo o actividad, no de una
+  decision), no lo repitas tal cual otra vez en `<next-step>` ni en `Sigue abierto` — fijale una
+  fecha ahora, con el mismo criterio de Step 3b, via:
+  ```bash
+  python3 "$JBIN/journal-emit.py" --type pendiente.window --id p-xxxxxxxxxx --revisar YYYY-MM-DD
+  ```
+  y trata el candidato como si ya trajera esa fecha (cae en la exclusion de arriba). Caso real:
+  `p-fd5c8cccb7` reaparecio dateless en dos sesiones el mismo dia (`<next-step>` en
+  `2026-09-16-cron-checkpoint-push-vs-whitelist`, `Sigue abierto` en
+  `2026-09-16-verificar-backfill-tier3-no-aplicado`) sin que ninguna le pusiera fecha.
   4. Si tampoco aplica, escribir literalmente `revisar _pendientes.md y proponer siguiente prioridad`.
   5. **Si la sesion genuinamente no dejo trabajo que retomar** (una sesion de reporte, de
      verificacion puntual, o que se cerro sola) — no hay pendiente nuevo, no hay uno relacionado,
