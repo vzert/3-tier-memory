@@ -288,8 +288,9 @@ acumulada, no de una condicion o decision) **el texto debe nombrar un intervalo 
 emitir el evento** — nunca lo dejes en prosa abierta como "revisar periodicamente" o "monitorear
 que no falle". Dos reglas fijas, sin criterio intermedio (para que dos agentes lleguen siempre a la
 misma fecha):
-1. **Si el propio usuario o la sesion ya dijeron UN SOLO numero de dias o semanas, o UNA SOLA
-   fecha futura inequivoca, sin condicion** ("T+7", "en 2 semanas" → dias × 7, "el 2026-09-30")
+1. **Si el propio usuario o la sesion ya dijeron UN SOLO numero POSITIVO (mayor que cero) de dias
+   o semanas, o UNA SOLA fecha futura inequivoca, sin condicion** ("T+7", "en 2 semanas" → dias × 7,
+   "el 2026-09-30")
    — conviertelo a fecha, igual que ya haces con "T+7". Una fecha relativa a un dia de la semana
    ("el viernes") cae aqui solo si el texto ya dice a cual viernes se refiere (p.ej. "el viernes
    que viene"); si no lo dice, cae en la regla 2. Una fecha YA VENCIDA (pasada o de hoy) tampoco
