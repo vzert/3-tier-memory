@@ -3,22 +3,25 @@
 ## [2.25.8] - 2026-09-16
 Reportado por el usuario (vía `/goalspec:interview`, sobre un caso real en `claude-vzert`,
 commit `1d04248`): `p-fd5c8cccb7` ("revisar el log del cron por PUSH FAILED", prioridad Alta, sin
-`_revisar`) ganó `<next-step>` por prioridad pura el mismo día que el cron se implementó — no podía
-haber ninguna aparición de PUSH FAILED todavía — y reapareció dateless en `Sigue abierto` de una
-sesión posterior (`2026-09-16-verificar-backfill-tier3-no-aplicado`). El fix de 2.25.7 solo excluye
-`_revisar` futuro explícito; un pendiente "esperar y luego revisar" sin ese campo no caía en ninguna
-exclusión y competía por prioridad como cualquier otro.
+`_revisar`) ganó `<next-step>` por prioridad pura el mismo día que el cron que monitorea se
+implementó, sin actividad de push acumulada todavía. El fix de 2.25.7 solo excluye `_revisar`
+futuro explícito; un pendiente "esperar y luego revisar" sin ese campo no caía en ninguna exclusión
+y competía por prioridad como cualquier otro — y siguió reapareciendo dateless en `Sigue abierto`
+de una sesión posterior (`2026-09-16-verificar-backfill-tier3-no-aplicado`).
 
-- **Step 3b (creación) exige fecha concreta para un pendiente "esperar y luego revisar"**: si el
-  texto es del tipo "revisar periódicamente" / "confirmar en unos días" sin fecha explícita, el
-  agente resuelve la fecha concreta ANTES de emitir el evento — misma disciplina que ya aplica para
-  convertir "T+7" en fecha real. No aplica a un pendiente bloqueado por una condición o decisión,
-  solo al que depende de que pase tiempo o actividad.
-- **Step 8 gana una red de seguridad** para un pendiente de este tipo que se coló sin `_revisar`
-  (uno viejo, o un agente que no aplicó la regla anterior): si su `_creado` no es de hoy (ya
-  sobrevivió una sesión sin fecharse — la misma señal que ya usa "Alta cross-sesión") y es
-  "esperar y luego revisar" por naturaleza, se le fija `_revisar` ahora vía
-  `journal-emit.py --type pendiente.window` en vez de repetirlo tal cual otra vez.
+- **Step 3b (creación) exige un intervalo concreto para un pendiente "esperar y luego revisar"**:
+  el texto ya no puede quedar en prosa abierta ("revisar periódicamente", "confirmar en unos
+  días") — nombra el intervalo (razonado del contexto, o 5 días por default si no hay señal mejor)
+  y lo convierte a `--revisar YYYY-MM-DD` antes de emitir el evento, misma disciplina que ya aplica
+  para "T+7". No aplica a un pendiente bloqueado por una condición o decisión ajena, solo al que
+  depende de que pase tiempo o actividad.
+
+Primer intento de esta sesión agregaba ademas una "red de seguridad" en Step 8 para un pendiente
+viejo que se coló sin `_revisar` — verificación adversarial (`/goalspec:adversary`, GPT-5) la
+rompió: gateaba por `_creado != hoy` pero seguía exigiendo el mismo juicio semántico ("es de este
+tipo?") que la regla 216 de `learnings/3tier-memory-system.md` ya prohíbe para Step 8. Se retiró;
+un pendiente viejo sin fecha se resuelve por triage manual (`/triage-3t`), no por inferencia de
+Step 8.
 
 ## [2.25.7] - 2026-09-16
 Reportado por el usuario (vía `/goalspec:interview`, sobre un caso real en otro proyecto:

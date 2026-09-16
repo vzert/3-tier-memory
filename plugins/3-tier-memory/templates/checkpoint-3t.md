@@ -283,19 +283,26 @@ prosa y ningun codigo la miro nunca**. Con el campo tiene dos consumidores: `exp
 (no toca un item cuya ventana no ha vencido; caduca el que si) y el Step 8c, que imprime el
 recordatorio de calendario. `--revisar` no cambia el `_id`: la ventana no es parte de la identidad.
 
-**Si el pendiente es del tipo "esperar y luego revisar" pero el texto no trae una fecha explicita**
-(`revisar periodicamente`, `monitorear que no falle`, `confirmar en unos dias`) — resuelve tu mismo
-la fecha concreta ANTES de emitir el evento, la misma disciplina que ya aplicas para convertir
-"T+7" en una fecha. Un pendiente asi sin `--revisar` no es accionable ni hoy ni en la proxima
-sesion (nadie puede revisar el log de un mecanismo que arranco hace minutos), pero sin el campo
-tampoco cae en la exclusion de Step 8 — se queda flotando indefinidamente como candidato de
-`<next-step>`/`Sigue abierto` por pura prioridad. Caso real (2026-09-16, proyecto `claude-vzert`):
-`p-fd5c8cccb7` ("revisar el log del cron por PUSH FAILED", prioridad Alta, sin `--revisar`) gano
-`<next-step>` el mismo dia que se implemento el cron — no podia haber ninguna aparicion de PUSH
-FAILED todavia — y siguio reapareciendo dateless en `Sigue abierto` de una sesion posterior
-(`2026-09-16-verificar-backfill-tier3-no-aplicado`) sin que nada lo corrigiera. Si el pendiente de
-verdad no depende del tiempo sino de una condicion o decision, no le pongas `--revisar` — esta
-regla es solo para el que su unico bloqueo real es "que pase tiempo o actividad".
+**Si el pendiente es del tipo "esperar y luego revisar"** (depende de que pase tiempo o actividad
+acumulada, no de una condicion o decision) **el texto debe nombrar un intervalo concreto ANTES de
+emitir el evento** — nunca lo dejes en prosa abierta como "revisar periodicamente" o "monitorear
+que no falle". Escribe el intervalo razonado del propio mecanismo si lo conoces (p.ej. "cuantos
+dias de actividad real hacen falta para que el chequeo tenga sentido"); **si no hay una senal mejor
+en el contexto, usa 5 dias por default** — mismo numero que ya uso el usuario en el caso real de
+abajo, y suficientemente arbitrario-pero-fijo para que dos agentes que sigan esta regla lleguen a
+la misma fecha. Convierte ese intervalo a `--revisar YYYY-MM-DD`, la misma disciplina que ya
+aplicas para "T+7". Un pendiente asi sin `--revisar` no cae en la exclusion de Step 8 (2.25.7) — se
+queda flotando indefinidamente como candidato de `<next-step>`/`Sigue abierto` por pura prioridad,
+sin importar que tan pronto sea razonable revisarlo. Caso real (2026-09-16, proyecto
+`claude-vzert`): `p-fd5c8cccb7` ("revisar el log del cron por PUSH FAILED", prioridad Alta, sin
+`--revisar`) gano `<next-step>` el mismo dia que se implemento el cron que monitorea — sin
+actividad de push acumulada todavia el chequeo no tenia con que fallar de verdad — y siguio
+reapareciendo dateless en `Sigue abierto` de una sesion posterior
+(`2026-09-16-verificar-backfill-tier3-no-aplicado`) sin que nada lo corrigiera; el usuario eligio 5
+dias (`_revisar: 2026-09-21`) al fecharlo a mano. Si el pendiente de verdad no depende del tiempo
+sino de una condicion o decision, no le pongas `--revisar` — esta regla es solo para el que su
+unico bloqueo real es "que pase tiempo o actividad", nunca para el que espera una decision ajena
+(ver la advertencia contra "revisar si X respondio" en Step 8, mas abajo).
 
 It prints the id. Do NOT also edit the files. The compactor (Step 3c) writes both tiers:
 **Tier 2** the line `- [ ] <texto> — _origen: [[sessions/DATE-SLUG]]_ — _creado: <today>_ — _id: p-…_`
@@ -840,21 +847,15 @@ Reglas para llenar los slots:
   hacer hoy. No excluye un `_revisar` YA VENCIDO (fecha igual o anterior a hoy) — eso ya paso su
   ventana y vuelve a ser un pendiente normal para el caso 3.
 
-  **Red de seguridad para un pendiente de este mismo tipo que se colo sin `_revisar`** (Step 3b ya
-  deberia haberselo puesto al crearlo, pero uno viejo pudo nacer antes de esa regla, o el agente
-  que lo creo no la aplico). Senal para reconocerlo sin clasificar por prosa: **su `_creado` no es
-  de hoy** — ya sobrevivio al menos una sesion anterior sin resolverse ni fecharse, la misma señal
-  que la regla de `Sigue abierto` de mas abajo ya usa para "Alta cross-sesion". Si un candidato asi
-  es "esperar y luego revisar" por naturaleza (depende de que pase tiempo o actividad, no de una
-  decision), no lo repitas tal cual otra vez en `<next-step>` ni en `Sigue abierto` — fijale una
-  fecha ahora, con el mismo criterio de Step 3b, via:
-  ```bash
-  python3 "$JBIN/journal-emit.py" --type pendiente.window --id p-xxxxxxxxxx --revisar YYYY-MM-DD
-  ```
-  y trata el candidato como si ya trajera esa fecha (cae en la exclusion de arriba). Caso real:
-  `p-fd5c8cccb7` reaparecio dateless en dos sesiones el mismo dia (`<next-step>` en
-  `2026-09-16-cron-checkpoint-push-vs-whitelist`, `Sigue abierto` en
-  `2026-09-16-verificar-backfill-tier3-no-aplicado`) sin que ninguna le pusiera fecha.
+  **Este paso NO intenta detectar ni corregir, por su cuenta, un pendiente viejo "esperar y luego
+  revisar" que se creo sin `_revisar` antes de que existiera la regla de Step 3b de abajo.**
+  Hacerlo aqui exigiria juzgar por el texto si el pendiente "es de ese tipo" — exactamente la
+  clasificacion por prosa que la regla 216 de `learnings/3tier-memory-system.md` ya prohibe para
+  este mismo Step (verificado por adversario, 2026-09-16: un primer intento de "red de seguridad"
+  aqui, gateada por `_creado != hoy`, seguia dependiendo del mismo juicio semantico y violaba esa
+  regla). Un pendiente asi se trata como cualquier otro sin `_revisar` (compite por prioridad,
+  casos 2-3) hasta que `/triage-3t` u otra revision manual del backlog le asigne fecha — no es
+  responsabilidad de este Step arreglar datos que otro paso dejo mal formados.
   4. Si tampoco aplica, escribir literalmente `revisar _pendientes.md y proponer siguiente prioridad`.
   5. **Si la sesion genuinamente no dejo trabajo que retomar** (una sesion de reporte, de
      verificacion puntual, o que se cerro sola) — no hay pendiente nuevo, no hay uno relacionado,
