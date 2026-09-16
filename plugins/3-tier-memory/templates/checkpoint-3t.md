@@ -288,13 +288,16 @@ acumulada, no de una condicion o decision) **el texto debe nombrar un intervalo 
 emitir el evento** — nunca lo dejes en prosa abierta como "revisar periodicamente" o "monitorear
 que no falle". Dos reglas fijas, sin criterio intermedio (para que dos agentes lleguen siempre a la
 misma fecha):
-1. **Si el propio usuario o la sesion ya dijeron UN SOLO numero POSITIVO (mayor que cero) de dias
-   naturales o semanas, o UNA SOLA fecha futura inequivoca, sin condicion** ("T+7", "en 2 semanas"
-   → dias × 7, "el 2026-09-30") — conviertelo a fecha, igual que ya haces con "T+7". Solo cuentan
-   dias naturales (calendario): "dias habiles" u otra unidad que dependa de un calendario que este
-   proyecto no define (feriados, fin de semana) NO cuenta como "un numero ya dicho" — cae en la
-   regla 2. Una fecha relativa a un dia de la semana ("el viernes") cae aqui solo si el texto ya
-   dice a cual viernes se refiere (p.ej. "el viernes que viene"); si no lo dice, cae en la regla 2.
+1. **Si el propio usuario o la sesion ya dijeron UN SOLO numero POSITIVO (mayor que cero) de
+   horas, dias naturales o semanas, o UNA SOLA fecha futura inequivoca, sin condicion** ("T+7",
+   "en 2 semanas" → dias × 7, "en 48 horas" → dias = horas ÷ 24 redondeado HACIA ARRIBA (48h → 2
+   dias; 30h → 2 dias, nunca hacia abajo — `_revisar` es una fecha sin hora, y redondear hacia
+   abajo revisaria antes de que termine de pasar el tiempo pedido), "el 2026-09-30") — conviertelo
+   a fecha, igual que ya haces con "T+7". Solo cuentan horas/dias naturales (calendario): "dias
+   habiles" u otra unidad que dependa de un calendario que este proyecto no define (feriados, fin
+   de semana) NO cuenta como "un numero ya dicho" — cae en la regla 2. Una fecha relativa a un dia
+   de la semana ("el viernes") cae aqui solo si el texto ya dice a cual viernes se refiere (p.ej.
+   "el viernes que viene"); si no lo dice, cae en la regla 2.
    Una fecha YA VENCIDA (pasada o de hoy) tampoco cuenta aqui — `_revisar` solo acepta futuro (ver
    el aviso mas arriba sobre `_revisar` vencido) — cae en la regla 2. **Cualquier otra forma — mas
    de un numero mencionado ("3 o 7 dias segun X"), una condicion ("si sigue igual, en una
