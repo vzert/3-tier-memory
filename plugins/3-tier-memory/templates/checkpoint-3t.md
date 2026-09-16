@@ -812,6 +812,19 @@ Reglas para llenar los slots:
      regla de `<contexto-1-linea>`, arriba — no se repite aqui.)
   2. El pendiente nuevo de mayor prioridad creado en Step 3b de esta sesion.
   3. Si no hay nuevo, el pendiente existente de mayor prioridad relacionado con el trabajo de la sesion.
+
+  **Ningun candidato de los casos 2 o 3 es valido si su unico dato accionable es una fecha futura**
+  — trae `_revisar: YYYY-MM-DD` posterior a hoy en `_pendientes.md`, el mismo campo que Step 8c ya
+  lee para generar su propio recordatorio de calendario. Un pendiente asi no es accionable hoy sea
+  cual sea su prioridad: tratalo como si el caso no aplicara y sigue cayendo por la escalera (al
+  otro candidato del mismo caso si hay mas de uno, o al siguiente caso). Caso real (2026-09-15,
+  proyecto `cloudflare-expert`): el `<next-step>` elegido fue `confirmar el 2026-09-16 que...`
+  sobre `p-b106ce03d9` (`_revisar: 2026-09-16`) — identico al recordatorio de calendario que el
+  mismo Step 8c genero para esa fecha en la MISMA sesion. Sin esta regla, `Como retomar` es una
+  replica del bloque de calendario: no le dice a la sesion siguiente nada que el calendario no
+  fuera a decir ya, y un usuario despistado copia el snippet y arranca una sesion sin nada que
+  hacer hoy. No excluye un `_revisar` YA VENCIDO (fecha igual o anterior a hoy) — eso ya paso su
+  ventana y vuelve a ser un pendiente normal para el caso 3.
   4. Si tampoco aplica, escribir literalmente `revisar _pendientes.md y proponer siguiente prioridad`.
   5. **Si la sesion genuinamente no dejo trabajo que retomar** (una sesion de reporte, de
      verificacion puntual, o que se cerro sola) — no hay pendiente nuevo, no hay uno relacionado,
@@ -820,14 +833,26 @@ Reglas para llenar los slots:
      aplica el 5 no es honesto: implica que hay algo que mirar, y manda a la sesion siguiente a
      buscar una prioridad que no existe.
 
+     **Tambien aplica cuando el UNICO candidato que encontraste en 2 o 3 quedo excluido por la
+     regla de `_revisar` futuro de arriba, y no hay otro sin fecha que lo reemplace** — no es lo
+     mismo que "no hay nada", pero el efecto para HOY es identico: nada que la sesion siguiente
+     pueda avanzar antes de esa fecha. La media-linea de motivo lo dice tal cual, señalando el
+     bloque de calendario: `ninguno — lo unico abierto de este hilo tiene fecha futura, ver
+     Recordatorios de calendario`. Ejemplo: si la sesion del 2026-09-08 no hubiera dejado el
+     pendiente suelto sin fecha `p-9445bed4b6`, el texto habria sido `ninguno — el snapshot semanal
+     de SQL-LIVE y la confirmacion de N8n-Crons ya tienen su propio recordatorio (09-16, 09-20)`.
+
      **Antes de declarar este caso, relee la seccion `## Pendientes` que este mismo Step ya
-     escribio (3a/3b) de ESTE archivo.** Si queda algun `- [ ]` sin marcar ahi, este caso no
-     aplica — es el 2 o el 3. Caso real (2026-09-15): una sesion declaro `ninguno` con un
-     pendiente Alta recien creado a la vista en su propia seccion `## Pendientes` — el atajo
-     salto directo a este caso sin pasar por el 2, y el pendiente se perdio del snippet hasta
-     que se audito el jsonl a mano en una sesion posterior. **No es excusa para NO declarar
-     este caso** un pendiente Alta que no sea de esta sesion ni este relacionado con ella — eso
-     va en `Sigue abierto` (regla debajo), no cambia el veredicto de `<next-step>`.
+     escribio (3a/3b) de ESTE archivo.** Si queda algun `- [ ]` sin marcar ahi **y trae `_revisar`
+     vencido o ningun `_revisar`**, este caso no aplica — es el 2 o el 3. Caso real (2026-09-15):
+     una sesion declaro `ninguno` con un pendiente Alta recien creado a la vista en su propia
+     seccion `## Pendientes` — el atajo salto directo a este caso sin pasar por el 2, y el
+     pendiente se perdio del snippet hasta que se audito el jsonl a mano en una sesion posterior.
+     **No es excusa para NO declarar este caso** un pendiente Alta que no sea de esta sesion ni
+     este relacionado con ella — eso va en `Sigue abierto` (regla debajo), no cambia el veredicto
+     de `<next-step>`. **Si TODOS los `- [ ]` sin marcar traen `_revisar` futuro**, la relectura no
+     bloquea el caso 5 — es exactamente la variante de arriba ("Tambien aplica cuando..."), no una
+     excepcion a esta regla.
 
   **Cuando aplica el caso 1**, la linea `Lee memory/sessions/DATE-SLUG.md para el contexto
   completo.` de la plantilla (mas abajo) se extiende con la ruta del plan:
@@ -855,6 +880,14 @@ Reglas para llenar los slots:
   por ` · `. **Maximo 3**; si hay mas, cierra con `+N mas en _pendientes.md`. **Omite la linea
   entera si el unico pendiente de la sesion es el que ya esta en `Proximo paso`** — repetirlo no
   anade nada.
+
+  **Excluye de esta lista (y de la lista Alta cross-sesion de abajo) cualquier pendiente con
+  `_revisar` futuro** — misma regla y mismo motivo que en `<next-step>` de arriba: si esta sesion
+  genero su propio recordatorio de calendario (Step 8c) para esa fecha, listarlo tambien aqui repite
+  la misma fecha dos veces en el mismo snippet, una vez sin contexto (solo el id) y otra con
+  Titulo/Descripcion completos en el bloque de calendario. Un pendiente **sin** `_revisar` (backlog
+  real, sin fecha) se queda en la lista aunque este relacionado con uno que si la tiene — la
+  exclusion es por el campo, no por el tema.
 
   **Ademas, agrega cualquier pendiente ABIERTO de prioridad Alta en `_pendientes.md`** que no sea
   ya el `<next-step>` — sin importar si es de esta sesion, de otra, o si toca el mismo tema. Va

@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.25.7] - 2026-09-16
+Reportado por el usuario (vía `/goalspec:interview`, sobre un caso real en otro proyecto:
+`cloudflare-expert/memory/sessions/2026-09-08-snapshots-n8n-digitalocean.md`): el `<next-step>` del
+snippet `## Como retomar` eligió `confirmar el 2026-09-16 que...` — idéntico al recordatorio de
+calendario que el mismo Step 8c ya generaba para esa misma fecha en la misma sesión, y `Sigue
+abierto` repetía el pendiente del recordatorio del 09-20. El bloque completo terminaba siendo una
+réplica del bloque de calendario sin aportar nada nuevo: un usuario despistado podía copiarlo y
+arrancar una sesión sin nada que hacer hoy.
+
+- **La escalera de `<next-step>` (casos 2-3) descarta candidatos con `_revisar` futuro**: un
+  pendiente cuyo único dato accionable es una fecha posterior a hoy (el mismo campo que Step 8c ya
+  lee para el recordatorio de calendario) no es elegible como próximo paso — cae al siguiente
+  candidato o caso, igual que cuando un caso simplemente no aplica. Un `_revisar` ya vencido no se
+  excluye.
+- **Caso 5 (`ninguno`) gana una variante**: aplica también cuando el único candidato disponible en
+  2/3 quedó excluido por la regla anterior y no hay otro sin fecha que lo reemplace — con el motivo
+  apuntando al bloque de calendario en vez de inventar uno genérico.
+- **`Sigue abierto` excluye los mismos pendientes con `_revisar` futuro** (de esta sesión y de la
+  lista Alta cross-sesión) para no repetir la misma fecha dos veces en el mismo snippet. Los
+  pendientes sin `_revisar` (backlog real, sin fecha) se quedan aunque estén relacionados con uno
+  que sí la tiene.
+
+Sin cambios en `bin/print-como-retomar.py`: ya sabía imprimir la forma de una línea cuando el caso 5
+aplica — solo cambió cuándo se dispara. `templates/backfill-3t.md` queda fuera de alcance, decide a
+propósito no escribir `## Como retomar`.
+
 ## [2.25.6] - 2026-09-15
 Reportado por el usuario (vía `/goalspec:interview`, sobre un caso real en otro proyecto que usa
 este plugin): el snippet `## Como retomar` cerró una sesión con `ninguno`, aunque esa misma sesión
