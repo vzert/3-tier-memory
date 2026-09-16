@@ -11,15 +11,19 @@ de una sesión posterior (`2026-09-16-verificar-backfill-tier3-no-aplicado`).
 
 - **Step 3b (creación) exige un intervalo concreto para un pendiente "esperar y luego revisar"**:
   el texto ya no puede quedar en prosa abierta ("revisar periódicamente", "confirmar en unos
-  días"). Dos reglas fijas, sin criterio intermedio: (1) si el usuario o la sesión ya dijeron un
-  número, conviértelo a fecha (igual que "T+7"); (2) en cualquier otro caso, 5 días literal, sin
-  "razonar" un intervalo distinto — ese tercer criterio intermedio era justo lo que dejaba a dos
-  agentes eligiendo fechas distintas (`/goalspec:adversary`, segunda ronda, 2026-09-16). No aplica
-  a un pendiente bloqueado por una condición o decisión ajena, solo al que depende de que pase
-  tiempo o actividad. Verificado a mano contra el caso real: `p-fd5c8cccb7` no traía número en su
-  texto → regla 2 → 5 días → `2026-09-21`, la misma fecha que el usuario ya había elegido a mano.
-  Como el resto de las reglas de prosa de este Step, no tiene prueba automatizada — se verifica
-  contra un caso real, mismo patrón que 2.25.7.
+  días"). Dos reglas fijas, sin criterio intermedio: (1) si el usuario o la sesión ya dijeron UN
+  SOLO número POSITIVO de días naturales o semanas, o una fecha futura inequívoca, sin condición
+  ni unidad dependiente de un calendario que este proyecto no define (p.ej. "días hábiles") —
+  conviértelo a fecha (igual que "T+7"); (2) cualquier otra forma (varios números, condición,
+  rango, cero, fecha vencida, día de semana sin ancla, "días hábiles") — 5 días literal, sin
+  "razonar" un intervalo distinto. Cinco rondas de `/goalspec:adversary` (GPT-5, 2026-09-16)
+  fueron cerrando cada hueco de determinismo uno por uno — ver `plugins/3-tier-memory/templates/
+  checkpoint-3t.md` (Step 3b) para el texto final, esta entrada resume el resultado, no cada
+  ronda. No aplica a un pendiente bloqueado por una condición o decisión ajena, solo al que
+  depende de que pase tiempo o actividad. Verificado a mano contra el caso real: `p-fd5c8cccb7` no
+  traía número en su texto → regla 2 → 5 días → `2026-09-21`, la misma fecha que el usuario ya
+  había elegido a mano. Como el resto de las reglas de prosa de este Step, no tiene prueba
+  automatizada — se verifica contra un caso real, mismo patrón que 2.25.7.
 
 Primer intento de esta sesión agregaba ademas una "red de seguridad" en Step 8 para un pendiente
 viejo que se coló sin `_revisar` — verificación adversarial (`/goalspec:adversary`, GPT-5) la
