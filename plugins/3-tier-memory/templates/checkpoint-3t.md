@@ -286,12 +286,16 @@ recordatorio de calendario. `--revisar` no cambia el `_id`: la ventana no es par
 **Si el pendiente es del tipo "esperar y luego revisar"** (depende de que pase tiempo o actividad
 acumulada, no de una condicion o decision) **el texto debe nombrar un intervalo concreto ANTES de
 emitir el evento** — nunca lo dejes en prosa abierta como "revisar periodicamente" o "monitorear
-que no falle". Escribe el intervalo razonado del propio mecanismo si lo conoces (p.ej. "cuantos
-dias de actividad real hacen falta para que el chequeo tenga sentido"); **si no hay una senal mejor
-en el contexto, usa 5 dias por default** — mismo numero que ya uso el usuario en el caso real de
-abajo, y suficientemente arbitrario-pero-fijo para que dos agentes que sigan esta regla lleguen a
-la misma fecha. Convierte ese intervalo a `--revisar YYYY-MM-DD`, la misma disciplina que ya
-aplicas para "T+7". Un pendiente asi sin `--revisar` no cae en la exclusion de Step 8 (2.25.7) — se
+que no falle". Dos reglas fijas, sin criterio intermedio (para que dos agentes lleguen siempre a la
+misma fecha):
+1. **Si el propio usuario o la sesion ya dijeron un numero** ("en una semana", "el viernes",
+   "T+7") — conviertelo a fecha, igual que ya haces con "T+7".
+2. **En cualquier otro caso, usa literalmente 5 dias** — mismo numero que ya uso el usuario en el
+   caso real de abajo. No hay un tercer criterio ("razona el intervalo del mecanismo"): ese
+   tercer criterio es el que dejaba a dos agentes eligiendo fechas distintas (hallazgo de
+   `/goalspec:adversary`, 2026-09-16).
+
+Convierte el resultado a `--revisar YYYY-MM-DD`, la misma disciplina que ya aplicas para "T+7". Un pendiente asi sin `--revisar` no cae en la exclusion de Step 8 (2.25.7) — se
 queda flotando indefinidamente como candidato de `<next-step>`/`Sigue abierto` por pura prioridad,
 sin importar que tan pronto sea razonable revisarlo. Caso real (2026-09-16, proyecto
 `claude-vzert`): `p-fd5c8cccb7` ("revisar el log del cron por PUSH FAILED", prioridad Alta, sin
