@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.25.9] - 2026-09-17
+Reportado por el usuario (vía `/goalspec:interview`, sobre un caso real en `claude-vzert`,
+sesión `memory/sessions/2026-09-17-remedicion-goalspec-precondicion-no-cumplida.md`): la sesión no
+dejó nada accionable hoy (los dos pendientes quedaron con `_revisar` futuro, 2026-09-24, y ya
+tenían su propio `## Recordatorios de calendario` con título y descripción — eso funciona bien
+desde 2.25.7). Pero el bloque `## Como retomar` — el que un humano copia y pega para arrancar una
+sesión nueva de inmediato — se generó completo (las 6 líneas de ceremonia) en vez de colapsar a
+una línea, porque `Sigue abierto` tenía pendientes Alta del backlog general sin relación con el
+trabajo del día. Con 89 pendientes abiertos y 5 en Alta, siempre hay alguno que califica — la
+excepción de Step 8 ("si hay un Alta que agregar, bloque completo aunque aplique el caso 5")
+volvía inalcanzable el colapso en la práctica.
+
+- **Step 8 (`checkpoint-3t.md`): el caso 5 (nada que retomar) colapsa a una línea sin excepción.**
+  Un pendiente Alta cross-sesión ya no fuerza el bloque completo — ese backlog lo reporta el hook
+  de inicio de sesión, no hace falta repetirlo en un snippet pensado para "corre esto ahora
+  mismo". La regla de agregar Alta cross-sesión a `Sigue abierto` sigue vigente, pero solo aplica
+  cuando el bloque completo se genera por otro motivo (el caso 5 no aplicó).
+- `bin/print-como-retomar.py`: comentario actualizado para reflejar la regla nueva (el script en
+  sí no cambió — ya era mecánico: imprime línea única o bloque fenced según lo que Step 8a haya
+  escrito).
+
 ## [2.25.8] - 2026-09-16
 Reportado por el usuario (vía `/goalspec:interview`, sobre un caso real en `claude-vzert`,
 commit `1d04248`): `p-fd5c8cccb7` ("revisar el log del cron por PUSH FAILED", prioridad Alta, sin

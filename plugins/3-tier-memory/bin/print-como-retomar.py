@@ -20,10 +20,10 @@ pega su salida tal cual". Solo hay una fuente de verdad (el session file); este 
 transforma mecanicamente al formato de terminal, nunca la reinterpreta.
 
 Que hace: lee la seccion `## Como retomar` de SESSION_FILE (entre ese encabezado y el siguiente
-`## `). Si es la forma de una linea (`Ninguno — ...`, sin bloque de codigo — caso 5 sin pendiente
-Alta que agregar), la imprime con el formato de linea unica que Step 8b ya define (sin
-separadores, para pegar dentro del reporte de Step 7). Si es un bloque de codigo (el snippet de
-6 lineas, con o sin condicionales), la imprime completa con los separadores visuales de Step 8b.
+`## `). Si es la forma de una linea (`Ninguno — ...`, sin bloque de codigo — caso 5, sin
+excepcion), la imprime con el formato de linea unica que Step 8b ya define (sin separadores,
+para pegar dentro del reporte de Step 7). Si es un bloque de codigo (el snippet de 6 lineas, con
+o sin condicionales), la imprime completa con los separadores visuales de Step 8b.
 Si la seccion esta vacia o dice solo el placeholder (`<filled in Step 8>`), no imprime nada y
 sale con codigo 1 — Step 8a todavia no corrio.
 

@@ -754,16 +754,23 @@ says so explicitly.
 
 Genera un prompt breve y autosuficiente que el usuario pueda copiar y pegar al iniciar la proxima sesion (despues de `/exit` o `/clear`) para retomar contexto sin pensar.
 
-**Si el caso 5 de `<next-step>` aplica (mas abajo) Y no hay un pendiente Alta que agregar a
-`Sigue abierto` (regla debajo), NO generes el bloque — mismo principio que Step 8c con los
-recordatorios de calendario: una seccion condicional que no aplica se omite entera, no se rellena
-con placeholders.** 2026-09-14, el propio usuario lo senalo sobre un caso real: un bloque con
-`Retomamos: ninguno` / `Proximo paso: ninguno` / `Antes de actuar...` para una sesion que no dejo
-nada que retomar es la misma ceremonia vacia que el bloque de calendario existe para evitar — mas
-ruido que senal. Ver la instruccion alternativa en 8a y 8b. **Si SI hay un pendiente Alta que
-agregar**, genera el bloque igual (formato normal de 8a/8b), con `Proximo paso: ninguno — <por
-que>` y la linea `Sigue abierto:` con ese pendiente — un `ninguno` real en `<next-step>` no es lo
-mismo que "nada que mirar en todo el repo".
+**Si el caso 5 de `<next-step>` aplica (mas abajo), NO generes el bloque completo — mismo
+principio que Step 8c con los recordatorios de calendario: una seccion condicional que no aplica
+se omite entera, no se rellena con placeholders.** 2026-09-14, el propio usuario lo senalo sobre
+un caso real: un bloque con `Retomamos: ninguno` / `Proximo paso: ninguno` / `Antes de actuar...`
+para una sesion que no dejo nada que retomar es la misma ceremonia vacia que el bloque de
+calendario existe para evitar — mas ruido que senal. Ver la instruccion alternativa en 8a y 8b.
+
+**Un pendiente Alta del backlog general (sin relacion con el trabajo de esta sesion) NO es motivo
+para generar el bloque completo cuando el caso 5 aplica.** Caso real (2026-09-17, proyecto
+`claude-vzert`, via `/goalspec:interview`): con 89 pendientes abiertos y 5 en Alta, siempre hay
+alguno suelto que calificaria para `Sigue abierto` — la excepcion anterior ("si hay un Alta que
+agregar, bloque completo") volvia inalcanzable el colapso a una linea en la practica, justo cuando
+la sesion no dejo nada accionable hoy (los unicos pendientes de esa sesion tenian `_revisar`
+futuro y ya su propio recordatorio de calendario). Ese backlog Alta ya lo reporta otro canal (el
+hook de inicio de sesion cuenta los pendientes Alta abiertos) — no hace falta repetirlo en un
+bloque pensado para "copia y pega esto en una sesion nueva, ahora mismo". El caso 5 colapsa a una
+linea sin excepcion (ver 8a).
 
 **Plantilla de 6 lineas: 4 obligatorias y 2 condicionales**:
 
@@ -940,12 +947,16 @@ Reglas para llenar los slots:
   ya el `<next-step>` — sin importar si es de esta sesion, de otra, o si toca el mismo tema. Va
   aqui, NUNCA en `<next-step>` (ese campo no debe cargar con una prioridad ajena al trabajo del
   dia — ver la advertencia contra "revisar si X respondio" mas arriba). Mismo tope de 3 y mismo
-  `+N mas`, contando junto con los de esta sesion. **Si aplica**, esta linea SI genera el bloque
-  aunque `<next-step>` haya caido en el caso 5 (`ninguno`) — un `ninguno` honesto en `Proximo paso`
-  no significa que no haya nada que mirar, solo que nada de ESTA sesion califica; ver 8a para el
-  formato en ese caso. Caso real (2026-09-15): un pendiente Alta quedo invisible en el snippet de
-  la sesion siguiente porque no tocaba el mismo tema y este campo solo miraba los pendientes de
-  la sesion misma.
+  `+N mas`, contando junto con los de esta sesion. **Esta regla solo aplica cuando el bloque
+  completo se genera** (`<next-step>` no cayo en el caso 5). **Si `<next-step>` cayo en el caso 5,
+  estos Alta cross-sesion NO se agregan aqui** — el snippet colapsa a una linea (ver 8a) y forzar
+  el bloque completo solo para listarlos fue justo el gap medido 2026-09-17 (proyecto
+  `claude-vzert`: 89 pendientes abiertos / 5 Alta, siempre habia alguno que calificaba, asi que el
+  colapso nunca se alcanzaba en la practica). Ese backlog ya lo reporta el hook de inicio de
+  sesion. Caso real (2026-09-15, antes de este ajuste): un pendiente Alta quedo invisible en el
+  snippet de la sesion siguiente porque no tocaba el mismo tema y este campo solo miraba los
+  pendientes de la sesion misma — esa parte de la regla (mirar tambien fuera del tema de hoy)
+  sigue vigente para el bloque completo.
 
   **Orden cuando hay mas de 3 candidatos (los de esta sesion mas los Alta cross-sesion)**:
   primero los de esta sesion (regla ya existente arriba), despues los Alta cross-sesion por
@@ -996,20 +1007,16 @@ condicionales, no opcionales: si la informacion existe, la linea va.
 
 **8a. Persistir en el session file**:
 
-**Si el caso 5 aplica y no hay pendiente Alta que agregar** (la sesion no dejo trabajo que
-retomar, en ningun lado), reemplaza el placeholder `<filled in Step 8>` con UNA linea, sin bloque
-de codigo:
+**Si el caso 5 aplica** (la sesion no dejo trabajo que retomar, en ningun lado), reemplaza el
+placeholder `<filled in Step 8>` con UNA linea, sin bloque de codigo — sin excepcion por
+pendientes Alta del backlog general (ver la regla de `Sigue abierto` mas arriba: esos Alta no
+entran aqui, se reportan por el hook de inicio de sesion, no por este snippet):
 
 ```markdown
 ## Como retomar
 
 Ninguno — <la misma media-linea del caso 5: por que esta sesion se cierra sola>.
 ```
-
-**Si el caso 5 aplica pero SI hay un pendiente Alta para `Sigue abierto`**, usa el formato normal
-de bloque completo (mas abajo), con `Proximo paso: ninguno — <la misma media-linea del caso 5>` y
-la linea `Sigue abierto:` presente — no es el caso de una linea, el bloque completo sigue teniendo
-valor.
 
 **En cualquier otro caso**, reemplaza el placeholder `<filled in Step 8>` de la seccion `## Como retomar` con el snippet dentro de un bloque de codigo (aqui con las dos condicionales presentes; omite la linea entera cuando no apliquen):
 
@@ -1061,8 +1068,7 @@ python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"
 
 **Pega su salida tal cual, sin resumirla ni reformularla**, como el ultimo bloque de tu respuesta
 (despues del reporte de Step 7). El script ya decide el formato correcto por ti — linea unica sin
-separadores si el caso 5 aplica sin pendiente Alta, bloque completo con separadores en cualquier
-otro caso — leyendo el MISMO `## Como retomar` que acabas de escribir en 8a. No existe una segunda
+separadores si el caso 5 aplica, bloque completo con separadores en cualquier otro caso — leyendo el MISMO `## Como retomar` que acabas de escribir en 8a. No existe una segunda
 redaccion que pueda divergir de la primera, porque no hay una segunda redaccion: hay una lectura.
 
 **Por que un script y no "redacta lo mismo otra vez".** Medido en vivo (2026-09-15, este mismo
