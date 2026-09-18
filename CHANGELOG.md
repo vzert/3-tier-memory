@@ -1,5 +1,36 @@
 # Changelog
 
+## [2.26.0] - 2026-09-17
+Origen: auditoría comparativa contra `cytostack/openwolf` (`memory/research/openwolf-vs-3tier.md`,
+vía `/goalspec:interview`). `recall.sh` solo reinyecta memoria cuando el prompt del usuario tiene
+match léxico con una regla; una sesión larga de puras tool calls sin prompts nuevos relevantes
+nunca vuelve a ver una regla crítica del proyecto (ej. "version bump obligatorio antes de push").
+
+- **Reinyección periódica de reglas críticas cada N tool calls, independiente de relevancia
+  léxica.** Dos hooks nuevos, con una sola responsabilidad cada uno — el mismo patrón que ya usa
+  `bash-journal-nudge.sh`/`journal-drift-nudge.sh`, porque un `PostToolUse` que imprime texto
+  plano NO llega al agente (medido en este repo, confirmado de nuevo hoy contra la documentación
+  oficial vigente):
+  - `bin/rule-reinject-count.sh` (`PostToolUse`, matcher vacío) cuenta tool calls por sesión, en
+    silencio, en un archivo de estado fuera de `memory/`.
+  - `bin/rule-reinject-nudge.sh` (`UserPromptSubmit`) entrega, cuando el contador cruza un
+    múltiplo de `THREET_RULE_REINJECT_INTERVAL` (default 25, `0` desactiva), una ventana rotativa
+    de `THREET_RULE_REINJECT_COUNT` (default 6) líneas del Quick Reference de `_learnings.md`,
+    avanzando el puntero en cada entrega para cubrir toda la lista con el tiempo.
+  - `bin/test-rule-reinject.sh`: 23 checks, incluyendo aislamiento entre sesiones concurrentes y
+    el caso de varios intervalos acumulados antes de un solo prompt.
+- **Corrección encontrada por `/goalspec:adversary` (codex, backend externo) antes de publicar**:
+  el diseño inicial saltaba el puntero de rotación directo al conteo actual en vez de avanzar de a
+  uno, lo que se comía una ventana de reglas para siempre cuando se acumulaba más de un cruce de
+  intervalo entre dos prompts. Corregido y cubierto con un test de regresión específico. Ronda
+  delta-scoped final: `hold` con evidencia en los 4 puntos revisados.
+- `memory/learnings/3tier-memory-system.md` regla 222 documenta la lección de fondo (dos hooks,
+  nunca uno, para cualquier aviso que necesite llegar al agente durante tool calls).
+- Pendiente abierto (`_revisar: 2026-09-21`): confirmar en el JSONL real de una sesión de
+  `claude-vzert` (tras su auto-update) que el `additionalContext` de este mecanismo efectivamente
+  llega — el test lo prueba a nivel de script, no hay verificación empírica en una sesión viva
+  todavía.
+
 ## [2.25.9] - 2026-09-17
 Reportado por el usuario (vía `/goalspec:interview`, sobre un caso real en `claude-vzert`,
 sesión `memory/sessions/2026-09-17-remedicion-goalspec-precondicion-no-cumplida.md`): la sesión no
