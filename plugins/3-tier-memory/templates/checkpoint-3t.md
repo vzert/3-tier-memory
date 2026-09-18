@@ -105,6 +105,9 @@ importance: <0-10>
 ## Recordatorios de calendario
 <filled in Step 8c-2 — borra esta seccion si no hubo pendientes con fecha futura>
 
+## Recomendaciones de research sin resolver
+<filled in Step 8d — borra esta seccion si print-research-recomendaciones.py no imprimio nada>
+
 ## Related
 - [[_session-index]]
 - [[_pendientes]]
@@ -173,6 +176,7 @@ python3 "$JBIN/enrich-memory.py" "$MEMORY_DIR" --apply --only creado,id   # lega
 python3 "$JBIN/repair-dualwrite.py" "$MEMORY_DIR" --apply --fix-pipes    # adopts orphan lines; Tier 2 lines with no Tier 3 row; rows a `|` made unclosable; idempotent
 python3 "$JBIN/repair-plans-index.py" "$MEMORY_DIR" --apply    # migrates legacy 4-col plan rows to the canonical 6-col shape, re-headers if needed; idempotent
 python3 "$JBIN/check-active-plans.py" "$MEMORY_DIR"    # read-only; lists active/draft/testing plans, if any
+python3 "$JBIN/check-active-research.py" "$MEMORY_DIR"    # read-only; lists research with unresolved '## Recomendaciones', if any
 ```
 
 `repair-plans-index.py` prints `legacy_rows_migrated=N header_rewritten=si|no unrepairable_rows=N possible_duplicates=N no_plans_table=0|1 header_unrecognized=0|1`. It runs BEFORE `check-active-plans.py` on purpose: a `_plans-index.md` still carrying the pre-journal 4-column shape (`Fecha|Plan|Status|Resumen`) under a legacy or mixed header reads its Plan/Status columns in the wrong order, so fixing the shape first is what makes the plan list `check-active-plans.py` prints trustworthy. `unrepairable_rows>0` or `possible_duplicates>0` means a row could not be migrated safely (ambiguous width, or a title collision with an existing canonical row) — read it and fix by hand; this script never guesses.
@@ -189,6 +193,15 @@ reconciled and it is easy to answer "## Plans: Ninguno" out of habit. It does no
 the connection for you (that needs following `_origen` → "Continuacion de" → plan chains across
 session files, and a wrong guess there is worse than no guess) — it only makes sure you cannot
 say you never saw the list.
+
+**`check-active-research.py` is the same reminder, one level over: a research that produced
+several candidate recommendations, of which this session (or a past one) only acted on some.**
+Without it, the recommendations you did NOT act on live only as prose inside a research already
+marked `completed` — nothing lists them again, ever, unless someone happens to reopen that exact
+file. If it prints any research with unresolved `## Recomendaciones` items, read them NOW, before
+Step 5 — Step 8d will build the "retomar" prompt for whatever is still unchecked, but only if you
+either resolved them (checked off, with a pointer to the plan/pendiente that tracks it, or a
+`declinado: <motivo>` note) or left them alone on purpose.
 
 **Read `adopted` and `rows_added` before you call anything broken — on the FIRST checkpoint of a
 memory that predates 2.12.0 they are both expected and non-zero, and nothing is wrong.** Such a
@@ -560,6 +573,45 @@ quedaba ciega para ese eslabón — hallazgo adversarial (2026-09-14), con repro
 - Add wikilink in session log ## Research section and ## Related
 
 **Fallback (no JBIN)**: add/update the row in memory/_research-index.md by hand.
+
+### Research con varias recomendaciones candidatas — sección `## Recomendaciones`
+
+**Cuándo aplica.** Solo si el research de esta sesión (o uno que revisaste, aunque no lo hayas
+escrito hoy) produjo **más de una** recomendación/opción a considerar, y esta sesión solo actuó
+sobre alguna(s) de ellas — típico de un audit comparativo ("de estas N ideas, implementamos 1").
+Un research con una sola conclusión (`--resultado` de una línea, sin ramas) no lo necesita.
+
+**Por qué existe.** `research.upsert --status completed` cierra el research entero como una sola
+unidad, con un solo `--resultado`. Las recomendaciones que NO se ejecutaron quedan como prosa
+suelta dentro de un archivo ya marcado `completed` — nada vuelve a mostrarlas jamás, a menos que
+alguien reabra ese archivo por su cuenta. Medido en este mismo repo, 2026-09-17:
+`research/openwolf-vs-3tier.md` generó 4 recomendaciones priorizadas, se implementó 1, y las
+otras 3 no tenían ningún rastro mecánico — ni en el índice, ni en "Como retomar" — hasta que el
+usuario lo señaló explícitamente. El precedente de planes (`--parent` + `## Sub-planes`) resuelve
+el problema análogo para fases de un plan, pero es demasiado — nunca se usó en un plan real de
+este repo (cero filas `(fase de plan-…)`, cero secciones `## Sub-planes`, verificado). Lo que sí
+sobrevivió al uso real (v2.13.0) fue el mecanismo más simple: un puntero directo, sin tabla
+recíproca ni detección de ciclos. Este es ese mismo espíritu, aplicado a research.
+
+**Qué escribir**, directo en el cuerpo del research (Tier 3, sin evento nuevo — no toca
+`research.upsert` ni el índice):
+
+```markdown
+## Recomendaciones
+
+- [ ] <recomendación aún sin decidir>
+- [x] <recomendación ya resuelta> — implementada en [[plans/plan-<slug>]]
+- [x] <recomendación descartada> — declinado: <motivo corto>
+```
+
+Marca `[x]` solo cuando la recomendación tiene un destino real: un plan/pendiente que la
+implementa, o una nota explícita de por qué se descarta. Dejarla `[ ]` es la señal correcta
+mientras nadie ha decidido nada — no la marques solo para "limpiar" la lista.
+
+`check-active-research.py` (Step 3-pre) avisa en cada checkpoint mientras queden `[ ]` sin
+marcar en cualquier research — no solo en el de hoy. `print-research-recomendaciones.py` (Step
+8d) arma el prompt de retomar a partir de esta misma sección, para los research que ESTA sesión
+enlazó en su `## Research` — una sola fuente de verdad, nunca una segunda redacción.
 
 ### If NO signals found for either:
 Write "Ninguno" in the session log sections and skip the index updates.
@@ -1212,4 +1264,38 @@ un mismo calendario, y tres campos que no dicen *donde* dejan un prompt que no s
 correr. El snippet de 8a/8b no tiene este problema porque se pega en el acto, sabiendo donde estas;
 este se pega dentro de un mes.
 
-No agregues git commit aqui — el cambio al session file ya quedo dentro del flujo de Step 6, pero como Step 8 corre DESPUES, ni `## Como retomar` ni `## Recordatorios de calendario` estaran en el commit. Es aceptable: el snippet vive en disco y el commit es best-effort. Si el usuario quiere comitearlo, puede `git add memory/sessions/DATE-SLUG.md && git commit --amend --no-edit` manualmente o esperar al proximo checkpoint.
+**8d. Recomendaciones de research sin resolver — bloque aparte, igual que el de calendario**:
+
+Si algún research que el `## Research` de este session log enlaza (de esta sesión, o uno viejo
+que solo revisaste) tiene una sección `## Recomendaciones` con ítems `- [ ]` sin marcar, corre:
+
+```bash
+python3 "$JBIN/print-research-recomendaciones.py" "$SESSION_FILE"
+```
+
+**Pega su salida tal cual, sin resumirla**, después del bloque de "Como retomar" (y después de
+los recordatorios de calendario si los hay) — mismo motivo que 8b: una segunda redacción es una
+segunda oportunidad de divergir o de sustituir el formato exigido por un resumen propio. Si no
+imprime nada, no hay nada que pegar — el silencio en stdout es el caso normal (la mayoría de los
+research no tienen recomendaciones múltiples, y los que las tienen normalmente ya se resolvieron).
+**Si el script avisa por stderr que un wikilink de `## Research` no se pudo leer, no lo ignores**
+— puede ser un research legítimamente `(inline)` (sin archivo propio), o puede ser un enlace roto
+que esconde recomendaciones sin resolver que el script no pudo revisar. Repáralo o confírmalo
+antes de asumir que ese research no tiene nada pendiente.
+
+**Va fuera del bloque `## Como retomar`, no dentro — misma regla que el recordatorio de
+calendario (8c).** No depende de qué caso de `<next-step>` haya aplicado: si el caso 5 colapsó
+"Como retomar" a una línea porque esta sesión no dejó nada del TRABAJO DE HOY que retomar, un
+research con recomendaciones sin resolver de una sesión anterior sigue sin resolverse igual, y
+el colapso de una no tiene por qué implicar el otro. Confundir los dos fue exactamente lo que
+pasó el 2026-09-17 en este mismo repo: una sesión implementó 1 de 4 recomendaciones de un
+research, cerró con "Como retomar: ninguno" (caso 5, correcto para el trabajo de hoy), y las
+otras 3 recomendaciones no aparecieron en ningún lado del cierre — el usuario tuvo que señalarlo
+él mismo, en la sesión siguiente, porque nada se lo recordó.
+
+**Persistir en el session file**: agrega la misma salida (o "Ninguna" si no imprimió nada) en una
+sección `## Recomendaciones de research sin resolver`, entre `## Recordatorios de calendario` (o
+`## Como retomar` si no hubo recordatorios) y `## Related`. Igual que 8c-2: los bloques
+persistidos son idénticos a los impresos.
+
+No agregues git commit aqui — el cambio al session file ya quedo dentro del flujo de Step 6, pero como Step 8 corre DESPUES, ni `## Como retomar` ni `## Recordatorios de calendario` ni `## Recomendaciones de research sin resolver` estaran en el commit. Es aceptable: el snippet vive en disco y el commit es best-effort. Si el usuario quiere comitearlo, puede `git add memory/sessions/DATE-SLUG.md && git commit --amend --no-edit` manualmente o esperar al proximo checkpoint.

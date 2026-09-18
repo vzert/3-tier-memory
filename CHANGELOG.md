@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.27.0] - 2026-09-17
+Origen: al cerrar la sesión de 2.26.0, el usuario señaló que `research/openwolf-vs-3tier.md`
+generó 4 recomendaciones priorizadas, se implementó 1, y las otras 3 no tenían ningún rastro
+mecánico — ni en el índice, ni en "Como retomar". Se pierden a menos que alguien recuerde abrir
+ese archivo concreto.
+
+- **Sección `## Recomendaciones` en research** (checklist `- [ ]`/`- [x] — implementada/
+  declinado`, Tier-3 directo, sin tocar el esquema del journal ni `_research-index.md`) para
+  research que producen varias recomendaciones candidatas.
+- `bin/check-active-research.py` (nuevo, Step 3-pre, mirror de `check-active-plans.py`): avisa en
+  cada checkpoint si algún research tiene recomendaciones sin marcar, antes de escribir
+  "## Research: Ninguno".
+- `bin/print-research-recomendaciones.py` (nuevo, Step 8d, mirror de `print-como-retomar.py`):
+  arma, para los research que el session log enlaza, el prompt exacto para retomar lo que quedó
+  sin resolver — bloque aparte de "Como retomar", nunca dentro (el colapso del caso 5 sobre el
+  trabajo de HOY no implica que no haya recomendaciones de una sesión anterior sin resolver).
+- Investigación previa al diseño: se verificó que el mecanismo padre/hijo/hermano de PLANES
+  (`--parent` + `## Sub-planes` + detección de ciclos) nunca se usó en un plan real de este repo
+  (cero filas, cero secciones). Se replicó en su lugar el patrón simple que sí sobrevivió al uso
+  real (v2.13.0): un puntero directo, sin tabla recíproca ni detección de ciclos.
+- **Corrección de `/goalspec:adversary` (codex) antes de publicar**: `print-research-
+  recomendaciones.py` trataba un wikilink de research ROTO (typo, archivo movido o borrado) igual
+  que uno legítimamente inline — silencio total, exactamente la pérdida que este mecanismo existe
+  para evitar. Ahora avisa por stderr sin ensuciar el bloque que sí se pega. Ronda delta-scoped
+  final: `hold`.
+- `memory/research/openwolf-vs-3tier.md` retrofit con su `## Recomendaciones` real.
+- `memory/learnings/3tier-memory-system.md` regla 223.
+
 ## [2.26.0] - 2026-09-17
 Origen: auditoría comparativa contra `cytostack/openwolf` (`memory/research/openwolf-vs-3tier.md`,
 vía `/goalspec:interview`). `recall.sh` solo reinyecta memoria cuando el prompt del usuario tiene
