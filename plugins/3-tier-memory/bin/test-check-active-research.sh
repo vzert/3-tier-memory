@@ -67,13 +67,17 @@ chk "lista el texto de cada una" "1" "$(printf '%s' "$O" | grep -c 'idea dos sin
 chk "no lista la ya marcada" "0" "$(printf '%s' "$O" | grep -c 'idea implementada')"
 chk "count = 1 (un research con pendientes)" "1" "$C"
 
-echo "== fichero illegible: avisa por stderr, no lo confunde con 'sin recomendaciones' =="
-chmod 000 "$M/research/con-pendientes.md" 2>/dev/null
-if [ "$(id -u)" != "0" ]; then
-  ERR=$(python3 "$BIN/check-active-research.py" "$M" 2>&1 >/dev/null)
-  chk "stderr avisa" "1" "$(printf '%s' "$ERR" | grep -c 'no se pudo leer')"
-fi
-chmod 644 "$M/research/con-pendientes.md" 2>/dev/null
+echo "== fichero ILEGIBLE (no inexistente): avisa por stderr, no lo confunde con 'sin recomendaciones' =="
+# chmod 000 no es Windows-safe (medido en CI: Git Bash no restringe lectura por permisos POSIX,
+# el mismo hallazgo que ya documenta test-check-active-plans.sh). Mismo truco que ese test: un
+# DIRECTORIO en el lugar del archivo dispara IsADirectoryError en cualquier plataforma.
+M2="$T/memory-ilegible"; mkdir -p "$M2/research"
+mkdir -p "$M2/research/roto.md"
+O2=$(python3 "$BIN/check-active-research.py" "$M2" 2>&1 >/dev/null)
+C2=0
+python3 "$BIN/check-active-research.py" "$M2" --count >/dev/null 2>&1 || C2=$?
+chk "stderr avisa (no se calla)" "1" "$(printf '%s' "$O2" | grep -c 'no se pudo leer')"
+chk "--count sale con error, no un 0 disfrazado" "1" "$([ "$C2" -ne 0 ] && echo 1 || echo 0)"
 
 echo
 echo "pass=$pass fail=$fail"
