@@ -31,9 +31,19 @@ recall inyectandola como `attachment` — desactivaba el aviso de la sesion en c
   adversario volvio con `true || python3 .../checkpoint-audit.py ; cat ficha-vieja.md` — un
   segmento parece invocar y otro trae la linea, y como el comando tiene una sola salida, la pareja
   dejaba de probar nada. Ahora cada segmento tiene que ser o la invocacion o un acompanante que no
-  produce salida (`cd`, `export`...). Un `cat`, un `echo`, un `tee`, o un `false &&` que ni
-  siquiera ejecuta lo que sigue, dejan el comando INCONCLUYENTE, y en la duda se avisa. En el
-  mismo viaje se arreglo un rechazo injusto: `env -i python3 .../checkpoint-audit.py` si cuenta.
+  produce salida. Un `cat`, un `echo`, un `tee`, o un `false &&` que ni siquiera ejecuta lo que
+  sigue, dejan el comando INCONCLUYENTE, y en la duda se avisa. En el mismo viaje se arreglo un
+  rechazo injusto: `env -i python3 .../checkpoint-audit.py` si cuenta.
+- **Y "acompanante mudo" se decide por lo que cada forma HACE, no por ser un builtin.** Tercera
+  vuelta del mismo sitio: la primera lista de acompanantes eran builtins de shell, y un
+  verificador independiente la rompio tres veces contra el hook de verdad. `set` a secas vuelca
+  TODAS las variables, asi que `export FAKE='resumen: hecho=9'; set; python3 .../checkpoint-audit.py`
+  imprimia la linea aunque el audit fallara; `source` y `.` ejecutan el contenido de un fichero
+  cualquiera; y `exec` REEMPLAZA el proceso, asi que el `python3` que iba detras no llegaba a
+  correr nunca. Los tres silenciaban el aviso. Ahora cada forma se admite por su semantica —
+  `cd` con un argumento que no sea `-`, `export` solo con asignaciones, `unset`/`umask`, y los
+  `VAR=valor` sueltos — y `exec` pasa a ser una envoltura, que es lo que si es cuando va DELANTE
+  de la invocacion.
 - **La clasificacion es estructural, no por `type` del registro** — y esto era la trampa. En el
   JSONL real de Claude Code un `tool_result` se graba DENTRO de un registro `type:"user"`, asi que
   "rechazar los mensajes de usuario" habria tirado el caso bueno junto con el malo. Lo que se mira
@@ -58,13 +68,18 @@ recall inyectandola como `attachment` — desactivaba el aviso de la sesion en c
   legible, en la duda silencio.
 - **Coste medido, no supuesto.** El parseo linea a linea lleva un prefiltro por substring antes de
   tocar el JSON, asi que solo se parsea la linea que puede aportar una de las dos mitades.
-- **`bin/test-checkpoint-audit-nudge.sh` reescrito**: 57 comprobaciones (antes 18), con las formas
+- **`bin/test-checkpoint-audit-nudge.sh` reescrito**: 67 comprobaciones (antes 18), con las formas
   de registro copiadas de un JSONL real en vez de inventadas, y una variable `NUDGE=` para correr
-  la misma bateria contra otra copia del script. Se comprobo asi que **21 de los casos nuevos
-  fallan contra 2.29.0** y pasan con esta; no se afirma, se corre. Trece de los veintiuno son
-  comandos impostores. Aparte van nueve casos que comprueban lo contrario — que las formas
-  legitimas de invocar el audit (con `-u`, con `env -i`, con `VAR=valor` delante, detras de un
-  `cd &&` o de un `export;`, invocado directo) siguen callando el aviso.
+  la misma bateria contra otra copia del script. Se comprobo asi que **28 de los casos fallan
+  contra 2.29.0** y pasan con esta; no se afirma, se corre. Veinte de los veintiocho son comandos
+  impostores. Aparte van doce casos que comprueban lo contrario — que las formas legitimas de
+  invocar el audit (con `-u`, con `env -i`, con `VAR=valor` o un `unset` delante, detras de un
+  `cd &&`, con `exec` delante, invocada directa) siguen callando el aviso.
+- **La receta de reproduccion del propio test llevaba un pie de banco.** Correr la bateria con
+  `NUDGE=` apuntando a una copia vieja SUELTA da un diferencial falso: el hook hace
+  `source "$(dirname "$0")/resolve-project-dir.sh"`, la copia suelta falla ese source y sale en
+  silencio ante cualquier entrada, asi que "todo falla" parece una senal y no lo es. Lo pisamos
+  dos, quien escribio el test y quien lo reviso. La cabecera del fichero ahora lo dice.
 - **Verificado ademas contra un transcript de verdad**, no solo contra ficheros de prueba, y sobre
   una INSTANTANEA para que sea repetible: cortando el JSONL de una sesion justo antes de la
   invocacion del audit, 2.29.0 se calla (el transcript ya llevaba la cadena por lecturas de

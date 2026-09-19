@@ -120,10 +120,32 @@ LANZADOR = re.compile(r"^(?:python[\d.]*|py)$")
 ASIGNACION = re.compile(r"^[A-Za-z_]\w*=")
 SIN_FICHERO = {"-c", "-m", "--command", "--module"}   # lo que sigue es codigo o modulo, no un fichero
 OPCION_CON_VALOR = {"-X", "-W"}
-ENVOLTURAS = {"env", "uv", "pipx", "nohup", "time", "stdbuf", "nice"}
-# Programas que no producen salida propia y pueden acompanar a la invocacion sin ensuciarla.
-# Todo lo demas convierte el comando en INCONCLUYENTE: ver `invoca_el_audit`.
-ACOMPANANTES = {"cd", "export", "set", "unset", "umask", "pwd", "mkdir", "source", ".", "exec"}
+ENVOLTURAS = {"env", "uv", "pipx", "nohup", "time", "stdbuf", "nice", "exec"}
+
+
+def acompanante_mudo(tokens):
+    """Cierto si este segmento no puede imprimir nada Y no impide que corra lo que sigue.
+
+    La primera version de esta lista decia "builtins de shell" cuando queria decir esto otro, y un
+    verificador independiente la rompio tres veces contra el hook de verdad: `set` a secas vuelca
+    TODAS las variables (`export FAKE='resumen: hecho=9'; set` imprime la linea), `source` y `.`
+    ejecutan el contenido de un fichero cualquiera, y `exec` REEMPLAZA el proceso, asi que el
+    `python3 checkpoint-audit.py` que fuera detras no llegaba a correr nunca. Los tres silenciaban
+    el aviso. Ahora cada forma se admite por lo que hace, no por ser un builtin — y `exec` pasa a
+    ser una envoltura, que es lo que si es cuando va DELANTE de la invocacion.
+    """
+    if not tokens:
+        return True
+    if all(ASIGNACION.match(t) for t in tokens):       # `VAR=valor` a secas
+        return True
+    prog, args = os.path.basename(tokens[0]), tokens[1:]
+    if prog == "cd":
+        return len(args) <= 1 and args != ["-"]        # `cd -` imprime el directorio
+    if prog == "export":
+        return bool(args) and all(ASIGNACION.match(a) for a in args)   # a secas LISTA las variables
+    if prog in ("unset", "umask"):
+        return True                                    # mudos, y `umask` a secas solo da un numero
+    return False
 
 
 def programa_ejecutado(tokens):
@@ -170,9 +192,10 @@ def invoca_el_audit(orden):
     que si otro de sus segmentos puede producir la linea de resumen por su cuenta, la pareja deja
     de probar nada: `true || python3 .../checkpoint-audit.py ; cat ficha-vieja.md` invoca en un
     segmento y trae la linea del otro. Lo encontro un adversario externo. Por eso se exige que
-    cada segmento sea o bien la invocacion, o bien un acompanante que no produce salida (`cd`,
-    `export`...). Cualquier otra cosa — `cat`, `echo`, `grep`, `git`, un `false &&` que ni siquiera
-    ejecuta lo que sigue — deja el comando INCONCLUYENTE, y en la duda se avisa.
+    cada segmento sea o bien la invocacion, o bien un acompanante MUDO (ver `acompanante_mudo`,
+    que lo decide por lo que cada forma hace, no por ser un builtin). Cualquier otra cosa — `cat`,
+    `echo`, `grep`, `git`, `set`, `source`, un `false &&` que ni siquiera ejecuta lo que sigue —
+    deja el comando INCONCLUYENTE, y en la duda se avisa.
     """
     visto = False
     for trozo in OPERADORES.split(orden):
@@ -182,13 +205,10 @@ def invoca_el_audit(orden):
             tokens = shlex.split(trozo)
         except ValueError:
             return False                        # comillas sin cerrar: no cuenta como corrida
-        prog = programa_ejecutado(tokens)
-        if prog == "checkpoint-audit.py":
+        if programa_ejecutado(tokens) == "checkpoint-audit.py":
             visto = True
-        elif prog is not None and prog not in ACOMPANANTES:
+        elif not acompanante_mudo(tokens):
             return False                        # el comando mezcla otra cosa: no prueba nada
-        elif prog is None and tokens:
-            return False                        # `-c` / `-m`: no ejecuta un fichero
     return visto
 
 

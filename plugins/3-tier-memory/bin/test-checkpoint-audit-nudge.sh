@@ -15,6 +15,12 @@
 #
 # Para comprobar que estos casos FALLAN sin el arreglo:
 #   NUDGE=/ruta/al/checkpoint-audit-nudge.sh.viejo bash test-checkpoint-audit-nudge.sh
+#
+# OJO con esa receta: el hook hace `source "$(dirname "$0")/resolve-project-dir.sh"`, asi que una
+# copia vieja SUELTA en un directorio cualquiera falla el source, sale en silencio ante CUALQUIER
+# entrada, y el diferencial sale mal — todo "falla", que parece una senal y no lo es. La copia
+# tiene que estar JUNTO a `resolve-project-dir.sh`; lo mas simple es dejarla en este mismo `bin/`
+# con un nombre temporal. Lo pisamos los dos, el que escribio esto y el verificador que lo reviso.
 set -e
 BIN="$(cd "$(dirname "$0")" && pwd)"
 NUDGE="${NUDGE:-$BIN/checkpoint-audit-nudge.sh}"
@@ -182,6 +188,9 @@ legitimo "invocado directo (con permiso de ejecucion)" '"$JBIN/checkpoint-audit.
 legitimo "con env -i delante"                 'env -i python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file x.md'
 legitimo "con env VAR=valor delante"          'env PYTHONUTF8=1 python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file x.md'
 legitimo "con un export delante"              'export PYTHONUTF8=1; python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file x.md'
+legitimo "con exec DELANTE de la invocacion"  'exec python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file x.md'
+legitimo "con un cd con argumento"            'cd /tmp; python3 "$JBIN/checkpoint-audit.py" memory --session-file x.md'
+legitimo "con un unset delante"               'unset PYTHONPATH; python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file x.md'
 
 echo "== CONTROL DE FLUJO Y MEZCLA: un comando que invoca Y trae la linea de otro sitio =="
 # Segundo hallazgo del adversario externo sobre este mismo arreglo: bastaba con que UN segmento
@@ -191,6 +200,18 @@ impostor "false && la invocacion nunca corre"    'false && python3 plugins/3-tie
 impostor "invoca y ademas lee una ficha vieja"   'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file x.md; cat memory/sessions/vieja.md'
 impostor "invoca y ademas hace echo"             'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file x.md && echo "resumen: hecho=9"'
 impostor "invoca por un tubo hacia otra cosa"    'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory | tee /tmp/x'
+
+echo "== ACOMPANANTES QUE NO SON MUDOS: set, source, exec =="
+# Tercer hallazgo, de un verificador independiente que lo reprodujo contra el hook de verdad. La
+# lista de acompanantes decia "builtins de shell" cuando queria decir "no imprime nada y no impide
+# que corra lo que sigue". No son lo mismo.
+impostor "set a secas vuelca las variables"      'export FAKE="resumen: hecho=9 parcial=1"; set; python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory'
+impostor "export a secas lista las variables"    'export FAKE="resumen: hecho=9 parcial=1"; export; python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory'
+impostor "exec reemplaza el proceso"             'exec echo "resumen: hecho=9"; python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory'
+impostor "source ejecuta un fichero cualquiera"  'source /tmp/falso.sh; python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory'
+impostor "el punto, que es el mismo source"      '. /tmp/falso.sh; python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory'
+impostor "cd - imprime el directorio"            'cd -; python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory'
+impostor "pwd imprime"                           'pwd; python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory'
 
 echo "== media prueba tampoco es prueba =="
 chk "invocado pero sin linea de resumen"  "1" "$(avisa "$CMT" "$TMEDIO")"
