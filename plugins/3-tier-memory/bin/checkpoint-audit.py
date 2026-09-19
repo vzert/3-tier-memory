@@ -89,7 +89,9 @@ REVISAR = re.compile(r"_revisar:\s*(\d{4}-\d{2}-\d{2})_")
 SEPARADOR_CELDA = re.compile(r"(?<!\\)\|")
 RECONCILIACION = re.compile(r"^RECONCILIACION:\s*(\d+)\s+de\s+(\d+)\b", re.M)
 FECHA_FRONTMATTER = re.compile(r"^date:\s*(\d{4}-\d{2}-\d{2})\s*$", re.M)
-MAS_PENDIENTES = re.compile(r"\+\s*\d+\s+m[aá]s", re.I)
+MAS_PENDIENTES = re.compile(r"\+\s*(\d+)\s+m[aá]s", re.I)
+LINEA_PENDIENTE = re.compile(r"^-\s*\[[ xX]\]\s")
+BLOQUE_CALENDARIO = re.compile(r"^###\s+\d{4}-\d{2}-\d{2}\b", re.M)
 
 # Version en la que `## Pendientes` empezo a llevar la linea `RECONCILIACION:` (Step 3d, 2.28.0).
 # Una ficha anterior no pudo escribirla: exigirsela es un falso positivo garantizado en toda
@@ -188,6 +190,20 @@ def filas_tabla(path):
     return filas
 
 
+def _tope_valido(nombrados, esperados, sec_retomar):
+    """El tope de Step 8 solo cubre lo omitido si se cumplen las TRES condiciones: se nombraron
+    exactamente los 3 del tope, hay marcador `+N mas`, y esa N es el numero real de omitidos.
+
+    Sin la aritmetica, `Sigue abierto: +1 mas en _pendientes.md.` — sin nombrar a nadie — tapaba
+    diez pendientes abiertos y el audit los daba por buenos."""
+    if nombrados != min(TOPE_SIGUE_ABIERTO, esperados):
+        return False
+    m = MAS_PENDIENTES.search(sec_retomar)
+    if not m:
+        return False
+    return int(m.group(1)) == esperados - nombrados
+
+
 def corre_git(repo_root, *args):
     try:
         r = subprocess.run(["git", "-C", repo_root] + list(args),
@@ -227,10 +243,21 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
     # en `## Contexto`, con la frase "no se reviso su vencimiento, solo se cito aqui", y el audit
     # devolvia HECHO en 3a y en vencidos — el hueco exacto que este mecanismo existe para romper,
     # blanqueado por el propio instrumento.
+    # Y dentro de esas secciones, solo en las LINEAS que reconcilian de verdad:
+    #   - en `## Pendientes`, una linea de lista `- [ ]` / `- [x]` (la forma que manda Step 3d);
+    #   - en `## Recordatorios de calendario`, solo si la seccion trae al menos un bloque real
+    #     (`### YYYY-MM-DD — Titulo`, Step 8c-2), no un id aparcado en prosa.
+    # Acotar solo la SECCION no bastaba: un adversario metio dentro de `## Pendientes` la frase
+    # "no llegamos a revisar p-9999999999" y el audit devolvio HECHO en 3a, en vencidos y en la
+    # linea RECONCILIACION. Mencion sigue sin ser reconciliacion, este la mencion donde este.
     abiertos = pendientes_abiertos(memory_dir)
     _sec_pend_raw = seccion_por_prefijo(secs, "Pendientes") or ""
     _sec_cal = seccion_por_prefijo(secs, "Recordatorios de calendario") or ""
-    ids_en_ficha = set(ID_PENDIENTE.findall(_sec_pend_raw + "\n" + _sec_cal))
+    _lineas_reconcilian = [l for l in _sec_pend_raw.splitlines()
+                           if LINEA_PENDIENTE.match(l.strip())]
+    if BLOQUE_CALENDARIO.search(_sec_cal):
+        _lineas_reconcilian.append(_sec_cal)
+    ids_en_ficha = set(ID_PENDIENTE.findall("\n".join(_lineas_reconcilian)))
     revisados = [p for p in abiertos if p[0] and p[0] in ids_en_ficha]
     sin_id = [p for p in abiertos if not p[0]]
     sin_revisar = len(abiertos) - len(revisados)
@@ -430,14 +457,14 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
         if not faltan_snip:
             h.append(Hallazgo(HECHO, "snippet.sigue_abierto",
                               f"el snippet nombra los {len(abiertos_ficha)} pendiente(s) que le tocan"))
-        elif nombrados >= TOPE_SIGUE_ABIERTO or MAS_PENDIENTES.search(sec_retomar):
-            # Step 8: maximo 3, y el resto se cierra con `+N mas en _pendientes.md`. Con el tope
-            # alcanzado o el marcador presente, lo que falta esta omitido por la regla, no por
-            # descuido.
+        elif _tope_valido(nombrados, len(abiertos_ficha), sec_retomar):
+            # Step 8: maximo 3 nombrados de verdad, y el resto cerrado con `+N mas`, con la N
+            # correcta. Se comprueba la ARITMETICA, no la presencia del texto: aceptar el
+            # marcador a secas dejaba esconder cualquier numero de pendientes detras de un
+            # `+1 mas` inventado, nombrando cero. Lo construyeron los dos adversarios.
             h.append(Hallazgo(DISENO, "snippet.sigue_abierto",
-                              f"el snippet nombra {nombrados} y cierra con el tope de "
-                              f"{TOPE_SIGUE_ABIERTO} + `+N mas`: los {len(faltan_snip)} restantes "
-                              "quedan fuera por la regla de Step 8"))
+                              f"el snippet nombra los {TOPE_SIGUE_ABIERTO} del tope y cierra con "
+                              f"`+{len(faltan_snip)} mas`: el resto queda fuera por la regla de Step 8"))
         else:
             h.append(Hallazgo(SALTADO, "snippet.sigue_abierto",
                               f"{len(faltan_snip)} pendiente(s) abierto(s) que el snippet no nombra "

@@ -448,6 +448,108 @@ PYFIN
 O=$($AUD "$M4" --session-file "$S6" --no-git --hoy $HOY 2>&1)
 chk "3 sin nombrar y sin tope = SALTADO" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*snippet.sigue_abierto')"
 
+echo "== EXPLOIT 1: un '+N mas' inventado no tapa nada =="
+# Construido por dos adversarios independientes: `Sigue abierto: +1 mas en _pendientes.md.` sin
+# nombrar a NADIE daba POR-DISENO y escondia diez pendientes abiertos. Ahora se comprueba la
+# aritmetica: 3 nombrados de verdad + N == omitidos reales.
+M5="$T/memory5"; nueva_memoria "$M5"
+for n in 1 2 3 4 5; do
+  echo "- [ ] pend $n — _creado: 2026-09-19_ — _id: p-bbbbbbbbb$n_" >> "$M5/_pendientes.md"
+  echo "| $n | pend $n | Media | 2026-09-19 | | | |" >> "$M5/pendientes/2026-09.md"
+done
+S7="$M5/sessions/2026-09-19-demo.md"; ficha_completa "$S7"
+python3 - "$S7" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+filas="\n".join("- [ ] pend %d — `p-bbbbbbbbb%d`" % (n,n) for n in range(1,6))
+t=t.replace("## Pendientes\n- Ninguno",
+            "## Pendientes\nRECONCILIACION: 5 de 5 pendientes abiertos revisados — 0 sin revisar, barrido en /triage-3t\n"+filas)
+t=t.replace("## Como retomar\nNinguno — la sesion cerro sin continuidad.",
+            "## Como retomar\n\n```\nRetomamos: demo.\n\nProximo paso: algo.\n\nSigue abierto: +1 mas en _pendientes.md.\n```")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+O=$($AUD "$M5" --session-file "$S7" --no-git --hoy $HOY 2>&1)
+chk "cero nombrados + marcador falso = SALTADO" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*snippet.sigue_abierto')"
+chk "y NO se bendice" "0" "$(printf '%s' "$O" | grep -c 'POR-DISEÑO .*snippet.sigue_abierto')"
+
+echo "== tope legitimo: 3 nombrados y la N correcta =="
+python3 - "$S7" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("Sigue abierto: +1 mas en _pendientes.md.",
+            "Sigue abierto: uno _id: p-bbbbbbbbb1_ · dos _id: p-bbbbbbbbb2_ · tres _id: p-bbbbbbbbb3_ · +2 mas en _pendientes.md.")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+O=$($AUD "$M5" --session-file "$S7" --no-git --hoy $HOY 2>&1)
+chk "3 nombrados + N correcta = POR-DISENO" "1" "$(printf '%s' "$O" | grep -c 'POR-DISEÑO .*snippet.sigue_abierto')"
+
+echo "== la N equivocada NO vale =="
+python3 - "$S7" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("· +2 mas en _pendientes.md.","· +9 mas en _pendientes.md.")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+O=$($AUD "$M5" --session-file "$S7" --no-git --hoy $HOY 2>&1)
+chk "N falsa = SALTADO" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*snippet.sigue_abierto')"
+
+echo "== EXPLOIT 2: prosa dentro de ## Pendientes no es reconciliacion =="
+# El adversario metio en `## Pendientes` la frase "no llegamos a revisar p-xxx" junto a una linea
+# RECONCILIACION calculada del mismo proxy, y el audit devolvia HECHO en las tres comprobaciones.
+M6="$T/memory6"; nueva_memoria "$M6"
+cat >> "$M6/_pendientes.md" <<'EOF'
+- [ ] vence hoy y nadie lo reviso — _creado: 2026-09-01_ — _id: p-cccccccccc_ — _revisar: 2026-09-19_
+EOF
+S8="$M6/sessions/2026-09-19-demo.md"; ficha_completa "$S8"
+python3 - "$S8" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Pendientes\n- Ninguno",
+            "## Pendientes\nRECONCILIACION: 1 de 1 pendientes abiertos revisados — 0 sin revisar, barrido en /triage-3t\nNota aparte: no llegamos a revisar p-cccccccccc hoy, queda pendiente de verdad.")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+O=$($AUD "$M6" --session-file "$S8" --no-git --hoy $HOY 2>&1)
+chk "3a no lo da por revisado" "1" "$(printf '%s' "$O" | grep -c 'PARCIAL .*pendientes.3a')"
+chk "sigue saliendo vencido" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*pendientes.vencidos')"
+chk "y la linea RECONCILIACION ya no cuadra" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*pendientes.reconciliacion_linea')"
+
+echo "== la MISMA ficha, con la linea de lista de verdad: HECHO =="
+python3 - "$S8" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("Nota aparte: no llegamos a revisar p-cccccccccc hoy, queda pendiente de verdad.",
+            "- [ ] vence hoy y nadie lo reviso — `p-cccccccccc` (still-open)")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+cat >> "$M6/pendientes/2026-09.md" <<'EOF'
+| 1 | vence hoy y nadie lo reviso | Media | 2026-09-01 | | | |
+EOF
+O=$($AUD "$M6" --session-file "$S8" --no-git --hoy $HOY 2>&1)
+chk "la linea de lista si cuenta" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*pendientes.3a')"
+chk "y ya no sale vencido" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*pendientes.vencidos')"
+
+echo "== un id aparcado en Recordatorios SIN bloque real no cuenta =="
+python3 - "$S8" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("- [ ] vence hoy y nadie lo reviso — `p-cccccccccc` (still-open)","- Ninguno")
+t=t.replace("## Commits","## Recordatorios de calendario\nAparcado aqui sin bloque: p-cccccccccc\n\n## Commits")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+O=$($AUD "$M6" --session-file "$S8" --no-git --hoy $HOY 2>&1)
+chk "sin bloque ### fecha no cuenta" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*pendientes.vencidos')"
+
+echo "== con el bloque ### fecha de Step 8c-2, si cuenta =="
+python3 - "$S8" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("Aparcado aqui sin bloque: p-cccccccccc",
+            "### 2026-09-19 — [demo] Revisar el pendiente\nTítulo: [demo] Revisar el pendiente\nDescripción: p-cccccccccc")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+O=$($AUD "$M6" --session-file "$S8" --no-git --hoy $HOY 2>&1)
+chk "con bloque real si cuenta" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*pendientes.vencidos')"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
