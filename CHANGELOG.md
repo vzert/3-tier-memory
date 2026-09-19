@@ -176,7 +176,7 @@ pendientes recien creados. Un usuario normal no pregunta: lee el cierre y lo da 
   fragil del flujo. Se calla si el audit ya corrio, si el commit no es el del checkpoint, o si no
   hay transcript legible (en la duda, silencio: un aviso que se repite sin motivo se aprende a
   ignorar). Es la regla 67 aplicada a este cierre — la superficie automatica es la unica que
-  alcanza a cada instalacion. `bin/test-checkpoint-audit-nudge.sh`, 15 asertos, la mayoria de
+  alcanza a cada instalacion. `bin/test-checkpoint-audit-nudge.sh`, 18 asertos, la mayoria de
   silencio.
 - **Step 7b (nuevo, tres preguntas fijas)** para lo que ningun script puede ver: afirmaciones sin
   dueno ("manana a las 03:00 esto sale del codigo actual" y nadie queda de comprobarlo), avisos
@@ -185,7 +185,7 @@ pendientes recien creados. Un usuario normal no pregunta: lee el cierre y lo da 
 - **La linea `RECONCILIACION:` se escribe tambien en la ficha** (Step 3d), no solo en pantalla, y
   el audit comprueba que exista **y que sus numeros cuadren** con los que mide el. Sin eso, el
   contrato nuevo habria sido la unica afirmacion del cambio sin nada que la sostuviera.
-- `bin/test-checkpoint-audit.sh` (nuevo, 52 asertos): una categoria por hueco medido, e incluye los
+- `bin/test-checkpoint-audit.sh` (nuevo, 77 asertos): una categoria por hueco medido, e incluye los
   casos `POR-DISEÑO` (ficha vieja cuya fila podo Step 5b; `Como retomar` colapsado por el caso 5 de
   Step 8 **solo cuando la sesion no deja pendientes propios abiertos**) porque un falso positivo ahi
   rompe el mecanismo entero, y un falso negativo lo convierte en el que tapa el hueco.
