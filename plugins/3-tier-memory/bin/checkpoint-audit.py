@@ -88,6 +88,18 @@ WIKILINK_RESEARCH = re.compile(r"\[\[research/([^\]|]+?)(?:\|[^\]]*)?\]\]")
 REVISAR = re.compile(r"_revisar:\s*(\d{4}-\d{2}-\d{2})_")
 SEPARADOR_CELDA = re.compile(r"(?<!\\)\|")
 RECONCILIACION = re.compile(r"^RECONCILIACION:\s*(\d+)\s+de\s+(\d+)\b", re.M)
+FECHA_FRONTMATTER = re.compile(r"^date:\s*(\d{4}-\d{2}-\d{2})\s*$", re.M)
+MAS_PENDIENTES = re.compile(r"\+\s*\d+\s+m[aá]s", re.I)
+
+# Version en la que `## Pendientes` empezo a llevar la linea `RECONCILIACION:` (Step 3d, 2.28.0).
+# Una ficha anterior no pudo escribirla: exigirsela es un falso positivo garantizado en toda
+# corrida retroactiva. La comparacion es ESTRICTA a proposito — un checkpoint de hoy ya corre con
+# 2.28.0 y debe cumplir. Borde conocido y aceptado: una ficha escrita hoy ANTES de que la
+# instalacion recibiera 2.28.0 sale como SALTADO; dura un dia y se explica sola.
+DESDE_RECONCILIACION = "2026-09-19"
+
+# Step 8 pone como mucho 3 pendientes en `Sigue abierto` y cierra con `+N mas en _pendientes.md`.
+TOPE_SIGUE_ABIERTO = 3
 
 
 class Hallazgo:
@@ -206,9 +218,19 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
                           f"{len(SECCIONES_OBLIGATORIAS)}/{len(SECCIONES_OBLIGATORIAS)} "
                           "secciones obligatorias presentes"))
 
-    # 2. Step 3a: reconciliacion. Un pendiente cuenta como REVISADO si su id aparece en la ficha.
+    # 2. Step 3a: reconciliacion. Un pendiente cuenta como REVISADO solo si su id aparece en la
+    # seccion donde Step 3d escribe la reconciliacion (`## Pendientes`) o en el bloque de
+    # recordatorios de calendario (Step 8c) — NO en cualquier parte del documento.
+    #
+    # La version anterior buscaba el id en TODO el texto, y eso no medía reconciliacion sino
+    # mencion: un adversario construyo una ficha que nombraba de pasada un pendiente vencido hoy
+    # en `## Contexto`, con la frase "no se reviso su vencimiento, solo se cito aqui", y el audit
+    # devolvia HECHO en 3a y en vencidos — el hueco exacto que este mecanismo existe para romper,
+    # blanqueado por el propio instrumento.
     abiertos = pendientes_abiertos(memory_dir)
-    ids_en_ficha = set(ID_PENDIENTE.findall(texto))
+    _sec_pend_raw = seccion_por_prefijo(secs, "Pendientes") or ""
+    _sec_cal = seccion_por_prefijo(secs, "Recordatorios de calendario") or ""
+    ids_en_ficha = set(ID_PENDIENTE.findall(_sec_pend_raw + "\n" + _sec_cal))
     revisados = [p for p in abiertos if p[0] and p[0] in ids_en_ficha]
     sin_id = [p for p in abiertos if not p[0]]
     sin_revisar = len(abiertos) - len(revisados)
@@ -231,10 +253,22 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
     # adversario lo marco como la unica afirmacion del cambio sin nada que la sostenga.
     # Mide ademas que los numeros declarados coincidan con los medidos aqui: una linea con
     # numeros inventados pasa el grep pero no este aserto.
-    m_rec = RECONCILIACION.search(texto)
+    # La linea se busca SOLO en `## Pendientes`: en cualquier otro sitio no es la linea que Step 3d
+    # manda escribir, y aceptarla en cualquier parte volveria el chequeo auto-consistente en vez de
+    # exigente.
+    m_rec = RECONCILIACION.search(_sec_pend_raw)
+    fecha_ficha = FECHA_FRONTMATTER.search(texto)
+    fecha_ficha = fecha_ficha.group(1) if fecha_ficha else None
     if not abiertos:
         h.append(Hallazgo(HECHO, "pendientes.reconciliacion_linea",
                           "sin pendientes abiertos: la linea no aplica"))
+    elif not m_rec and fecha_ficha and fecha_ficha < DESDE_RECONCILIACION:
+        # Una ficha anterior a 2.28.0 no pudo escribir una linea que no existia. Marcarla como
+        # SALTADO seria un falso positivo en cada corrida retroactiva, y un muro de falsos
+        # positivos ciega igual que el silencio.
+        h.append(Hallazgo(DISENO, "pendientes.reconciliacion_linea",
+                          f"ficha del {fecha_ficha}, anterior a {DESDE_RECONCILIACION}: la linea "
+                          "no existia todavia"))
     elif not m_rec:
         h.append(Hallazgo(SALTADO, "pendientes.reconciliacion_linea",
                           "la ficha no lleva la linea RECONCILIACION: de Step 3d",
@@ -349,9 +383,26 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
 
     # 8. El snippet de continuidad nombra los pendientes que la sesion deja abiertos
     sec_retomar = seccion_por_prefijo(secs, "Como retomar") or ""
-    abiertos_ficha = [ID_PENDIENTE.search(l).group(0)
-                      for l in sec_pend.splitlines()
-                      if l.strip().startswith("- [ ]") and ID_PENDIENTE.search(l)]
+    # Step 8 excluye de `Sigue abierto` todo pendiente con `_revisar` FUTURO respecto a la ficha:
+    # ese ya sale con su Titulo/Descripcion completos en `## Recordatorios de calendario` (Step
+    # 8c), y repetirlo pone la misma fecha dos veces en el mismo snippet. Exigirlo aqui era un
+    # falso positivo — lo reporto otra sesion sobre un caso real y se verifico contra el template
+    # (regla de `<pendientes de esta sesion>`, Step 8).
+    rev_por_id = {p[0]: p[2] for p in abiertos if p[0]}
+    ref = fecha_ficha or hoy
+    abiertos_ficha = []
+    excluidos_por_fecha = []
+    for l in sec_pend.splitlines():
+        if not l.strip().startswith("- [ ]"):
+            continue
+        m = ID_PENDIENTE.search(l)
+        if not m:
+            continue
+        rev = rev_por_id.get(m.group(0))
+        if rev and rev > ref:
+            excluidos_por_fecha.append(m.group(0))
+        else:
+            abiertos_ficha.append(m.group(0))
     if "```" not in sec_retomar and not abiertos_ficha:
         # Step 8 caso 5: el bloque se colapsa a una linea a proposito cuando no hay continuidad.
         # SOLO vale si la sesion no dejo pendientes PROPIOS abiertos: colapsar el bloque teniendo
@@ -369,17 +420,30 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
                           corrige="escribe el bloque completo: el caso 5 de Step 8 solo aplica sin "
                                   "continuidad propia"))
     elif not abiertos_ficha:
-        h.append(Hallazgo(HECHO, "snippet.sigue_abierto", "la sesion no deja pendientes abiertos"))
+        extra = (f" ({len(excluidos_por_fecha)} con `_revisar` futuro van al bloque de calendario)"
+                 if excluidos_por_fecha else "")
+        h.append(Hallazgo(HECHO, "snippet.sigue_abierto",
+                          f"la sesion no deja pendientes que toquen esta linea{extra}"))
     else:
         faltan_snip = [i for i in abiertos_ficha if i not in sec_retomar]
-        if faltan_snip:
+        nombrados = len([i for i in abiertos_ficha if i in sec_retomar])
+        if not faltan_snip:
+            h.append(Hallazgo(HECHO, "snippet.sigue_abierto",
+                              f"el snippet nombra los {len(abiertos_ficha)} pendiente(s) que le tocan"))
+        elif nombrados >= TOPE_SIGUE_ABIERTO or MAS_PENDIENTES.search(sec_retomar):
+            # Step 8: maximo 3, y el resto se cierra con `+N mas en _pendientes.md`. Con el tope
+            # alcanzado o el marcador presente, lo que falta esta omitido por la regla, no por
+            # descuido.
+            h.append(Hallazgo(DISENO, "snippet.sigue_abierto",
+                              f"el snippet nombra {nombrados} y cierra con el tope de "
+                              f"{TOPE_SIGUE_ABIERTO} + `+N mas`: los {len(faltan_snip)} restantes "
+                              "quedan fuera por la regla de Step 8"))
+        else:
             h.append(Hallazgo(SALTADO, "snippet.sigue_abierto",
-                              f"{len(faltan_snip)} pendiente(s) abierto(s) que el snippet no nombra",
+                              f"{len(faltan_snip)} pendiente(s) abierto(s) que el snippet no nombra "
+                              f"ni cubre con el tope de {TOPE_SIGUE_ABIERTO}",
                               faltan_snip,
                               corrige="anade su id a la linea `Sigue abierto:` del bloque Como retomar"))
-        else:
-            h.append(Hallazgo(HECHO, "snippet.sigue_abierto",
-                              f"el snippet nombra los {len(abiertos_ficha)} pendiente(s) abiertos"))
 
     # 9. Research con recomendaciones sin resolver que ESTA ficha enlaza
     sec_res = seccion_por_prefijo(secs, "Research") or ""

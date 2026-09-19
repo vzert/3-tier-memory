@@ -344,6 +344,110 @@ echo "== directorio de memoria inexistente: error, no silencio =="
 rc=0; O=$($AUD "$T/no-existe" --session-file "$S" --no-git 2>&1) || rc=$?
 chk "sale con error" "1" "$([ "$rc" -ne 0 ] && echo 1 || echo 0)"
 
+echo "== un id NOMBRADO DE PASO fuera de ## Pendientes no cuenta como revisado =="
+# El hueco decisivo que encontro el adversario: buscar el id en TODO el texto mide MENCION, no
+# reconciliacion. Una ficha que nombra de pasada un pendiente vencido hoy y dice explicitamente que
+# no lo reviso salia HECHO en 3a y en vencidos -- el instrumento blanqueaba el hueco que existe
+# para romper.
+M3="$T/memory3"; nueva_memoria "$M3"
+cat >> "$M3/_pendientes.md" <<'EOF'
+- [ ] vence hoy y solo se cita de paso — _creado: 2026-09-01_ — _id: p-8888888888_ — _revisar: 2026-09-19_
+EOF
+S4="$M3/sessions/2026-09-19-demo.md"; ficha_completa "$S4"
+python3 - "$S4" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Contexto\nalgo",
+            "## Contexto\nDe paso: p-8888888888 se menciona aqui. No se reviso su vencimiento hoy.")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+O=$($AUD "$M3" --session-file "$S4" --no-git --hoy $HOY 2>&1)
+chk "la mencion NO lo da por revisado" "1" "$(printf '%s' "$O" | grep -c 'PARCIAL .*pendientes.3a')"
+chk "y sigue saliendo como vencido" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*pendientes.vencidos')"
+chk "lo nombra" "1" "$(printf '%s' "$O" | grep -c '  - p-8888888888 (revisar 2026-09-19)')"
+
+echo "== la linea RECONCILIACION: fuera de ## Pendientes no vale =="
+python3 - "$S4" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Contexto\nDe paso:",
+            "## Contexto\nRECONCILIACION: 1 de 1 pendientes abiertos revisados — 0 sin revisar, barrido en /triage-3t\nDe paso:")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+O=$($AUD "$M3" --session-file "$S4" --no-git --hoy $HOY 2>&1)
+chk "en otra seccion no cuenta" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*pendientes.reconciliacion_linea')"
+
+echo "== ficha anterior a 2.28.0 sin la linea: POR-DISENO, no SALTADO =="
+S5="$M3/sessions/2026-09-10-vieja.md"; ficha_completa "$S5"
+python3 - "$S5" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+open(p,'w',encoding='utf-8').write(t.replace("date: 2026-09-19","date: 2026-09-10"))
+PYFIN
+O=$($AUD "$M3" --session-file "$S5" --no-git --hoy $HOY 2>&1)
+chk "no se le exige lo que no existia" "1" "$(printf '%s' "$O" | grep -c 'POR-DISEÑO .*pendientes.reconciliacion_linea')"
+
+echo "== Sigue abierto: un pendiente con _revisar FUTURO no es omision (regla de Step 8) =="
+M4="$T/memory4"; nueva_memoria "$M4"
+cat >> "$M4/_pendientes.md" <<'EOF'
+- [ ] este va al calendario, no al snippet — _creado: 2026-09-19_ — _id: p-9999999999_ — _revisar: 2026-09-25_
+EOF
+cat >> "$M4/pendientes/2026-09.md" <<'EOF'
+| 1 | este va al calendario, no al snippet | Media | 2026-09-19 | | | |
+EOF
+S6="$M4/sessions/2026-09-19-demo.md"; ficha_completa "$S6"
+python3 - "$S6" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Pendientes\n- Ninguno",
+            "## Pendientes\nRECONCILIACION: 1 de 1 pendientes abiertos revisados — 0 sin revisar, barrido en /triage-3t\n- [ ] este va al calendario — `p-9999999999` (Media)")
+t=t.replace("## Como retomar\nNinguno — la sesion cerro sin continuidad.",
+            "## Como retomar\n\n```\nRetomamos: demo.\n\nProximo paso: otra cosa.\n```")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+O=$($AUD "$M4" --session-file "$S6" --no-git --hoy $HOY 2>&1)
+chk "no lo marca como omision" "0" "$(printf '%s' "$O" | grep -c 'SALTADO .*snippet.sigue_abierto')"
+chk "y lo dice" "1" "$(printf '%s' "$O" | grep -c 'revisar` futuro van al bloque de calendario')"
+
+echo "== Sigue abierto: tope de 3 + '+N mas' cubre a los que faltan =="
+cat >> "$M4/_pendientes.md" <<'EOF'
+- [ ] uno — _creado: 2026-09-19_ — _id: p-aaaaaaaaa1_
+- [ ] dos — _creado: 2026-09-19_ — _id: p-aaaaaaaaa2_
+- [ ] tres — _creado: 2026-09-19_ — _id: p-aaaaaaaaa3_
+- [ ] cuatro — _creado: 2026-09-19_ — _id: p-aaaaaaaaa4_
+EOF
+python3 - "$S6" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("RECONCILIACION: 1 de 1 pendientes abiertos revisados — 0 sin revisar",
+            "RECONCILIACION: 5 de 5 pendientes abiertos revisados — 0 sin revisar")
+t=t.replace("- [ ] este va al calendario — `p-9999999999` (Media)",
+            "- [ ] este va al calendario — `p-9999999999` (Media)\n- [ ] uno — `p-aaaaaaaaa1`\n- [ ] dos — `p-aaaaaaaaa2`\n- [ ] tres — `p-aaaaaaaaa3`\n- [ ] cuatro — `p-aaaaaaaaa4`")
+t=t.replace("Proximo paso: otra cosa.",
+            "Proximo paso: otra cosa.\n\nSigue abierto: uno _id: p-aaaaaaaaa1_ · dos _id: p-aaaaaaaaa2_ · tres _id: p-aaaaaaaaa3_ · +1 mas en _pendientes.md.")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+cat >> "$M4/pendientes/2026-09.md" <<'EOF'
+| 2 | uno | Media | 2026-09-19 | | | |
+| 3 | dos | Media | 2026-09-19 | | | |
+| 4 | tres | Media | 2026-09-19 | | | |
+| 5 | cuatro | Media | 2026-09-19 | | | |
+EOF
+O=$($AUD "$M4" --session-file "$S6" --no-git --hoy $HOY 2>&1)
+chk "el tope no es omision" "1" "$(printf '%s' "$O" | grep -c 'POR-DISEÑO .*snippet.sigue_abierto')"
+chk "y no sale como SALTADO" "0" "$(printf '%s' "$O" | grep -c 'SALTADO .*snippet.sigue_abierto')"
+
+echo "== pero sin tope alcanzado ni '+N mas', el que falta SI es omision =="
+python3 - "$S6" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("Sigue abierto: uno _id: p-aaaaaaaaa1_ · dos _id: p-aaaaaaaaa2_ · tres _id: p-aaaaaaaaa3_ · +1 mas en _pendientes.md.",
+            "Sigue abierto: uno _id: p-aaaaaaaaa1_.")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+O=$($AUD "$M4" --session-file "$S6" --no-git --hoy $HOY 2>&1)
+chk "3 sin nombrar y sin tope = SALTADO" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*snippet.sigue_abierto')"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
