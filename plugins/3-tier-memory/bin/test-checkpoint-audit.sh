@@ -1,0 +1,292 @@
+#!/bin/bash
+# Prueba de bin/checkpoint-audit.py — ver memory/plans/plan-cierre-auditado-checkpoint.md.
+#
+# Lo que cubre, y por que: cada caso corresponde a una categoria de hueco MEDIDA en 14 sesiones
+# reales (2026-09-13..19) donde el usuario tuvo que preguntar "falto algo de tu checkpoint?".
+# Los casos POR-DISENO son igual de importantes que los SALTADO: sin ellos el bloque se llena de
+# falsos positivos (no hacer push y dejar el hash como referencia adelantada los ORDENA el skill,
+# y aun asi el agente los confesaba como fallas cuando se le preguntaba).
+set -e
+BIN="$(cd "$(dirname "$0")" && pwd)"
+T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+pass=0; fail=0
+chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: esperaba '$2', salio '$3'"; fi; }
+
+AUD="python3 $BIN/checkpoint-audit.py"
+HOY=2026-09-19
+
+# ---------------------------------------------------------------- memoria minima y sana
+nueva_memoria() {   # $1 = ruta
+  local M="$1"
+  rm -rf "$M"; mkdir -p "$M/sessions" "$M/plans" "$M/learnings" "$M/pendientes" "$M/research"
+  cat > "$M/_pendientes.md" <<'EOF'
+# Pendientes
+
+## Alta prioridad
+
+## Media prioridad
+
+## Baja prioridad
+EOF
+  cat > "$M/_session-index.md" <<'EOF'
+# Sesiones
+
+| Fecha | Sesion | Status | Resumen | Commit |
+|---|---|---|---|---|
+| 2026-09-19 | [[sessions/2026-09-19-demo\|demo]] | completada | demo | `abc1234` |
+EOF
+  cat > "$M/_plans-index.md" <<'EOF'
+# Planes
+
+| Plan | Status | Fecha | Sesion | Pendientes | Learnings |
+|---|---|---|---|---|---|
+EOF
+  cat > "$M/_learnings.md" <<'EOF'
+# Learnings
+
+| Tema | Archivo | Cuando consultarlo |
+|---|---|---|
+EOF
+  cat > "$M/pendientes/2026-09.md" <<'EOF'
+# Pendientes — Septiembre 2026
+
+| # | Pendiente | Prioridad | Creado | Origen | Resuelto | Sesion resolucion |
+|---|---|---|---|---|---|---|
+EOF
+}
+
+ficha_completa() {   # $1 = ruta de la ficha; escribe las 10 secciones obligatorias
+  cat > "$1" <<'EOF'
+---
+type: session
+date: 2026-09-19
+---
+# Demo
+
+## Contexto
+algo
+
+## Cambios realizados
+algo
+
+## Bugs fixed
+- Ninguno
+
+## Plans
+- Ninguno
+
+## Research
+- Ninguno
+
+## Learnings generados
+- Ninguno
+
+## Pendientes
+- Ninguno
+
+## Commits
+- `abc1234`
+
+## Como retomar
+Ninguno — la sesion cerro sin continuidad.
+
+## Related
+- [[_pendientes]]
+EOF
+}
+
+M="$T/memory"; S="$T/memory/sessions/2026-09-19-demo.md"
+nueva_memoria "$M"; ficha_completa "$S"
+
+echo "== checkpoint sano: cero SALTADO, cero PARCIAL =="
+O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
+C=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY --count 2>&1)
+chk "sin SALTADO" "0" "$(printf '%s' "$O" | grep -c 'SALTADO')"
+chk "sin PARCIAL" "0" "$(printf '%s' "$O" | grep -c 'PARCIAL')"
+chk "--count = 0" "0" "$C"
+chk "imprime el resumen" "1" "$(printf '%s' "$O" | grep -c 'resumen: hecho=')"
+
+echo "== ficha a la que le falta una seccion obligatoria: SALTADO =="
+grep -v '^## Commits' "$S" | grep -v '^- `abc1234`' > "$S.tmp" && mv "$S.tmp" "$S"
+O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
+chk "avisa de la seccion" "1" "$(printf '%s' "$O" | grep -c 'ficha.secciones')"
+chk "la nombra" "1" "$(printf '%s' "$O" | grep -c '## Commits')"
+ficha_completa "$S"
+
+echo "== Step 3a: pendientes abiertos sin reconciliar => PARCIAL, nunca HECHO =="
+cat >> "$M/_pendientes.md" <<'EOF'
+- [ ] uno sin tocar — _creado: 2026-09-01_ — _id: p-1111111111_
+- [ ] dos sin tocar — _creado: 2026-09-01_ — _id: p-2222222222_
+- [ ] tres tocado — _creado: 2026-09-01_ — _id: p-3333333333_
+EOF
+python3 - "$S" <<'PY'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Pendientes\n- Ninguno","## Pendientes\n- [ ] tres tocado — `p-3333333333` (Media)")
+open(p,'w',encoding='utf-8').write(t)
+PY
+O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
+chk "PARCIAL en 3a" "1" "$(printf '%s' "$O" | grep -c 'PARCIAL .*pendientes.3a')"
+chk "cuenta 1 de 3" "1" "$(printf '%s' "$O" | grep -c '1 de 3 revisados')"
+chk "remite a /triage-3t" "1" "$(printf '%s' "$O" | grep -c 'triage-3t')"
+
+echo "== el id entre guiones bajos de cursiva SI se reconoce (el fallo real de \\b) =="
+# Con `\b` de cierre, `_id: p-1111111111_` no casaba y el conteo mentia por defecto: 24 de 189
+# en la memoria real que lo destapo. Este aserto es el que impide que vuelva.
+chk "los 3 abiertos se ven (no 0)" "1" "$(printf '%s' "$O" | grep -c 'de 3 revisados')"
+
+echo "== pendientes vencidos que la ficha no menciona: SALTADO =="
+cat >> "$M/_pendientes.md" <<'EOF'
+- [ ] vence hoy y nadie lo mira — _creado: 2026-09-01_ — _id: p-4444444444_ — _revisar: 2026-09-19_
+- [ ] vence dentro de un mes — _creado: 2026-09-01_ — _id: p-5555555555_ — _revisar: 2026-10-19_
+EOF
+O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
+chk "avisa del vencido" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*pendientes.vencidos')"
+chk "nombra el que vence hoy" "1" "$(printf '%s' "$O" | grep -c 'p-4444444444')"
+chk "NO nombra el de octubre" "0" "$(printf '%s' "$O" | grep -c 'p-5555555555')"
+
+echo "== plan enlazado sin bloque ## Estado y sin fila que apunte a la sesion: dos SALTADO =="
+cat > "$M/plans/plan-demo.md" <<'EOF'
+---
+type: plan
+---
+# Plan demo
+
+## Fases
+- una
+EOF
+python3 - "$S" <<'PY'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Plans\n- Ninguno","## Plans\n- [[plans/plan-demo]] — tocado en esta sesion")
+open(p,'w',encoding='utf-8').write(t)
+PY
+O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
+chk "plan sin ## Estado" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*plan.estado')"
+chk "fila del indice stale" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*plan.indice')"
+chk "da el comando de plan.upsert" "1" "$(printf '%s' "$O" | grep -c 'type plan.upsert')"
+
+echo "== el mismo plan, ya con ## Estado y con su fila apuntando aqui: HECHO =="
+cat > "$M/plans/plan-demo.md" <<'EOF'
+---
+type: plan
+---
+# Plan demo
+
+## Estado
+- Fase actual: 2
+- Proxima accion: nada
+- Bloqueo: ninguno
+- Fecha: 2026-09-19
+
+## Fases
+- una
+EOF
+cat >> "$M/_plans-index.md" <<'EOF'
+| [[plans/plan-demo\|Plan demo]] | active | 2026-09-19 | [[sessions/2026-09-19-demo]] | 0 | 0 |
+EOF
+O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
+chk "plan.estado HECHO" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*plan.estado')"
+chk "plan.indice HECHO" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*plan.indice')"
+
+echo "== snippet que no nombra un pendiente que la sesion deja abierto: SALTADO =="
+python3 - "$S" <<'PY'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Pendientes\n- [ ] tres tocado — `p-3333333333` (Media)",
+            "## Pendientes\n- [ ] tres tocado — `p-3333333333` (Media)\n- [ ] nuevo de hoy — `p-6666666666` (Alta)")
+t=t.replace("## Como retomar\nNinguno — la sesion cerro sin continuidad.",
+            "## Como retomar\n\n```\nRetomamos: demo.\n\nSigue abierto: tres tocado _id: p-3333333333_.\n```")
+open(p,'w',encoding='utf-8').write(t)
+PY
+cat >> "$M/pendientes/2026-09.md" <<'EOF'
+| 1 | tres tocado | Media | 2026-09-01 | | | |
+EOF
+O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
+chk "avisa del que falta" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*snippet.sigue_abierto')"
+chk "lo nombra por id" "1" "$(printf '%s' "$O" | grep -c 'snippet.sigue_abierto' )"
+chk "el id sale en el detalle" "1" "$(printf '%s' "$O" | grep -A2 'snippet.sigue_abierto' | grep -c '  - p-6666666666')"
+chk "dual write: la fila mensual falta" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*pendientes.dualwrite')"
+
+echo "== bloque Como retomar colapsado (Step 8 caso 5): POR-DISENO, no SALTADO =="
+python3 - "$S" <<'PY'
+import sys, re
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=re.sub(r"## Como retomar\n.*?\n\n## Related", "## Como retomar\nNinguno.\n\n## Related", t, flags=re.S)
+open(p,'w',encoding='utf-8').write(t)
+PY
+O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
+chk "colapsado no es falla" "1" "$(printf '%s' "$O" | grep -c 'POR-DISEÑO .*snippet.sigue_abierto')"
+chk "y no sale como SALTADO" "0" "$(printf '%s' "$O" | grep -c 'SALTADO .*snippet.sigue_abierto')"
+
+echo "== research enlazado con recomendaciones sin marcar: SALTADO con el comando de Step 8d =="
+cat > "$M/research/demo.md" <<'EOF'
+---
+type: research
+---
+# Research demo
+
+## Recomendaciones
+- [x] una hecha — implementada
+- [ ] otra sin decidir
+EOF
+python3 - "$S" <<'PY'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Research\n- Ninguno","## Research\n- [[research/demo]] — parcialmente resuelto")
+open(p,'w',encoding='utf-8').write(t)
+PY
+O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
+chk "avisa del research" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*research.recomendaciones')"
+chk "remite a Step 8d" "1" "$(printf '%s' "$O" | grep -c 'print-research-recomendaciones.py')"
+
+echo "== learning declarado cuyo topico no existe: SALTADO =="
+python3 - "$S" <<'PY'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Learnings generados\n- Ninguno",
+            "## Learnings generados\n- [[learnings/inexistente]] — regla nueva")
+open(p,'w',encoding='utf-8').write(t)
+PY
+O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
+chk "avisa del topico roto" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*learnings.dualwrite')"
+
+echo "== linea [x] rezagada en _pendientes.md: SALTADO =="
+echo '- [x] esta ya se resolvio y nadie la saco — _id: p-7777777777_' >> "$M/_pendientes.md"
+O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
+chk "avisa de la rezagada" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*pendientes.marcados')"
+
+echo "== journal con evento sin aplicar: SALTADO con el comando de compactar =="
+mkdir -p "$M/.journal/pending"; echo '{}' > "$M/.journal/pending/x.json"
+O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
+chk "avisa del journal" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*journal.limpio')"
+chk "da el comando" "1" "$(printf '%s' "$O" | grep -A2 'journal.limpio' | grep -c 'corrige:.*journal-compact.py')"
+rm -rf "$M/.journal"
+
+echo "== ficha vieja sin fila en el indice: POR-DISENO (la podo Step 5b), no SALTADO =="
+M2="$T/memory2"; nueva_memoria "$M2"
+for n in 1 2 3; do ficha_completa "$M2/sessions/2026-09-2$n-nueva.md"; done
+S2="$M2/sessions/2026-01-01-vieja.md"; ficha_completa "$S2"
+O=$($AUD "$M2" --session-file "$S2" --no-git --hoy $HOY 2>&1)
+chk "poda, no falla" "1" "$(printf '%s' "$O" | grep -c 'POR-DISEÑO .*indice.sesion')"
+
+echo "== ficha reciente que de verdad falta del indice: SALTADO =="
+S3="$M2/sessions/2026-09-24-recentisima.md"; ficha_completa "$S3"
+O=$($AUD "$M2" --session-file "$S3" --no-git --hoy $HOY 2>&1)
+chk "esa si es falla" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*indice.sesion')"
+
+echo "== ficha ilegible: error explicito, NUNCA un checkpoint limpio disfrazado =="
+# Un DIRECTORIO donde va el fichero dispara el error en cualquier plataforma; chmod 000 no es
+# Windows-safe (mismo hallazgo que test-check-active-research.sh).
+mkdir -p "$M/sessions/rota.md"
+rc=0; O=$($AUD "$M" --session-file "$M/sessions/rota.md" --no-git --hoy $HOY 2>&1) || rc=$?
+chk "sale con error" "1" "$([ "$rc" -ne 0 ] && echo 1 || echo 0)"
+chk "lo dice" "1" "$(printf '%s' "$O" | grep -c 'no se pudo leer')"
+
+echo "== directorio de memoria inexistente: error, no silencio =="
+rc=0; O=$($AUD "$T/no-existe" --session-file "$S" --no-git 2>&1) || rc=$?
+chk "sale con error" "1" "$([ "$rc" -ne 0 ] && echo 1 || echo 0)"
+
+echo
+echo "pass=$pass fail=$fail"
+[ "$fail" -eq 0 ]

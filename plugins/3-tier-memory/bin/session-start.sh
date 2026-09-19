@@ -697,7 +697,7 @@ else:
 
 if any(days_old(c) is not None and days_old(c) > STALE_DAYS for _, (c, _t) in shown):
     print()
-    print(f"Items marcados ⚠ tienen >{STALE_DAYS} dias sin cerrar — probables candidatos a resolved/abandoned en /checkpoint-3t Step 3a.")
+    print(f"Items marcados ⚠ tienen >{STALE_DAYS} dias sin cerrar — probables candidatos a resolved/abandoned en /triage-3t (desde 2.28.0 el Step 3a del checkpoint solo cubre lo que toco la sesion y lo que vence hoy).")
 
 if notes:
     print()
@@ -738,7 +738,7 @@ if hpath:
         lineas.append("Los mas antiguos:")
         for c, t in viejos[:3]:
             lineas.append(f"  · {shorten(t)}  ({c}, {days_old(c)} dias)")
-    lineas.append("Cierra o descarta con /triage-3t. Para reconciliarlos uno a uno: /checkpoint-3t Step 3a.")
+    lineas.append("Cierra o descarta con /triage-3t: el barrido del backlog es suyo, no del checkpoint.")
     try:
         with open(hpath, "w", encoding="utf-8") as fh:
             fh.write("\n".join(lineas) + "\n")

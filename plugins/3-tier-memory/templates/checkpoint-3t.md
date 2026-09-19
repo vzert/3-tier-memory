@@ -233,21 +233,44 @@ how you resolve it in 3a; never match a line by its text.
 
 ### Step 3a — Reconciliacion de pendientes existentes (RECONCILIATION FIRST)
 
-Enumerate EVERY open item (`- [ ]`) you just read. For each, classify into exactly one of:
+**Alcance acotado — y el resto se CUENTA, no se calla.** Hasta 2.27.0 este paso pedia clasificar
+*cada* pendiente abierto. Medido en 14 sesiones reales de un usuario del plugin (2026-09-13..19):
+con ~200 abiertos, ese barrido no se hizo **ni una sola vez** — las 8 sesiones que llegaron aqui lo
+difirieron a `/triage-3t`, y ninguna lo dijo en su cierre. Un paso que se salta el 100% de las
+veces no es un agente flojo, es una especificacion mal escrita: pide un barrido de backlog dentro
+de un guardado de sesion. Asi que el alcance obligatorio de 3a es cerrado:
+
+1. **Los pendientes que esta sesion toco** — resueltos, creados, superseded o simplemente leidos
+   mientras trabajabas.
+2. **Los que traen `_revisar: <fecha>_` vencida o de hoy**, sean de la sesion que sean. Son los que
+   alguien programo para HOY y los que mas veces salieron sin mencionar (3 de las sesiones medidas).
+
+Lo demas queda **fuera del alcance de este paso** y se declara con una linea, no con silencio:
+
+```
+RECONCILIACION: <R> de <N> pendientes abiertos revisados — <N-R> sin revisar, barrido en /triage-3t
+```
+
+Esa linea es obligatoria aunque `N-R` sea 0. `checkpoint-audit.py` (Step 7a) la vuelve a medir por
+su cuenta y la imprime como `PARCIAL` mientras quede uno sin revisar, asi que recortarla en
+silencio ya no es posible.
+
+Para los pendientes DENTRO del alcance, clasifica cada uno en exactamente uno de:
 
 - **resolved** — the work described was completed in this session, directly or indirectly (e.g., the user asked for X and X happens to satisfy the pendiente).
 - **still-open** — the work is still pending and was not touched this session.
 - **superseded** — the item was absorbed by another pendiente or a scope change (reference the new owner/scope).
 - **abandoned** — the item no longer applies (architecture changed, feature dropped, etc.).
 
-**Print a reconciliation table** to the user before continuing, so the decision is explicit:
+**Print the reconciliation table** to the user before continuing, so the decision is explicit. Solo
+lleva los pendientes del alcance de arriba, y **cierra con la linea del conteo**:
 ```
-RECONCILIACION:
-- #1 <pendiente text> → still-open
-- #2 <pendiente text> → resolved (this session)
-- #3 <pendiente text> → superseded by <new pendiente or scope ref>
-- #4 <pendiente text> → abandoned — <reason>
-...
+RECONCILIACION: 4 de 203 pendientes abiertos revisados — 199 sin revisar, barrido en /triage-3t
+- p-aaaaaaaaaa <pendiente text> → still-open
+- p-bbbbbbbbbb <pendiente text> → resolved (this session)
+- p-cccccccccc <pendiente text> → superseded by <new pendiente or scope ref>
+- p-dddddddddd <pendiente text> → abandoned — <reason>
+- p-eeeeeeeeee <pendiente text> → still-open (vence 2026-09-19, no es de esta sesion)
 ```
 
 For EACH item classified `resolved`, `superseded`, or `abandoned`, emit one event:
@@ -790,9 +813,75 @@ If the commit fails (e.g., user.name/user.email not configured) → set GIT_SKIP
 - Set commit hash to "N/A" in `_session-index.md`
 - Do NOT stop — continue to Step 7
 
+## Step 7a: Auditoria del propio checkpoint (deterministica — NO es opcional)
+
+```bash
+python3 "$JBIN/checkpoint-audit.py" "$MEMORY_DIR" --session-file "$SESSION_FILE" --repo-root .
+```
+
+**Por que existe.** Step 7 solo pide reportar lo que SI se hizo. Medido en 14 sesiones reales de un
+usuario del plugin (2026-09-13..19): en las 14 el usuario pregunto *"falto algo de tu checkpoint?"*
+y en las 14 el agente enumero omisiones reales que su propio cierre no mencionaba — la tabla de 3a,
+el plan sin `## Estado`, un `header_issues=1` repetido tres veces y nunca reportado, pendientes que
+vencian ese dia, el snippet sin los pendientes recien creados. La informacion existia dentro de la
+sesion; nunca llegaba sola al usuario. Un usuario normal no pregunta: lee el cierre y lo da por
+completo. Esto es la regla de las garantias mecanicas aplicada al cierre — no se delega al agente
+recordar que se salto, se mide.
+
+El script **no repara y no escribe**: lee `memory/` y el estado de git, y da cuatro estados:
+
+| Estado | Que significa | Que haces |
+|---|---|---|
+| `HECHO` | el paso se cumplio, medido | nada |
+| `PARCIAL` | se hizo dentro de un alcance acotado (Step 3a) | dejar el conteo a la vista |
+| `SALTADO` | el paso falta y no hay diseno que lo permita | **arreglar o declarar** (abajo) |
+| `POR-DISEÑO` | el skill lo ordena asi (no hay push, el hash es referencia adelantada) | reportarlo como lo que es, nunca como falla |
+
+`POR-DISEÑO` es un estado de primera clase por una razon medida: al preguntarle, el agente tambien
+confesaba como fallas cosas que este mismo archivo ORDENA (no hacer `git push`, dejar el hash del
+commit sin commitear — Step 6c). Sin una referencia fija de que cuenta como omision, la confesion
+libre produce un muro de falsos positivos y el usuario se queda tan ciego como con el silencio.
+
+**Que hacer con cada `SALTADO` o `PARCIAL`:**
+
+1. **Si el script imprime una linea `corrige:`, ejecutala ahora.** Son arreglos baratos y
+   deterministas (emitir el `plan.upsert` que falto, compactar el journal, correr Step 8d). Vuelve
+   a correr el audit y marca ese punto como `CORREGIDO` en el reporte. No le devuelvas al usuario
+   un trabajo de un comando.
+2. **Si no hay `corrige:` o el arreglo pide criterio**, se queda `SALTADO` y entra literal en el
+   reporte de Step 7 con su motivo en una linea. Ejemplos legitimos: el barrido completo de 3a
+   (es `/triage-3t`), una cabecera mensual incompleta (es una migracion), un pendiente vencido de
+   otra sesion que no te toca resolver.
+3. **Nunca marques como `POR-DISEÑO` algo que el script no clasifico asi.** Ese estado lo decide el
+   script leyendo este archivo, no tu comodidad.
+
+**La salida del script se pega LITERAL en el reporte de Step 7**, con sus cuatro estados y su linea
+`resumen:`. No la parafrasees ni la resumas: la salida entera cabe en pantalla y su valor esta en
+que el usuario vea los `SALTADO` sin tener que preguntar.
+
+## Step 7b: Los tres huecos que ningun script puede ver
+
+El audit mide artefactos. Estas tres preguntas son sobre lo que **dijiste**, y no hay fichero que
+las conteste. Respondelas las tres, siempre, aunque la respuesta sea "ninguno" — una seccion
+condicional que se omite entera se lee como que no se miro:
+
+```
+HUECOS NO MECANIZABLES:
+1. Afirmaciones sin dueno: <ninguna | que afirmaste que pasaria o se comprobaria despues, y que
+   pendiente con fecha lo cubre ahora>
+2. Avisos que vi y no reporte: <ninguno | que imprimio un script o un hook durante la sesion y no
+   llego al reporte>
+3. Pasos que recorte: <ninguno | que paso hiciste a medias por tamano o tiempo, y por que>
+```
+
+La 1 es la mas cara y la que menos se ve: si esta sesion afirmo *"manana a las 03:00 esto sale del
+codigo actual"* y nadie quedo de comprobarlo, falta un pendiente con `--revisar`. Salio exactamente
+asi en el corpus medido y el cierre no lo menciono.
+
 ## Step 7: Report
 
-Tell the user: session path, N pendientes extracted, M resolved, journal result (`applied=N` for Steps 3c, 5a and 6c together, any quarantined event with its reason, and whether any **Fallback** path was used), N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, N rows pruned by hand (if any), frontmatter sealed (if N>0), **secrets redacted (if N>0, with file:line list + rotate-your-keys warning)**, git result (commit hash OR reason skipped).
+Empieza pegando **literal** la salida de Step 7a y el bloque de Step 7b. Despues, el reporte de
+siempre: session path, N pendientes extracted, M resolved, journal result (`applied=N` for Steps 3c, 5a and 6c together, any quarantined event with its reason, and whether any **Fallback** path was used), N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, N rows pruned by hand (if any), frontmatter sealed (if N>0), **secrets redacted (if N>0, with file:line list + rotate-your-keys warning)**, git result (commit hash OR reason skipped).
 
 **Say what a number MEANS, not just the number.** A count the user cannot interpret reads as a
 failure: an `adopted=12 rows_added=12` on a memory older than 2.12.0 is a one-time migration and

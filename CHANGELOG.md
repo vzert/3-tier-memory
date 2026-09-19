@@ -1,5 +1,46 @@
 # Changelog
 
+## [2.28.0] - 2026-09-19
+Origen: el usuario reviso 107 JSONL de un proyecto que usa el plugin a diario. En **14 sesiones**
+(2026-09-13..19) tuvo que preguntar *"falto algo de tu checkpoint?"* y en las **14** el agente
+enumero omisiones reales que su propio cierre no mencionaba. Frecuencia medida sobre las 9
+respuestas completas: **8 de 8** sesiones se saltaron la tabla de reconciliacion de Step 3a; 5
+dejaron el plan enlazado sin `## Estado` o sin `plan.upsert`; 3 nunca reportaron el mismo
+`header_issues=1`; 3 no mencionaron pendientes que vencian ESE dia; 3 dejaron el snippet sin los
+pendientes recien creados. Un usuario normal no pregunta: lee el cierre y lo da por completo.
+
+- **`bin/checkpoint-audit.py` (nuevo, Step 7a)**: audita el propio checkpoint y emite un estado por
+  comprobacion — `HECHO` / `SALTADO` / `PARCIAL` / `POR-DISEÑO`. Solo lee (`memory/` + estado de
+  git); no repara, no escribe, no emite eventos. Step 7 pega su salida **literal**. Junto a cada
+  `SALTADO` con arreglo barato y determinista imprime el comando exacto que lo corrige, para que el
+  agente lo ejecute en vez de devolverle el trabajo al usuario. 15 comprobaciones: secciones
+  obligatorias de la ficha, conteo de 3a, pendientes vencidos, `## Estado` y fila del plan,
+  dual-write de learnings y pendientes, snippet vs pendientes abiertos, recomendaciones de research,
+  fila en `_session-index.md`, `- [x]` rezagadas, journal sin aplicar o en cuarentena, avisos de
+  `repair-dualwrite` re-medidos en seco, y los dos `POR-DISEÑO` de git.
+- **`POR-DISEÑO` es un estado de primera clase, no un detalle.** Medido en el mismo corpus: al
+  preguntarle, el agente tambien confesaba como fallas cosas que el propio skill ORDENA (que el
+  checkpoint no suba nada al remoto, que el hash del commit quede como referencia adelantada —
+  Step 6c). Sin una referencia fija de que cuenta como omision, la confesion libre produce un muro
+  de falsos positivos y el usuario se queda tan ciego como con el silencio.
+- **Step 3a acotado (cambio de contrato).** Pedia clasificar *cada* pendiente abierto; con ~200
+  abiertos no se cumplio ni una vez en las 8 sesiones medidas. El alcance obligatorio pasa a ser
+  cerrado: los pendientes que la sesion toco + los que traen `_revisar:` vencida o de hoy. El resto
+  se **cuenta** en una linea obligatoria (`RECONCILIACION: R de N revisados — N-R sin revisar,
+  barrido en /triage-3t`), que el audit vuelve a medir por su cuenta como `PARCIAL`.
+- **Step 7b (nuevo, tres preguntas fijas)** para lo que ningun script puede ver: afirmaciones sin
+  dueno ("manana a las 03:00 esto sale del codigo actual" y nadie queda de comprobarlo), avisos
+  vistos y no reportados, y pasos recortados por tamano. Se responden las tres siempre, aunque sea
+  "ninguno".
+- `bin/test-checkpoint-audit.sh` (nuevo, 35 asertos): una categoria por hueco medido, e incluye los
+  dos casos `POR-DISEÑO` (`Como retomar` colapsado por el caso 5 de Step 8; ficha vieja cuya fila
+  podo Step 5b) porque un falso positivo ahi rompe el mecanismo entero.
+- **Dos defectos del propio script, encontrados corriendolo contra memoria real antes de publicar**:
+  (1) el cierre `\b` del regex de ids no casa con `_id: p-xxxxxxxxxx_`, porque `_` es caracter de
+  palabra — salian 24 de 189 pendientes abiertos y el conteo de 3a habria mentido por defecto;
+  (2) partir las filas de tabla por `|` a secas rompe todo wikilink con alias (`[[plans/x\|T]]`),
+  corriendo una posicion las columnas y dando falso negativo en el chequeo de `plan.upsert`.
+
 ## [2.27.0] - 2026-09-17
 Origen: al cerrar la sesión de 2.26.0, el usuario señaló que `research/openwolf-vs-3tier.md`
 generó 4 recomendaciones priorizadas, se implementó 1, y las otras 3 no tenían ningún rastro
