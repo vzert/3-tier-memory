@@ -35,7 +35,7 @@ pendientes recien creados. Un usuario normal no pregunta: lee el cierre y lo da 
 - **La linea `RECONCILIACION:` se escribe tambien en la ficha** (Step 3d), no solo en pantalla, y
   el audit comprueba que exista **y que sus numeros cuadren** con los que mide el. Sin eso, el
   contrato nuevo habria sido la unica afirmacion del cambio sin nada que la sostuviera.
-- `bin/test-checkpoint-audit.sh` (nuevo, 42 asertos): una categoria por hueco medido, e incluye los
+- `bin/test-checkpoint-audit.sh` (nuevo, 52 asertos): una categoria por hueco medido, e incluye los
   casos `POR-DISEÑO` (ficha vieja cuya fila podo Step 5b; `Como retomar` colapsado por el caso 5 de
   Step 8 **solo cuando la sesion no deja pendientes propios abiertos**) porque un falso positivo ahi
   rompe el mecanismo entero, y un falso negativo lo convierte en el que tapa el hueco.
@@ -50,6 +50,20 @@ pendientes recien creados. Un usuario normal no pregunta: lee el cierre y lo da 
   afirmaba; (2) un wikilink de research roto se saltaba en silencio y devolvia `HECHO`, cuando "no
   se pudo mirar" nunca es "no hay nada"; (3) la linea `RECONCILIACION:` era obligatoria por prosa y
   no la exigia nada.
+- **El hueco decisivo, encontrado por un segundo adversario (subagente Sonnet 5) sobre el codigo ya
+  corregido**: "revisado" se medía buscando el id del pendiente en TODO el texto de la ficha, o sea
+  MENCION, no reconciliacion. Construyo una ficha que nombraba de paso un pendiente vencido hoy en
+  `## Contexto`, con la frase "no se reviso su vencimiento", y el audit devolvia `HECHO` en 3a y en
+  vencidos; anadiendo la linea `RECONCILIACION:` calculada del mismo proxy, el audit entero salia
+  limpio. El instrumento blanqueaba como correcto el hueco exacto que existe para romper. Ahora
+  solo cuenta un id que aparezca en `## Pendientes` o en `## Recordatorios de calendario`, y la
+  linea `RECONCILIACION:` solo vale DENTRO de `## Pendientes`.
+- **Tres falsos positivos mas, corregidos.** `snippet.sigue_abierto` ignoraba tres reglas del propio
+  Step 8: se excluyen de `Sigue abierto` los pendientes con `_revisar` futuro (ya salen completos en
+  `## Recordatorios de calendario`), hay un tope de 3 con `+N mas`, y el bloque puede estar
+  colapsado. Lo reporto una sesion par sobre un caso real y se verifico contra el template antes de
+  aceptarlo. Ademas, una ficha anterior a 2.28.0 no puede llevar una linea que no existia: eso es
+  `POR-DISENO`, no `SALTADO`.
 - **Alcance honesto de la medicion.** Correr el audit sobre fichas ya cerradas ilustra el formato,
   no prueba redescubrimiento retroactivo: la mayoria de las comprobaciones leen estado GLOBAL de
   hoy (vencidos, avisos de `repair-dualwrite`, fila del plan) y el estado de hoy no prueba el de
