@@ -1,6 +1,57 @@
 # Changelog
 
 
+## [2.30.0] - 2026-09-19
+Origen: el adversario externo que reviso el push de 2.29.0 encontro que
+`checkpoint-audit-nudge.sh` — el aviso que salta al comitear un checkpoint sin haber corrido
+`checkpoint-audit.py` — se apagaba con cualquier aparicion de `resumen: hecho=<n>` en los ultimos
+4 MB del transcript, mirando el texto en crudo y sin preguntarse de donde venia la cadena. Su
+propio test lo consagraba: metia esa linea en un mensaje del usuario y esperaba silencio. Es el
+learning 12 otra vez — un arnes que acepta no-evidencia no vigila nada. Y el agujero era mas
+ancho de lo que parecia: Step 7a manda pegar la salida LITERAL del audit en la ficha de sesion,
+asi que toda ficha vieja lleva la cadena dentro, y un simple `cat` de una ficha anterior — o el
+recall inyectandola como `attachment` — desactivaba el aviso de la sesion en curso.
+
+- **La senal de silencio pasa a ser una prueba emparejada, no una cadena suelta.** El hook ya no
+  busca texto: empareja por el id de la llamada **un bloque `tool_use` cuyo comando INVOCA el
+  script** con **el `tool_result` de esa misma llamada cuya salida trae la linea de resumen**. Sin
+  las dos mitades, y con el mismo id, el aviso sale. Falsificarlo deja de ser un descuido y pasa a
+  ser escribir a mano un comando que finge ser el audit.
+- **Invocar no es nombrar.** El comando cuenta solo si el script esta en posicion ejecutable —
+  detras de un lanzador de python (`python3 "$JBIN/checkpoint-audit.py" ...`) o como primer token
+  del segmento. `grep -rn x .../checkpoint-audit.py` y `cat .../checkpoint-audit.py` no cuentan,
+  aunque su salida arrastre la linea de resumen.
+- **La clasificacion es estructural, no por `type` del registro** — y esto era la trampa. En el
+  JSONL real de Claude Code un `tool_result` se graba DENTRO de un registro `type:"user"`, asi que
+  "rechazar los mensajes de usuario" habria tirado el caso bueno junto con el malo. Lo que se mira
+  es el tipo del BLOQUE dentro de `message.content`: `tool_use` solo lo emite el assistant,
+  `tool_result` solo llega como resultado de una herramienta. Un prompt es `content` string o un
+  bloque `text`, y un `attachment` no tiene `message`: ninguno de los dos entra.
+- **Tres vias de apagado que quedan cerradas**: el bloque de auditoria pegado en un prompt; la
+  cadena dentro de un fichero inyectado (recall, CLAUDE.md, una ficha); y el `cat`/`grep` de una
+  ficha de sesion anterior. Tambien las medias pruebas: audit invocado cuya salida no trae el
+  resumen, y linea de resumen con un id que no casa con ninguna invocacion.
+- **Sigue sin bloquear.** Imprime y sale 0, y sigue callando cuando no hay transcript legible: un
+  gate ahi dejaria el checkpoint a medias, con la memoria escrita y sin comitear.
+- **Coste medido, no supuesto.** El parseo linea a linea lleva un prefiltro por substring antes de
+  tocar el JSON; sobre una cola de 4 MB el hook tarda menos de 3 s, contra un timeout de 10 s.
+- **`bin/test-checkpoint-audit-nudge.sh` reescrito**: 32 comprobaciones (antes 18), con las formas
+  de registro copiadas de un JSONL real en vez de inventadas, y una variable `NUDGE=` para correr
+  la misma bateria contra otra copia del script. Se comprobo asi que **6 de los casos nuevos
+  fallan contra la version anterior** y pasan con esta; no se afirma, se corre.
+- **Verificado ademas contra un transcript de verdad**, no solo contra ficheros de prueba: en una
+  sesion donde el audit NO se habia corrido pero si se habian leido ficheros con la cadena, la
+  version anterior se callaba y esta avisa; tras correr el audit de verdad, esta se calla. Mismo
+  transcript, las dos mitades observadas.
+- **Invariante contra el defecto auto-infligido**, ahora medido sobre el texto y no solo por un
+  caso: el aviso del hook no puede contener la linea de resumen. La version mas vieja del hook
+  buscaba el NOMBRE del script, que su propio aviso incluye, y se desactivaba sola tras avisar una
+  vez. Nombrar el script vuelve a ser seguro justo porque nombrar ya no cuenta como correr, y el
+  aviso recupera el comando literal de Step 7a.
+
+Sigue abierto y NO lo toca esta version: el mismo nudge no puede disparar en un proyecto cuyo
+`memory/` este en `.gitignore`, porque entonces no hay commit de checkpoint donde engancharse.
+
 ## [2.29.0] - 2026-09-19
 Origen: un caso real del 2026-09-19, en otro proyecto que usa el plugin a diario. Un pendiente
 pedia "comprobar el 2026-09-20 que 7 code maps salieron del codigo actual"; a media sesion esa

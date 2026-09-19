@@ -19,7 +19,8 @@
 #
 # Se calla cuando:
 #   - el comando no es el commit del checkpoint;
-#   - el transcript de ESTA sesion ya muestra una corrida de `checkpoint-audit.py`;
+#   - el transcript de ESTA sesion muestra una corrida real de `checkpoint-audit.py` (ver abajo
+#     que cuenta como corrida y por que);
 #   - no hay transcript legible (no se puede afirmar que no corrio: en la duda, silencio, porque
 #     un aviso que se repite sin motivo se aprende a ignorar y entonces no avisa de nada).
 
@@ -68,18 +69,111 @@ try:
 except Exception:
     sys.exit(0)
 
-# La senal de silencio tiene que ser prueba de que el audit CORRIO, no de que alguien lo nombro.
-# Buscar `checkpoint-audit.py` era un defecto grave y auto-infligido: ese nombre esta en el texto
-# de aviso de aqui abajo, asi que en cuanto el hook avisaba una vez, el intento siguiente veia su
-# propio aviso en el transcript y se callaba — el nudge se desactivaba solo tras usarlo una vez.
-# Tambien lo habrian silenciado un prompt del usuario, un trozo del template o un comando fallido
-# que solo mencionaran el nombre.
+# QUE CUENTA COMO CORRIDA, Y POR QUE ESTO NO ES UN grep.
 #
-# `resumen: hecho=` es la ultima linea que imprime checkpoint-audit.py y no aparece en ningun otro
-# sitio: ni en el template, ni en el aviso de abajo (comprobado). Solo la produce una corrida real.
-if re.search(r"resumen:\s*hecho=\d+", cola):
+# Buscar `checkpoint-audit.py` en el texto era un defecto grave y auto-infligido: ese nombre esta
+# en el aviso de aqui abajo, asi que en cuanto el hook avisaba una vez, el intento siguiente veia
+# su propio aviso y se callaba — el nudge se desactivaba solo tras usarlo una vez.
+#
+# Buscar `resumen: hecho=<n>` (la ultima linea que imprime checkpoint-audit.py) en CUALQUIER parte
+# de la cola tampoco vale, y es el defecto que arregla esta version: el texto plano no distingue de
+# donde viene la cadena. La apagaban tres cosas que no son evidencia de nada —
+#   1. un bloque de auditoria PEGADO en un prompt del usuario;
+#   2. un fichero inyectado como `attachment` (CLAUDE.md, una ficha de sesion, el recall);
+#   3. un `cat`/`grep` de una ficha de sesion ANTERIOR — y Step 7a manda precisamente pegar la
+#      salida LITERAL del audit en esa ficha, asi que toda ficha vieja lleva la cadena dentro.
+# Es el learning 12: un arnes que acepta no-evidencia no vigila nada.
+#
+# La prueba que si es evidencia son las DOS mitades juntas, emparejadas por el id de la llamada:
+#   - un bloque `tool_use` cuyo comando INVOCA el script (no que lo nombre: `grep x audit.py` no
+#     cuenta, `python3 "$JBIN/checkpoint-audit.py"` si), y
+#   - el `tool_result` de ESA misma llamada, cuya salida trae la linea de resumen.
+# Falsificar eso ya no es un descuido, es escribir a mano un comando que finge ser el audit.
+#
+# La clasificacion es ESTRUCTURAL, no por `type` del registro, porque en el JSONL real de Claude
+# Code un `tool_result` se graba dentro de un registro `type:"user"` (comprobado sobre transcripts
+# reales). Mirar el `type` y descartar `user` habria roto el caso bueno. Lo que se mira es el tipo
+# del BLOQUE dentro de `message.content`: `tool_use` solo lo emite el assistant y `tool_result`
+# solo llega como resultado de una herramienta. Un prompt del usuario es `content` string o un
+# bloque `text`, y un `attachment` no tiene `message` — ninguno de los dos entra por aqui.
+
+LINEA_RESUMEN = re.compile(r"resumen:\s*hecho=\d+")
+
+# El script en posicion EJECUTABLE: detras de un lanzador de python, o como primer token del
+# segmento (por si esta con permiso de ejecucion). Asi `grep -rn x .../checkpoint-audit.py` y
+# `cat .../checkpoint-audit.py` no cuentan como corrida.
+SEGMENTO = r"(?:^|[;&|(]|\n)\s*(?:[A-Za-z_]\w*=[^\s;&|]*\s+)*"
+INVOCA = re.compile(SEGMENTO + r"(?:[\"']?[^\s;&|\"']*/)?(?:python[\d.]*|py|uv|pipx)\b"
+                    r"[^\n;&|]{0,200}checkpoint-audit\.py")
+DIRECTO = re.compile(SEGMENTO + r"[\"']?[^\s;&|\"']*checkpoint-audit\.py")
+
+
+def texto_de(contenido):
+    """El contenido de un bloque puede ser una cadena o una lista de sub-bloques."""
+    if isinstance(contenido, str):
+        return contenido
+    if isinstance(contenido, list):
+        partes = []
+        for sub in contenido:
+            if isinstance(sub, dict):
+                partes.append(sub.get("text") or sub.get("content") or "")
+            elif isinstance(sub, str):
+                partes.append(sub)
+        return "\n".join(p for p in partes if isinstance(p, str))
+    return ""
+
+
+ids_comando = set()   # ids de llamadas cuyo comando INVOCA el audit
+ids_salida = set()    # ids de llamadas cuya salida trae la linea de resumen
+
+lineas = cola.split("\n")
+if len(lineas) > 1:
+    lineas = lineas[1:]   # la primera puede venir partida por el corte de la cola
+
+for linea in lineas:
+    # Prefiltro barato: parsear 4 MB de JSON linea a linea dentro de un hook es como se rompen
+    # los hooks. Solo se parsea lo que puede aportar una de las dos mitades.
+    if "checkpoint-audit.py" not in linea and "hecho=" not in linea:
+        continue
+    try:
+        reg = json.loads(linea)
+    except Exception:
+        continue
+    if not isinstance(reg, dict):
+        continue
+    contenido = ((reg.get("message") or {}) if isinstance(reg.get("message"), dict) else {}).get("content")
+    if not isinstance(contenido, list):
+        continue
+    for bloque in contenido:
+        if not isinstance(bloque, dict):
+            continue
+        tipo = bloque.get("type")
+        if tipo == "tool_use":
+            entrada = bloque.get("input")
+            if isinstance(entrada, dict):
+                orden = entrada.get("command")
+                if not isinstance(orden, str):
+                    orden = " ".join(v for v in entrada.values() if isinstance(v, str))
+            elif isinstance(entrada, str):
+                orden = entrada
+            else:
+                orden = ""
+            if orden and (INVOCA.search(orden) or DIRECTO.search(orden)):
+                bid = bloque.get("id")
+                if isinstance(bid, str):
+                    ids_comando.add(bid)
+        elif tipo == "tool_result":
+            if LINEA_RESUMEN.search(texto_de(bloque.get("content"))):
+                bid = bloque.get("tool_use_id")
+                if isinstance(bid, str):
+                    ids_salida.add(bid)
+
+if ids_comando & ids_salida:
     sys.exit(0)
 
+# INVARIANTE: este texto no puede contener nada que silencie al hook — ni `resumen: hecho=<n>`,
+# ni el script en posicion ejecutable. Nombrarlo en prosa es seguro justo porque nombrarlo ya no
+# cuenta como corrida. Hay un aserto que lo comprueba en test-checkpoint-audit-nudge.sh.
 print(
     "AVISO del plugin 3-tier-memory: vas a comitear el checkpoint y en esta sesion no corriste "
     "`bin/checkpoint-audit.py` (Step 7a). Ese paso es el unico que mide que pasos del checkpoint "
