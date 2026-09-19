@@ -57,6 +57,11 @@
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/bin/bash-journal-nudge.sh\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/bin/checkpoint-audit-nudge.sh\"",
+            "timeout": 10
           }
         ]
       }
