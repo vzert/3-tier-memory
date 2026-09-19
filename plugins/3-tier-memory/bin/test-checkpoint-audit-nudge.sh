@@ -145,6 +145,41 @@ chk "dentro de un fichero inyectado"        "1" "$(avisa "$CMT" "$TATTACH")"
 chk "leida de una ficha anterior con cat"   "1" "$(avisa "$CMT" "$TCAT")"
 chk "grep al propio script (nombrar!=correr)" "1" "$(avisa "$CMT" "$TGREP")"
 
+echo "== IMPOSTOR: un comando que NOMBRA el script sin ejecutarlo no silencia =="
+# Lo rompio un adversario externo contra la primera version de este arreglo: la expresion regular
+# solo pedia que el nombre apareciera detras de un lanzador de python, no que fuera el programa
+# ejecutado. Ahora el comando se tokeniza y se pregunta que fichero corre de verdad.
+impostor() {   # $1 = etiqueta, $2 = comando impostor
+  local TI="$T/impostor-$$-$RANDOM.jsonl"
+  cp "$TSIN" "$TI"
+  reg tool-use "toolu_IMP01" "$2"          >> "$TI"
+  reg tool-result "toolu_IMP01" "$RESUMEN" >> "$TI"
+  chk "$1" "1" "$(avisa "$CMT" "$TI")"
+}
+impostor "python3 -c que solo nombra el script"  'python3 -c '"'"'print("resumen: hecho=9")'"'"' checkpoint-audit.py'
+impostor "python3 -m con el nombre detras"       'python3 -m json.tool checkpoint-audit.py'
+impostor "echo del propio comando"               'echo python3 checkpoint-audit.py'
+impostor "un .pyc, no el .py"                    'python3 plugins/3-tier-memory/bin/checkpoint-audit.pyc'
+impostor "un .py.bak, no el .py"                 'python3 plugins/3-tier-memory/bin/checkpoint-audit.py.bak'
+impostor "head del script"                       'head -50 plugins/3-tier-memory/bin/checkpoint-audit.py'
+impostor "git show del script"                   'git show HEAD:plugins/3-tier-memory/bin/checkpoint-audit.py'
+impostor "comillas sin cerrar (falla cerrado)"   'python3 "plugins/checkpoint-audit.py'
+
+echo "== y las formas legitimas de invocarlo SI silencian =="
+legitimo() {   # $1 = etiqueta, $2 = comando
+  local TL="$T/legit-$$-$RANDOM.jsonl"
+  cp "$TSIN" "$TL"
+  reg tool-use "toolu_LEG01" "$2"          >> "$TL"
+  reg tool-result "toolu_LEG01" "$RESUMEN" >> "$TL"
+  chk "$1" "" "$(correr "$CMT" "$TL")"
+}
+legitimo "python3 con la ruta entre comillas" "$ORDEN"
+legitimo "python sin el 3"                    'python plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file x.md'
+legitimo "con -u delante"                     'python3 -u plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file x.md'
+legitimo "con VAR=valor delante"              'PYTHONUTF8=1 python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file x.md'
+legitimo "detras de un cd y un &&"            'cd /tmp && python3 "$JBIN/checkpoint-audit.py" memory --session-file x.md'
+legitimo "invocado directo (con permiso de ejecucion)" '"$JBIN/checkpoint-audit.py" memory --session-file x.md'
+
 echo "== media prueba tampoco es prueba =="
 chk "invocado pero sin linea de resumen"  "1" "$(avisa "$CMT" "$TMEDIO")"
 chk "linea de resumen huerfana (id ajeno)" "1" "$(avisa "$CMT" "$THUERFANA")"
@@ -215,7 +250,23 @@ print(json.dumps({'tool_name':'Bash','tool_input':{'command':'''$CMT'''},'transc
 " | bash "$NUDGE" >/dev/null 2>&1 || rc=$?
 chk "sale 0 avisando" "0" "$rc"
 
-echo "== rendimiento: una cola de 4 MB no puede colgar el hook (timeout 10s) =="
+echo "== la ventana de lectura no puede partir la prueba en dos =="
+# La prueba son DOS registros. Con una ventana estrecha, actividad posterior los empuja fuera —
+# o peor, deja medio dentro — y el aviso salta tras una corrida legitima. Lo senalo un adversario
+# externo. La ventana es ahora de 64 MB: en la practica, el fichero entero.
+TLEJOS="$T/pareja-lejos.jsonl"
+cp "$TREAL" "$TLEJOS"
+python3 - "$TLEJOS" <<'PYFAR'
+import json, sys
+relleno = "y" * 900
+with open(sys.argv[1], "a", encoding="utf-8") as fh:
+    for i in range(6000):   # ~5,5 MB de actividad DESPUES de la corrida del audit
+        fh.write(json.dumps({"type": "assistant", "message": {"role": "assistant",
+                 "content": [{"type": "text", "text": f"{i} {relleno}"}]}}) + "\n")
+PYFAR
+chk "sigue callado con 5,5 MB de ruido detras" "" "$(correr "$CMT" "$TLEJOS")"
+
+echo "== rendimiento: una cola grande no puede colgar el hook (timeout 10s) =="
 TGORDO="$T/gordo.jsonl"
 python3 - "$TGORDO" <<'PYBIG'
 import json, sys
@@ -228,7 +279,7 @@ PYBIG
 ini=$(python3 -c 'import time;print(time.time())')
 O=$(correr "$CMT" "$TGORDO")
 seg=$(python3 -c "import time,sys;print('1' if time.time()-float(sys.argv[1])<3 else '0')" "$ini")
-chk "avisa igual sobre 4 MB" "1" "$(printf '%s' "$O" | grep -c 'no corriste')"
+chk "avisa igual sobre 4,5 MB" "1" "$(printf '%s' "$O" | grep -c 'no corriste')"
 chk "tarda menos de 3s" "1" "$seg"
 
 echo

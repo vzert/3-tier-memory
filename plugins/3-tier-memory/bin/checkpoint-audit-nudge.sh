@@ -27,7 +27,7 @@
 source "$(dirname "$0")/resolve-project-dir.sh"
 
 HOOK_INPUT="$_HOOK_INPUT" python3 - <<'PY'
-import json, os, re, sys
+import json, os, re, shlex, sys
 
 for _f in (sys.stdout, sys.stderr):
     if hasattr(_f, "reconfigure"):
@@ -58,13 +58,19 @@ tpath = d.get("transcript_path", "") or ""
 if not tpath or not os.path.isfile(tpath):
     sys.exit(0)   # sin transcript no se puede afirmar nada; callar antes que avisar en falso
 
-# Solo la cola: Step 7a corre a pocos pasos del commit, y parsear un transcript entero en un hook
-# con timeout de 10s es como se rompen los hooks.
-COLA = 4 * 1024 * 1024
+# CUANTO TRANSCRIPT SE LEE. La prueba que se busca son DOS registros (la llamada y su resultado),
+# asi que un corte no solo puede tirarla: puede PARTIRLA y dejar media, que es un aviso en falso
+# tras una corrida legitima. Medido sobre un fichero de 40 MB, leer y prefiltrar la cola entera
+# cuesta 0,05 s contra un timeout de 10 s — la ventana estrecha no compraba nada. Se sube a 64 MB,
+# que en la practica es el fichero completo, y solo se descarta la primera linea cuando de verdad
+# hubo corte (si no hubo, no hay linea partida que descartar).
+COLA = 64 * 1024 * 1024
 try:
     with open(tpath, "rb") as fh:
         fh.seek(0, os.SEEK_END)
-        fh.seek(max(0, fh.tell() - COLA))
+        total = fh.tell()
+        cortado = total > COLA
+        fh.seek(max(0, total - COLA))
         cola = fh.read().decode("utf-8", "replace")
 except Exception:
     sys.exit(0)
@@ -99,13 +105,63 @@ except Exception:
 
 LINEA_RESUMEN = re.compile(r"resumen:\s*hecho=\d+")
 
-# El script en posicion EJECUTABLE: detras de un lanzador de python, o como primer token del
-# segmento (por si esta con permiso de ejecucion). Asi `grep -rn x .../checkpoint-audit.py` y
-# `cat .../checkpoint-audit.py` no cuentan como corrida.
-SEGMENTO = r"(?:^|[;&|(]|\n)\s*(?:[A-Za-z_]\w*=[^\s;&|]*\s+)*"
-INVOCA = re.compile(SEGMENTO + r"(?:[\"']?[^\s;&|\"']*/)?(?:python[\d.]*|py|uv|pipx)\b"
-                    r"[^\n;&|]{0,200}checkpoint-audit\.py")
-DIRECTO = re.compile(SEGMENTO + r"[\"']?[^\s;&|\"']*checkpoint-audit\.py")
+# QUE COMANDO CUENTA COMO INVOCACION. No vale una expresion regular sobre el texto del comando:
+# un adversario externo rompio la primera version con `python3 -c \'print("resumen: hecho=9")\'
+# checkpoint-audit.py`, que casaba porque el nombre aparecia detras de un lanzador de python, sin
+# ser el programa que se ejecuta. Tampoco valia `checkpoint-audit.pyc`, que casaba por no exigir
+# frontera tras `.py`. Asi que el comando se TOKENIZA y se pregunta cual es el fichero que el
+# segmento ejecuta de verdad: ni `-c` ni `-m` ejecutan un fichero, y `grep`/`cat`/`echo` sobre el
+# script tampoco. Falla cerrado: lo que no se puede tokenizar no cuenta como corrida.
+OPERADORES = re.compile(r"[;&|\n()]+")
+LANZADOR = re.compile(r"^(?:python[\d.]*|py)$")
+ASIGNACION = re.compile(r"^[A-Za-z_]\w*=")
+SIN_FICHERO = {"-c", "-m", "--command", "--module"}   # lo que sigue es codigo o modulo, no un fichero
+OPCION_CON_VALOR = {"-X", "-W"}
+ENVOLTURAS = {"env", "uv", "pipx", "nohup", "time", "stdbuf", "nice"}
+
+
+def programa_ejecutado(tokens):
+    """El basename del fichero que este segmento ejecuta de verdad, o None."""
+    i, n, saltos = 0, len(tokens), 0
+    while i < n and saltos < 8:
+        t = tokens[i]
+        base = os.path.basename(t)
+        if ASIGNACION.match(t):                 # VAR=valor delante del programa
+            i += 1
+            continue
+        if base in ENVOLTURAS:
+            i += 1
+            saltos += 1
+            while i < n and tokens[i] in ("run", "--"):   # `uv run`, `pipx run`
+                i += 1
+            continue
+        if LANZADOR.match(base):
+            i += 1
+            saltos += 1
+            while i < n:
+                op = tokens[i]
+                if op in SIN_FICHERO:
+                    return None                 # `-c CODIGO` / `-m MODULO`: no ejecuta un fichero
+                if op.startswith("-") and op != "-":
+                    i += 2 if op in OPCION_CON_VALOR else 1
+                    continue
+                break
+            continue
+        return base
+    return None
+
+
+def invoca_el_audit(orden):
+    for trozo in OPERADORES.split(orden):
+        if "checkpoint-audit.py" not in trozo:
+            continue
+        try:
+            tokens = shlex.split(trozo)
+        except ValueError:
+            continue                            # comillas sin cerrar: no cuenta como corrida
+        if programa_ejecutado(tokens) == "checkpoint-audit.py":
+            return True
+    return False
 
 
 def texto_de(contenido):
@@ -127,8 +183,8 @@ ids_comando = set()   # ids de llamadas cuyo comando INVOCA el audit
 ids_salida = set()    # ids de llamadas cuya salida trae la linea de resumen
 
 lineas = cola.split("\n")
-if len(lineas) > 1:
-    lineas = lineas[1:]   # la primera puede venir partida por el corte de la cola
+if cortado and len(lineas) > 1:
+    lineas = lineas[1:]   # solo si hubo corte: esa primera linea puede venir partida
 
 for linea in lineas:
     # Prefiltro barato: parsear 4 MB de JSON linea a linea dentro de un hook es como se rompen
@@ -158,7 +214,7 @@ for linea in lineas:
                 orden = entrada
             else:
                 orden = ""
-            if orden and (INVOCA.search(orden) or DIRECTO.search(orden)):
+            if orden and invoca_el_audit(orden):
                 bid = bloque.get("id")
                 if isinstance(bid, str):
                     ids_comando.add(bid)
