@@ -179,6 +179,18 @@ legitimo "con -u delante"                     'python3 -u plugins/3-tier-memory/
 legitimo "con VAR=valor delante"              'PYTHONUTF8=1 python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file x.md'
 legitimo "detras de un cd y un &&"            'cd /tmp && python3 "$JBIN/checkpoint-audit.py" memory --session-file x.md'
 legitimo "invocado directo (con permiso de ejecucion)" '"$JBIN/checkpoint-audit.py" memory --session-file x.md'
+legitimo "con env -i delante"                 'env -i python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file x.md'
+legitimo "con env VAR=valor delante"          'env PYTHONUTF8=1 python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file x.md'
+legitimo "con un export delante"              'export PYTHONUTF8=1; python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file x.md'
+
+echo "== CONTROL DE FLUJO Y MEZCLA: un comando que invoca Y trae la linea de otro sitio =="
+# Segundo hallazgo del adversario externo sobre este mismo arreglo: bastaba con que UN segmento
+# pareciera invocar. Como el comando tiene una sola salida, otro segmento podia aportar la linea.
+impostor "true || la invocacion nunca corre"     'true || python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory'
+impostor "false && la invocacion nunca corre"    'false && python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory'
+impostor "invoca y ademas lee una ficha vieja"   'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file x.md; cat memory/sessions/vieja.md'
+impostor "invoca y ademas hace echo"             'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file x.md && echo "resumen: hecho=9"'
+impostor "invoca por un tubo hacia otra cosa"    'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory | tee /tmp/x'
 
 echo "== media prueba tampoco es prueba =="
 chk "invocado pero sin linea de resumen"  "1" "$(avisa "$CMT" "$TMEDIO")"
@@ -265,6 +277,13 @@ with open(sys.argv[1], "a", encoding="utf-8") as fh:
                  "content": [{"type": "text", "text": f"{i} {relleno}"}]}}) + "\n")
 PYFAR
 chk "sigue callado con 5,5 MB de ruido detras" "" "$(correr "$CMT" "$TLEJOS")"
+
+echo "== por encima del tope de lectura: SILENCIO, no un aviso sobre media lectura =="
+# El fichero se lee entero justamente para que el corte no pueda partir la pareja en dos. Por
+# encima de un tope absurdo no se lee, y entonces no se afirma nada: en la duda, silencio.
+# `_NUDGE_TOPE_BYTES` existe solo para poder probar esto sin fabricar 256 MB.
+chk "callado por encima del tope (aunque no haya audit)" "" "$(_NUDGE_TOPE_BYTES=100 correr "$CMT" "$TSIN")"
+chk "avisa por debajo del tope" "1" "$(_NUDGE_TOPE_BYTES=100000000 avisa "$CMT" "$TSIN")"
 
 echo "== rendimiento: una cola grande no puede colgar el hook (timeout 10s) =="
 TGORDO="$T/gordo.jsonl"

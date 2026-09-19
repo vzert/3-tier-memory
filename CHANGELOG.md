@@ -27,6 +27,13 @@ recall inyectandola como `attachment` — desactivaba el aviso de la sesion en c
   exigia frontera tras `.py`, asi que `checkpoint-audit.pyc` colaba. Con tokens, no cuentan ni
   esos dos ni `grep`/`cat`/`head`/`git show`/`echo` sobre el script, aunque su salida arrastre la
   linea de resumen.
+- **Y no basta con que UN segmento invoque: el comando entero tiene que ser la corrida.** El
+  adversario volvio con `true || python3 .../checkpoint-audit.py ; cat ficha-vieja.md` — un
+  segmento parece invocar y otro trae la linea, y como el comando tiene una sola salida, la pareja
+  dejaba de probar nada. Ahora cada segmento tiene que ser o la invocacion o un acompanante que no
+  produce salida (`cd`, `export`...). Un `cat`, un `echo`, un `tee`, o un `false &&` que ni
+  siquiera ejecuta lo que sigue, dejan el comando INCONCLUYENTE, y en la duda se avisa. En el
+  mismo viaje se arreglo un rechazo injusto: `env -i python3 .../checkpoint-audit.py` si cuenta.
 - **La clasificacion es estructural, no por `type` del registro** — y esto era la trampa. En el
   JSONL real de Claude Code un `tool_result` se graba DENTRO de un registro `type:"user"`, asi que
   "rechazar los mensajes de usuario" habria tirado el caso bueno junto con el malo. Lo que se mira
@@ -39,21 +46,25 @@ recall inyectandola como `attachment` — desactivaba el aviso de la sesion en c
   resumen, y linea de resumen con un id que no casa con ninguna invocacion.
 - **Sigue sin bloquear.** Imprime y sale 0, y sigue callando cuando no hay transcript legible: un
   gate ahi dejaria el checkpoint a medias, con la memoria escrita y sin comitear.
-- **La ventana de lectura sube de 4 MB a 64 MB, que es un aviso falso menos.** La prueba son
-  ahora DOS registros, asi que un corte no solo puede tirarla: puede PARTIRLA y dejar media, y
-  entonces el aviso salta despues de una corrida legitima — un aviso que salta cuando no toca se
-  aprende a ignorar. Lo senalo el mismo adversario. La ventana estrecha no compraba nada: medido
-  sobre un fichero de 40 MB, leer y prefiltrar la cola entera cuesta 0,05 s contra un timeout de
-  10 s. Ademas, la primera linea de la cola solo se descarta cuando de verdad hubo corte.
+- **Se acaba la ventana de lectura: el transcript se lee entero, o no se afirma nada.** La prueba
+  son ahora DOS registros, asi que leer solo una cola no es que pueda tirarla: puede PARTIRLA y
+  dejar media, y entonces el aviso salta despues de una corrida legitima — un aviso que salta
+  cuando no toca se aprende a ignorar. La primera version de este arreglo subio la ventana de
+  4 MB a 64 MB y declaro cerrado el defecto; **el adversario respondio que eso solo mueve la
+  frontera de sitio**, y tenia razon. Ahora no hay ventana. Cuesta poco — medido, leer y
+  prefiltrar 40 MB son 0,05 s contra un timeout de 10 s — porque el prefiltro descarta por
+  substring antes de tocar el JSON. Por encima de un tope absurdo (256 MB) el hook **se calla**
+  en vez de avisar sobre una lectura parcial: la misma doctrina que ya seguia sin transcript
+  legible, en la duda silencio.
 - **Coste medido, no supuesto.** El parseo linea a linea lleva un prefiltro por substring antes de
   tocar el JSON, asi que solo se parsea la linea que puede aportar una de las dos mitades.
-- **`bin/test-checkpoint-audit-nudge.sh` reescrito**: 47 comprobaciones (antes 18), con las formas
+- **`bin/test-checkpoint-audit-nudge.sh` reescrito**: 57 comprobaciones (antes 18), con las formas
   de registro copiadas de un JSONL real en vez de inventadas, y una variable `NUDGE=` para correr
-  la misma bateria contra otra copia del script. Se comprobo asi que **15 de los casos nuevos
-  fallan contra 2.29.0** y pasan con esta; no se afirma, se corre. Ocho de los quince son comandos
-  impostores. Aparte van seis casos que comprueban lo contrario — que las formas legitimas de
-  invocar el audit (con `-u`, con `VAR=valor` delante, detras de un `cd &&`, invocado directo)
-  siguen callando el aviso — y esos pasan en las dos versiones, porque 2.29.0 callaba con todo.
+  la misma bateria contra otra copia del script. Se comprobo asi que **21 de los casos nuevos
+  fallan contra 2.29.0** y pasan con esta; no se afirma, se corre. Trece de los veintiuno son
+  comandos impostores. Aparte van nueve casos que comprueban lo contrario — que las formas
+  legitimas de invocar el audit (con `-u`, con `env -i`, con `VAR=valor` delante, detras de un
+  `cd &&` o de un `export;`, invocado directo) siguen callando el aviso.
 - **Verificado ademas contra un transcript de verdad**, no solo contra ficheros de prueba, y sobre
   una INSTANTANEA para que sea repetible: cortando el JSONL de una sesion justo antes de la
   invocacion del audit, 2.29.0 se calla (el transcript ya llevaba la cadena por lecturas de

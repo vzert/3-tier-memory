@@ -58,19 +58,22 @@ tpath = d.get("transcript_path", "") or ""
 if not tpath or not os.path.isfile(tpath):
     sys.exit(0)   # sin transcript no se puede afirmar nada; callar antes que avisar en falso
 
-# CUANTO TRANSCRIPT SE LEE. La prueba que se busca son DOS registros (la llamada y su resultado),
-# asi que un corte no solo puede tirarla: puede PARTIRLA y dejar media, que es un aviso en falso
-# tras una corrida legitima. Medido sobre un fichero de 40 MB, leer y prefiltrar la cola entera
-# cuesta 0,05 s contra un timeout de 10 s — la ventana estrecha no compraba nada. Se sube a 64 MB,
-# que en la practica es el fichero completo, y solo se descarta la primera linea cuando de verdad
-# hubo corte (si no hubo, no hay linea partida que descartar).
-COLA = 64 * 1024 * 1024
+# CUANTO TRANSCRIPT SE LEE: O ENTERO, O NADA. La prueba que se busca son DOS registros (la llamada
+# y su resultado), asi que leer solo una cola no es que pueda tirarla: puede PARTIRLA y dejar
+# media, y entonces el aviso salta despues de una corrida legitima. Una ventana mas ancha solo
+# mueve esa frontera de sitio, no la quita — lo senalo un adversario externo cuando la version
+# anterior de este fichero la subio de 4 MB a 64 MB y afirmo haber cerrado el defecto.
+#
+# Asi que no hay ventana: se lee el fichero completo. Cuesta poco (medido: leer y prefiltrar 40 MB
+# son 0,05 s, contra un timeout de 10 s) porque el prefiltro descarta por substring antes de tocar
+# el JSON. Y por encima de un tope absurdo se CALLA, en vez de avisar sobre una lectura parcial:
+# es la misma doctrina que el resto del fichero — en la duda, silencio, porque un aviso que se
+# repite sin motivo se aprende a ignorar.
+TOPE = int(os.environ.get("_NUDGE_TOPE_BYTES") or 0) or 256 * 1024 * 1024   # env: solo para pruebas
 try:
+    if os.path.getsize(tpath) > TOPE:
+        sys.exit(0)   # no se puede leer entero: no se afirma nada
     with open(tpath, "rb") as fh:
-        fh.seek(0, os.SEEK_END)
-        total = fh.tell()
-        cortado = total > COLA
-        fh.seek(max(0, total - COLA))
         cola = fh.read().decode("utf-8", "replace")
 except Exception:
     sys.exit(0)
@@ -118,6 +121,9 @@ ASIGNACION = re.compile(r"^[A-Za-z_]\w*=")
 SIN_FICHERO = {"-c", "-m", "--command", "--module"}   # lo que sigue es codigo o modulo, no un fichero
 OPCION_CON_VALOR = {"-X", "-W"}
 ENVOLTURAS = {"env", "uv", "pipx", "nohup", "time", "stdbuf", "nice"}
+# Programas que no producen salida propia y pueden acompanar a la invocacion sin ensuciarla.
+# Todo lo demas convierte el comando en INCONCLUYENTE: ver `invoca_el_audit`.
+ACOMPANANTES = {"cd", "export", "set", "unset", "umask", "pwd", "mkdir", "source", ".", "exec"}
 
 
 def programa_ejecutado(tokens):
@@ -132,7 +138,13 @@ def programa_ejecutado(tokens):
         if base in ENVOLTURAS:
             i += 1
             saltos += 1
-            while i < n and tokens[i] in ("run", "--"):   # `uv run`, `pipx run`
+            # `uv run`, `pipx run`, y las opciones de `env` (`env -i`, `env -u VAR`)
+            while i < n and (tokens[i] in ("run", "--")
+                             or (tokens[i].startswith("-") and tokens[i] != "-")):
+                if tokens[i] in ("-u", "--unset"):
+                    i += 1
+                i += 1
+            while i < n and ASIGNACION.match(tokens[i]):   # `env VAR=valor programa`
                 i += 1
             continue
         if LANZADOR.match(base):
@@ -152,16 +164,32 @@ def programa_ejecutado(tokens):
 
 
 def invoca_el_audit(orden):
+    """Cierto solo si TODO el comando es una corrida del audit y nada mas.
+
+    No basta con que UN segmento invoque el script. El mismo comando tiene una sola salida, asi
+    que si otro de sus segmentos puede producir la linea de resumen por su cuenta, la pareja deja
+    de probar nada: `true || python3 .../checkpoint-audit.py ; cat ficha-vieja.md` invoca en un
+    segmento y trae la linea del otro. Lo encontro un adversario externo. Por eso se exige que
+    cada segmento sea o bien la invocacion, o bien un acompanante que no produce salida (`cd`,
+    `export`...). Cualquier otra cosa — `cat`, `echo`, `grep`, `git`, un `false &&` que ni siquiera
+    ejecuta lo que sigue — deja el comando INCONCLUYENTE, y en la duda se avisa.
+    """
+    visto = False
     for trozo in OPERADORES.split(orden):
-        if "checkpoint-audit.py" not in trozo:
+        if not trozo.strip():
             continue
         try:
             tokens = shlex.split(trozo)
         except ValueError:
-            continue                            # comillas sin cerrar: no cuenta como corrida
-        if programa_ejecutado(tokens) == "checkpoint-audit.py":
-            return True
-    return False
+            return False                        # comillas sin cerrar: no cuenta como corrida
+        prog = programa_ejecutado(tokens)
+        if prog == "checkpoint-audit.py":
+            visto = True
+        elif prog is not None and prog not in ACOMPANANTES:
+            return False                        # el comando mezcla otra cosa: no prueba nada
+        elif prog is None and tokens:
+            return False                        # `-c` / `-m`: no ejecuta un fichero
+    return visto
 
 
 def texto_de(contenido):
@@ -182,9 +210,7 @@ def texto_de(contenido):
 ids_comando = set()   # ids de llamadas cuyo comando INVOCA el audit
 ids_salida = set()    # ids de llamadas cuya salida trae la linea de resumen
 
-lineas = cola.split("\n")
-if cortado and len(lineas) > 1:
-    lineas = lineas[1:]   # solo si hubo corte: esa primera linea puede venir partida
+lineas = cola.split("\n")   # el fichero se leyo entero: no hay primera linea partida que tirar
 
 for linea in lineas:
     # Prefiltro barato: parsear 4 MB de JSON linea a linea dentro de un hook es como se rompen
