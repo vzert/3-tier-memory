@@ -44,9 +44,13 @@ cmd = (d.get("tool_input") or {}).get("command", "") or ""
 if not cmd:
     sys.exit(0)
 
-# El commit de Step 6c: `git commit -m "checkpoint: DATE-SLUG — resumen"`. Se exige que `git
-# commit` y la palabra `checkpoint` esten los dos, para no saltar en cualquier commit del dia.
-if not (re.search(r"\bgit\b[^\n;&|]{0,200}\bcommit\b", cmd) and re.search(r"checkpoint", cmd, re.I)):
+# El commit de Step 6c: `git commit -m "checkpoint: DATE-SLUG — resumen"`. Se exige que
+# `checkpoint` este en el MENSAJE, no en cualquier parte del comando: pedir solo que aparezca
+# hacia saltar el aviso en un commit normal cuyo comando mencionara la ruta del propio script
+# (`git commit ... plugins/.../checkpoint-audit.py`). Un aviso que salta cuando no toca se
+# aprende a ignorar.
+if not (re.search(r"\bgit\b[^\n;&|]{0,200}\bcommit\b", cmd)
+        and re.search(r"-m\s*['\"]?\s*checkpoint", cmd, re.I)):
     sys.exit(0)
 
 tpath = d.get("transcript_path", "") or ""
@@ -64,9 +68,16 @@ try:
 except Exception:
     sys.exit(0)
 
-# `checkpoint-audit.py` aparece en el transcript tanto en el comando como en su salida. Cualquiera
-# de las dos sirve: las dos significan que la auditoria se miro.
-if "checkpoint-audit.py" in cola or "AUDITORIA DEL CHECKPOINT" in cola:
+# La senal de silencio tiene que ser prueba de que el audit CORRIO, no de que alguien lo nombro.
+# Buscar `checkpoint-audit.py` era un defecto grave y auto-infligido: ese nombre esta en el texto
+# de aviso de aqui abajo, asi que en cuanto el hook avisaba una vez, el intento siguiente veia su
+# propio aviso en el transcript y se callaba — el nudge se desactivaba solo tras usarlo una vez.
+# Tambien lo habrian silenciado un prompt del usuario, un trozo del template o un comando fallido
+# que solo mencionaran el nombre.
+#
+# `resumen: hecho=` es la ultima linea que imprime checkpoint-audit.py y no aparece en ningun otro
+# sitio: ni en el template, ni en el aviso de abajo (comprobado). Solo la produce una corrida real.
+if re.search(r"resumen:\s*hecho=\d+", cola):
     sys.exit(0)
 
 print(

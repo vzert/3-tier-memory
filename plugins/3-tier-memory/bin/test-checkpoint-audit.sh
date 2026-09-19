@@ -550,6 +550,41 @@ PYFIN
 O=$($AUD "$M6" --session-file "$S8" --no-git --hoy $HOY 2>&1)
 chk "con bloque real si cuenta" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*pendientes.vencidos')"
 
+echo "== el tope solo vale desde la linea 'Sigue abierto:', no desde otro renglon =="
+# El marcador y los nombres se buscaban en TODO el bloque `## Como retomar`, asi que tres ids y un
+# `+N mas` correcto escritos dentro de `No repitas:` daban POR-DISENO. Lo encontro un verificador
+# externo.
+python3 - "$S7" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("Sigue abierto: uno _id: p-bbbbbbbbb1_ · dos _id: p-bbbbbbbbb2_ · tres _id: p-bbbbbbbbb3_ · +9 mas en _pendientes.md.",
+            "No repitas: uno _id: p-bbbbbbbbb1_ · dos _id: p-bbbbbbbbb2_ · tres _id: p-bbbbbbbbb3_ · +2 mas en _pendientes.md.")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+O=$($AUD "$M5" --session-file "$S7" --no-git --hoy $HOY 2>&1)
+chk "en otra linea no cuenta" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*snippet.sigue_abierto')"
+
+echo "== dos marcadores que se contradicen: no vale =="
+python3 - "$S7" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("No repitas: uno _id: p-bbbbbbbbb1_ · dos _id: p-bbbbbbbbb2_ · tres _id: p-bbbbbbbbb3_ · +2 mas en _pendientes.md.",
+            "Sigue abierto: uno _id: p-bbbbbbbbb1_ · dos _id: p-bbbbbbbbb2_ · tres _id: p-bbbbbbbbb3_ · +2 mas en _pendientes.md, o +7 mas si cuentas los viejos.")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+O=$($AUD "$M5" --session-file "$S7" --no-git --hoy $HOY 2>&1)
+chk "uno correcto y otro falso = SALTADO" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*snippet.sigue_abierto')"
+
+echo "== y con el marcador unico y correcto en su linea: POR-DISENO =="
+python3 - "$S7" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace(" +2 mas en _pendientes.md, o +7 mas si cuentas los viejos."," +2 mas en _pendientes.md.")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+O=$($AUD "$M5" --session-file "$S7" --no-git --hoy $HOY 2>&1)
+chk "vuelve a valer" "1" "$(printf '%s' "$O" | grep -c 'POR-DISEÑO .*snippet.sigue_abierto')"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

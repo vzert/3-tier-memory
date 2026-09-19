@@ -190,18 +190,40 @@ def filas_tabla(path):
     return filas
 
 
-def _tope_valido(nombrados, esperados, sec_retomar):
-    """El tope de Step 8 solo cubre lo omitido si se cumplen las TRES condiciones: se nombraron
-    exactamente los 3 del tope, hay marcador `+N mas`, y esa N es el numero real de omitidos.
+def linea_sigue_abierto(sec_retomar):
+    """La linea `Sigue abierto: …` del snippet, o "" si no esta.
+
+    Todo lo del tope se mide SOBRE ESTA LINEA, no sobre el bloque entero: buscar el marcador o
+    contar ids en todo `## Como retomar` dejaba pasar tres ids y un `+N mas` correcto escritos en
+    cualquier otro renglon (por ejemplo dentro de `No repitas:`), que no es lo que manda Step 8."""
+    for l in sec_retomar.splitlines():
+        s = l.strip()
+        if s.lower().startswith("sigue abierto:"):
+            return s
+    return ""
+
+
+def _tope_valido(linea, nombrados, responsabilidad):
+    """El tope de Step 8 solo cubre lo omitido si se cumplen las TRES condiciones, y las tres
+    medidas sobre la linea `Sigue abierto:`: se nombraron exactamente los 3 del tope, hay marcador
+    `+N mas`, y esa N es el numero real de omitidos.
+
+    `responsabilidad` son los pendientes que le tocan a ESTA linea, o sea los abiertos de la
+    sesion menos los que ya salen en otra parte del snippet (Step 8 permite que el de
+    `Proximo paso` no se repita aqui).
 
     Sin la aritmetica, `Sigue abierto: +1 mas en _pendientes.md.` — sin nombrar a nadie — tapaba
-    diez pendientes abiertos y el audit los daba por buenos."""
-    if nombrados != min(TOPE_SIGUE_ABIERTO, esperados):
+    diez pendientes abiertos. Y sin acotarlo a la linea, el marcador valia desde cualquier otro
+    renglon del bloque. Con varios marcadores se exige que TODOS cuadren, no solo el primero:
+    mirar solo el primero dejaba contradicciones sin revisar detras."""
+    if not linea:
         return False
-    m = MAS_PENDIENTES.search(sec_retomar)
-    if not m:
+    if nombrados != min(TOPE_SIGUE_ABIERTO, responsabilidad):
         return False
-    return int(m.group(1)) == esperados - nombrados
+    marcadores = MAS_PENDIENTES.findall(linea)
+    if not marcadores:
+        return False
+    return all(int(n) == responsabilidad - nombrados for n in marcadores)
 
 
 def corre_git(repo_root, *args):
@@ -453,11 +475,17 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
                           f"la sesion no deja pendientes que toquen esta linea{extra}"))
     else:
         faltan_snip = [i for i in abiertos_ficha if i not in sec_retomar]
-        nombrados = len([i for i in abiertos_ficha if i in sec_retomar])
+        # El tope se mide sobre la linea `Sigue abierto:`, y solo sobre los pendientes que le
+        # TOCAN: Step 8 permite no repetir aqui el que ya va en `Proximo paso`.
+        linea_sa = linea_sigue_abierto(sec_retomar)
+        nombrados_linea = len([i for i in abiertos_ficha if i in linea_sa])
+        cubiertos_fuera = len([i for i in abiertos_ficha
+                               if i in sec_retomar and i not in linea_sa])
+        responsabilidad = len(abiertos_ficha) - cubiertos_fuera
         if not faltan_snip:
             h.append(Hallazgo(HECHO, "snippet.sigue_abierto",
                               f"el snippet nombra los {len(abiertos_ficha)} pendiente(s) que le tocan"))
-        elif _tope_valido(nombrados, len(abiertos_ficha), sec_retomar):
+        elif _tope_valido(linea_sa, nombrados_linea, responsabilidad):
             # Step 8: maximo 3 nombrados de verdad, y el resto cerrado con `+N mas`, con la N
             # correcta. Se comprueba la ARITMETICA, no la presencia del texto: aceptar el
             # marcador a secas dejaba esconder cualquier numero de pendientes detras de un

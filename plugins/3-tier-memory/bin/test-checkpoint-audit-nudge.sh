@@ -13,14 +13,17 @@ chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$(
 # Transcript sin rastro del audit
 TSIN="$T/sin-audit.jsonl"
 printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"escribo la ficha"}]}}' > "$TSIN"
-# Transcript CON rastro del audit
+# Transcript con una CORRIDA REAL del audit (su ultima linea)
 TCON="$T/con-audit.jsonl"
 cp "$TSIN" "$TCON"
-printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","input":{"command":"python3 bin/checkpoint-audit.py memory --session-file x.md"}}]}}' >> "$TCON"
-# Transcript con la SALIDA del audit pero sin el nombre del script en un comando
-TSAL="$T/salida.jsonl"
-cp "$TSIN" "$TSAL"
-printf '%s\n' '{"type":"user","message":{"content":"AUDITORIA DEL CHECKPOINT (bin/x) resumen: hecho=9"}}' >> "$TSAL"
+printf '%s\n' '{"type":"user","message":{"content":"AUDITORIA DEL CHECKPOINT ... resumen: hecho=9 parcial=1 saltado=2 por-diseno=1"}}' >> "$TCON"
+# Transcript donde el script SOLO se NOMBRA (comando que pudo fallar, prompt, trozo del template)
+TSOLO="$T/solo-mencion.jsonl"
+cp "$TSIN" "$TSOLO"
+printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","input":{"command":"python3 bin/checkpoint-audit.py memory --session-file x.md"}}]}}' >> "$TSOLO"
+# Transcript que contiene el AVISO DE ESTE MISMO HOOK (el caso auto-infligido)
+TAVISO="$T/con-aviso.jsonl"
+cp "$TSIN" "$TAVISO"
 
 correr() {   # $1 = comando bash, $2 = transcript
   python3 -c "
@@ -40,13 +43,31 @@ chk "da el comando" "1" "$(printf '%s' "$O" | grep -c 'checkpoint-audit.py')"
 echo "== el MISMO commit con el audit ya corrido: silencio =="
 chk "silencio" "" "$(correr "$CMT" "$TCON")"
 
-echo "== basta con la SALIDA del audit en el transcript: silencio =="
-chk "silencio" "" "$(correr "$CMT" "$TSAL")"
+echo "== el script solo NOMBRADO (no corrido) NO silencia =="
+# Un comando que pudo fallar, un prompt o un trozo del template mencionan el nombre sin que la
+# auditoria se haya hecho. Silenciar con eso era aceptar no-evidencia.
+chk "avisa igual" "1" "$(printf '%s' "$(correr "$CMT" "$TSOLO")" | grep -c 'no corriste')"
+
+echo "== EL BUG AUTO-INFLIGIDO: su propio aviso no puede silenciarlo =="
+# El texto del aviso contiene `checkpoint-audit.py`. Con la condicion vieja, el hook avisaba una
+# vez, veia su propio aviso en el transcript y se callaba para siempre: se desactivaba solo tras
+# el primer uso. Lo encontro un verificador externo.
+AVISO=$(correr "$CMT" "$TSIN")
+python3 - "$TAVISO" "$AVISO" <<'PYFIN'
+import json, sys
+with open(sys.argv[1], "a", encoding="utf-8") as fh:
+    fh.write(json.dumps({"type": "user", "message": {"content": sys.argv[2]}}) + "\n")
+PYFIN
+chk "sigue avisando tras haber avisado" "1" "$(printf '%s' "$(correr "$CMT" "$TAVISO")" | grep -c 'no corriste')"
 
 echo "== un commit cualquiera que no es el del checkpoint: silencio =="
 chk "silencio (fix normal)" "" "$(correr 'git commit -m "fix: arregla el parser"' "$TSIN")"
 chk "silencio (git status)" "" "$(correr 'git status --short' "$TSIN")"
 chk "silencio (grep que menciona checkpoint)" "" "$(correr 'grep -r checkpoint memory/' "$TSIN")"
+# Un commit normal cuyo COMANDO menciona la ruta del script, con mensaje ajeno: no es el del
+# checkpoint. La condicion vieja (la palabra en cualquier parte del comando) saltaba aqui.
+chk "silencio (commit normal que toca el script)" "" "$(correr 'git commit -m "fix: tipo en el audit" plugins/3-tier-memory/bin/checkpoint-audit.py' "$TSIN")"
+chk "silencio (mensaje ajeno, ruta con checkpoint)" "" "$(correr 'git add bin/checkpoint-audit.py && git commit -m "refactor del parser"' "$TSIN")"
 
 echo "== la palabra checkpoint sin git commit: silencio =="
 chk "silencio" "" "$(correr 'python3 bin/journal-compact.py --memory-dir memory  # tras el checkpoint' "$TSIN")"
