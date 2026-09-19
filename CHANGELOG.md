@@ -32,14 +32,30 @@ pendientes recien creados. Un usuario normal no pregunta: lee el cierre y lo da 
   dueno ("manana a las 03:00 esto sale del codigo actual" y nadie queda de comprobarlo), avisos
   vistos y no reportados, y pasos recortados por tamano. Se responden las tres siempre, aunque sea
   "ninguno".
-- `bin/test-checkpoint-audit.sh` (nuevo, 35 asertos): una categoria por hueco medido, e incluye los
-  dos casos `POR-DISEÑO` (`Como retomar` colapsado por el caso 5 de Step 8; ficha vieja cuya fila
-  podo Step 5b) porque un falso positivo ahi rompe el mecanismo entero.
+- **La linea `RECONCILIACION:` se escribe tambien en la ficha** (Step 3d), no solo en pantalla, y
+  el audit comprueba que exista **y que sus numeros cuadren** con los que mide el. Sin eso, el
+  contrato nuevo habria sido la unica afirmacion del cambio sin nada que la sostuviera.
+- `bin/test-checkpoint-audit.sh` (nuevo, 42 asertos): una categoria por hueco medido, e incluye los
+  casos `POR-DISEÑO` (ficha vieja cuya fila podo Step 5b; `Como retomar` colapsado por el caso 5 de
+  Step 8 **solo cuando la sesion no deja pendientes propios abiertos**) porque un falso positivo ahi
+  rompe el mecanismo entero, y un falso negativo lo convierte en el que tapa el hueco.
 - **Dos defectos del propio script, encontrados corriendolo contra memoria real antes de publicar**:
   (1) el cierre `\b` del regex de ids no casa con `_id: p-xxxxxxxxxx_`, porque `_` es caracter de
-  palabra — salian 24 de 189 pendientes abiertos y el conteo de 3a habria mentido por defecto;
+  palabra — salian 24 de 190 pendientes abiertos y el conteo de 3a habria mentido por defecto;
   (2) partir las filas de tabla por `|` a secas rompe todo wikilink con alias (`[[plans/x\|T]]`),
   corriendo una posicion las columnas y dando falso negativo en el chequeo de `plan.upsert`.
+- **Tres defectos mas, encontrados por el adversario externo (`codex`, GPT-5) antes de publicar**:
+  (1) `snippet.sigue_abierto` daba `POR-DISEÑO` a cualquier bloque `Como retomar` sin fence, aunque
+  la sesion dejara pendientes propios abiertos — el auditor bendecia el hueco y el arnes lo
+  afirmaba; (2) un wikilink de research roto se saltaba en silencio y devolvia `HECHO`, cuando "no
+  se pudo mirar" nunca es "no hay nada"; (3) la linea `RECONCILIACION:` era obligatoria por prosa y
+  no la exigia nada.
+- **Alcance honesto de la medicion.** Correr el audit sobre fichas ya cerradas ilustra el formato,
+  no prueba redescubrimiento retroactivo: la mayoria de las comprobaciones leen estado GLOBAL de
+  hoy (vencidos, avisos de `repair-dualwrite`, fila del plan) y el estado de hoy no prueba el de
+  entonces. Y **nada fuerza mecanicamente a correr Step 7a**: el unico consumidor de la salida es la
+  prosa del template. Lo que sostiene el cambio es acotado — cuando el checkpoint corre su Step 7a,
+  las omisiones salen sin que el usuario pregunte.
 
 ## [2.27.0] - 2026-09-17
 Origen: al cerrar la sesión de 2.26.0, el usuario señaló que `research/openwolf-vs-3tier.md`

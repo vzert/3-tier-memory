@@ -390,10 +390,15 @@ session touched, each with the id the journal actually assigned:
 
 ```markdown
 ## Pendientes
+RECONCILIACION: <R> de <N> pendientes abiertos revisados — <N-R> sin revisar, barrido en /triage-3t
 - [ ] <texto corto> — `p-xxxxxxxxxx`
 - [x] <texto corto> — `p-yyyyyyyyyy` (resuelto)
 <or "Ninguno">
 ```
+
+**La linea `RECONCILIACION:` va tambien AQUI, no solo impresa en pantalla.** Impresa se la lleva el
+scroll; en la ficha queda, y `checkpoint-audit.py` (Step 7a) la comprueba. Es la misma linea de
+Step 3a, con los mismos numeros.
 
 Take every id from the `journal-emit.py` stdout of Steps 3a/3b, or from the line the compactor
 wrote in `_pendientes.md` — **never type one from memory and never make one up**. If an id you

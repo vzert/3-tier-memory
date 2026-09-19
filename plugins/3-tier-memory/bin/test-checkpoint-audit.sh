@@ -128,7 +128,7 @@ PY
 O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
 chk "PARCIAL en 3a" "1" "$(printf '%s' "$O" | grep -c 'PARCIAL .*pendientes.3a')"
 chk "cuenta 1 de 3" "1" "$(printf '%s' "$O" | grep -c '1 de 3 revisados')"
-chk "remite a /triage-3t" "1" "$(printf '%s' "$O" | grep -c 'triage-3t')"
+chk "remite a /triage-3t" "1" "$(printf '%s' "$O" | grep -c 'pendientes.3a .*triage-3t')"
 
 echo "== el id entre guiones bajos de cursiva SI se reconoce (el fallo real de \\b) =="
 # Con `\b` de cierre, `_id: p-1111111111_` no casaba y el conteo mentia por defecto: 24 de 189
@@ -208,16 +208,54 @@ chk "lo nombra por id" "1" "$(printf '%s' "$O" | grep -c 'snippet.sigue_abierto'
 chk "el id sale en el detalle" "1" "$(printf '%s' "$O" | grep -A2 'snippet.sigue_abierto' | grep -c '  - p-6666666666')"
 chk "dual write: la fila mensual falta" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*pendientes.dualwrite')"
 
-echo "== bloque Como retomar colapsado (Step 8 caso 5): POR-DISENO, no SALTADO =="
-python3 - "$S" <<'PY'
+echo "== bloque colapsado CON pendientes propios abiertos: SALTADO, no POR-DISENO =="
+# El caso 5 de Step 8 colapsa el bloque cuando NO hay continuidad propia. Colapsarlo teniendo
+# pendientes propios abiertos es la omision, no el caso permitido: bendecirlo como POR-DISENO
+# convertiria al auditor en el que tapa el hueco. Lo encontro el adversario.
+python3 - "$S" <<'PYFIN'
 import sys, re
 p=sys.argv[1]; t=open(p,encoding='utf-8').read()
 t=re.sub(r"## Como retomar\n.*?\n\n## Related", "## Como retomar\nNinguno.\n\n## Related", t, flags=re.S)
 open(p,'w',encoding='utf-8').write(t)
-PY
+PYFIN
 O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
-chk "colapsado no es falla" "1" "$(printf '%s' "$O" | grep -c 'POR-DISEÑO .*snippet.sigue_abierto')"
-chk "y no sale como SALTADO" "0" "$(printf '%s' "$O" | grep -c 'SALTADO .*snippet.sigue_abierto')"
+chk "colapsado con continuidad propia = falla" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*snippet.sigue_abierto')"
+chk "y NO se bendice" "0" "$(printf '%s' "$O" | grep -c 'POR-DISEÑO .*snippet.sigue_abierto')"
+
+echo "== bloque colapsado SIN pendientes propios abiertos: POR-DISENO =="
+python3 - "$S" <<'PYFIN'
+import sys, re
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=re.sub(r"## Pendientes\n.*?\n\n## Commits", "## Pendientes\n- Ninguno\n\n## Commits", t, flags=re.S)
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
+chk "ese si es el caso 5" "1" "$(printf '%s' "$O" | grep -c 'POR-DISEÑO .*snippet.sigue_abierto')"
+
+echo "== linea RECONCILIACION: ausente, con numeros falsos, y correcta =="
+# El contrato nuevo dice que recortar el conteo en silencio ya no es posible. Sin este chequeo esa
+# frase seria falsa: era la unica afirmacion del cambio sin nada que la sostuviera.
+O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
+chk "ausente = SALTADO" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*pendientes.reconciliacion_linea')"
+python3 - "$S" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Pendientes\n- Ninguno",
+            "## Pendientes\nRECONCILIACION: 99 de 99 pendientes abiertos revisados — 0 sin revisar, barrido en /triage-3t\n- Ninguno")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
+chk "numeros falsos = SALTADO" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*pendientes.reconciliacion_linea')"
+chk "dice lo medido" "1" "$(printf '%s' "$O" | grep -c 'declara 99 de 99')"
+python3 - "$S" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("RECONCILIACION: 99 de 99 pendientes abiertos revisados — 0 sin revisar",
+            "RECONCILIACION: 0 de 5 pendientes abiertos revisados — 5 sin revisar")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
+chk "numeros correctos = HECHO" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*pendientes.reconciliacion_linea')"
 
 echo "== research enlazado con recomendaciones sin marcar: SALTADO con el comando de Step 8d =="
 cat > "$M/research/demo.md" <<'EOF'
@@ -238,7 +276,26 @@ open(p,'w',encoding='utf-8').write(t)
 PY
 O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
 chk "avisa del research" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*research.recomendaciones')"
-chk "remite a Step 8d" "1" "$(printf '%s' "$O" | grep -c 'print-research-recomendaciones.py')"
+chk "remite a Step 8d" "1" "$(printf '%s' "$O" | grep -A3 'research.recomendaciones' | grep -c 'corrige:.*print-research-recomendaciones.py')"
+
+echo "== wikilink de research ROTO: SALTADO, nunca un HECHO por no poder mirar =="
+# Un enlace roto no es "sin recomendaciones": es que no se pudo mirar. La version anterior lo
+# saltaba en silencio y devolvia HECHO. Lo encontro el adversario.
+python3 - "$S" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("- [[research/demo]] — parcialmente resuelto","- [[research/no-existe]] — enlace roto")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
+chk "enlace roto = SALTADO" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*research.recomendaciones')"
+chk "lo dice" "1" "$(printf '%s' "$O" | grep -c '  - no-existe .* el archivo del research no existe')"
+python3 - "$S" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("- [[research/no-existe]] — enlace roto","- [[research/demo]] — parcialmente resuelto")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
 
 echo "== learning declarado cuyo topico no existe: SALTADO =="
 python3 - "$S" <<'PY'

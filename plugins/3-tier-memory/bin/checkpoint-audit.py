@@ -87,6 +87,7 @@ WIKILINK_LEARNING = re.compile(r"\[\[learnings/([^\]|]+?)(?:\|[^\]]*)?\]\]")
 WIKILINK_RESEARCH = re.compile(r"\[\[research/([^\]|]+?)(?:\|[^\]]*)?\]\]")
 REVISAR = re.compile(r"_revisar:\s*(\d{4}-\d{2}-\d{2})_")
 SEPARADOR_CELDA = re.compile(r"(?<!\\)\|")
+RECONCILIACION = re.compile(r"^RECONCILIACION:\s*(\d+)\s+de\s+(\d+)\b", re.M)
 
 
 class Hallazgo:
@@ -225,6 +226,30 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
                           f"{len(revisados)} de {len(abiertos)} revisados — "
                           f"{sin_revisar} sin revisar{extra}, barrido completo en /triage-3t"))
 
+    # 2-bis. La linea `RECONCILIACION:` de Step 3a/3d tiene que quedar EN LA FICHA, no solo
+    # impresa. Sin esto el contrato "recortarla en silencio ya no es posible" seria falso: el
+    # adversario lo marco como la unica afirmacion del cambio sin nada que la sostenga.
+    # Mide ademas que los numeros declarados coincidan con los medidos aqui: una linea con
+    # numeros inventados pasa el grep pero no este aserto.
+    m_rec = RECONCILIACION.search(texto)
+    if not abiertos:
+        h.append(Hallazgo(HECHO, "pendientes.reconciliacion_linea",
+                          "sin pendientes abiertos: la linea no aplica"))
+    elif not m_rec:
+        h.append(Hallazgo(SALTADO, "pendientes.reconciliacion_linea",
+                          "la ficha no lleva la linea RECONCILIACION: de Step 3d",
+                          corrige=f"escribe en `## Pendientes`: RECONCILIACION: {len(revisados)} de "
+                                  f"{len(abiertos)} pendientes abiertos revisados — "
+                                  f"{sin_revisar} sin revisar, barrido en /triage-3t"))
+    elif (int(m_rec.group(1)), int(m_rec.group(2))) != (len(revisados), len(abiertos)):
+        h.append(Hallazgo(SALTADO, "pendientes.reconciliacion_linea",
+                          f"la linea declara {m_rec.group(1)} de {m_rec.group(2)} y lo medido aqui "
+                          f"es {len(revisados)} de {len(abiertos)}",
+                          corrige="corrige los numeros de la linea; no los escribas de memoria"))
+    else:
+        h.append(Hallazgo(HECHO, "pendientes.reconciliacion_linea",
+                          "la linea esta en la ficha y sus numeros cuadran"))
+
     # 3. Pendientes con fecha de revision vencida o de hoy que esta ficha no menciona
     vencidos = [p for p in abiertos
                 if p[2] and p[2] <= hoy and (p[0] is None or p[0] not in ids_en_ficha)]
@@ -327,10 +352,22 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
     abiertos_ficha = [ID_PENDIENTE.search(l).group(0)
                       for l in sec_pend.splitlines()
                       if l.strip().startswith("- [ ]") and ID_PENDIENTE.search(l)]
-    if "```" not in sec_retomar:
+    if "```" not in sec_retomar and not abiertos_ficha:
         # Step 8 caso 5: el bloque se colapsa a una linea a proposito cuando no hay continuidad.
+        # SOLO vale si la sesion no dejo pendientes PROPIOS abiertos: colapsar el bloque teniendo
+        # continuidad propia es precisamente la omision, no el caso permitido. (Lo marco el
+        # adversario: la version anterior bendecia como POR-DISENO un hueco real, y el arnes lo
+        # afirmaba.)
         h.append(Hallazgo(DISENO, "snippet.sigue_abierto",
-                          "bloque `Como retomar` colapsado (Step 8, caso 5) — sin linea de pendientes"))
+                          "bloque `Como retomar` colapsado (Step 8, caso 5) — la sesion no deja "
+                          "pendientes propios abiertos"))
+    elif "```" not in sec_retomar:
+        h.append(Hallazgo(SALTADO, "snippet.sigue_abierto",
+                          f"bloque `Como retomar` colapsado pero la sesion deja "
+                          f"{len(abiertos_ficha)} pendiente(s) propio(s) abierto(s)",
+                          abiertos_ficha,
+                          corrige="escribe el bloque completo: el caso 5 de Step 8 solo aplica sin "
+                                  "continuidad propia"))
     elif not abiertos_ficha:
         h.append(Hallazgo(HECHO, "snippet.sigue_abierto", "la sesion no deja pendientes abiertos"))
     else:
@@ -348,9 +385,14 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
     sec_res = seccion_por_prefijo(secs, "Research") or ""
     researches = sorted(set(WIKILINK_RESEARCH.findall(sec_res)))
     pendientes_reco = []
+    rotos_reco = []
     for r in researches:
         ruta = os.path.join(memory_dir, "research", r + ".md")
         if not os.path.exists(ruta):
+            # Un wikilink de research ROTO no es "sin recomendaciones": es que no se pudo mirar, y
+            # callarlo da un HECHO falso — el mismo fallo que print-research-recomendaciones.py ya
+            # aprendio en 2.27.0. Lo marco el adversario aqui.
+            rotos_reco.append((r, "el archivo del research no existe"))
             continue
         cuerpo = seccion_por_prefijo(secciones(leer(ruta)), "Recomendaciones")
         if cuerpo is None:
@@ -360,12 +402,18 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
             pendientes_reco.append((r, len(sin)))
     if not researches:
         h.append(Hallazgo(HECHO, "research.recomendaciones", "la ficha no enlaza ningun research"))
-    elif pendientes_reco:
+    elif pendientes_reco or rotos_reco:
+        detalle = []
+        if pendientes_reco:
+            detalle.append(f"{len(pendientes_reco)} con recomendaciones sin resolver")
+        if rotos_reco:
+            detalle.append(f"{len(rotos_reco)} con wikilink roto")
         h.append(Hallazgo(SALTADO, "research.recomendaciones",
-                          f"{len(pendientes_reco)} research enlazado(s) con recomendaciones sin resolver",
-                          [f"{r} — {n} sin marcar" for r, n in pendientes_reco],
+                          "research enlazado(s): " + ", ".join(detalle),
+                          [f"{r} — {n} sin marcar" for r, n in pendientes_reco]
+                          + [f"{r} — {m}" for r, m in rotos_reco],
                           corrige='python3 "$JBIN/print-research-recomendaciones.py" "$MEMORY_DIR" '
-                                  "<SESSION_FILE>   # Step 8d"))
+                                  "<SESSION_FILE>   # Step 8d; un wikilink roto se arregla en la ficha"))
     else:
         h.append(Hallazgo(HECHO, "research.recomendaciones",
                           "ningun research enlazado tiene recomendaciones sin marcar"))
@@ -479,11 +527,11 @@ def imprimir(hallazgos):
     orden = {SALTADO: 0, PARCIAL: 1, DISENO: 2, HECHO: 3}
     print("AUDITORIA DEL CHECKPOINT (bin/checkpoint-audit.py) — pega este bloque literal")
     for hh in sorted(hallazgos, key=lambda x: (orden[x.estado], x.clave)):
-        print(f"  {hh.estado:<11} {hh.clave:<26} {hh.detalle}")
+        print(f"  {hh.estado:<11} {hh.clave:<31} {hh.detalle}")
         for l in hh.lineas:
-            print(f"  {'':<11} {'':<26}   - {l}")
+            print(f"  {'':<11} {'':<31}   - {l}")
         if hh.corrige and hh.estado in (SALTADO, PARCIAL):
-            print(f"  {'':<11} {'':<26}   corrige: {hh.corrige}")
+            print(f"  {'':<11} {'':<31}   corrige: {hh.corrige}")
     c = {e: sum(1 for x in hallazgos if x.estado == e) for e in (HECHO, PARCIAL, SALTADO, DISENO)}
     print(f"  resumen: hecho={c[HECHO]} parcial={c[PARCIAL]} saltado={c[SALTADO]} "
           f"por-diseno={c[DISENO]}")
