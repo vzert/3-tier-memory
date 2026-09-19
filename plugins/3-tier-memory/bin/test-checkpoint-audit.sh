@@ -585,6 +585,98 @@ PYFIN
 O=$($AUD "$M5" --session-file "$S7" --no-git --hoy $HOY 2>&1)
 chk "vuelve a valer" "1" "$(printf '%s' "$O" | grep -c 'POR-DISEÑO .*snippet.sigue_abierto')"
 
+echo "== un id repetido en dos lineas abiertas: SALTADO, y no infla el conteo =="
+# Los dos salieron dogfoodeando el primer checkpoint real: _pendientes.md tenia 3 ids duplicados,
+# el conteo por LINEA los contaba dos veces, y la linea RECONCILIACION correcta salia rechazada.
+M7="$T/memory7"; nueva_memoria "$M7"
+cat >> "$M7/_pendientes.md" <<'EOF'
+- [ ] uno — _creado: 2026-09-01_ — _id: p-dddddddddd_
+- [ ] uno otra vez, por error — _creado: 2026-09-01_ — _id: p-dddddddddd_
+- [ ] dos — _creado: 2026-09-01_ — _id: p-eeeeeeeeee_
+EOF
+cat >> "$M7/pendientes/2026-09.md" <<'EOF'
+| 1 | uno | Media | 2026-09-01 | | | |
+| 2 | dos | Media | 2026-09-01 | | | |
+EOF
+S9="$M7/sessions/2026-09-19-demo.md"; ficha_completa "$S9"
+python3 - "$S9" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Pendientes\n- Ninguno",
+            "## Pendientes\nRECONCILIACION: 1 de 2 pendientes abiertos revisados — 1 sin revisar, barrido en /triage-3t\n- [ ] uno — `p-dddddddddd`")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+O=$($AUD "$M7" --session-file "$S9" --no-git --hoy $HOY 2>&1)
+chk "avisa del duplicado" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*pendientes.duplicados')"
+chk "lo nombra" "1" "$(printf '%s' "$O" | grep -A2 'pendientes.duplicados' | grep -c '  - p-dddddddddd')"
+chk "cuenta 2 distintos, no 3 lineas" "1" "$(printf '%s' "$O" | grep -c '1 de 2 revisados')"
+chk "y la linea RECONCILIACION cuadra" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*pendientes.reconciliacion_linea')"
+
+echo "== sin duplicados: HECHO =="
+python3 - "$M7/_pendientes.md" <<'PYFIN'
+import sys
+p=sys.argv[1]
+ls=[l for l in open(p,encoding='utf-8') if 'uno otra vez' not in l]
+open(p,'w',encoding='utf-8').writelines(ls)
+PYFIN
+O=$($AUD "$M7" --session-file "$S9" --no-git --hoy $HOY 2>&1)
+chk "sin duplicados" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*pendientes.duplicados')"
+
+echo "== el placeholder de Step 8 no es una omision: POR-DISENO =="
+# Step 7a corre ANTES de Step 8 en el template, asi que el audit ve `<filled in Step 8>`. Marcarlo
+# SALTADO ponia un falso positivo en CADA checkpoint. Salio en el primer uso real.
+python3 - "$S9" <<'PYFIN'
+import sys, re
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=re.sub(r"## Como retomar\n.*?\n\n## Related",
+         "## Como retomar\n<filled in Step 8>\n\n## Related", t, flags=re.S)
+t=t.replace("- [ ] uno — `p-dddddddddd`","- [ ] uno — `p-dddddddddd`\n- [ ] dos — `p-eeeeeeeeee`")
+t=t.replace("RECONCILIACION: 1 de 2","RECONCILIACION: 2 de 2").replace("— 1 sin revisar","— 0 sin revisar")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+O=$($AUD "$M7" --session-file "$S9" --no-git --hoy $HOY 2>&1)
+chk "el placeholder no es falla" "1" "$(printf '%s' "$O" | grep -c 'POR-DISEÑO .*snippet.sigue_abierto')"
+chk "y NO sale como SALTADO" "0" "$(printf '%s' "$O" | grep -c 'SALTADO .*snippet.sigue_abierto')"
+
+echo "== un pendiente que CITA el id de otro no se roba su identidad =="
+# El fallo que destapo el primer checkpoint real: el id de una linea se tomaba del primer `p-…`
+# que apareciera, asi que un pendiente cuyo texto cita otros ids perdia el suyo y le sumaba una
+# repeticion falsa al citado. Los 3 "duplicados" que reporto el audit en datos reales eran los
+# tres este mismo fallo.
+M8="$T/memory8"; nueva_memoria "$M8"
+cat >> "$M8/_pendientes.md" <<'EOF'
+- [ ] arreglar el parser — _creado: 2026-09-01_ — _id: p-1010101010_
+- [ ] el fix de p-1010101010 sigue sin verificarse en produccion — _creado: 2026-09-01_ — _id: p-2020202020_
+EOF
+cat >> "$M8/pendientes/2026-09.md" <<'EOF'
+| 1 | arreglar el parser | Media | 2026-09-01 | | | |
+| 2 | verificar el fix | Media | 2026-09-01 | | | |
+EOF
+SA="$M8/sessions/2026-09-19-demo.md"; ficha_completa "$SA"
+python3 - "$SA" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Pendientes\n- Ninguno",
+            "## Pendientes\nRECONCILIACION: 0 de 2 pendientes abiertos revisados — 2 sin revisar, barrido en /triage-3t\n- Ninguno")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+O=$($AUD "$M8" --session-file "$SA" --no-git --hoy $HOY 2>&1)
+chk "no inventa duplicados" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*pendientes.duplicados')"
+chk "cuenta los 2 distintos" "1" "$(printf '%s' "$O" | grep -c '0 de 2 revisados')"
+
+echo "== y reconciliar el que cita se le atribuye a EL, no al citado =="
+python3 - "$SA" <<'PYFIN'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("RECONCILIACION: 0 de 2 pendientes abiertos revisados — 2 sin revisar",
+            "RECONCILIACION: 1 de 2 pendientes abiertos revisados — 1 sin revisar")
+t=t.replace("- Ninguno\n\n## Commits","- [ ] verificar el fix — `p-2020202020`\n\n## Commits")
+open(p,'w',encoding='utf-8').write(t)
+PYFIN
+O=$($AUD "$M8" --session-file "$SA" --no-git --hoy $HOY 2>&1)
+chk "cuenta 1 de 2" "1" "$(printf '%s' "$O" | grep -c '1 de 2 revisados')"
+chk "la linea cuadra" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*pendientes.reconciliacion_linea')"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

@@ -43,6 +43,7 @@ Modos:
 """
 # sella-huellas: no (solo lee memory/ y consulta git; no escribe nada)
 import argparse
+import collections
 import datetime
 import glob
 import os
@@ -82,6 +83,9 @@ SECCIONES_OBLIGATORIAS = [
 # contra la memoria real de un usuario: con `\b` salian 24 de 189 pendientes abiertos, y el
 # conteo de Step 3a habria mentido por defecto — justo el fallo silencioso que esto audita.
 ID_PENDIENTE = re.compile(r"\bp-[0-9a-f]{10}(?![0-9a-f])")
+# El id PROPIO de una linea de _pendientes.md va en su campo `_id:`, al final. Ver la nota en
+# pendientes_abiertos() sobre por que el primer `p-…` de la linea no sirve.
+CAMPO_ID = re.compile(r"_id:\s*(p-[0-9a-f]{10})(?![0-9a-f])")
 WIKILINK_PLAN = re.compile(r"\[\[plans/([^\]|]+?)(?:\|[^\]]*)?\]\]")
 WIKILINK_LEARNING = re.compile(r"\[\[learnings/([^\]|]+?)(?:\|[^\]]*)?\]\]")
 WIKILINK_RESEARCH = re.compile(r"\[\[research/([^\]|]+?)(?:\|[^\]]*)?\]\]")
@@ -157,9 +161,16 @@ def pendientes_abiertos(memory_dir):
         s = linea.strip()
         if not s.startswith("- [ ]"):
             continue
-        m_id = ID_PENDIENTE.search(s)
+        # El id de la linea es SU CAMPO `_id:`, nunca el primer `p-…` que aparezca: un pendiente
+        # cuyo TEXTO cita el id de otro (cosa normal — "el fix de p-xxxx sigue pendiente") se
+        # llevaba el id citado y perdia el suyo. Medido dogfoodeando: 3 "ids duplicados" en la
+        # memoria de este repo eran los tres falsos positivos por esa causa, y el pendiente que
+        # los denunciaba se auto-provoco el tercero al citarlos. Con el campo: 96 lineas, 96 ids
+        # distintos, cero duplicados.
+        m_id = CAMPO_ID.search(s) or ID_PENDIENTE.search(s)   # fallback: lineas anteriores a 2.12.0
         m_rev = REVISAR.search(s)
-        out.append((m_id.group(0) if m_id else None, s[5:].strip(), m_rev.group(1) if m_rev else None))
+        ident = m_id.group(1) if (m_id and m_id.re is CAMPO_ID) else (m_id.group(0) if m_id else None)
+        out.append((ident, s[5:].strip(), m_rev.group(1) if m_rev else None))
     return out
 
 
@@ -280,21 +291,27 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
     if BLOQUE_CALENDARIO.search(_sec_cal):
         _lineas_reconcilian.append(_sec_cal)
     ids_en_ficha = set(ID_PENDIENTE.findall("\n".join(_lineas_reconcilian)))
-    revisados = [p for p in abiertos if p[0] and p[0] in ids_en_ficha]
+    # Contar por id DISTINTO, no por linea: `_pendientes.md` puede traer el mismo id en dos lineas
+    # abiertas (defecto de datos, ver la comprobacion `pendientes.duplicados` mas abajo), y contar
+    # lineas hacia que R e incluso N mintieran — medido dogfoodeando este mismo checkpoint: la
+    # linea declaraba 8 de 95 y el audit exigia 9 de 95 porque un id reconciliado estaba dos veces.
+    ids_abiertos = {p[0] for p in abiertos if p[0]}
+    revisados = ids_abiertos & ids_en_ficha
     sin_id = [p for p in abiertos if not p[0]]
-    sin_revisar = len(abiertos) - len(revisados)
+    total_abiertos = len(ids_abiertos) + len(sin_id)
+    sin_revisar = total_abiertos - len(revisados)
     if not abiertos:
         h.append(Hallazgo(HECHO, "pendientes.3a", "no hay pendientes abiertos que reconciliar"))
     elif sin_revisar == 0:
         h.append(Hallazgo(HECHO, "pendientes.3a",
-                          f"los {len(abiertos)} pendientes abiertos estan reconciliados en la ficha"))
+                          f"los {total_abiertos} pendientes abiertos estan reconciliados en la ficha"))
     else:
         # Un pendiente SIN id no se puede casar con la ficha por id: cuenta como sin revisar y se
         # dice aparte, porque el motivo es distinto (linea anterior a 2.12.0, la arregla
         # enrich-memory.py --only id) y callarlo lo haria pasar por revisado.
         extra = f" ({len(sin_id)} sin id, no casables)" if sin_id else ""
         h.append(Hallazgo(PARCIAL, "pendientes.3a",
-                          f"{len(revisados)} de {len(abiertos)} revisados — "
+                          f"{len(revisados)} de {total_abiertos} revisados — "
                           f"{sin_revisar} sin revisar{extra}, barrido completo en /triage-3t"))
 
     # 2-bis. La linea `RECONCILIACION:` de Step 3a/3d tiene que quedar EN LA FICHA, no solo
@@ -322,16 +339,30 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
         h.append(Hallazgo(SALTADO, "pendientes.reconciliacion_linea",
                           "la ficha no lleva la linea RECONCILIACION: de Step 3d",
                           corrige=f"escribe en `## Pendientes`: RECONCILIACION: {len(revisados)} de "
-                                  f"{len(abiertos)} pendientes abiertos revisados — "
+                                  f"{total_abiertos} pendientes abiertos revisados — "
                                   f"{sin_revisar} sin revisar, barrido en /triage-3t"))
-    elif (int(m_rec.group(1)), int(m_rec.group(2))) != (len(revisados), len(abiertos)):
+    elif (int(m_rec.group(1)), int(m_rec.group(2))) != (len(revisados), total_abiertos):
         h.append(Hallazgo(SALTADO, "pendientes.reconciliacion_linea",
                           f"la linea declara {m_rec.group(1)} de {m_rec.group(2)} y lo medido aqui "
-                          f"es {len(revisados)} de {len(abiertos)}",
+                          f"es {len(revisados)} de {total_abiertos}",
                           corrige="corrige los numeros de la linea; no los escribas de memoria"))
     else:
         h.append(Hallazgo(HECHO, "pendientes.reconciliacion_linea",
                           "la linea esta en la ficha y sus numeros cuadran"))
+
+    # 2-ter. Ids duplicados entre lineas abiertas. Es un defecto de datos que `repair-dualwrite`
+    # no mira (cuenta filas de Tier 3 que faltan, no lineas de Tier 2 repetidas), y que ademas
+    # falsea cualquier conteo por linea. Salio dogfoodeando: 3 ids con dos lineas abiertas cada uno.
+    dup = sorted(i for i, n in collections.Counter(
+        p[0] for p in abiertos if p[0]).items() if n > 1)
+    if dup:
+        h.append(Hallazgo(SALTADO, "pendientes.duplicados",
+                          f"{len(dup)} id(s) aparecen en mas de una linea abierta de _pendientes.md",
+                          dup,
+                          corrige="no se arregla solo: decide cual linea sobrevive y cierra la otra "
+                                  "con pendiente.resolve --estado superseded"))
+    else:
+        h.append(Hallazgo(HECHO, "pendientes.duplicados", "ningun id repetido entre los abiertos"))
 
     # 3. Pendientes con fecha de revision vencida o de hoy que esta ficha no menciona
     vencidos = [p for p in abiertos
@@ -452,7 +483,15 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
             excluidos_por_fecha.append(m.group(0))
         else:
             abiertos_ficha.append(m.group(0))
-    if "```" not in sec_retomar and not abiertos_ficha:
+    if "<filled in Step 8>" in sec_retomar:
+        # Step 7a corre ANTES de Step 8 en el template, asi que aqui la seccion todavia lleva su
+        # placeholder. Eso no es una omision — es que el paso no ha llegado. Reportarlo como
+        # SALTADO ponia un falso positivo en CADA checkpoint, que es justo el muro de ruido que
+        # este auditor existe para no crear. Salio en su primer uso real.
+        h.append(Hallazgo(DISENO, "snippet.sigue_abierto",
+                          "`## Como retomar` aun trae su placeholder: Step 8 corre despues de "
+                          "esta auditoria"))
+    elif "```" not in sec_retomar and not abiertos_ficha:
         # Step 8 caso 5: el bloque se colapsa a una linea a proposito cuando no hay continuidad.
         # SOLO vale si la sesion no dejo pendientes PROPIOS abiertos: colapsar el bloque teniendo
         # continuidad propia es precisamente la omision, no el caso permitido. (Lo marco el
