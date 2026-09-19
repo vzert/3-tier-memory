@@ -16,6 +16,17 @@ Tipos de evento:
                     [--revisar YYYY-MM-DD]   (ventana declarada; la lee expire-pendientes.py)
                     Imprime el id (p-<10 hex>) por stdout.                              (Fase 1)
   pendiente.resolve --id ID --estado resolved|superseded|abandoned [--sesion S] [--nota N]
+  pendiente.update  --id ID [--text T] [--prioridad Alta|Media|Baja] [--text-prefix P]
+                    Corrige el texto y/o la prioridad de un pendiente VIVO conservando su id.
+                    El id es el hash con el que NACIO, no el del texto de hoy: cambiarlo
+                    romperia las citas del id en fichas, recordatorios y research, que es lo
+                    que hacia el unico camino que habia antes (resolve --superseded + add).
+                    Un cambio de texto deja `_actualizado: FECHA_` en la linea; esa marca es
+                    lo que le dice a repair-dualwrite.py que ese id es el de nacimiento y no
+                    un id inventado (sin ella, `--fix-ids --apply` lo renombraria).
+                    `--text-prefix` es el guardian contra la actualizacion perdida entre dos
+                    sesiones: si no se pasa, se toma de la linea viva. Exige --text y/o
+                    --prioridad. Sobre un pendiente ya cerrado o caducado no hace nada.
   pendiente.expire  --id ID --dias N [--line "<linea verbatim>"]   (caducidad por edad)
   pendiente.reopen  --id ID [--prioridad P]                        (reversa de expire)
   pendiente.window  --id ID --revisar YYYY-MM-DD                  (pone/actualiza la ventana)
@@ -43,6 +54,13 @@ Identidad de un pendiente = sha1(texto normalizado + creado + origen)[:10]. Sin 
 sin lock: dos agentes que emiten el mismo pendiente el mismo dia producen el mismo id y el
 compactador lo aplica una sola vez (deduplicacion). Dos textos distintos con el mismo id
 (colision) se cuarentenan en el compactador; nunca se fusionan.
+
+El id es el hash con el que el pendiente NACIO, no el de su texto de hoy: `pendiente.update`
+corrige el texto y deja el id intacto, porque ese id ya esta citado en fichas de sesion, en
+recordatorios y en research. El precio es que la linea corregida deja de casar con su propio
+hash, y hay dos herramientas que miden esa discrepancia — `repair-dualwrite.ids_invented`
+(avisa) y `--fix-ids --apply` (RENOMBRA). La marca `_actualizado: FECHA_` que el compactador
+deja en la linea es lo que las dos leen para saber que la discrepancia es deliberada.
 
 Salida: 0 ok; 1 argumentos invalidos; 2 no se pudo crear el evento (queda copia en failed/).
 Nunca descarta un evento en silencio.
@@ -230,7 +248,7 @@ def strip_meta(text):
     # Las mismas claves que `META_RE` en repair-dualwrite.py, que re-deriva este hash para
     # detectar ids inventados. Si divergen, todo pendiente con la clave que falte se reporta
     # como id inventado. Si anades una clave aqui, anadela alli.
-    text = re.sub(r"\s*—\s*_(?:origen|creado|id|revisar):[^—]*", "", text)
+    text = re.sub(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado):[^—]*", "", text)
     return text.strip()
 
 
@@ -271,7 +289,7 @@ def avisar_origen_colgante(origen, mem):
 def main():
     ap = argparse.ArgumentParser(description="Emite un evento al journal de memory/.")
     ap.add_argument("--type", required=True,
-                    choices=["pendiente.add", "pendiente.resolve",
+                    choices=["pendiente.add", "pendiente.resolve", "pendiente.update",
                              "pendiente.expire", "pendiente.reopen", "pendiente.window",
                              "session.add",
                              "learning.add", "plan.upsert", "research.upsert"])
@@ -433,6 +451,37 @@ def main():
         avisar_origen_colgante(a.origen, memory_dir)
         write_event(memory_dir, base)
         print(f"r-{slug}")
+        return
+
+    if a.type == "pendiente.update":
+        pid = (a.id or "").strip()
+        if not ID_RE.match(pid):
+            sys.exit("journal-emit: --id debe tener la forma p-<10 hex>")
+        # El texto que llega puede venir pegado de la linea entera (con sus `— _origen:` y su
+        # `— _id:`). Esos sufijos los POSEE el compactador: si entraran aqui, la linea acabaria
+        # con dos `_id:` y el pendiente dejaria de resolverse por id. Se quitan y se avisa.
+        crudo = normalize_text(a.text or "")
+        text = strip_meta(crudo) if crudo else ""
+        if crudo and text != crudo:
+            print("journal-emit: AVISO — se quitaron los metadatos (_origen/_creado/_id/"
+                  "_revisar/_actualizado) del --text; esos campos los conserva el compactador "
+                  "de la linea viva, no se reescriben desde el evento.", file=sys.stderr)
+        if crudo and not text:
+            sys.exit("journal-emit: pendiente.update recibio un --text que es SOLO metadatos")
+        prio = (a.prioridad or "").strip().capitalize()
+        if prio and prio not in PRIORIDADES:
+            sys.exit(f"journal-emit: --prioridad debe ser una de {PRIORIDADES}")
+        if not text and not prio:
+            sys.exit("journal-emit: pendiente.update necesita --text y/o --prioridad")
+        prefix = a.text_prefix
+        if prefix is None:
+            current = find_line_text(memory_dir, pid)
+            prefix = current[:40] if current else ""
+        base["payload"] = {"id": pid, "text": text, "prioridad": prio,
+                           "text_prefix": normalize_text(prefix),
+                           "fecha": date.today().isoformat()}
+        write_event(memory_dir, base)
+        print(pid)
         return
 
     if a.type == "pendiente.window":

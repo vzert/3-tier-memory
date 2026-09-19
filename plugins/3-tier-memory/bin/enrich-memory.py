@@ -232,7 +232,7 @@ def enrich_ids(memory_dir, apply):
             continue
         origen = ORIGEN_RE.search(line)
         origen_txt = re.search(r"\[\[[^\]]+\]\]", origen.group(1)).group(0) if origen else ""
-        text = re.sub(r"\s*—\s*_(origen|creado):[^—]*", "", line[5:]).strip()
+        text = re.sub(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado):[^—]*", "", line[5:]).strip()
         pid = pendiente_id(text, creado.group(1), origen_txt)
         newline = line.rstrip() + f" — _id: {pid}_"
         stats["id_added"] += 1

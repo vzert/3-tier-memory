@@ -91,6 +91,14 @@ MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto
          "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 ID_RE = re.compile(r"_id: (p-[0-9a-f]{10})_")
 HEADERS = {"alta": "## Alta prioridad", "media": "## Media prioridad", "baja": "## Baja prioridad"}
+# `_actualizado:` la pone `pendiente.update` cuando cambia el TEXTO de un pendiente vivo. Es la
+# marca que dice "este `_id:` es el hash con el que nacio, no el del texto de hoy": sin ella,
+# `repair-dualwrite.ids_invented` lo contaria como id inventado y `--fix-ids --apply` lo
+# renombraria, que es justo la rotura de citas que el evento existe para evitar.
+ACTUALIZADO_RE = re.compile(r"\s*—\s*_actualizado: \d{4}-\d{2}-\d{2}_")
+# Donde empieza la cola de metadatos de una linea de Tier 2. La cola se conserva VERBATIM en un
+# update: contiene `_origen:`/`_creado:`/`_id:`/`_revisar:` y cualquier clave que otro escribiera.
+META_START_RE = re.compile(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado):")
 SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$")   # tambien guarda contra '../'
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 CELL_SPLIT = re.compile(r"(?<!\\)\|")   # un `\|` dentro de una celda (alias de wikilink) no separa
@@ -104,6 +112,12 @@ LOG_FILE = None
 
 
 def log(msg):
+    # Un registro del log es UNA linea. Los mensajes interpolan valores que vienen del EVENTO
+    # (el motivo de una cuarentena lleva la prioridad o el id tal como llegaron), y el compactador
+    # es su propia frontera de confianza: un evento escrito a mano con un salto de linea dentro
+    # partia el registro en dos y lo dejaba sin recuperar por grep. Mismo defecto que `campo_log`
+    # cierra en los logs de campos, en el otro escritor de lineas. (Adversario, ronda 4.)
+    msg = campo_log(msg)
     if LOG_FILE:
         # newline="\n" tambien en el append: en modo texto, Windows escribiria CRLF y el log
         # quedaria MEZCLADO segun donde corriera cada pasada que le anade lineas.
@@ -346,7 +360,7 @@ def find_id_line(lines, pid):
 
 def line_text(line):
     s = line.strip()[5:].strip()
-    return normalize_text(re.sub(r"\s*—\s*_(origen|creado|id|revisar):[^—]*", "", s))
+    return normalize_text(re.sub(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado):[^—]*", "", s))
 
 
 def header_index(lines, prio):
@@ -446,6 +460,92 @@ def ensure_header(lines, prio):
     return lines, header_index(lines, prio), True
 
 
+def _cargar_pendiente_id():
+    """`journal-emit.pendiente_id`, importado del script vecino: una sola definicion del hash.
+
+    Re-teclearlo aqui seria la tercera copia de la misma formula (journal-emit la define,
+    repair-dualwrite la importa por su cuenta), y dos copias de una regla es como se
+    desincronizan en silencio — el mismo defecto que ya costo 2.15.0 (learning 150).
+    """
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "journal-emit.py")
+    if not os.path.isfile(path):
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location("je", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.pendiente_id
+    except Exception:
+        return None
+
+
+def campo_log(valor):
+    """Un campo apto para un log de una linea por registro, con tabuladores de separador.
+
+    Un `\\t` crudo corre el campo de sitio y un `\\n` crudo parte el registro en dos lineas: el
+    contenido sigue ahi byte a byte, pero deja de ser recuperable con el `grep` con el que se
+    recupera. "Byte-completo" no es "recuperable", y la diferencia solo se ve cuando el texto
+    viene de un evento escrito a mano — el compactador es su propia frontera de confianza, asi
+    que ese texto SI llega hasta aqui sin pasar por `normalize_text`. (Adversario, ronda 3.)
+
+    Se escapan, no se borran: secuencias literales de dos caracteres que conservan el dato y lo
+    dejan en una sola linea. `\\` primero, o desescapar seria ambiguo.
+
+    CR y LF se escapan por separado, y con eso `\\r`, `\\n` y `\\r\\n` ya salen distintos — no hace
+    falta un caso propio para CRLF, y tenerlo era un no-op que hacia creer que la distincion la
+    compraba el. Mandar los tres al mismo `\\n`, como hacia la primera version, deja el registro
+    en una linea pero ya no permite reconstruir el original: media promesa. (Adversario, rondas
+    4 y 5; la inyectividad se comprobo con 200.000 cadenas aleatorias sobre {\\, tab, CR, LF}.)
+    """
+    return (str(valor if valor is not None else "")
+            .replace("\\", "\\\\").replace("\t", "\\t")
+            .replace("\n", "\\n").replace("\r", "\\r"))
+
+
+def anotar_add_descartado(mem, p):
+    """Guarda entero el `pendiente.add` que se descarta sobre una linea ya corregida.
+
+    Devuelve la ruta relativa donde quedo, o una frase que diga que no se pudo escribir — nunca
+    se afirma un destino que no se logro. Igual que `anotar_nota_perdida`, el log sobrevive a un
+    `--quiet >/dev/null` (recall.sh corre el compactador asi), que es la diferencia entre "no en
+    silencio" y "no en silencio salvo por el camino que mas corre".
+    """
+    try:
+        d = os.path.join(mem, ".journal")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "adds-descartados.log"), "a",
+                  encoding="utf-8", newline="\n") as fh:
+            campos = [date.today().isoformat(), p.get("id"), p.get("creado"),
+                      p.get("origen"), p.get("prioridad"), p.get("text")]
+            fh.write("\t".join(campo_log(c) for c in campos) + "\n")
+        return ".journal/adds-descartados.log"
+    except Exception:
+        return "NINGUN SITIO (no se pudo escribir el log)"
+
+
+def add_es_su_propio_origen(p):
+    """¿El id de este `pendiente.add` es el hash de SU PROPIO texto+creado+origen?
+
+    Descarta el evento que simplemente AFIRMA un id sin que su contenido lo produzca. Ojo con lo
+    que NO prueba: coherencia no es procedencia. Dos textos distintos pueden dar el mismo id de
+    40 bits —un adversario externo construyo el par por fuerza bruta en minutos— y esta funcion
+    dice True para los dos. Por eso quien la llama no se limita a descartar el add: lo escribe
+    entero en `.journal/adds-descartados.log` primero (ver `anotar_add_descartado`).
+
+    Si no se puede comprobar (journal-emit.py no esta al lado, copia suelta), se responde False:
+    el camino conservador es la cuarentena que ya habia, no un descarte apoyado en una
+    comprobacion que no llego a correr.
+    """
+    fn = _cargar_pendiente_id()
+    if fn is None:
+        return False
+    try:
+        return fn(p.get("text", ""), p.get("creado", ""), p.get("origen", "")) == p.get("id")
+    except Exception:
+        return False
+
+
 def apply_add_index(mem, p):
     path = os.path.join(mem, "_pendientes.md")
     if not os.path.isfile(path):
@@ -454,6 +554,35 @@ def apply_add_index(mem, p):
     i = find_id_line(lines, p["id"])
     if i is not None:
         if line_text(lines[i]) != normalize_text(p["text"]):
+            # Una linea con `_actualizado:` tiene el texto corregido a proposito por un
+            # `pendiente.update`, conservando su id. El texto del add ya NO es el de la linea y
+            # eso es correcto, no una colision: cuarentenarlo mandaria a una persona el replay
+            # normal de un add (dos sesiones emiten el mismo pendiente el mismo dia).
+            #
+            # La marca SOLA no basta para decidirlo. Es texto en un fichero que cualquiera puede
+            # escribir a mano, asi que si fuera suficiente, escribirla convertiria una colision
+            # de verdad —dos pendientes distintos bajo el mismo id— en un descarte silencioso del
+            # segundo. Lo que se exige ADEMAS es que el evento sea coherente consigo mismo: que
+            # su id sea el hash de SU PROPIO texto+creado+origen, o sea, que de verdad sea el
+            # add con el que ese id nacio. Un evento forjado no pasa esa comprobacion por mucha
+            # marca que lleve la linea. (Adversario externo, ronda 1.)
+            if ACTUALIZADO_RE.search(lines[i]) and add_es_su_propio_origen(p):
+                # `add_es_su_propio_origen` prueba COHERENCIA, no PROCEDENCIA: un adversario
+                # externo construyo por fuerza bruta dos textos distintos que, con el mismo
+                # creado y origen, dan el mismo id de 40 bits, y la comprobacion dice True para
+                # los dos. O sea que un add que NO es el de nacimiento puede llegar hasta aqui.
+                # Distinguirlos es imposible — el texto de nacimiento ya no esta en ningun sitio,
+                # justo porque el update lo reemplazo.
+                #
+                # Asi que lo que se cierra no es la ambiguedad, es la PERDIDA: el evento
+                # descartado se escribe entero en un log del journal antes de soltarlo. El caso
+                # comun (replay del add de nacimiento) sigue sin molestar a nadie, y el caso raro
+                # (una colision real) deja el pendiente recuperable en vez de desaparecer.
+                # Mismo patron que `anotar_nota_perdida`. (Adversario externo, ronda 2.)
+                destino = anotar_add_descartado(mem, p)
+                log(f"WARN add: {p['id']} ya existe con el texto corregido por un "
+                    f"pendiente.update — el add se descarta y queda entero en {destino}")
+                return False
             raise Quarantine(f"id-collision: {p['id']} ya existe con otro texto")
         return False  # idempotente: ya aplicado
     lines, h, _creado = ensure_header(lines, p["prioridad"])
@@ -526,7 +655,8 @@ def anotar_nota_perdida(mem, path, pid, nota):
         os.makedirs(d, exist_ok=True)
         with open(os.path.join(d, "notas-sin-columna.log"), "a",
                   encoding="utf-8", newline="\n") as fh:
-            fh.write(f"{date.today().isoformat()}\t{os.path.basename(path)}\t{pid}\t{nota}\n")
+            campos = [date.today().isoformat(), os.path.basename(path), pid, nota]
+            fh.write("\t".join(campo_log(c) for c in campos) + "\n")
         return True
     except Exception:
         return False
@@ -841,6 +971,129 @@ def apply_window(mem, p):
     if nueva == lines[i]:
         return False                      # idempotente: ya tiene esa ventana
     lines[i] = nueva
+    atomic_write(path, lines)
+    return True
+
+
+def seccion_de(lines, i):
+    """Clave de prioridad ('alta'|'media'|'baja') de la seccion donde vive la linea i, o None."""
+    for k in range(i, -1, -1):
+        s = lines[k].strip().lower()
+        if s.startswith("## "):
+            return next((key for key in HEADERS if s.startswith(f"## {key}")), None)
+    return None
+
+
+def pendiente_cerrado(mem, pid):
+    """'caducado' | 'resuelto' | None, para un id que ya no vive en _pendientes.md.
+
+    `find_id_line` devuelve None por dos razones muy distintas —el pendiente se cerro, o el id
+    no existio nunca— y tratarlas igual es lo que convierte un id mal tecleado en un silencio.
+    """
+    cpath = caducados_path(mem)
+    if os.path.isfile(cpath):
+        if any(f"_id: {pid}_" in line for line in read_lines(cpath)):
+            return "caducado"
+    found = find_monthly_row(mem, pid)
+    if found and found[3][COL_RESUELTO]:
+        return "resuelto"
+    return None
+
+
+def apply_update_index(mem, p):
+    """Corrige texto y/o prioridad de la linea VIVA, CONSERVANDO su `_id:`.
+
+    El id de upstream es `sha1(texto+creado+origen)[:10]`, asi que el texto nuevo tiene otro
+    hash. Se conserva el viejo a proposito: el id ya esta citado en fichas, en recordatorios y
+    en research, y renombrarlo deja esas citas apuntando a nada — el mismo dano que producia el
+    unico camino que habia antes (`resolve --superseded` + `add`, que ademas parte la fila
+    mensual en dos trabajos donde solo hay uno). La marca `_actualizado:` es lo que le dice a
+    `repair-dualwrite` que esa discrepancia id/texto es deliberada.
+
+    La cola de metadatos se conserva VERBATIM: `_origen:`/`_creado:`/`_id:`/`_revisar:` los
+    posee el compactador, no el evento. Reconstruirlos desde el payload perderia cualquier clave
+    que este fichero todavia no conozca.
+    """
+    path = os.path.join(mem, "_pendientes.md")
+    if not os.path.isfile(path):
+        raise Quarantine("no-index: _pendientes.md no existe")
+    lines = read_lines(path)
+    i = find_id_line(lines, p["id"])
+    if i is None:
+        donde = pendiente_cerrado(mem, p["id"])
+        if donde:
+            log(f"WARN update: {p['id']} ya esta {donde} — un update no toca un pendiente "
+                f"cerrado. Si hay que reabrirlo es pendiente.reopen, no esto.")
+            return False
+        raise Quarantine(f"unknown-id: {p['id']} no esta abierto en _pendientes.md ni aparece "
+                         "cerrado en el historial")
+    linea = lines[i].rstrip("\n")
+    nuevo = normalize_text(p.get("text") or "")
+    if nuevo:
+        prefix = normalize_text(p.get("text_prefix") or "")
+        if prefix and not line_text(linea).startswith(prefix):
+            raise Quarantine(
+                f"prefix-mismatch: la linea {p['id']} ya no empieza por '{prefix[:40]}' — "
+                "otra sesion la cambio entre la emision y el compactado")
+        m = META_START_RE.search(linea)
+        if m is None:
+            raise Quarantine(f"no-anchor: la linea {p['id']} no tiene cola de metadatos "
+                             "reconocible; no se reescribe a ciegas")
+        cola = ACTUALIZADO_RE.sub("", linea[m.start():])
+        # La fecha viene del EVENTO, no de hoy: si no, cada replay reescribe la linea y el
+        # detector de deriva ve una escritura nueva cada dia.
+        cola = f"{cola} — _actualizado: {p['fecha']}_"
+        linea = f"- [ ] {nuevo}{cola}"
+        # Invariante barata que ataja cualquier fallo de reconstruccion antes de escribirlo:
+        # una linea sin su id no la vuelve a encontrar nadie.
+        if f"_id: {p['id']}_" not in linea:
+            raise Quarantine(f"rebuild-lost-id: la linea reconstruida de {p['id']} perdio su id")
+
+    prio = (p.get("prioridad") or "").strip().capitalize()
+    mover = bool(prio) and seccion_de(lines, i) != prio.lower()
+    if not mover:
+        if linea == lines[i].rstrip("\n"):
+            return False                       # idempotente: replay del estado final
+        lines[i] = linea
+        atomic_write(path, lines)
+        return True
+
+    del lines[i]
+    # No dejar dos lineas en blanco seguidas donde estaba la que se movio (igual que resolve).
+    if 0 < i < len(lines) - 1 and lines[i].strip() == "" and lines[i - 1].strip() == "":
+        del lines[i]
+    lines, h, _creado = ensure_header(lines, prio)
+    if h is None:
+        raise Quarantine(f"no-anchor: prioridad '{prio}' no es Alta, Media ni Baja")
+    at = h + 1
+    if at < len(lines) and lines[at].strip() == "":
+        at += 1
+    lines.insert(at, linea)
+    if at + 1 < len(lines) and lines[at + 1].startswith("## "):
+        lines.insert(at + 1, "")
+    atomic_write(path, lines)
+    return True
+
+
+def apply_update_monthly(mem, p):
+    """Texto y/o prioridad de la fila mensual del MISMO id. No reabre una fila ya resuelta."""
+    found = find_monthly_row(mem, p["id"])
+    if not found:
+        log(f"WARN monthly: sin fila con id {p['id']} — Tier 2 queda corregido y Tier 3 no")
+        return False
+    path, lines, i, cells, cmap = found
+    if cells[COL_RESUELTO]:
+        return False                            # cerrada: un update no toca historial cerrado
+    nuevas = list(cells)
+    if p.get("text"):
+        # Misma forma exacta que apply_add_monthly: el `_id:` va AL FINAL de la celda de texto,
+        # que es donde find_monthly_row lo busca (toma el ULTIMO `_id:` de la celda).
+        nuevas[COL_TEXT] = f"{escape_cell(p['text'])} _id: {p['id']}_"
+    if p.get("prioridad"):
+        nuevas[COL_PRIO] = p["prioridad"]
+    if nuevas == cells:
+        return False
+    lines[i] = render_row(nuevas, cmap)
     atomic_write(path, lines)
     return True
 
@@ -1794,6 +2047,23 @@ def validate(ev):
         for k in ("id", "estado"):
             if not p.get(k):
                 raise Quarantine(f"malformed: pendiente.resolve sin '{k}'")
+    elif t == "pendiente.update":
+        if not p.get("id"):
+            raise Quarantine("malformed: pendiente.update sin 'id'")
+        if not p.get("text") and not p.get("prioridad"):
+            raise Quarantine("malformed: pendiente.update sin 'text' ni 'prioridad'")
+        if p.get("prioridad") and p["prioridad"].lower() not in HEADERS:
+            raise Quarantine(f"malformed: prioridad '{p['prioridad']}' desconocida")
+        # La fecha se EXIGE y se comprueba que sea real. El compactador es su propia frontera de
+        # confianza (learning 106): un evento puede venir de otro emisor o escrito a mano. Sin
+        # esto, un evento sin fecha caia en `date.today()` y cada replay reescribia la linea otro
+        # dia —el detector de deriva veria una escritura fuera del journal—, y una fecha imposible
+        # producia una marca que `ACTUALIZADO_RE` no reconoce y que el replay duplicaba.
+        # (Adversario externo, ronda 1.)
+        try:
+            date.fromisoformat(str(p.get("fecha", "")))
+        except (ValueError, TypeError):
+            raise Quarantine("malformed: pendiente.update sin 'fecha' con una fecha real")
     elif t == "pendiente.expire":
         if not p.get("id"):
             raise Quarantine("malformed: pendiente.expire sin 'id'")
@@ -1860,6 +2130,10 @@ def apply_event(mem, ev):
     if t == "pendiente.resolve":
         a = apply_resolve_index(mem, p)
         b = apply_resolve_monthly(mem, p)
+        return a or b
+    if t == "pendiente.update":
+        a = apply_update_index(mem, p)
+        b = apply_update_monthly(mem, p)
         return a or b
     if t == "pendiente.expire":
         a = apply_expire_index(mem, p)

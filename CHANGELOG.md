@@ -1,6 +1,144 @@
 # Changelog
 
 
+## [2.29.0] - 2026-09-19
+Origen: un caso real del 2026-09-19, en otro proyecto que usa el plugin a diario. Un pendiente
+pedia "comprobar el 2026-09-20 que 7 code maps salieron del codigo actual"; a media sesion esa
+comprobacion se adelanto y quedo hecha, y lo que faltaba era otra cosa mas chica. El texto del
+pendiente habia quedado **falso** y no habia forma sancionada de corregirlo: el journal solo
+aceptaba `add`/`resolve`/`expire`/`reopen`/`window`, ninguno cambia texto ni prioridad, y con
+`journal_strict=1` el hook deniega el `Edit` a mano. La unica salida era
+`resolve --estado superseded` + `add`, que **cambia el id** (es `sha1(texto+creado+origen)`): el
+id viejo ya estaba escrito en el `## Como retomar` de una ficha anterior, en un recordatorio de
+calendario del usuario y en un research, y las tres referencias quedaron apuntando a un pendiente
+cerrado. La fila mensual, ademas, aparentaba dos trabajos donde solo habia uno con el alcance
+ajustado. Mismo problema para subir una prioridad o anotar avance parcial sin cerrar nada.
+
+- **`pendiente.update` (evento nuevo)**: `--id ID [--text T] [--prioridad P] [--text-prefix PRE]`.
+  Corrige el texto y/o la prioridad de un pendiente **vivo** **conservando su id**. Reescribe la
+  linea de Tier 2 conservando VERBATIM la cola de metadatos (`_origen:`/`_creado:`/`_id:`/
+  `_revisar:` y cualquier clave que este compactador todavia no conozca), mueve la linea bajo el
+  header correcto si cambia la prioridad, y actualiza las celdas Pendiente/Prioridad de la fila
+  mensual por id. Exige `--text` y/o `--prioridad`.
+- **La diferencia de diseno frente al fork del VPS, que es donde estaba el trabajo real**: alla la
+  identidad es el numero del ledger, asi que un update no puede tocar el id ni queriendo. Aqui la
+  identidad ES el hash del texto, asi que conservar el id deja la linea sin casar con su propio
+  hash — y hay dos herramientas que miden esa discrepancia. `repair-dualwrite.ids_invented` solo
+  avisa; **`--fix-ids --apply` RENOMBRA**, que habria deshecho el evento entero y roto las citas
+  igual que `superseded` + `add`. La marca `_actualizado: FECHA_` que el compactador deja en la
+  linea corregida es lo que las dos leen para saltarsela. La fecha sale del EVENTO y no de
+  `date.today()`: si saliera de hoy, cada replay reescribiria la linea y el detector de deriva
+  veria una escritura fuera del journal.
+- **`pendiente.add` sobre una linea ya corregida ya no es una colision**: el replay del add
+  original (dos sesiones emitiendo el mismo pendiente el mismo dia es el camino de deduplicacion
+  documentado) traia el texto viejo, que tras un update ya no casa con la linea. Antes de este
+  cambio eso habria ido a cuarentena, mandandole a una persona un trabajo que no existe. Ahora es
+  un noop con aviso.
+- **Cerrado y desconocido dejan de ser el mismo silencio**: `find_id_line` devuelve `None` por dos
+  razones opuestas. Sobre un pendiente resuelto o caducado el update es un noop con aviso (para
+  reabrir esta `pendiente.reopen`); sobre un id que no existe en ningun sitio, cuarentena
+  `unknown-id`. Un id mal tecleado era, si no, una correccion que el agente cree hecha.
+- **Guardian contra la actualizacion perdida**: `--text-prefix`, el mismo patron que ya usa
+  `pendiente.resolve`. Si otra sesion cambio la linea entre la emision y el compactado, el evento
+  va a cuarentena (`prefix-mismatch`) en vez de pisar su correccion. Aqui corren 5-10 sesiones a
+  la vez, que es la carrera que el journal existe para quitar.
+- **El emisor despoja los metadatos del `--text`**: pegar la linea entera copiada de
+  `_pendientes.md` es el error natural, y sin despojar la linea acabaria con dos `_id:` y dejaria
+  de resolverse. Se quitan y se avisa por stderr.
+- **Arreglo lateral, no silencioso — las 7 expresiones que despojan metadatos ahora son la MISMA
+  cadena**: `journal-emit`, `journal-compact`, `repair-dualwrite`, `enrich-memory`,
+  `expire-pendientes`, `triage-scan` y `build-recall-index`. Dos de ellas ya habian divergido
+  antes de este cambio (a `enrich-memory` y a `build-recall-index` les faltaba `revisar`, y
+  `expire-pendientes` cerraba con `[^_]*_`, que parte el valor en cuanto un wikilink lleva un
+  guion bajo). Es el defecto de 2.15.0 (learning 143) todavia abierto en otros ficheros;
+  `_actualizado:` era la siguiente clave en tropezar con el. `bin/test-pendiente-update.sh` caso
+  16 las compara **con un comando**, no con un comentario que afirme que son iguales (learning
+  148).
+- **`bin/test-pendiente-update.sh` (nuevo)**: 74 comprobaciones. Los tres primeros casos no
+  prueban la edicion —que es la parte facil— sino que `ids_invented` siga en 0 y que
+  `--fix-ids --apply` no deshaga el evento.
+
+### Lo que seis rondas adversarias rompieron antes de cerrar, y como quedo
+
+Seis veredictos, alternando dos backends (un proveedor externo y un subagente de otro modelo):
+`break`, `break`, `hold`, `break`, `break`, `break`. Ocho defectos reales, todos en la parte que
+este evento anade y ninguno en la edicion en si. Los casos 18-25 del test los fijan. Los ultimos,
+que son los mas finos, estan al final.
+
+Los cuatro primeros los encontro la primera ronda:
+
+- **La marca era un instrumento falsificable.** `_actualizado:` es texto en un fichero que
+  cualquiera puede escribir a mano. En la primera version bastaba para (a) sacar la linea del
+  informe de `ids_invented` y (b) convertir una colision de id en un noop. O sea: escribirla a
+  mano era la forma de volverse invisible a la deteccion de ids inventados, y de que un `add` con
+  OTRO pendiente bajo el mismo id se descartara en silencio. Dos arreglos distintos, porque son
+  dos problemas distintos: el informe ahora **clasifica en vez de callar** (`ids_actualizados=N`
+  en la linea de resumen, con su propia NOTA nombrando los ids — un numero distinto de cero es
+  normal si alguien corrigio pendientes, y es la pista a seguir si nadie lo hizo), y el noop de
+  `pendiente.add` exige **ademas** que el evento sea coherente consigo mismo: que su id sea el
+  hash de su propio texto+creado+origen, o sea, que de verdad sea el add con el que ese id nacio.
+  Un evento forjado no pasa esa comprobacion por mucha marca que lleve la linea. Lo que la marca
+  compra sigue siendo solo que `--fix-ids` no renombre: renombrar es el acto que hace dano.
+- **"La fecha viene del evento" era falso en la frontera del compactador.** El emisor siempre la
+  pone, pero `validate` no la exigia y `apply_update_index` caia en `date.today()`. Un evento sin
+  fecha —de otro emisor, o escrito a mano— reescribia la linea otro dia en cada replay, y el
+  detector de deriva lo veria como una escritura fuera del journal; una fecha imposible producia
+  una marca que `ACTUALIZADO_RE` no reconoce y que el replay siguiente duplicaba. Ahora la fecha
+  se exige y se comprueba que sea real (learning 106: el compactador es su propia frontera).
+- **Sin fila mensual, Tier 2 se corregia y Tier 3 no, sin que el caso estuviera fijado.** El
+  comportamiento es el mismo que ya tienen `resolve` y `expire` —se avisa y no se inventa la
+  fila—, pero no habia prueba que lo sostuviera. Caso 21.
+- **Carriers sin actualizar** (learning 149): `journal-guard.sh` y `bash-journal-nudge.sh`
+  enumeraban `pendiente.add/resolve` al denegar una edicion a mano, o sea que el aviso que
+  aparece justo cuando alguien intenta corregir una linea no mencionaba el evento que existe para
+  eso. Y las copias ejecutables de este mismo repo (`.claude/commands/*.md`) se sincronizan desde
+  el plugin INSTALADO, no desde el arbol: se refrescaron a mano. Caso 22.
+
+Dos hipotesis mas se persiguieron y quedaron refutadas con evidencia: la unificacion de las 7
+expresiones no cambia ningun id ya asignado (`enrich-memory` solo asigna ids a lineas que aun no
+lo tienen), y el movimiento de seccion por cambio de prioridad no puede perder la linea (borrado
+y reinsercion ocurren sobre la lista en memoria, con una sola `atomic_write`).
+
+Y los dos ultimos, que son los que de verdad costaron:
+
+- **Coherencia no es procedencia, y hay una colision de 40 bits al alcance de una tarde.** El
+  guard que se acababa de poner (`add_es_su_propio_origen`: el id del evento tiene que ser el
+  hash de su propio texto+creado+origen) lo rompio el adversario por fuerza bruta: construyo dos
+  textos distintos que, con el mismo creado y el mismo origen, dan el mismo id de 10 hex, y la
+  funcion dice `True` para los dos. O sea que un `add` que NO es el de nacimiento puede llegar al
+  noop. Distinguirlos es **imposible**: el texto de nacimiento ya no existe en ningun sitio,
+  precisamente porque el update lo reemplazo. Asi que lo que se cierra no es la ambiguedad, es la
+  PERDIDA: el evento descartado se escribe entero —id, creado, origen, prioridad, texto— en
+  `.journal/adds-descartados.log` antes de soltarlo. El caso comun (replay del add de nacimiento)
+  sigue sin molestar a nadie; el caso raro deja el pendiente recuperable en vez de desaparecer.
+  El limite queda escrito en el docstring de la funcion, no implicito. Caso 23.
+- **"Byte-completo" no es "recuperable".** Esa misma prueba tenia un agujero que encontro la
+  ronda siguiente: `validate` de `pendiente.add` comprueba que los campos esten, no los
+  normaliza, asi que un evento escrito a mano llega al log con `\t` y `\n` crudos dentro del
+  texto. El fichero quedaba byte-completo y aun asi irrecuperable — el tabulador corre el campo,
+  el salto parte el registro en dos lineas fisicas, y el propio `grep` con el que el caso 23
+  demuestra que se recupera devolvia **cero**. Un escapador unico (`campo_log`) deja `\t` y `\n`
+  como dos caracteres literales, en una sola linea, sin perder el dato. Se aplico tambien a
+  `anotar_nota_perdida`, que tenia el mismo formato y por tanto el mismo agujero desde antes de
+  esta version — el adversario lo senalo como observacion fuera de alcance y se arreglo igual,
+  porque es el mismo defecto (learning 143: al tocar un formato, enumera todo lo que lo escribe).
+  Caso 24.
+- **Escapar no es lo mismo que poder desescapar.** La primera version del escapador mandaba `\r`,
+  `\n` y `\r\n` los tres al mismo `\n`: el registro quedaba en una linea y aun asi el original ya
+  no se podia reconstruir. Ahora CR y LF se escapan por separado y los tres salen distintos
+  (comprobado con 200.000 cadenas aleatorias sobre `{\, tab, CR, LF}`: inyectiva, y un
+  desescapador la deshace exacta).
+- **Y quedaba un segundo escritor de lineas sin escapar: `log()`.** Sus mensajes interpolan
+  valores que vienen del EVENTO —el motivo de una cuarentena lleva la prioridad o el id tal como
+  llegaron—, asi que un evento escrito a mano con un salto dentro partia el registro del `--log`
+  igual que antes partia el de los campos. Ahora `log()` pasa por el mismo escapador. Ningun
+  mensaje del fichero era multilinea a proposito, y los dos consumidores de su salida
+  (`session-start.sh` y `recall.sh`) solo filtran lineas `HUMAN-EVENT:`, que salen por `print()`
+  y no por `log()`. Caso 25.
+- Docs actualizadas en los carriers de la regla: `/triage-3t` Step 4c, `/checkpoint-3t` Step 3a
+  (clasificacion `corregido` nueva, con su fila de ejemplo y su comando), `/audit-3t` (la glosa de
+  `ids_invented` tenia una causa sancionada nueva) y README (contaba "six event types" cuando ya
+  eran nueve).
 ## [2.28.0] - 2026-09-19
 Origen: el usuario reviso 107 JSONL de un proyecto que usa el plugin a diario. En **14 sesiones**
 (2026-09-13..19) tuvo que preguntar *"falto algo de tu checkpoint?"* y en las **14** el agente

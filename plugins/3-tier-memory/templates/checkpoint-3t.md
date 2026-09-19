@@ -259,8 +259,14 @@ Para los pendientes DENTRO del alcance, clasifica cada uno en exactamente uno de
 
 - **resolved** — the work described was completed in this session, directly or indirectly (e.g., the user asked for X and X happens to satisfy the pendiente).
 - **still-open** — the work is still pending and was not touched this session.
+- **corregido** — sigue abierto, pero su TEXTO quedo falso (parte del trabajo se adelanto, el
+  alcance se ajusto) o su prioridad cambio. No es un cierre: se emite `pendiente.update`, abajo.
 - **superseded** — the item was absorbed by another pendiente or a scope change (reference the new owner/scope).
 - **abandoned** — the item no longer applies (architecture changed, feature dropped, etc.).
+
+`corregido` existe para que no se use `superseded` + `add` en su lugar. Ese par cambia el id (es
+`sha1(texto+creado+origen)`), y deja las citas del id viejo —en fichas, recordatorios y research—
+apuntando a un pendiente cerrado, con la fila mensual aparentando dos trabajos donde hay uno.
 
 **Print the reconciliation table** to the user before continuing, so the decision is explicit. Solo
 lleva los pendientes del alcance de arriba, y **cierra con la linea del conteo**:
@@ -271,6 +277,7 @@ RECONCILIACION: 4 de 203 pendientes abiertos revisados — 199 sin revisar, barr
 - p-cccccccccc <pendiente text> → superseded by <new pendiente or scope ref>
 - p-dddddddddd <pendiente text> → abandoned — <reason>
 - p-eeeeeeeeee <pendiente text> → still-open (vence 2026-09-19, no es de esta sesion)
+- p-ffffffffff <pendiente text> → corregido — <que dejo de ser cierto del texto>
 ```
 
 For EACH item classified `resolved`, `superseded`, or `abandoned`, emit one event:
@@ -279,6 +286,21 @@ For EACH item classified `resolved`, `superseded`, or `abandoned`, emit one even
 python3 "$JBIN/journal-emit.py" --type pendiente.resolve --id p-xxxxxxxxxx \
   --estado resolved|superseded|abandoned --sesion "[[sessions/DATE-SLUG]]" --nota "<reason or new ref>"
 ```
+
+Para cada item clasificado `corregido`, un evento distinto — **no** cierra nada y **conserva el
+id**, que es todo el punto:
+
+```bash
+python3 "$JBIN/journal-emit.py" --type pendiente.update --id p-xxxxxxxxxx \
+  --text "<el texto corregido>" --prioridad Alta|Media|Baja
+```
+
+Cualquiera de los dos campos basta (`--text`, `--prioridad`, o los dos). El compactador reescribe
+la linea de **Tier 2** conservando `_origen:`/`_creado:`/`_id:`/`_revisar:`, mueve la linea de
+seccion si cambio la prioridad, actualiza las celdas Pendiente/Prioridad de la fila mensual
+(**Tier 3**) por id, y deja `_actualizado: FECHA_` en la linea. Esa marca es lo que le dice a
+`repair-dualwrite.py` que el `_id:` es el hash de NACIMIENTO y no uno inventado: sin ella,
+`--fix-ids --apply` lo renombraria y romperia las citas igual que `superseded` + `add`.
 
 The compactor (Step 3c) removes the line from `_pendientes.md` (**Tier 2**) and fills `Resuelto`
 with today's date and `Sesion resolucion` with `<sesion> — <estado> — <nota>` in the monthly row

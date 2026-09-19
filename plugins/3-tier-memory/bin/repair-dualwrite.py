@@ -116,7 +116,12 @@ ORIGEN_RE = re.compile(r"_origen:\s*(\[\[[^\]]+\]\])_")
 # que es quien las quita antes de hashear: una clave de menos aqui cambia el texto, cambia el
 # sha1 y el pendiente sale como `ids_invented` con un aviso falso de fila duplicada. Paso con
 # `revisar` (2026-09-11). Si anades una clave alli, anadela aqui.
-META_RE = re.compile(r"\s*—\s*_(?:origen|creado|id|revisar):[^—]*")
+META_RE = re.compile(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado):[^—]*")
+# La marca que deja `pendiente.update` al corregir el TEXTO de un pendiente vivo. Mientras este,
+# el `_id:` de esa linea es el hash de NACIMIENTO y no casa con el de su texto: no es un id
+# inventado y `--fix-ids` no debe renombrarlo (renombrarlo romperia las citas del id, que es
+# justo lo que el evento existe para evitar). Identica a `journal-compact.ACTUALIZADO_RE`.
+ACTUALIZADO_RE = re.compile(r"\s*—\s*_actualizado: \d{4}-\d{2}-\d{2}_")
 
 
 def load_compactor(bin_dir):
@@ -144,6 +149,11 @@ def parse_tier2(path):
 
     El texto es la linea sin el `- [ ] ` y sin los sufijos de metadatos, igual que
     `journal-compact.line_text`, para que la celda diga lo mismo que diria el compactador.
+
+    El ultimo campo, `actualizado`, dice si la linea lleva la marca `_actualizado:` que pone
+    `pendiente.update`. Esa marca significa que el `_id:` es el hash con el que el pendiente
+    NACIO y no el de su texto de hoy: la discrepancia es deliberada, y quien re-deriva el hash
+    (`ids_invented`, `fix_invented_ids`) tiene que saltarsela.
     """
     out = []
     prio = None
@@ -178,7 +188,8 @@ def parse_tier2(path):
             out.append((pid, text, prio,
                         mcre.group(1) if mcre else None,
                         mori.group(1) if mori else None,
-                        faltan))
+                        faltan,
+                        bool(ACTUALIZADO_RE.search(line))))
     return out
 
 
@@ -515,9 +526,33 @@ def ids_invented(idx_path):
     porque y el alcance exacto de cuando SI se renombran.
     """
     out = []
-    for pid, text, _p, creado, origen, faltan in parse_tier2(idx_path):
+    for pid, text, _p, creado, origen, faltan, actualizado in parse_tier2(idx_path):
         if faltan or origen is None:
             continue   # sin origen no hay hash que comparar (linea anterior al journal)
+        if actualizado:
+            continue   # se cuenta aparte, en `ids_actualizados` — no desaparece
+        if _canonical_id(text, creado, origen) != pid:
+            out.append(pid)
+    return out
+
+
+def ids_actualizados(idx_path):
+    """Ids cuya discrepancia con el hash de su linea la explica un `pendiente.update`.
+
+    No se CALLAN, se CLASIFICAN. La marca `_actualizado:` es texto en un fichero que cualquiera
+    puede escribir a mano, asi que si bastara para sacar una linea del informe, escribirla seria
+    la forma de volverse invisible a la deteccion de ids inventados — apagar la alarma en vez de
+    explicarla (adversario externo, ronda 1). Lo que la marca compra es solo que `--fix-ids` NO
+    renombre ese id: renombrar es el acto que hace dano, contar no.
+
+    Por eso salen en el resumen como `ids_actualizados=N`, con su propia linea de detalle: un
+    numero distinto de cero aqui es normal si alguien corrigio pendientes, y es la pista a seguir
+    si nadie lo hizo.
+    """
+    out = []
+    for pid, text, _p, creado, origen, faltan, actualizado in parse_tier2(idx_path):
+        if faltan or origen is None or not actualizado:
+            continue
         if _canonical_id(text, creado, origen) != pid:
             out.append(pid)
     return out
@@ -572,7 +607,7 @@ def fix_invented_ids(jc, mem, idx_path, apply_):
             id_to_lines.setdefault(m.group(1), []).append(i)
     known_ids = set(id_to_lines)
     dup_ids = {pid for pid, idxs in id_to_lines.items() if len(idxs) > 1}
-    tier2 = {pid: (text, creado, origen) for pid, text, _p, creado, origen, faltan
+    tier2 = {pid: (text, creado, origen) for pid, text, _p, creado, origen, faltan, _a
              in parse_tier2(idx_path) if not faltan and origen}
 
     fixed = []
@@ -688,6 +723,7 @@ def main():
         # lo correcto: un aviso que reaparece sin trabajo detras es el que deja de leerse.
         adoptados = [x for x in adoptados_todos if x[3] or x[0] not in have]
         inventados = ids_invented(idx)
+        actualizados = ids_actualizados(idx)
         desalineadas = unaligned_rows(jc, mem)
         valores_raros = odd_value_rows(jc, mem)
         cabeceras = header_issues(jc, mem)
@@ -699,7 +735,7 @@ def main():
         # item se reportaria NO REPARABLE justo al lado de su propia linea ADOPTADO, que es
         # contradecirse, y en el caso cerrado se quedaria sin fila para siempre.
         prio_adoptada = {pid: prio for pid, prio, _, _ in adoptados_todos}
-        for pid, text, prio, creado, origen, faltan in parse_tier2(idx):
+        for pid, text, prio, creado, origen, faltan, _a in parse_tier2(idx):
             if pid in have:
                 continue
             if prio is None and pid in prio_adoptada:
@@ -771,7 +807,14 @@ def main():
                   f"unaligned_rows={len(desalineadas)} unrepairable={len(unrepairable)} "
                   f"odd_values={len(valores_raros)} header_issues={len(cabeceras)} "
                   f"ids_invented={len(inventados)} "
+                  f"ids_actualizados={len(actualizados)} "
                   f"missing_data={len(broken)}{idsuf}{sufijo}")
+            if actualizados:
+                print(f"  NOTA {len(actualizados)} pendiente(s) llevan `_actualizado:`: su `_id:` "
+                      f"es el hash con el que nacieron, no el de su texto de hoy, porque un "
+                      f"`pendiente.update` los corrigio conservando el id. No se renombran. Si "
+                      f"nadie corrigio nada, esa marca se escribio a mano y hay que mirarla: "
+                      f"{', '.join(actualizados[:6])}{' ...' if len(actualizados) > 6 else ''}")
             for pid, prio, motivo, movido in adoptados:
                 if movido:
                     verbo = "movido" if a.apply else "se moveria"

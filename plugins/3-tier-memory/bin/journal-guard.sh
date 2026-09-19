@@ -144,7 +144,7 @@ if not guarded:
 if os.environ.get("STRICT") == "1":
     reason = (
         f"journal_strict=1: memory/{rel} lo escribe solo el compactador del journal. "
-        "Usa journal-emit.py (pendiente.add/resolve, session.add, learning.add, plan.upsert, "
+        "Usa journal-emit.py (pendiente.add/resolve/update, session.add, learning.add, plan.upsert, "
         "research.upsert) y luego journal-compact.py. Para una edicion manual legitima pon "
         "journal_strict=0 en memory/.memory-config, edita y vuelve a ponerlo en 1."
     )
@@ -162,7 +162,7 @@ else:
         "Ese indice lo escribe SOLO el compactador del journal — una linea puesta a mano no "
         "tiene evento que auditar y no genera su fila de Tier 3, asi que al cerrarla se pierden "
         "su fecha de cierre y la sesion que la cerro. "
-        "Usa bin/journal-emit.py (pendiente.add/resolve, session.add, learning.add, plan.upsert, "
+        "Usa bin/journal-emit.py (pendiente.add/resolve/update, session.add, learning.add, plan.upsert, "
         "research.upsert) y luego bin/journal-compact.py. "
         "Si la escritura es una reparacion manual deliberada, hazla y despues corre "
         "`journal-compact.py --reseal` para que no se reporte como deriva. "

@@ -104,6 +104,26 @@ python3 "$JBIN/journal-emit.py" --type pendiente.resolve --id p-xxxxxxxxxx \
 python3 "$JBIN/journal-emit.py" --type pendiente.window --id p-xxxxxxxxxx --revisar YYYY-MM-DD
 ```
 
+**4c. Correcciones** — el item sigue abierto pero su texto quedo falso, o su prioridad cambio:
+
+```bash
+python3 "$JBIN/journal-emit.py" --type pendiente.update --id p-xxxxxxxxxx \
+  --text "<el texto corregido>" --prioridad Alta
+```
+
+Usa esto, **no** `resolve --estado superseded` + `add`. Ese camino cambia el id (el id es
+`sha1(texto+creado+origen)`), y el id viejo ya esta citado en fichas de sesion, en recordatorios
+y en research: todas esas citas quedan apuntando a un pendiente cerrado, y la fila mensual
+aparenta dos trabajos donde solo hay uno con el alcance ajustado. `pendiente.update` conserva el
+id, mueve la linea de seccion si cambia la prioridad, y deja `_actualizado: FECHA_` para que
+`repair-dualwrite` sepa que ese id es el de nacimiento y no lo renombre.
+
+Cuando lo que cambio es el texto, pasa tambien `--text-prefix "<los primeros caracteres del
+texto VIVO>"` si lo leiste hace rato: si otra sesion lo cambio entre medias, el compactador
+cuarentena el evento en vez de pisar su correccion. Sin `--text-prefix` el emisor lo toma de la
+linea viva en ese instante. Sobre un pendiente ya cerrado o caducado no hace nada (avisa); para
+reabrir uno caducado es `pendiente.reopen`.
+
 **Por evento, nunca editando la linea a mano.** Con `journal_strict=1` en
 `memory/.memory-config`, el hook `journal-guard.sh` deniega precisamente ese `Edit` sobre
 `memory/_*.md` — o sea que la instruccion manual era inaplicable justo en la configuracion que el
