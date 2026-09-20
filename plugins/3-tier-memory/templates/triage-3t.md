@@ -122,7 +122,21 @@ Cuando lo que cambio es el texto, pasa tambien `--text-prefix "<los primeros car
 texto VIVO>"` si lo leiste hace rato: si otra sesion lo cambio entre medias, el compactador
 cuarentena el evento en vez de pisar su correccion. Sin `--text-prefix` el emisor lo toma de la
 linea viva en ese instante. Sobre un pendiente ya cerrado o caducado no hace nada (avisa); para
-reabrir uno caducado es `pendiente.reopen`.
+reabrir uno es `pendiente.reopen`.
+
+**Cerraste uno por error: `pendiente.reopen`, no un `add` nuevo.** Desde 2.31.0 `reopen` revierte
+tanto un `expire` como un `resolve`: al cerrar, la linea se archiva verbatim (en
+`pendientes/_resueltos.md` o en `_caducados.md`), y `reopen` la devuelve BYTE A BYTE a su seccion
+de prioridad original, con su id de nacimiento y su cola de metadatos, y limpia las celdas
+`Resuelto`/`Sesion resolucion` de la fila mensual.
+
+```bash
+python3 "$JBIN/journal-emit.py" --type pendiente.reopen --id p-xxxxxxxxxx
+```
+
+Un pendiente cerrado ANTES de 2.31.0 no tiene linea archivada — entonces `resolve` borraba sin
+guardar nada. En ese caso `reopen` cuarentena el evento con el motivo `no-archivado` y te dice que
+uses `pendiente.add` con el `--creado` original para reproducir el id. No inventa una linea.
 
 **Por evento, nunca editando la linea a mano.** Con `journal_strict=1` en
 `memory/.memory-config`, el hook `journal-guard.sh` deniega precisamente ese `Edit` sobre

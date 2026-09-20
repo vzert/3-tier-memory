@@ -66,6 +66,19 @@ python3 "$JBIN/journal-emit.py" --type learning.add --topic <topic-slug> \
   [--title "<Topic Title>" --when "<when to consult>" --importance <0-10>]   # when the topic is new
 ```
 
+**Si la regla YA EXISTE y quedo falsa, corrigela — no anadas otra que la contradiga.** Emitir un
+`learning.add` que diga "la regla N esta vencida" deja el indice mal Y anotado: la falsa sigue
+ahi, con otra al lado diciendo que no le hagas caso, y el recall devuelve las dos.
+
+```bash
+python3 "$JBIN/journal-emit.py" --type learning.update --topic <topic-slug> \
+  --match-prefix "<prefijo del texto ACTUAL>" --text "**<Regla>** — <texto nuevo>"
+```
+
+Conserva el numero de la regla (se cita por numero en todo el repo). El prefijo se compara sin
+enfasis ni mayusculas; si casan cero o dos reglas, el evento cae en cuarentena y nombra las
+candidatas en vez de reescribir a ciegas.
+
 Then compact:
 
 ```bash

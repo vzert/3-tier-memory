@@ -449,8 +449,14 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
     if not ids_ficha:
         h.append(Hallazgo(HECHO, "pendientes.dualwrite", "la ficha no declara pendientes con id"))
     else:
+        # Solo los mensuales YYYY-MM.md, no todo `*.md` del directorio. Ahi viven tambien los dos
+        # archivos (`_caducados.md` y, desde 2.31.0, `_resueltos.md`), y con el glob ancho un id
+        # que SOLO estuviera archivado contaba como "tiene su fila mensual" — el audit daba por
+        # hecho un dual-write que no existe. Era falso ya con _caducados.md; _resueltos.md, que
+        # crece en cada cierre, lo volvia el caso normal en vez de la excepcion.
         mensuales = "\n".join(leer(p) for p in sorted(glob.glob(
-            os.path.join(memory_dir, "pendientes", "*.md"))))
+            os.path.join(memory_dir, "pendientes", "*.md")))
+            if re.match(r"^\d{4}-\d{2}\.md$", os.path.basename(p)))
         huerfanos = [i for i in ids_ficha if i not in mensuales]
         if huerfanos:
             h.append(Hallazgo(SALTADO, "pendientes.dualwrite",

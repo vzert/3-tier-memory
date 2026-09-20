@@ -613,9 +613,30 @@ def apply_resolve_index(mem, p):
     i = find_id_line(lines, p["id"])
     if i is None:
         return False  # ya borrada (idempotente) o cerrada a mano
+    # ESTE cierre concreto ya se revirtio con un reopen: no se vuelve a aplicar. Sin esta guarda,
+    # un replay del resolve original volvia a cerrar un pendiente que alguien habia reabierto a
+    # proposito — el reopen devuelve la linea viva y el evento viejo la encuentra otra vez.
+    # Deshacer en silencio una decision deliberada del usuario es peor que el hueco que esta
+    # version viene a cerrar. Lo encontro un adversario externo. Un cierre NUEVO tiene otro ts y
+    # pasa: solo se frena la reaplicacion del que ya se deshizo.
+    if fue_revertido(mem, p["id"], p.get("_ts", 0)):
+        log(f"WARN resolve: {p['id']} se reabrio despues de este mismo cierre — el evento no se "
+            f"reaplica. Si hay que cerrarlo otra vez, emite un pendiente.resolve nuevo.")
+        return False
     prefix = normalize_text(p.get("text_prefix") or "")
     if prefix and not line_text(lines[i]).startswith(prefix):
         raise Quarantine(f"prefix-mismatch: la linea {p['id']} no empieza por '{prefix[:40]}'")
+    # 2.31.0: se archiva VERBATIM antes de borrar. Hasta aqui `resolve` hacia `del lines[i]` sin
+    # guardar nada, asi que `reopen` —que solo mira _caducados.md— devolvia False en silencio sobre
+    # un resuelto y un cierre equivocado no tenia vuelta atras por evento. El 2026-09-19 se reabrio
+    # uno a mano en tres pasos que solo funcionaron por casualidad, y con journal_strict=1 ni eso.
+    # Se archiva la prioridad porque la seccion de la que sale es el unico sitio que la sabe: sin
+    # ella, reopen devuelve la linea a la seccion equivocada (mismo fallo que expire ya tuvo).
+    archivar_linea(
+        resueltos_path(mem), RESUELTOS_HEAD, lines[i].rstrip("\n"), p["id"],
+        f"_resuelto: {p.get('fecha') or date.today().isoformat()}_"
+        f" — _estado: {p.get('estado') or '?'}_"
+        f" — _prio: {seccion_de(lines, i) or '?'}_", p.get("_ts", 0))
     del lines[i]
     # No dejar dos lineas en blanco seguidas donde estaba la borrada.
     # `len(lines) - 1` y no `len(lines)`: read_lines parte por "\n", asi que el ultimo elemento
@@ -886,6 +907,116 @@ def caducados_path(mem):
     return os.path.join(mem, "pendientes", CADUCADOS)
 
 
+RESUELTOS = "_resueltos.md"
+RESUELTOS_HEAD = [
+    "---",
+    "type: pendientes-resueltos",
+    "---",
+    "",
+    "# Pendientes resueltos",
+    "",
+    "Items CERRADOS (`pendiente.resolve`). La linea se guarda verbatim para que",
+    "`pendiente.reopen` pueda devolverla intacta: hasta 2.31.0 `resolve` la borraba sin archivar,",
+    "asi que un cierre equivocado no tenia vuelta atras por evento y habia que rehacerlo a mano.",
+    "",
+    "Fichero APARTE de `_caducados.md` a proposito: ese lo lee `expire-pendientes.py`, y meter",
+    "aqui los resueltos le cambiaria la cuenta de lo que caduco por edad.",
+    "",
+]
+
+
+def resueltos_path(mem):
+    return os.path.join(mem, "pendientes", RESUELTOS)
+
+
+REABIERTOS_LOG = "reabiertos.log"
+
+
+def anotar_reabierto(mem, pid, ev):
+    """Registra en `.journal/reabiertos.log` que ESE cierre concreto se revirtio.
+
+    Va en `.journal/` y no como marca dentro de `_resueltos.md`/`_caducados.md` a proposito: esos
+    dos ficheros tienen un invariante que su propia bateria defiende — tras un reopen el item vive
+    en EXACTAMENTE UN sitio. Dejar ahi una entrada "reabierta" lo rompia (aparecia vivo en el
+    indice y archivado a la vez). Esto es contabilidad del journal, no contenido de la memoria, y
+    `.journal/` ya guarda otros registros de la misma clase (adds-descartados, notas-sin-columna).
+    """
+    d = os.path.join(mem, ".journal")
+    try:
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, REABIERTOS_LOG), "a",
+                  encoding="utf-8", newline="\n") as fh:
+            fh.write(f"{campo_log(pid)}\t{campo_log(str(ev))}\t{date.today().isoformat()}\n")
+    except OSError as e:
+        # Se CUARENTENA, no se avisa y se sigue. Una version anterior de esto restauraba la linea
+        # igual y solo dejaba un WARN: el reopen quedaba hecho pero SIN proteccion, asi que un
+        # replay del cierre original lo deshacia — exactamente el fallo que este registro existe
+        # para cerrar, reaparecido por la puerta del manejo de errores. (Adversario externo, 2a
+        # ronda.) Por eso tambien se llama ANTES de tocar nada: si no se puede proteger la reversa,
+        # no se hace la reversa, y no queda a medias.
+        #
+        # En la practica esta rama casi no se alcanza: si `.journal/` no se puede escribir, el
+        # compactador tampoco puede mover sus eventos a `applied/` y no llega hasta aqui.
+        raise Quarantine(
+            f"no-registro: no se pudo anotar la reapertura de {pid} en .journal/{REABIERTOS_LOG} "
+            f"({e}). El reopen NO se aplica: sin ese registro, un replay del cierre original "
+            f"volveria a cerrarlo y la reapertura se perderia en silencio.")
+
+
+def fue_revertido(mem, pid, ev):
+    """True si ESTE cierre concreto (mismo id, mismo ts de evento) ya se revirtio con un reopen.
+
+    Sin esto, un replay del `pendiente.resolve` original volvia a cerrar un pendiente que alguien
+    habia reabierto A PROPOSITO: el reopen devuelve la linea viva y el evento viejo la encuentra
+    otra vez. Deshacer en silencio una decision deliberada del usuario es peor que cualquier cosa
+    que esta version venga a arreglar. Lo encontro un adversario externo; el caso que yo llamaba
+    "replay de resolve" solo reproducia el evento con el pendiente AUN cerrado, que es el facil.
+
+    Se compara el ts del evento, no solo el id: un cierre NUEVO despues del reopen es legitimo y
+    tiene otro ts, asi que pasa. Solo se frena la reaplicacion del cierre ya revertido.
+    """
+    path = os.path.join(mem, ".journal", REABIERTOS_LOG)
+    if not os.path.isfile(path):
+        return False
+    clave = f"{campo_log(pid)}\t{campo_log(str(ev))}\t"
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return any(l.startswith(clave) for l in fh)
+    except OSError:
+        return False
+
+
+def entradas_archivadas(path, pid):
+    """(lines, [indices]) de las entradas de ese id en un archivo. ([], []) si no hay fichero."""
+    if not os.path.isfile(path):
+        return [], []
+    alines = read_lines(path)
+    return alines, [k for k, a in enumerate(alines)
+                    if a.lstrip().startswith("- [ ]") and f"_id: {pid}_" in a]
+
+
+def archivar_linea(path, head, verbatim, pid, marca, ev):
+    """Anade `verbatim — marca` al archivo, creandolo si falta. Idempotente por id + evento.
+
+    Mismo ORDEN que expire (primero el destino, despues el origen): un fallo entre las dos
+    escrituras deja la linea en los dos sitios, que se ve y se repara, nunca en ninguno.
+
+    La idempotencia se mide por id Y por `_ev:` (el ts del evento que cerro), no solo por id. Con
+    id solo, un cierre NUEVO de un pendiente que se habia reabierto no se archivaba —ya habia una
+    entrada suya, la vieja, marcada como reabierta— y ese segundo cierre se quedaba sin reversa.
+    """
+    alines, hits = entradas_archivadas(path, pid)
+    if not alines:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        alines = list(head)
+    if any(f"_ev: {ev}_" in alines[k] for k in hits):
+        return
+    alines.append(f"{verbatim} — {marca} — _ev: {ev}_")
+    atomic_write(path, alines)
+
+
+
+
 def apply_expire_index(mem, p):
     """Archiva la linea VERBATIM en pendientes/_caducados.md y la saca de _pendientes.md.
 
@@ -905,19 +1036,18 @@ def apply_expire_index(mem, p):
     if p.get("line") and normalize_text(p["line"]) != normalize_text(verbatim):
         log(f"WARN expire: la linea {p['id']} cambio desde la emision — se archiva la del disco")
 
-    cpath = caducados_path(mem)
-    if os.path.isfile(cpath):
-        clines = read_lines(cpath)
-    else:
-        os.makedirs(os.path.dirname(cpath), exist_ok=True)
-        clines = list(CADUCADOS_HEAD)
     # La prioridad va en la marca: un item legacy no tiene fila mensual de donde deducirla, y sin
     # esto reopen lo devolvia a la seccion equivocada (visto en la primera corrida real).
-    if not any(f"_id: {p['id']}_" in c for c in clines):
-        marca = (f"_caducado: {p.get('fecha') or date.today().isoformat()}_"
-                 f" — _dias: {p.get('dias', '?')}_ — _prio: {p.get('prioridad') or '?'}_")
-        clines.append(f"{verbatim} — {marca}")
-        atomic_write(cpath, clines)
+    #
+    # Pasa por `archivar_linea` (2.31.0) en vez de archivar aqui a mano. No es cosmetico: desde que
+    # `reopen` MARCA la entrada como reabierta en vez de borrarla, una idempotencia medida solo por
+    # id veria esa entrada vieja y se saltaria el archivado de una caducidad NUEVA — la linea se
+    # borraria del indice sin quedar guardada en ningun sitio. La clave es id + ts del evento.
+    archivar_linea(
+        caducados_path(mem), CADUCADOS_HEAD, verbatim, p["id"],
+        f"_caducado: {p.get('fecha') or date.today().isoformat()}_"
+        f" — _dias: {p.get('dias', '?')}_ — _prio: {p.get('prioridad') or '?'}_",
+        p.get("_ts", 0))
 
     del lines[i]
     # `len(lines) - 1` y no `len(lines)`: read_lines parte por "\n", asi que el ultimo elemento
@@ -1030,8 +1160,18 @@ def apply_update_index(mem, p):
     linea = lines[i].rstrip("\n")
     nuevo = normalize_text(p.get("text") or "")
     if nuevo:
+        # ARREGLO LATERAL DECLARADO (2.31.0). El guardian de prefijo corria ANTES de mirar si la
+        # linea ya estaba corregida, y el prefijo se captura en la EMISION (texto viejo). En un
+        # replay del mismo evento la linea ya tiene el texto nuevo, asi que el prefijo no casa POR
+        # CONSTRUCCION y el replay acababa en cuarentena con un motivo ademas falso ("otra sesion
+        # la cambio" — no hubo otra sesion). Medido 2026-09-19: fixture -> update -> compactar ->
+        # devolver el evento de applied/ a pending/ -> compactar da `quarantined=1 prefix-mismatch`,
+        # contra lo que declara la cabecera de este fichero ("un replay de evento ya aplicado se
+        # archiva"). Se mira primero el estado final; el guardian sigue corriendo en todo caso en
+        # que la linea NO sea ya el texto nuevo, que es cuando hay algo que guardar.
+        ya_corregida = normalize_text(line_text(linea)) == nuevo
         prefix = normalize_text(p.get("text_prefix") or "")
-        if prefix and not line_text(linea).startswith(prefix):
+        if not ya_corregida and prefix and not line_text(linea).startswith(prefix):
             raise Quarantine(
                 f"prefix-mismatch: la linea {p['id']} ya no empieza por '{prefix[:40]}' — "
                 "otra sesion la cambio entre la emision y el compactado")
@@ -1098,26 +1238,62 @@ def apply_update_monthly(mem, p):
     return True
 
 
+MARCA_CADUCADO_RE = re.compile(
+    r"\s+—\s+_caducado: \d{4}-\d{2}-\d{2}_ — _dias: [^_]*_(?: — _prio: [^_]*_)?\s*$")
+MARCA_RESUELTO_RE = re.compile(
+    r"\s+—\s+_resuelto: \d{4}-\d{2}-\d{2}_ — _estado: [^_]*_(?: — _prio: [^_]*_)?\s*$")
+
+
+def buscar_archivado(mem, pid):
+    """(path, lines, idx, verbatim, prio, origen) del id en CUALQUIERA de los dos archivos.
+
+    Dos archivos porque son dos cosas distintas: `_caducados.md` es "dejo de ser un compromiso"
+    (por edad) y `_resueltos.md` es "se cerro". `reopen` revierte los dos, pero la marca que hay
+    que quitar y la celda mensual que hay que limpiar no son iguales, asi que el origen viaja con
+    el hallazgo en vez de deducirse despues.
+    """
+    for path, marca_re, origen in ((caducados_path(mem), MARCA_CADUCADO_RE, "caducado"),
+                                   (resueltos_path(mem), MARCA_RESUELTO_RE, "resuelto")):
+        if not os.path.isfile(path):
+            continue
+        alines = read_lines(path)
+        for k, line in enumerate(alines):
+            if not (line.lstrip().startswith("- [ ]") and f"_id: {pid}_" in line):
+                continue
+            # `_ev:` es contabilidad del journal (la clave de idempotencia del archivado), no parte
+            # de la linea del usuario: se quita antes de devolverla, o el reopen la restauraria con
+            # un sufijo que nunca tuvo y "byte a byte" dejaria de ser cierto.
+            mev = re.search(r"_ev: ([^_]*)_\s*$", line)
+            sin_ev = re.sub(r"\s+—\s+_ev: [^_]*_\s*$", "", line)
+            mprio = re.search(r"_prio: ([^_]*)_\s*$", sin_ev)
+            return (path, alines, k, marca_re.sub("", sin_ev),
+                    (mprio.group(1).strip() if mprio else ""), origen,
+                    (mev.group(1).strip() if mev else "0"))
+    return None
+
+
 def apply_reopen(mem, p):
-    """Reversa exacta de expire: devuelve la linea VERBATIM y limpia la fila mensual."""
-    cpath = caducados_path(mem)
-    if not os.path.isfile(cpath):
-        raise Quarantine("no-caducados: no hay pendientes/_caducados.md que revertir")
-    clines = read_lines(cpath)
-    idx = None
-    for k, line in enumerate(clines):
-        if line.lstrip().startswith("- [ ]") and f"_id: {p['id']}_" in line:
-            idx = k
-            break
-    if idx is None:
-        return False  # idempotente: ya reabierto
-    archivado = clines[idx]
-    # Quitar solo la marca que anadio expire; el resto de la linea vuelve intacto.
-    mprio = re.search(r"_prio: ([^_]*)_\s*$", archivado)
-    prio_archivada = (mprio.group(1).strip() if mprio else "")
-    verbatim = re.sub(
-        r"\s+—\s+_caducado: \d{4}-\d{2}-\d{2}_ — _dias: [^_]*_(?: — _prio: [^_]*_)?\s*$",
-        "", archivado)
+    """Reversa de expire Y de resolve: devuelve la linea VERBATIM y limpia la fila mensual."""
+    hallado = buscar_archivado(mem, p["id"])
+    if hallado is None:
+        # Hasta 2.31.0 `resolve` no archivaba nada, asi que un pendiente cerrado ANTES de esta
+        # version no tiene linea que devolver. Antes esto era un `return False` mudo, que es
+        # indistinguible de "ya estaba reabierto": la persona no sabia si habia funcionado ni por
+        # que no. Se separan los dos silencios (pendiente p-d949b88e8a).
+        donde = pendiente_cerrado(mem, p["id"])
+        if donde:
+            raise Quarantine(
+                f"no-archivado: {p['id']} figura {donde} pero no hay linea suya en "
+                f"pendientes/{RESUELTOS} ni en pendientes/{CADUCADOS}. Se cerro antes de 2.31.0, "
+                f"cuando resolve borraba sin archivar: no hay texto verbatim que devolver. "
+                f"Reabrelo con un pendiente.add y su --creado original para reproducir el id.")
+        return False  # idempotente: ya reabierto, o un id que nunca existio
+    cpath, clines, idx, verbatim, prio_archivada, origen, ev_archivado = hallado
+    # PRIMERO el registro de la reversa, ANTES de tocar nada. Si no se puede escribir, esto
+    # cuarentena y el reopen no ocurre: una reapertura sin registro queda sin proteccion frente al
+    # replay del cierre original, o sea deshecha mas tarde y en silencio. Mejor no reabrir que
+    # reabrir a medias. (Adversario externo, 2a ronda.)
+    anotar_reabierto(mem, p["id"], ev_archivado)
     # ORDEN, igual que expire pero al reves: primero devolver la linea viva y solo despues
     # quitarla del archivo. El peor caso vuelve a ser "esta en los dos", nunca "en ninguno".
     path = os.path.join(mem, "_pendientes.md")
@@ -1143,7 +1319,12 @@ def apply_reopen(mem, p):
             lines.insert(at + 1, "")
         atomic_write(path, lines)
 
-    clines = read_lines(cpath)           # releer antes de borrar: entre medias pudo escribir otro
+    # Releer antes de borrar: entre medias pudo escribir otro. La entrada SALE del archivo —el
+    # invariante que la bateria de expire/reopen defiende es que tras un reopen el item vive en
+    # exactamente un sitio—, y el hecho de que este cierre se revirtio queda anotado en
+    # `.journal/reabiertos.log`, que es donde va la contabilidad del journal. Eso es lo que impide
+    # que un replay del cierre original deshaga el reopen.
+    clines = read_lines(cpath)
     for k, line in enumerate(clines):
         if line.lstrip().startswith("- [ ]") and f"_id: {p['id']}_" in line:
             del clines[k]
@@ -1155,7 +1336,11 @@ def apply_reopen(mem, p):
         mpath, mlines, i, cells, cmap = found
         # Una fila sin columna `Sesion resolucion` no pudo guardar el "expired —...", asi que la
         # marca de caducado es la FECHA: se limpia igual, y no se exige la nota para reabrir.
-        if cells[COL_SESION].startswith("expired") or \
+        # `origen == "resuelto"`: la celda Sesion lleva la nota de cierre (sesion — estado —
+        # nota), no "expired", asi que la condicion de expire no la cubria. Ningun evento
+        # deshacia estas dos celdas — es literalmente el paso que hubo que hacer a mano el
+        # 2026-09-19 al reabrir p-532174ff63 (pendiente p-d949b88e8a).
+        if origen == "resuelto" or cells[COL_SESION].startswith("expired") or \
                 (COL_SESION not in cmap and cells[COL_RESUELTO]):
             cells[COL_RESUELTO] = ""
             cells[COL_SESION] = ""
@@ -1207,6 +1392,11 @@ def apply_add_monthly(mem, p):
 
 
 def apply_resolve_monthly(mem, p):
+    # Misma guarda que en el indice: si ESTE cierre ya se revirtio con un reopen, no se reaplica.
+    # Sin ella el indice quedaba bien (la linea sigue viva) pero la fila mensual volvia a marcarse
+    # como resuelta — el pendiente aparecia abierto y cerrado a la vez.
+    if fue_revertido(mem, p["id"], p.get("_ts", 0)):
+        return False
     found = find_monthly_row(mem, p["id"])
     if not found:
         log(f"WARN monthly: sin fila con id {p['id']} — llenar Resuelto a mano si aplica")
@@ -1659,6 +1849,280 @@ def apply_learning_add(mem, p):
     return changed
 
 
+def find_rule_anchored(lines, start, end, prefix, nuevo, donde):
+    """(indice, ya_corregida) de la regla a reescribir en lines[start:end].
+
+    ORDEN DELIBERADO, al reves que `apply_update_index`: se mira PRIMERO si alguna regla ya ES el
+    texto nuevo. Un learning no tiene id, asi que el ancla es el texto de HOY; en un replay del
+    mismo evento ese prefijo viejo ya no casa POR CONSTRUCCION, asi que comprobar el prefijo
+    primero manda todo replay a cuarentena con un motivo que ademas es falso ("otra sesion la
+    cambio"). Medido 2026-09-19 contra `pendiente.update`: fixture -> update -> compactar ->
+    devolver el evento de applied/ a pending/ -> compactar da `quarantined=1 prefix-mismatch`,
+    contra lo que declara la cabecera de este fichero ("un replay de evento ya aplicado se
+    archiva"). Ese orden se corrige alli en esta misma version; aqui nace ya invertido.
+
+    Invertirlo no afloja el guardian: si la regla NO es ya el texto nuevo, el prefijo se comprueba
+    igual. Solo cambia el caso en que el estado final ya esta escrito, que es precisamente cuando
+    no hay nada que guardar.
+    """
+    pn = normalize_text(nuevo)
+    pp = plain(prefix)
+    hits = []
+    iguales = []
+    candidatas = []
+    for i in range(start, end):
+        _n, t = rule_text(lines[i])
+        if not t:
+            continue
+        # El PREFIJO se compara con plain(): sin enfasis y en minusculas. Una regla se escribe
+        # `**Titulo** — detalle`, asi que exigir el prefijo con sus asteriscos convierte el evento
+        # en una trampa de citado y devuelve a la persona al workaround que este evento existe para
+        # matar. Medido: 0 colisiones de prefijo a 40 chars entre las 131 reglas del Quick
+        # Reference, asi que aflojar el enfasis no crea ambiguedad real.
+        if pp and plain(t).startswith(pp):
+            hits.append(i)
+        # La igualdad se mide EXACTA (normalize_text, no plain): asi un cambio que solo toca el
+        # enfasis —ponerle negrita al titulo— sigue siendo un cambio y se aplica. Con plain() se
+        # leeria como "ya esta corregida" y se perderia en silencio.
+        if pn and normalize_text(t) == pn:
+            iguales.append(i)
+        candidatas.append(t)
+
+    # ORDEN DELIBERADO, y el matiz importa. Se resuelve PRIMERO por prefijo, que es el ancla que
+    # el emisor eligio, y solo si el prefijo no casa NADA se mira si alguna regla ya es el texto
+    # nuevo (ese es el replay: la regla ya se reescribio, asi que su prefijo viejo no puede casar).
+    #
+    # Una version anterior preguntaba la igualdad ANTES, recorriendo toda la region y devolviendo
+    # la primera regla igual al destino. Un adversario externo lo rompio: si OTRA regla del mismo
+    # fichero ya contenia ese texto, el evento se declaraba replay y la regla que el prefijo
+    # senalaba —la que de verdad estaba vencida— se quedaba sin corregir, en silencio. Perder una
+    # correccion legitima es exactamente el fallo que este evento existe para cerrar.
+    if len(hits) > 1:
+        raise Quarantine(
+            f"ambiguous: {len(hits)} reglas de {donde} empiezan por '{prefix[:40]}' — alarga el "
+            f"prefijo hasta que sea unico, no hay forma segura de saber cual es la buena")
+    if hits:
+        # La regla que el prefijo senala: si YA es el texto nuevo, no hay nada que hacer.
+        return hits[0], hits[0] in iguales
+    if iguales:
+        # El prefijo no casa nada Y alguna regla ya es el texto nuevo: se trata como replay. Es lo
+        # correcto en el caso normal (la regla ya se reescribio, por eso su prefijo viejo no casa),
+        # pero NO es una certeza: si otra sesion cambio la regla entre la emision y el compactado,
+        # la que coincide podria ser OTRA y la que el emisor queria corregir quedarse sin tocar.
+        # Distinguirlos sin un id es imposible —un learning no lo tiene—, asi que no se puede
+        # cerrar; lo que si se puede es que no sea MUDO. (Adversario externo, 2a ronda.)
+        log(f"WARN learning.update: en {donde} ninguna regla empieza por '{prefix[:40]}', pero una "
+            f"ya dice el texto nuevo — se toma como replay y no se escribe nada. Si esperabas "
+            f"corregir otra regla, su texto cambio desde que emitiste: vuelve a mirar y reemite.")
+        return iguales[0], True                # replay: ya reescrita, el prefijo viejo no casa
+    muestra = " | ".join(c[:50] for c in candidatas[:4]) or "(ninguna)"
+    raise Quarantine(
+        f"no-anchor: ninguna regla de {donde} empieza por '{prefix[:40]}' y ninguna es ya el "
+        f"texto nuevo — no se reescribe una regla a ciegas. Las que hay empiezan por: {muestra}")
+
+
+def blancos_iniciales(linea):
+    return linea[:len(linea) - len(linea.lstrip())]
+
+
+def b_no_mas_adentro_que_a(a, b):
+    """True/False cuando la respuesta es la misma con CUALQUIER anchura de tabulador; None si no.
+
+    Tres versiones se rompieron aqui antes que esta, y las tres por el mismo motivo de fondo:
+    respondian a una pregunta MAS FACIL que la de verdad.
+      1. Contar CARACTERES. Un tabulador es 1 caracter y varias columnas, asi que `\\t- hijo` bajo
+         `    1. padre` salia "menos indentado" que su padre y pasaba por hermana.
+      2. Contar columnas con anchura fija, negandose solo si el tabulador estaba en UN lado. Con
+         las dos sangrias mezclando tabulador y espacios en posiciones distintas
+         (`'    \\t- padre'` contra `'\\t - hijo'`) la respuesta sigue dependiendo de la anchura y
+         la funcion respondia igual, con aplomo.
+      3. MUESTREAR unas cuantas anchuras (1, 2, 4, 8) y exigir que coincidieran. Mejor, pero sigue
+         siendo un sondeo: `'  \\t '` contra `'   \\t'` coincide en las cuatro y discrepa en 3.
+         Una comprobacion por muestreo no puede cerrar un "para todo".
+
+    Asi que no se muestrea: se DECIDE, y para eso basta partir en los dos casos en que la respuesta
+    es demostrable sin fijar ninguna anchura.
+      - Sangrias identicas byte a byte -> estan al mismo nivel con cualquier anchura. Comparables.
+      - Sin ningun tabulador -> la columna es la longitud, sin ambiguedad. Comparables.
+      - Cualquier otra cosa (hay tabulador y las sangrias difieren) -> no se decide, None.
+
+    Lo que cuesta la tercera rama son sangrias mixtas que ademas difieren, y eso, medido sobre el
+    corpus real, son cero reglas de 247. Negarse ahi es gratis; adivinar cuesta un fichero roto.
+    """
+    wa, wb = blancos_iniciales(a), blancos_iniciales(b)
+    if wa == wb:
+        return True
+    if "\t" in wa or "\t" in wb:
+        return None
+    return len(wb) <= len(wa)
+
+
+def rewrite_rule(lines, i, end, nuevo, donde):
+    """Reescribe la regla de UNA LINEA que empieza en `i`, conservando numero, vineta y sangria.
+
+    SOLO reescribe reglas de una linea. Si la regla arrastra cualquier otra cosa —una continuacion,
+    una sublista, una tabla, un bloque de codigo— se cuarentena y no se toca el fichero.
+
+    Por que negarse en vez de intentarlo, que es lo que hacian las dos versiones anteriores: "donde
+    acaba una regla en markdown" es un problema sin fondo, y dos adversarios seguidos lo demostraron
+    con casos distintos. La primera version reescribia solo la primera linea y dejaba las
+    continuaciones viejas colgando bajo el texto nuevo. La segunda sustituia el bloque entero
+    decidiendo por sangria, y entonces una sublista indentada la cortaba antes de tiempo; corregido
+    eso, un bloque de codigo con una linea que empieza por `- ` dentro volvia a cortarlo, dejando la
+    valla de cierre huerfana y el markdown roto — EN SILENCIO, porque no se absorbia ninguna linea y
+    el aviso no llegaba a dispararse. Cada arreglo cerraba un caso y abria el siguiente.
+
+    Lo que cierra el problema no es un parser mejor, es el alcance. Medido sobre el corpus real:
+    **0 de 247 reglas de `memory/learnings/` tienen lineas de continuacion**, y las 131 del Quick
+    Reference tampoco. O sea que la capacidad de reescribir bloques no servia a NINGUN caso real y
+    era la unica fuente de estos fallos. Negarse cuesta cero casos de verdad y cambia el peor
+    resultado posible de "te corrompo el fichero sin avisar" a "no lo toco y te digo por que".
+
+    Que quede claro lo que esto NO afirma, porque una version anterior de este comentario si lo
+    afirmaba y un adversario lo marco con razon: **no es que delimitar un bloque de markdown sea
+    imposible**. Con un parser de markdown de verdad se puede, y si algun dia hace falta, ese es el
+    camino — no otra heuristica de sangria. Es una decision de ALCANCE apoyada en dos hechos
+    medidos: cero casos reales que la necesiten hoy, y tres rondas adversarias seguidas rompiendo
+    la heuristica casera con casos distintos. Si el corpus cambia y aparecen reglas multilinea de
+    verdad, la decision se revisa con una dependencia de parser, no reabriendo esta funcion.
+
+    El numero es la identidad publica de un learning: las reglas se citan por numero en fichas de
+    sesion, en comentarios del codigo y en los propios learnings (37 citas en `plugins/`, 118
+    contando `memory/`; el comando exacto esta en la cabecera de test-learning-update.sh — la
+    cifra viaja con su corpus porque una sin el no se pudo reproducir). Renumerar rompe esas citas,
+    exactamente el mismo dano que renombrar el `_id:` de un pendiente.
+
+    La VINETA se conserva tal cual (`-` o `*`): `rule_text` acepta las dos y reconstruir siempre
+    con `-` reescribia el estilo de un fichero ajeno sin que nadie lo hubiera pedido.
+    """
+    # Una regla ocupa una sola linea si lo siguiente es el final de la region, una linea en blanco,
+    # una cabecera, u otra regla. Cualquier otra cosa es contenido que le pertenece y que este
+    # evento no sabe reescribir sin riesgo.
+    j = i + 1
+    if j < end:
+        sig = lines[j]
+        s = sig.strip()
+        _n, t = rule_text(sig)
+        al_mismo_nivel = b_no_mas_adentro_que_a(lines[i], sig)
+        # Hermana solo si esta a la MISMA sangria o menos. Una vineta INDENTADA es una sublista que
+        # pertenece a esta regla, no la siguiente — `rule_text` no distingue las dos, y tratarlas
+        # igual dejaba la sublista vieja pegada al texto nuevo sin avisar de nada.
+        #
+        # `al_mismo_nivel is None` = la respuesta cambia segun cuanto midas un tabulador, o sea que
+        # no se puede decidir sin inventarse una anchura que el formato no define. Entonces NO es
+        # hermana y se cae a la cuarentena de abajo: negarse cuando no se sabe, que es la politica
+        # de toda esta funcion. `is True` y no un booleano suelto, porque None tambien es falso y
+        # aqui los dos "no" significan cosas distintas.
+        hermana = bool(t) and al_mismo_nivel is True
+        if s and not s.startswith("#") and not hermana:
+            raise Quarantine(
+                f"bloque-multilinea: la regla de {donde} arrastra contenido en la linea siguiente "
+                f"('{s[:50]}'). learning.update solo reescribe reglas de UNA linea — es una "
+                f"decision de alcance: ninguna regla de este corpus lo necesita y las heuristicas "
+                f"para delimitar sublistas, tablas y bloques de codigo ya rompieron ficheros tres "
+                f"veces. Corrigela a mano, o simplificala a una linea y reemite.")
+    line = lines[i]
+    sangria = line[:len(line) - len(line.lstrip())]
+    s = line.strip()
+    m = re.match(r"^(\d+)\.\s", s)
+    cabeza = f"{m.group(1)}. " if m else f"{s[0]} "
+    lines[i] = f"{sangria}{cabeza}{nuevo}"
+
+
+def find_topic_row(lines, topic):
+    """Fila de '## Topic Files' cuya CELDA DE FICHERO es `[[learnings/<topic>]]`.
+
+    No usa `find_row_anywhere`: ese hace `search` sobre la fila ENTERA, asi que una fila cuya
+    columna "When to consult" citara `[[learnings/otro-tema]]` se llevaria el update y reescribiria
+    el titulo del tema equivocado. Al insertar (apply_learning_add) eso solo producia un duplicado;
+    al REESCRIBIR corrompe una fila ajena, que es otra cosa. Se ancla a la celda. Hallazgo aportado
+    por una sesion par que medio el mismo defecto en el otro arbol.
+    """
+    key = link_re("learnings/", topic)
+    for _sec, hdr, _sep, rows in find_tables(lines):
+        if len(split_cells(lines[hdr])) != 3:
+            continue
+        for i in rows:
+            cells = pad(split_cells(lines[i]), 3)
+            if key.search(cells[1]):
+                return i
+    return None
+
+
+def apply_learning_update(mem, p):
+    """Corrige una regla YA escrita en cualquiera de las tres superficies de un learning.
+
+    Un learning vive en tres sitios y los tres envejecen: el bullet del cuerpo de
+    learnings/<topic>.md, la fila de resumen de '## Topic Files' y la regla numerada del
+    '## Quick Reference'. `learning.add` solo ANADE, asi que hasta ahora corregir una regla vencida
+    obligaba a emitir otra NUEVA que dijera "la anterior no vale": el indice quedaba mal Y anotado,
+    y el recall devolvia las dos.
+
+    Cada superficie se ancla por separado y se escribe por separado: corregir el cuerpo no obliga a
+    tocar el Quick Reference, que suele llevar una version mas corta de la misma regla.
+    """
+    topic = check_slug(p["topic"], "topic")
+    ipath = os.path.join(mem, "_learnings.md")
+    if not os.path.isfile(ipath):
+        raise Quarantine("no-index: _learnings.md no existe")
+    changed = False
+
+    text = normalize_text(p.get("text") or "")
+    if text:
+        tpath = os.path.join(mem, "learnings", topic + ".md")
+        if not os.path.isfile(tpath):
+            raise Quarantine(f"no-anchor: learnings/{topic}.md no existe — learning.update corrige "
+                             f"una regla ya escrita, no la crea (para eso esta learning.add)")
+        lines = read_lines(tpath)
+        start, related = body_region(lines)
+        i, ya = find_rule_anchored(lines, start, related,
+                                   normalize_text(p.get("match_prefix") or ""), text,
+                                   f"learnings/{topic}.md")
+        if not ya:
+            rewrite_rule(lines, i, related, text, f"learnings/{topic}.md")
+            bump_updated(lines)
+            atomic_write(tpath, lines)
+            changed = True
+
+    q = normalize_text(p.get("quickref") or "")
+    if q:
+        ilines = read_lines(ipath)
+        sec = section_bounds(ilines, "## Quick Reference")
+        if not sec:
+            raise Quarantine("no-anchor: falta '## Quick Reference' en _learnings.md")
+        s0, s1 = sec
+        i, ya = find_rule_anchored(ilines, s0, s1,
+                                   normalize_text(p.get("quickref_prefix") or ""), q,
+                                   "'## Quick Reference'")
+        if not ya:
+            rewrite_rule(ilines, i, s1, q, "'## Quick Reference'")
+            bump_updated(ilines)
+            atomic_write(ipath, ilines)
+            changed = True
+
+    title = normalize_text(p.get("title") or "")
+    when = p.get("when") or ""
+    if title or when:
+        ilines = read_lines(ipath)
+        hit = find_topic_row(ilines, topic)
+        if hit is None:
+            raise Quarantine(f"no-anchor: no hay fila de [[learnings/{topic}]] en '## Topic Files' "
+                             f"de _learnings.md")
+        cells = pad(split_cells(ilines[hit]), 3)
+        new = list(cells)
+        if title:
+            new[0] = title
+        if when:
+            new[2] = when
+        if new != cells:
+            ilines[hit] = join_cells(new)
+            bump_updated(ilines)
+            atomic_write(ipath, ilines)
+            changed = True
+
+    return changed
+
+
 PARENT_ANNOTATION_RE = re.compile(r"\(fase de plan-([A-Za-z0-9._-]+)\)")
 
 
@@ -2047,6 +2511,11 @@ def validate(ev):
         for k in ("id", "estado"):
             if not p.get(k):
                 raise Quarantine(f"malformed: pendiente.resolve sin '{k}'")
+        # El ts del evento viaja al payload: es lo que distingue el REPLAY de este mismo cierre de
+        # un cierre NUEVO del mismo pendiente. Sin el, un reopen deliberado se puede deshacer solo
+        # (ver `fue_revertido`). Un evento sin ts queda en 0, que nunca casa con un ts real, asi
+        # que el peor caso de un emisor viejo es no ganar la proteccion, no perder una escritura.
+        p["_ts"] = ev.get("ts", 0)
     elif t == "pendiente.update":
         if not p.get("id"):
             raise Quarantine("malformed: pendiente.update sin 'id'")
@@ -2069,6 +2538,7 @@ def validate(ev):
             raise Quarantine("malformed: pendiente.expire sin 'id'")
         if not str(p.get("dias", "")).isdigit():
             raise Quarantine("malformed: pendiente.expire sin 'dias' numerico")
+        p["_ts"] = ev.get("ts", 0)   # misma clave de archivado que resolve: id + ts del evento
     elif t == "pendiente.reopen":
         if not p.get("id"):
             raise Quarantine("malformed: pendiente.reopen sin 'id'")
@@ -2093,6 +2563,20 @@ def validate(ev):
     elif t == "learning.add":
         if not p.get("topic"):
             raise Quarantine("malformed: learning.add sin 'topic'")
+        check_slug(p["topic"], "topic")
+        return t, p
+    elif t == "learning.update":
+        # El compactador es su propia frontera de confianza (learning 106): journal-emit ya
+        # rechaza estos casos, pero un evento puede venir escrito a mano o de otro emisor.
+        if not p.get("topic"):
+            raise Quarantine("malformed: learning.update sin 'topic'")
+        if not (p.get("text") or p.get("quickref") or p.get("title") or p.get("when")):
+            raise Quarantine("malformed: learning.update sin nada que corregir")
+        if p.get("text") and not p.get("match_prefix"):
+            raise Quarantine("malformed: learning.update con 'text' sin 'match_prefix' — sin ancla "
+                             "no se sabe que regla reescribir")
+        if p.get("quickref") and not p.get("quickref_prefix"):
+            raise Quarantine("malformed: learning.update con 'quickref' sin 'quickref_prefix'")
         check_slug(p["topic"], "topic")
         return t, p
     elif t == "plan.upsert":
@@ -2147,6 +2631,8 @@ def apply_event(mem, ev):
         return apply_session_add(mem, p)
     if t == "learning.add":
         return apply_learning_add(mem, p)
+    if t == "learning.update":
+        return apply_learning_update(mem, p)
     if t == "plan.upsert":
         return apply_plan_upsert(mem, p)
     return apply_research_upsert(mem, p)

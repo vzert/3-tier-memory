@@ -1,6 +1,296 @@
 # Changelog
 
 
+## [2.31.0] - 2026-09-20
+Origen: una sesion par reporto que no existe forma de corregir un learning ya escrito, y el
+usuario pidio revisar si el mismo hueco afecta a pendientes, planes, research y sesiones. Se midio
+leyendo las 14 funciones `apply_*` de `journal-compact.py`, tipo por tipo y superficie por
+superficie. El resultado no es un hueco, son tres, y la familia ya era incoherente:
+
+| Tipo | Superficies que el journal escribe | Editar | Deshacer un cierre |
+|---|---|---|---|
+| pendiente | `_pendientes.md` + `pendientes/YYYY-MM.md` | si, completo | `reopen` revierte `expire`; **`resolve` no tenia reversa** |
+| plan | `_plans-index.md` | si (titulo, status, celdas) | **libre y sin guardian** |
+| research | `_research-index.md` | parcial; el **tema no** (es la llave) | **monotono a proposito**, `return False` mudo |
+| session | `_session-index.md` | parcial; **fecha y alias no** | n/a |
+| learning | `_learnings.md` + `learnings/<topic>.md` | **nada** | **nada** |
+
+`research` prohibe la reversa para que un replay viejo no deshaga un cierre; `plan` la permite sin
+mirar. Es el mismo problema decidido al reves en dos ficheros (learning 106). `expire`/`reopen` ya
+lo tenian bien resuelto: archivar verbatim al cerrar, y entonces la reversa EXIGE que la linea
+archivada exista — un hecho en disco, no una regla en prosa, es lo que distingue una reversa
+deliberada de un replay. Esta version generaliza ese patron y construye los dos huecos con caso
+real medido; los otros tres quedan disenados con su pendiente, sin codigo.
+
+- **`learning.update` (evento nuevo)**: `--topic T [--match-prefix P --text T2]
+  [--quickref-prefix QP --quickref Q2] [--title TT] [--when W]`. Corrige una regla YA escrita en
+  cualquiera de las **tres** superficies de un learning (el bullet del cuerpo de
+  `learnings/<topic>.md`, la fila de `## Topic Files`, la regla numerada del `## Quick Reference`),
+  cada una anclada y escrita por separado. Hasta aqui el unico camino era emitir un learning NUEVO
+  que dijera "la anterior esta vencida": el indice quedaba mal **Y** anotado y el recall devolvia
+  las dos. Se uso dos veces en la semana del 2026-09-19.
+- **El numero de la regla se conserva**, que es el punto y no un detalle. Las reglas se citan por
+  numero, asi que renumerar rompe esas citas — el mismo dano que renombrar el `_id:` de un
+  pendiente, que es justo por lo que existe `pendiente.update`. La cifra, con su corpus y su
+  comando declarados, porque una version anterior de esta entrada dijo "38 citas" sin decir sobre
+  que y un adversario externo no pudo reproducirla (el `grep` de este entorno respeta `.gitignore`
+  y se saltaba `memory/`, que aqui no se versiona):
+
+  ```
+  grep -roiE "\b(learning|regla|rule)s? [0-9]{1,3}\b" plugins/ \
+    --include='*.py' --include='*.sh' --include='*.md' | wc -l
+  ```
+
+  **37** en `plugins/` (el codigo y las plantillas que se publican) y **118** anadiendo `memory/`
+  (la memoria de este proyecto, que no se versiona). Cualquiera de los dos corpus sostiene la
+  decision; lo que no la sostenia era una cifra sin corpus.
+- **El ancla es topic + prefijo del texto de hoy**, porque un learning NO tiene id estampado en su
+  linea. Esa asimetria con `pendiente.update` (que ancla por `--id`) es la parte dificil del
+  problema. Medido antes de elegirlo: **0 colisiones de prefijo a 40 caracteres** entre las 131
+  reglas del Quick Reference. El prefijo se compara sin enfasis y sin distinguir mayusculas —
+  exigir los asteriscos convertia el evento en una trampa de citado, que es como se vuelve al
+  workaround. Cero coincidencias o mas de una es cuarentena (`no-anchor` / `ambiguous`) y el motivo
+  **lista las reglas candidatas**; nunca una reescritura a ciegas.
+- **La fila de `## Topic Files` se ancla a la CELDA, no a la fila entera.** `find_row_anywhere`
+  hace `search` sobre la fila completa, asi que una fila cuya columna "When to consult" citara
+  `[[learnings/otro-tema]]` se llevaba el update y reescribia el titulo del tema equivocado. Al
+  INSERTAR eso solo producia un duplicado; al REESCRIBIR corrompe una fila ajena. Cerrado con
+  `find_topic_row`, sin tocar el helper compartido. Defecto aportado por una sesion par que lo
+  midio en el otro arbol.
+- **`pendiente.reopen` revierte tambien un `resolve`**, no solo un `expire`. `apply_resolve_index`
+  hacia `del lines[i]` sin archivar nada, asi que `reopen` —que solo miraba `_caducados.md`—
+  devolvia `False` en silencio sobre un resuelto y un cierre equivocado no tenia vuelta atras por
+  evento (pendiente `p-d949b88e8a`). Ahora `resolve` archiva la linea VERBATIM en
+  `pendientes/_resueltos.md` antes de borrarla, con el mismo orden que `expire` (primero el
+  destino, despues el origen: el peor caso es que quede en los dos, nunca en ninguno), y `reopen`
+  la devuelve **byte a byte** a su seccion de prioridad original y limpia las celdas
+  `Resuelto`/`Sesion resolucion` de la fila mensual — el paso que el 2026-09-19 hubo que hacer a
+  mano porque ningun evento lo deshacia.
+- **Fichero APARTE de `_caducados.md`, no una marca mas dentro de el.** Medido: `_caducados.md`
+  tiene tres lectores y uno es `expire-pendientes.py`. Meter ahi los resueltos le cambia la cuenta
+  de lo que caduco por edad. Ademas son dos cosas distintas: "dejo de ser un compromiso" y "se
+  cerro".
+- **Los dos silencios se separan.** `reopen` sobre un id que nunca existio sigue siendo un noop
+  mudo (no hay nada roto que reportar). `reopen` sobre un pendiente cerrado ANTES de 2.31.0 —que no
+  tiene linea archivada— pasa a cuarentena `no-archivado`, diciendo por que no hay texto que
+  devolver y que use `pendiente.add --creado` para reproducir el id. Antes los dos eran el mismo
+  `return False`.
+- **Arreglo lateral declarado: un replay de `pendiente.update` caia en cuarentena.** Medido, no
+  razonado: fixture -> update -> compactar -> devolver el evento de `.journal/applied/` a
+  `pending/` -> compactar daba `quarantined=1` con `prefix-mismatch: ... otra sesion la cambio
+  entre la emision y el compactado` — y no habia otra sesion. El guardian de prefijo corria ANTES
+  de mirar si la linea ya estaba corregida, y el prefijo se captura en la EMISION (texto viejo),
+  asi que en un replay no casa POR CONSTRUCCION. Contradecia la cabecera del propio compactador
+  ("un replay de evento ya aplicado se archiva"). Se invierte el orden — igualdad primero,
+  guardian despues — acotado a ese reorden. `learning.update` nace ya con el orden bueno; enviar
+  uno idempotente y otro no seria la misma incoherencia que esta version le critica a
+  research-vs-plan.
+- **`checkpoint-audit.py` dejaba de contar bien las filas mensuales.** Hacia `glob` de
+  `pendientes/*.md` y concatenaba todo como pajar para responder "este id tiene fila mensual?", asi
+  que un id que SOLO estuviera archivado contaba como que si. Era falso ya con `_caducados.md`;
+  `_resueltos.md`, que crece en CADA cierre, lo habria vuelto el caso normal. Ahora filtra por
+  `^\d{4}-\d{2}\.md$`, como ya hacian los otros tres lectores del directorio.
+- **Enrutamiento en todos los carriers**, que es lo que decide si el evento se usa: `/checkpoint-3t`
+  Step 4 (seccion nueva "corregir una regla YA escrita"), `/save-learning`, `/triage-3t` (reversa de
+  un cierre), `journal-guard.sh` y `bash-journal-nudge.sh` (el aviso que sale al denegar una
+  edicion a mano no nombraba los eventos que existen para eso), y el README (decia "Ten event
+  types" cuando ya son doce). Sin esto el workaround se repite aunque el evento exista.
+- **Correccion a la premisa de partida, medida**: `journal-guard.sh` solo protege `memory/_*.md` y
+  `pendientes/YYYY-MM.md`. El **cuerpo** de `learnings/<topic>.md` NO esta bajo `journal_strict` y
+  si se puede editar a mano hoy. Lo que no tenia salida sancionada son las **dos superficies dentro
+  de `_learnings.md`** (Quick Reference y la fila de resumen). Para el cuerpo, `learning.update`
+  aporta atomicidad, seguridad ante escrituras concurrentes y consistencia con las otras dos, no
+  ser el unico camino.
+### Tres defectos que encontro el adversario externo, y que estaban en el codigo nuevo
+
+Ninguno de los tres lo tenia yo visto; los tres son de esta misma version.
+
+- **Un replay del cierre volvia a cerrar un pendiente reabierto a proposito.** El caso que el
+  primer test no cubria: alli el replay corria con el pendiente AUN cerrado, que es el facil.
+  Reabierto, la linea vuelve a estar viva, asi que el evento viejo la encontraba otra vez y la
+  cerraba — deshaciendo en silencio una decision deliberada del usuario. Peor que el hueco que esta
+  version viene a cerrar. Ahora `reopen` anota la reversa en **`.journal/reabiertos.log`** (id + ts
+  del evento revertido) y `resolve` no reaplica un cierre que figure ahi. Se compara el TS, no solo
+  el id: un cierre nuevo posterior es legitimo y pasa; solo se frena la reaplicacion del que ya se
+  deshizo. El registro va a `.journal/` y no como marca dentro del archivo porque los dos ficheros
+  de archivo tienen un invariante que su propia bateria defiende — tras un reopen el item vive en
+  EXACTAMENTE UN sitio— y marcarlo alli lo rompia (lo detecto `test-expire-reopen.sh` al intentarlo).
+  De paso, `expire` pasa a archivar por el mismo helper: su idempotencia medida solo por id se
+  habria saltado el archivado de una caducidad nueva tras un reopen, borrando la linea sin guardarla.
+- **`learning.update` podia saltarse una correccion legitima.** `find_rule_anchored` recorria la
+  region buscando CUALQUIER regla igual al texto nuevo y, si la encontraba, declaraba replay. Con
+  dos reglas distintas donde una ya dice lo que la otra debe decir, la vencida se quedaba sin
+  corregir y en silencio. Ahora se resuelve primero por el prefijo —el ancla que el emisor eligio— y
+  la igualdad global solo decide cuando el prefijo no casa nada, que es el replay de verdad.
+- **`rewrite_rule` reescribia el estilo ajeno y dejaba texto viejo colgando.** `rule_text` acepta
+  `-` y `*` como vineta, pero la reconstruccion usaba siempre `-`. Y solo sustituia la PRIMERA
+  linea: una regla de varias lineas se quedaba con el texto nuevo arriba y sus continuaciones
+  viejas debajo, diciendo dos cosas. Ahora conserva la vineta real y sustituye el bloque entero,
+  **avisando** de cuantas continuaciones retiro — colapsar lineas en silencio es borrar contenido
+  sin que nadie lo vea.
+
+Y tres mas de una SEGUNDA ronda, sobre los arreglos de la primera — los tres son el mismo tipo de
+fallo: el arreglo cerraba el caso central y dejaba abierto un borde.
+
+- **La proteccion del replay se podia perder por la puerta del manejo de errores.** Si
+  `.journal/reabiertos.log` no se podia escribir, `anotar_reabierto` solo avisaba y el reopen se
+  completaba igual: reapertura hecha, pero SIN registro, o sea deshecha mas tarde y en silencio por
+  el replay del cierre. Ahora el registro se escribe ANTES de tocar nada y su fallo es cuarentena
+  `no-registro`: si no se puede proteger la reversa, no se hace la reversa. Queda un limite que no
+  se puede cerrar y se declara: si alguien BORRA ese fichero, la proteccion se pierde y el
+  comportamiento degrada al de antes de 2.31.0.
+- **Una sublista indentada bajo una regla se tomaba por la regla vecina.** `rule_text` reconoce una
+  vineta este donde este, asi que el bloque se cortaba antes de tiempo y la sublista vieja se
+  quedaba colgando bajo el texto nuevo — justo lo que el arreglo anterior venia a impedir. Ahora
+  manda la SANGRIA: solo una regla a la misma sangria o menos corta el bloque.
+- **El replay por igualdad global deja de ser mudo.** Si el prefijo no casa nada pero otra regla ya
+  dice el texto nuevo, se toma como replay. Es lo correcto casi siempre, pero si otra sesion cambio
+  la regla entre la emision y el compactado podria ser OTRA. Sin un id no se pueden distinguir —un
+  learning no lo tiene— asi que el caso no se cierra; lo que si se hace es avisar en vez de callar.
+
+Y una TERCERA ronda, esta en otro modelo (el cambio de voz que se vuelve obligatorio tras dos
+breaks del mismo sitio), cerro la unica parte que seguia rompiendose:
+
+- **`learning.update` deja de reescribir reglas de varias lineas: se NIEGA.** Las dos versiones
+  anteriores lo intentaron y dos adversarios distintos las rompieron con casos distintos. La
+  primera dejaba las continuaciones viejas colgando bajo el texto nuevo. La segunda sustituia el
+  bloque decidiendo por sangria, y una sublista indentada lo cortaba antes de tiempo; corregido eso,
+  un bloque de codigo con una linea que empieza por `- ` dentro volvia a cortarlo, dejando la valla
+  de cierre huerfana y el markdown roto — **y en silencio**, porque no se absorbia ninguna linea y
+  el aviso estaba atado a "absorbi N". Cada arreglo cerraba un caso y abria el siguiente.
+  Lo que cierra el problema no es un parser mejor, es el alcance. **Medido sobre el corpus real: 0
+  de 247 reglas de `memory/learnings/` tienen lineas de continuacion**, y las 131 del Quick
+  Reference tampoco. La capacidad de reescribir bloques no servia a NINGUN caso real y era la unica
+  fuente de estos fallos. Ahora una regla que arrastre cualquier cosa —continuacion, sublista,
+  tabla, bloque de codigo— cuarentena `bloque-multilinea` y el fichero no se toca. El peor resultado
+  posible pasa de "te corrompo el fichero sin avisar" a "no lo toco y te digo por que".
+- **El README decia "Twelve event types" y son ONCE.** Error de aritmetica mio: eran diez y
+  `learning.update` hace once, no doce. Contados en el `choices` de `journal-emit.py`, no en la
+  prosa.
+
+Una CUARTA ronda, acotada solo a ese cambio de enfoque y autorizada por el usuario, encontro dos
+cosas mas — ya sin nada inseguro ni sin falsar:
+
+- **La sangria se comparaba en caracteres, no en columnas.** Un tabulador es UN caracter y varias
+  columnas, asi que una sublista indentada con tabulador bajo una regla indentada con espacios
+  salia "menos indentada" que su padre, pasaba por regla hermana, y la regla se reescribia dejando
+  la sublista vieja pegada — sin cuarentena y sin aviso. Contar columnas tampoco lo cierra: la
+  anchura de un tabulador no esta definida, asi que con 4 empata con cuatro espacios y con 8 no.
+  Se aplica la misma politica que el resto de la funcion: **cuando las dos sangrias mezclan
+  tabulador y espacios no se decide, se cuarentena**. Los dos casos exactos del adversario
+  (`['    1. parent', '\t- child']` y su variante mezclada) ahora se niegan; los legitimos
+  (hermana a la misma sangria, hermana sin sangria, linea siguiente en blanco) siguen pasando.
+- **Y una QUINTA ronda, en el otro modelo, rompio tambien esa comparacion de sangrias** — y con
+  ella la leccion de toda la version. Mi guardian preguntaba "¿hay tabulador en un lado y no en el
+  otro?", cuando lo que importa es "¿depende esta comparacion de cuanto mida un tabulador?". Con
+  las dos sangrias mezclando tabulador y espacios en posiciones distintas (`'    \t- padre'` contra
+  `'\t - hijo'`) la respuesta cambia entre anchura 4 y anchura 8, y la funcion respondia igual.
+  El siguiente intento —muestrear las anchuras 1, 2, 4 y 8 y exigir que coincidieran— parecia
+  cerrarlo y no: `'  \t '` contra `'   \t'` coincide en esas cuatro y discrepa en 3. **Un sondeo no
+  puede cerrar un "para todo".** La version que queda no muestrea, DECIDE: sangrias identicas byte
+  a byte estan al mismo nivel con cualquier anchura; sangrias sin ningun tabulador se comparan por
+  longitud; cualquier otra cosa se niega. Comprobado por fuerza bruta sobre los 3969 pares de
+  sangrias de hasta 5 caracteres: 78 escrituras, **0 ambiguas** con anchuras de 1 a 32. Esa
+  comprobacion de PROPIEDAD (no una lista de ejemplos) es ahora un caso del arnes.
+
+  Las cuatro versiones de esta comparacion fallaron por lo mismo: responder a una pregunta mas
+  facil que la de verdad. Contar caracteres, contar columnas con una anchura fija, negarse solo
+  cuando el tabulador esta en un lado, muestrear anchuras. El patron —y la regla que deja esta
+  version— es que **un proxy no cierra un invariante: o decides la propiedad, o te la rompen por el
+  borde que el proxy no mira.**
+- **El comentario que justificaba el cambio afirmaba una imposibilidad que no esta demostrada.**
+  Decia que delimitar un bloque de markdown "no se puede hacer sin riesgo". Con un parser de
+  markdown de verdad si se puede; lo que hay son dos hechos medidos (cero casos reales que lo
+  necesiten, y tres rondas rompiendo la heuristica casera) que sostienen una decision de ALCANCE,
+  no una imposibilidad tecnica. Reescrito para decir eso, y para decir cual seria el camino si el
+  corpus cambia: una dependencia de parser, no otra heuristica de sangria.
+
+Esa tercera ronda **si pudo correr las 30 suites** (su entorno escribe en `$TMPDIR`, el del otro
+backend no) y verifico los conteos de los arneses ejecutandolos: 18/52, 15/52 y 26/78. Eso cierra la
+unica afirmacion grande que ningun verificador independiente habia podido comprobar.
+
+Y el diseno de `research.rename` se cerro decidiendo en vez de describiendo: una fila `--inline`
+**no se renombra**, cuarentena `sin-identidad`. Su unica identidad es el tema plano, que es lo que
+el rename destruye; inventarle un alias o una lapida seria una segunda fuente de verdad, el mismo
+callejon que 2.29.0 ya descarto con el ledger de ids.
+
+Otros dos hallazgos de la primera ronda se cerraron sin tocar codigo: la cifra de citas por numero
+ahora viaja con su corpus y su comando (arriba), y el diseno de los tres tipos diferidos se
+escribio de verdad (abajo). Un sexto —"no pude correr las 30 suites"— es una limitacion del sandbox
+del adversario, que no puede escribir ni en `$TMPDIR` y las suites usan `mktemp -d`: limitacion
+ambiental, no hallazgo (learning 107).
+
+- **Tests**: `bin/test-learning-update.sh` (nuevo, 21 casos / 59 comprobaciones) y
+  `bin/test-resolve-reopen.sh` (nuevo, 15 casos / 52 comprobaciones). `test-pendiente-update.sh`
+  pasa de 25 a 26 casos y de 74 a 78 comprobaciones con el caso de replay. Los dos ficheros nuevos
+  no prueban la edicion —que es la parte facil— sino las propiedades que se pueden perder sin que
+  nadie lo note: que el numero y la linea vuelvan identicos, que un replay sea noop y no cuarentena,
+  y que un replay NO deshaga un reopen deliberado. Las 30 suites del directorio quedan en verde.
+### Lo que NO se construyo — diseno, no promesa
+
+Un adversario externo objeto, con razon, que la primera version de esta entrada decia "disenados"
+y solo nombraba el campo que falta. Eso no es un diseno. Va el contrato completo de los tres, con
+la decision de forma ya tomada: **tipos de evento NUEVOS, no banderas nuevas sobre los existentes**
+— un compactador viejo ignora en silencio una bandera que no conoce (el rename se perderia sin que
+nadie lo vea), mientras que un TIPO que no conoce cae en cuarentena, que es ruidoso. El codigo no
+se escribio en esta version.
+
+**1. `research.rename --slug S --tema T`** — corregir el tema de un research.
+- *Identidad*: el slug. El tema es la celda 0 y es tambien la llave de busqueda de respaldo, que es
+  justo por lo que no se puede corregir con el `upsert` de hoy.
+- *Ancla*: la fila cuya CELDA DE FICHERO es `[[research/<slug>]]`, en `## Active Research` o en
+  `## Completed Research`. A la celda, no a la fila: mismo defecto que se cerro en `## Topic Files`
+  en esta version.
+- *Las filas `--inline` NO se renombran: cuarentena `sin-identidad`.* Un adversario externo señalo
+  el agujero y la respuesta es negarse, no inventar un ancla. Una fila inline no tiene wikilink, asi
+  que su UNICA identidad es el tema plano — que es justo lo que el rename destruye. Despues del
+  rename, un `research.upsert` con el tema viejo ya no casaria nada y crearia una fila DUPLICADA, y
+  el compactador no tendria forma de saber que son el mismo research. Las alternativas (un alias,
+  una lapida con el tema viejo) son una segunda fuente de verdad que, si se pierde, resucita el
+  duplicado: el mismo callejon que ya se descarto en 2.29.0 con el ledger de ids. El mensaje de
+  cuarentena dice que hacer: darle fichero al research primero (`[[research/<slug>]]`), que le da
+  una identidad que sobrevive al cambio de tema, y renombrar despues.
+- *Replay*: la celda ya es el tema nuevo -> noop. Ni el viejo ni el nuevo casan -> `no-anchor`.
+- *Compatibilidad*: ninguna fila existente cambia de forma; el evento solo reescribe una celda.
+- *Ficheros*: `journal-emit.py`, `journal-compact.py` (`apply_research_rename`), `_research-index.md`.
+- *Criterio verificable*: dos corridas. (1) Tras renombrar una fila CON fichero, el tema viejo sale
+  0 veces y el nuevo 1, el wikilink queda intacto, y **un `research.upsert` posterior que traiga el
+  tema VIEJO no crea una fila duplicada** — el respaldo por tema plano de `find_research_row` ya no
+  casa, pero el wikilink si. (2) Renombrar una fila `--inline` cuarentena y **no toca el fichero**.
+
+**2. `session.amend --slug S [--date D] [--alias A]`** — corregir fecha y alias de una sesion.
+- *Identidad*: el slug. La celda 1 es `[[sessions/<slug>\|alias]]` y la celda 0 es la fecha;
+  `session.add` actualiza status/summary/commit y ninguna de esas dos.
+- *Ancla*: la celda 1. Hoy `session.add` usa `find_row_anywhere`, que hace `search` sobre la fila
+  ENTERA — el mismo defecto latente que en `## Topic Files`: una fila cuyo resumen cite
+  `[[sessions/<otro-slug>]]` se lleva la escritura.
+- *Replay*: las celdas ya iguales -> noop.
+- *La arista que hay que resolver antes de escribir el codigo*: el compactador **poda por fecha**
+  (10 sesiones). Cambiar la fecha de una fila cambia su orden, asi que un amend puede expulsar la
+  propia fila que acaba de corregir. El amend NO debe podar: la poda se queda donde esta, en
+  `session.add`.
+- *Ficheros*: `journal-emit.py`, `journal-compact.py` (`apply_session_amend`), `_session-index.md`.
+- *Criterio verificable*: la fecha queda corregida, el alias y el wikilink siguen siendo coherentes
+  entre si, y **la fila sigue presente tras la corrida** aunque la fecha nueva la mande al final.
+
+**3. `plan.reopen --slug S`** — el guardian de reversa que a `plan.upsert` le falta.
+- *No es un campo que falte, es el problema contrario a research*: `apply_plan_upsert` sobreescribe
+  la celda de status sin mirar, asi que **un replay de un `plan.upsert --status active` viejo
+  des-completa un plan ya cerrado**, en silencio. `research` prohibe la reversa por miedo a
+  exactamente esto y se pasa de largo (su `return False` es mudo). Los dos extremos estan mal.
+- *Diseno*: el mismo patron que `resolve`/`reopen` de esta version. Un `plan.upsert` que RETROCEDA
+  el status (de `completed|abandoned|superseded` a `active`) deja de aplicarse: **noop con aviso**,
+  no cuarentena, porque un replay no es un error. Retroceder de verdad pide un `plan.reopen`
+  explicito.
+- *Replay*: `plan.reopen` anota la reversa en `.journal/reabiertos.log` con la clave
+  `plan-<slug>` + ts del evento, el mismo registro y el mismo formato que estrena esta version para
+  los pendientes. Asi el replay del cierre posterior tampoco vuelve a cerrarlo.
+- *Ficheros*: `journal-emit.py`, `journal-compact.py` (`apply_plan_upsert` + `apply_plan_reopen`),
+  `_plans-index.md`.
+- *Criterio verificable*: tres corridas. Un replay de un `upsert --status active` viejo sobre un
+  plan completed **no** lo reabre; un `plan.reopen` explicito **si**; y el replay del cierre que
+  vino despues **no** lo vuelve a cerrar.
+
 ## [2.30.0] - 2026-09-19
 Origen: el adversario externo que reviso el push de 2.29.0 encontro que
 `checkpoint-audit-nudge.sh` — el aviso que salta al comitear un checkpoint sin haber corrido

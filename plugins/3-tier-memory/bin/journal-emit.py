@@ -40,6 +40,14 @@ Tipos de evento:
                     file y su fila en _learnings.md si faltan; --quickref agrega la version
                     corta al Quick Reference (numerada, max+1). Sin --text solo registra el
                     topic. Imprime l-<10 hex> (o l-topic-<topic>).
+  learning.update   --topic T [--match-prefix P --text "<nuevo>"]
+                    [--quickref-prefix QP --quickref "<nuevo>"] [--title TT] [--when W]
+                    Corrige una regla YA escrita, CONSERVANDO su numero. Un learning no tiene id
+                    en la linea: el ancla es topic + prefijo del texto de hoy. El numero se
+                    conserva porque las reglas se citan por numero ("learning 106"); renumerar
+                    rompe esas citas igual que renombrar el id de un pendiente. Exige al menos
+                    uno de los cuatro campos, y --text/--quickref exigen su prefijo: no se
+                    reescribe una regla a ciegas.
   plan.upsert       --slug S --title T --status ST [--date D] [--sesion [[sessions/..]]]
                     [--pendientes N] [--learnings N] [--inline] [--parent P]            (Fase 2)
                     Fila en _plans-index.md por slug (o titulo); actualiza celdas dadas.
@@ -292,7 +300,8 @@ def main():
                     choices=["pendiente.add", "pendiente.resolve", "pendiente.update",
                              "pendiente.expire", "pendiente.reopen", "pendiente.window",
                              "session.add",
-                             "learning.add", "plan.upsert", "research.upsert"])
+                             "learning.add", "learning.update",
+                             "plan.upsert", "research.upsert"])
     ap.add_argument("--memory-dir")
     ap.add_argument("--session")
     # pendiente.add
@@ -328,6 +337,9 @@ def main():
     ap.add_argument("--topic")
     ap.add_argument("--section", default="")
     ap.add_argument("--quickref", default="")
+    # learning.update: anclas de prefijo (un learning no tiene id que citar)
+    ap.add_argument("--match-prefix", default="")
+    ap.add_argument("--quickref-prefix", default="")
     ap.add_argument("--when", default="")
     ap.add_argument("--importance", default="")
     a = ap.parse_args()
@@ -405,6 +417,43 @@ def main():
         base["payload"]["id"] = learning_id(topic, text) if text else f"l-topic-{topic}"
         write_event(memory_dir, base)
         print(base["payload"]["id"])
+        return
+
+    if a.type == "learning.update":
+        topic = check_slug(a.topic, "--topic")
+        text = normalize_text(a.text or "")
+        quickref = normalize_text(a.quickref or "")
+        mprefix = normalize_text(a.match_prefix or "")
+        qprefix = normalize_text(a.quickref_prefix or "")
+        title = normalize_text(a.title or "")
+        when = cell(a.when)
+        # Un learning no tiene `_id:` en su linea, asi que el unico ancla posible es el texto de
+        # hoy. Reescribir sin ancla seria "corrige la regla que sea": se rechaza en la emision,
+        # no en el compactador, para que el error salga donde la persona puede corregirlo.
+        if text and not mprefix:
+            sys.exit("journal-emit: --text necesita --match-prefix (el prefijo del texto ACTUAL "
+                     "de la regla) — una regla no tiene id, sin ancla no se sabe cual reescribir")
+        if quickref and not qprefix:
+            sys.exit("journal-emit: --quickref necesita --quickref-prefix (el prefijo de la regla "
+                     "ACTUAL del Quick Reference)")
+        if mprefix and not text:
+            sys.exit("journal-emit: --match-prefix sin --text no corrige nada")
+        if qprefix and not quickref:
+            sys.exit("journal-emit: --quickref-prefix sin --quickref no corrige nada")
+        if not (text or quickref or title or when):
+            sys.exit("journal-emit: learning.update necesita al menos uno de --text, --quickref, "
+                     "--title o --when")
+        base["payload"] = {
+            "topic": topic,
+            "match_prefix": mprefix,
+            "text": text,
+            "quickref_prefix": qprefix,
+            "quickref": quickref,
+            "title": title,
+            "when": when,
+        }
+        write_event(memory_dir, base)
+        print(f"l-topic-{topic}")
         return
 
     if a.type == "plan.upsert":

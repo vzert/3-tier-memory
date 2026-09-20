@@ -441,6 +441,35 @@ python3 "$JBIN/journal-emit.py" --type learning.add --topic <topic-slug> \
   [--title "<Topic Title>" --when "<when to consult>" --importance <0-10>]
 ```
 
+### Corregir una regla YA escrita — `learning.update`, nunca un `learning.add` de correccion
+
+Si lo que hiciste fue descubrir que una regla EXISTENTE quedo falsa (cambio la ruta que cita, el
+mecanismo que describe ya no es ese, la fila de resumen contradice a su propio fichero), **no
+emitas un `learning.add` diciendo "la regla N esta vencida"**. Eso deja el indice mal Y anotado:
+la regla falsa sigue ahi, con otra al lado diciendo que no le hagas caso, y el recall devuelve las
+dos. Es el workaround que se uso dos veces en la semana del 2026-09-19 y el motivo de que exista
+este evento.
+
+```bash
+python3 "$JBIN/journal-emit.py" --type learning.update --topic <topic-slug> \
+  [--match-prefix "<prefijo del texto ACTUAL de la regla>" --text "**<Regla>** — <texto nuevo>"] \
+  [--quickref-prefix "<prefijo de la regla ACTUAL del Quick Reference>" \
+   --quickref "**<Regla>** — <version corta nueva>"] \
+  [--title "<Titulo del tema>"] [--when "<cuando consultarlo>"]
+```
+
+Las tres superficies son independientes: corregir el cuerpo no obliga a tocar el Quick Reference,
+que suele llevar una version mas corta de la misma regla. Pasa las que de verdad cambiaron.
+
+**El numero de la regla se conserva.** Es su identidad publica: las reglas se citan por numero
+("learning 106", "regla 142") en fichas de sesion, en comentarios del codigo y en los propios
+learnings. Renumerar rompe esas citas igual que renombrar el `_id:` de un pendiente.
+
+**El ancla es un prefijo, porque un learning no tiene id en su linea.** El prefijo se compara sin
+enfasis y sin distinguir mayusculas, asi que no hace falta citar los asteriscos. Si no casa
+ninguna regla, o casan dos, el compactador cuarentena el evento y nombra las candidatas: no
+reescribe a ciegas. Si sale `ambiguous`, alarga el prefijo.
+
 **Tier 3**: the compactor appends the rule to `memory/learnings/<topic>.md` with the next number
 (`max + 1`, assigned under the lock — two agents never get the same number), at the end of
 `--section` (created before `## Related` if it does not exist) or of the last block before

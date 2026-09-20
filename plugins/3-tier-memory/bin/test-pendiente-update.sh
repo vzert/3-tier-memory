@@ -373,6 +373,22 @@ compact --quiet --log "$M/.journal/compact.log" >/dev/null 2>&1 || true
 chk "el aviso de cuarentena ocupa una sola linea" "1" "$(grep -c 'prioridad' "$M/.journal/compact.log")"
 chk "y el salto quedo escapado, no partio el registro" "0" "$(grep -c '^INYECTADO' "$M/.journal/compact.log")"
 
+echo "== 26. REPLAY del mismo evento: noop, NO cuarentena (arreglo de 2.31.0) =="
+# El guardian --text-prefix corria ANTES de mirar si la linea ya estaba corregida, y el prefijo se
+# captura en la EMISION (texto viejo). En un replay la linea ya tiene el texto nuevo, asi que el
+# prefijo no casa POR CONSTRUCCION: el replay acababa en cuarentena, con un motivo ademas falso
+# ("otra sesion la cambio" — no hubo otra sesion). Contradecia la cabecera del compactador ("un
+# replay de evento ya aplicado se archiva"). Medido 2026-09-19 con este mismo fixture.
+fixture
+emit --type pendiente.update --id "$ID" --text "$NUEVO" >/dev/null
+compact --quiet >/dev/null
+cp "$M"/.journal/applied/*/*.json "$M"/.journal/pending/
+OUT=$(compact)
+chk "el replay NO cuarentena" "0" "$(cuarentena)"
+chk "el replay cuenta como noop" "1" "$(printf '%s' "$OUT" | grep -c 'noop=')"
+chk "la linea sigue con el texto corregido, una sola vez" "1" "$(printf '%s' "$(linea "$ID")" | grep -c 'unir el PR #214')"
+chk "y conserva su id de nacimiento" "1" "$(printf '%s' "$(linea "$ID")" | grep -c "_id: ${ID}_")"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
