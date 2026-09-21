@@ -1,6 +1,13 @@
 # Changelog
 
 
+## [2.31.2] - 2026-09-21
+### Fixed
+- **CI de Windows en rojo desde 2.29.0**: `test-pendiente-update.sh` (caso 16) sumaba con
+  `paste -sd+ - | bc`, y el Git Bash del runner de Windows no trae `bc` (`bc: command not found`,
+  rc=127). Se suma con `awk`. Comprobado en un PATH sin `bc`: 78/78. Ubuntu y macOS nunca fallaron.
+
+
 ## [2.31.1] - 2026-09-21
 Origen: el estado final de 2.31.0 no lo habia revisado nadie de fuera (`p-bc9432d258`). Una ronda
 adversaria externa, acotada a la comparacion de sangrias de `rewrite_rule` (`learning.update`),

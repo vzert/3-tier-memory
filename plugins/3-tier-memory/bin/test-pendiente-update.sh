@@ -196,7 +196,7 @@ N=$(grep -ho 'r"\\s\*—\\s\*_(?:origen|creado|id|revisar|actualizado):\[^—\]\
 C=$(grep -hoc 'r"\\s\*—\\s\*_(?:origen|creado|id|revisar|actualizado):\[^—\]\*"' \
       "$BIN/journal-emit.py" "$BIN/journal-compact.py" "$BIN/repair-dualwrite.py" \
       "$BIN/enrich-memory.py" "$BIN/expire-pendientes.py" "$BIN/triage-scan.py" \
-      "$BIN/build-recall-index.py" | paste -sd+ - | bc)
+      "$BIN/build-recall-index.py" | awk '{s+=$1} END{print s+0}')   # no bc: Git Bash de Windows no lo trae
 chk "los 7 ficheros la llevan" "7" "$C"
 chk "y las 7 son la MISMA cadena" "1" "$N"
 
