@@ -345,7 +345,7 @@ recordatorio de calendario. `--revisar` no cambia el `_id`: la ventana no es par
 acumulada, no de una condicion o decision) **el texto debe nombrar un intervalo concreto ANTES de
 emitir el evento** — nunca lo dejes en prosa abierta como "revisar periodicamente" o "monitorear
 que no falle". Dos reglas fijas, sin criterio intermedio (para que dos agentes lleguen siempre a la
-misma fecha):
+misma fecha), y una sola salida sin fecha — la fecha ya vencida o de hoy, dentro de la regla 1:
 1. **Si el propio usuario o la sesion ya dijeron UN SOLO numero POSITIVO (mayor que cero) de
    horas, dias naturales o semanas, o UNA SOLA fecha futura inequivoca, sin condicion** ("T+7",
    "en 2 semanas" → dias × 7, "en 48 horas" → dias = horas ÷ 24 redondeado HACIA ARRIBA (48h → 2
@@ -356,8 +356,11 @@ misma fecha):
    de semana) NO cuenta como "un numero ya dicho" — cae en la regla 2. Una fecha relativa a un dia
    de la semana ("el viernes") cae aqui solo si el texto ya dice a cual viernes se refiere (p.ej.
    "el viernes que viene"); si no lo dice, cae en la regla 2.
-   Una fecha YA VENCIDA (pasada o de hoy) tampoco cuenta aqui — `_revisar` solo acepta futuro (ver
-   el aviso mas arriba sobre `_revisar` vencido) — cae en la regla 2. **Cualquier otra forma — mas
+   Una fecha YA VENCIDA (pasada o de hoy) no va en `--revisar`, pero **tampoco cae en la regla
+   2**: la espera ya termino, asi que el pendiente es accionable HOY. Emitelo **sin** `--revisar`
+   — igual que un `_revisar` vencido "vuelve a ser un pendiente normal" en Step 8. Mandarlo a 5
+   dias (o a manana) lo sacaria de `<next-step>` justo cuando el usuario pidio mirarlo ya
+   (hallazgo de Codex, 2026-09-21: "revisalo hoy" terminaba con `_revisar` a 5 dias). **Cualquier otra forma — mas
    de un numero mencionado ("3 o 7 dias segun X"), una condicion ("si sigue igual, en una
    semana"), o un rango— tampoco cuenta como "un numero ya dicho": cae en la regla 2.**
 2. **En cualquier otro caso, usa literalmente 5 dias** — mismo numero que ya uso el usuario en el
@@ -365,7 +368,9 @@ misma fecha):
    tercer criterio es el que dejaba a dos agentes eligiendo fechas distintas (hallazgo de
    `/goalspec:adversary`, 2026-09-16).
 
-Convierte el resultado a `--revisar YYYY-MM-DD`, la misma disciplina que ya aplicas para "T+7". Un pendiente asi sin `--revisar` no cae en la exclusion de Step 8 (2.25.7) — se
+Convierte el resultado a `--revisar YYYY-MM-DD`, la misma disciplina que ya aplicas para "T+7" —
+salvo la fecha ya vencida o de hoy de la regla 1, que va sin `--revisar`. Un pendiente que SI espera
+tiempo y queda sin `--revisar` no cae en la exclusion de Step 8 (2.25.7) — se
 queda flotando indefinidamente como candidato de `<next-step>`/`Sigue abierto` por pura prioridad,
 sin importar que tan pronto sea razonable revisarlo. Caso real (2026-09-16, proyecto
 `claude-vzert`): `p-fd5c8cccb7` ("revisar el log del cron por PUSH FAILED", prioridad Alta, sin
@@ -1094,14 +1099,17 @@ Reglas para llenar los slots:
      de SQL-LIVE y la confirmacion de N8n-Crons ya tienen su propio recordatorio (09-16, 09-20)`.
 
      **Antes de declarar este caso, relee la seccion `## Pendientes` que este mismo Step ya
-     escribio (3a/3b) de ESTE archivo.** Si queda algun `- [ ]` sin marcar ahi **y trae `_revisar`
-     vencido o ningun `_revisar`**, este caso no aplica — es el 2 o el 3. Caso real (2026-09-15):
+     escribio (3a/3b) de ESTE archivo.** Si queda algun `- [ ]` sin marcar ahi **y su id, buscado en
+     `_pendientes.md`, trae `_revisar` vencido o ningun `_revisar`**, este caso no aplica — es el 2
+     o el 3. El `_revisar` se mira en `_pendientes.md` porque la linea de `## Pendientes` de la ficha
+     solo guarda texto e id (plantilla de Step 3d): ahi el campo nunca aparece, y leerlo ahi haria
+     pasar por "sin `_revisar`" a todos. Caso real (2026-09-15):
      una sesion declaro `ninguno` con un pendiente Alta recien creado a la vista en su propia
      seccion `## Pendientes` — el atajo salto directo a este caso sin pasar por el 2, y el
      pendiente se perdio del snippet hasta que se audito el jsonl a mano en una sesion posterior.
      **No es excusa para NO declarar este caso** un pendiente Alta que no sea de esta sesion ni
      este relacionado con ella — eso va en `Sigue abierto` (regla debajo), no cambia el veredicto
-     de `<next-step>`. **Si TODOS los `- [ ]` sin marcar traen `_revisar` futuro**, la relectura no
+     de `<next-step>`. **Si TODOS los `- [ ]` sin marcar traen `_revisar` futuro** (en `_pendientes.md`), la relectura no
      bloquea el caso 5 — es exactamente la variante de arriba ("Tambien aplica cuando..."), no una
      excepcion a esta regla.
 

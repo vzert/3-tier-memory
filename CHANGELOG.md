@@ -1,6 +1,54 @@
 # Changelog
 
 
+## [2.31.4] - 2026-09-21
+Origen: Codex revisó en Will-Ops el diff que sincronizaba las plantillas de 2.31.x (hallazgos
+enviados por la sesión `will-ops-c3`). Los cuatro se reprodujeron contra el fuente del plugin.
+Una ronda de `/goalspec:adversary` (Codex) rompió la primera versión: la reparación podía borrar
+una fila que solo CITABA la sesión en su Resumen, juntaba filas bajo una cabecera de 3 columnas, y
+Step 3b se contradecía en su última línea. Los tres están corregidos; los dos del compactador
+tienen test, el de Step 3b es texto de plantilla y ningún test lo revisa. La ronda 2 señaló un
+fallo anterior, de la misma familia, que también se corrige aquí (segundo punto de abajo).
+
+### Fixed
+- **`_session-index.md` con cabecera de 4 columnas duplicaba cada sesión.** Instalaciones viejas
+  (Will-Ops, Vecinex) tienen `Fecha | Sesión | Status | Resumen`, sin `Commit`. La búsqueda de la
+  fila existente (`find_row_anywhere`) solo mira tablas de 5 columnas, así que el segundo
+  `session.add` de una sesión (el del commit) insertaba otra fila. La poda de `MAX_SESSIONS` cuenta
+  filas, así que el índice guardaba 5 sesiones en vez de 10 (así desapareció
+  `2026-09-18-fase-0-backup-vps-restic-syncthing` de Will-Ops). Ahora el compactador, al aplicar
+  cualquier `session.add`: (1) agrega `Commit` a una cabecera de 4 columnas; (2) con la cabecera
+  ya en 5, junta las filas de la misma sesión que ya estaban duplicadas. La sesión se lee de la
+  celda Sesión, nunca del resto de la fila: un Resumen que cita otra sesión no cuenta. Gana la fila
+  de arriba, celda por celda donde no está vacía. No es porque la tabla esté ordenada (la de
+  Vecinex va de vieja a nueva), sino porque el bug crea cada duplicado insertando por encima de
+  todas las filas, incluida la anterior de su misma sesión. Un proyecto afectado se repara solo en
+  su siguiente `/checkpoint-3t`, sin migración. Las sesiones ya podadas no vuelven al índice; sus
+  fichas en `sessions/` siguen ahí. Otra forma de tabla (cabecera de 3 columnas, filas de 6
+  celdas) no se toca: ni su cabecera ni sus filas. Test: `bin/test-session-index-heal.sh`
+  (con 2.31.3 fallan los casos 1-4, 8 y 9; los casos 5, 6, 6b y 7 vigilan que la reparación
+  no toque lo que no debe).
+  **Límite conocido, anterior a este cambio:** una tabla de 4 columnas bajo otro título (p. ej.
+  `## Historial`) sigue sin adoptarse: el compactador crea un `## Sessions` nuevo a su lado y la
+  fila vieja no se ve. Ningún proyecto medido tiene esa forma.
+- **`session.add` podía actualizar la fila equivocada** (fallo anterior a 2.31.4). Para encontrar
+  la fila de una sesión, `find_row_anywhere` buscaba el enlace en toda la fila. Si el Resumen de
+  otra fila citaba la sesión y esa fila estaba antes, el update le pisaba Status, Resumen y Commit.
+  `unifi-expert` tiene esa forma hoy (`agent-build` cita `subagent-skill-build` justo encima de su
+  fila). Ahora la búsqueda de `session.add` mira solo la celda Sesión (`cell=1`). La de
+  `plan.upsert`/`research.upsert` no cambia. Test: caso 9 de `bin/test-session-index-heal.sh`.
+- **`/checkpoint-3t` Step 3b:** una fecha de hoy o ya pasada caía en la regla de "5 días", y un
+  "revísalo hoy" quedaba a 5 días, fuera de `<next-step>`. Ahora esa fecha va **sin** `--revisar`:
+  la espera terminó y el pendiente es accionable ya. La instrucción final del paso ("Convierte el
+  resultado a `--revisar`") lleva la misma excepción.
+- **`/checkpoint-3t` Step 8, caso 5 de `<next-step>`:** pedía leer `_revisar` en la sección
+  `## Pendientes` de la ficha, que solo guarda texto e id. Ahora se busca el id en `_pendientes.md`.
+- **`/triage-3t`:** las correcciones (`pendiente.update`, desde 2.29.0) no tenían destino en el
+  Step 2 ni fila en la propuesta del Step 3, así que no pasaban por la aprobación del usuario.
+  Ahora hay un sexto destino, `corregir`, con el texto o la prioridad exactos en la propuesta y su
+  cuenta en el RESUMEN. Había dos pasos "4c"; Compactar pasa a 4d.
+
+
 ## [2.31.3] - 2026-09-21
 ### Changed
 - CI instala `markdown-it-py` (solo para las pruebas) para que `tools/oraculo-rewrite-rule.py`

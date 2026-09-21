@@ -51,7 +51,7 @@ Uno por uno. **Prohibido clasificar por patron de texto** (reglas 93 y 102 de
 `memory/_learnings.md`: se intento tres veces y un revisor rompio las tres). Para cada item,
 **cita la frase literal que decide** — del item, de su sesion de origen, o de una posterior.
 
-Cinco destinos:
+Seis destinos:
 
 - **resolved** — el trabajo se hizo. **Exige evidencia citada**: una sesion posterior que lo diga.
   El silencio NO es evidencia (8.6% de precision, medido). Sin cita, no es `resolved`.
@@ -63,6 +63,9 @@ Cinco destinos:
 - **no es un compromiso** — el registro de algo ya hecho, una regla permanente disfrazada de
   pendiente, o un texto cortado a mitad. Lleva a `abandoned` con la nota de por que, y si la regla
   vale la pena, a un learning con `/save-learning`.
+- **corregir** — sigue abierto, pero su texto quedo falso (el alcance cambio, cita algo que ya no
+  existe) o su prioridad ya no es la real. **Cita la frase que lo hace falso** y escribe el texto o
+  la prioridad nuevos en la propuesta: el usuario aprueba el texto exacto, no la idea. Va al Step 4c.
 
 Si el texto no alcanza para decidir, es **still-open**. El sesgo va contra cerrar.
 
@@ -83,7 +86,11 @@ BARRIDO — lote 1-25 de 576
   p-zzzzzzzzzz  108d  Media  -> necesita ventana 2026-10-01
       "Re-evaluar el floor despues de 3 reactivaciones (target 2026-10-01)"
 
-RESUMEN: still-open 16 · resolved 4 · abandoned 3 · necesita ventana 2
+  p-wwwwwwwwww   95d  Alta   -> corregir  prioridad Media
+      "Migrar el cron al VPS nuevo" — [[sessions/2026-07-02-vps]] "el VPS viejo sigue, sin fecha"
+      texto nuevo: (sin cambio)
+
+RESUMEN: still-open 15 · resolved 4 · abandoned 3 · necesita ventana 2 · corregir 1
 ```
 
 **Pregunta al usuario si aplica el lote completo, parte, o ninguno.** No emitas sin respuesta.
@@ -104,7 +111,8 @@ python3 "$JBIN/journal-emit.py" --type pendiente.resolve --id p-xxxxxxxxxx \
 python3 "$JBIN/journal-emit.py" --type pendiente.window --id p-xxxxxxxxxx --revisar YYYY-MM-DD
 ```
 
-**4c. Correcciones** — el item sigue abierto pero su texto quedo falso, o su prioridad cambio:
+**4c. Correcciones** — uno por item aprobado como `corregir`, con el texto y la prioridad que el
+usuario aprobo en el Step 3 (si cambio alguno, el suyo, no el tuyo):
 
 ```bash
 python3 "$JBIN/journal-emit.py" --type pendiente.update --id p-xxxxxxxxxx \
@@ -144,7 +152,7 @@ uses `pendiente.add` con el `--creado` original para reproducir el id. No invent
 plugin recomienda. Desde que el campo existe, `expire-pendientes.py --modo revisar` caduca el item
 solo cuando la fecha pase.
 
-**4c. Compactar**:
+**4d. Compactar**:
 
 ```bash
 python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"

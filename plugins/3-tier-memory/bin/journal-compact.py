@@ -1645,7 +1645,7 @@ def link_re(prefix, slug):
     return re.compile(r"\[\[" + re.escape(prefix + slug) + r"(\\\||\||\]\])")
 
 
-def find_row_anywhere(lines, ncols, key_re):
+def find_row_anywhere(lines, ncols, key_re, cell=None):
     """Busca una fila que ya cite `key_re` (un wikilink EXACTO: `[[prefijo-slug]]`) en CUALQUIER
     tabla de `ncols` columnas del archivo — no solo en la que devuelve `need_table`.
 
@@ -1669,12 +1669,22 @@ def find_row_anywhere(lines, ncols, key_re):
     `[[plans/plan-<slug>]]`, etc.) y no tiene ese riesgo; el titulo plano si, porque solo depende
     de que el texto coincida. Por eso el fallback por titulo se queda ACOTADO a la tabla canonica
     en cada llamante (ver apply_plan_upsert / apply_research_upsert), como antes de esta ronda.
+
+    `cell`: si se da, el wikilink se busca SOLO en esa celda, no en toda la fila. Hallazgo de
+    `/goalspec:adversary` (2.31.4, ronda 2): buscando en la fila, una fila cuyo Resumen CITA la
+    sesion (`unifi-expert`: "... completados en [[sessions/<otra>]]") aparece antes que la fila de
+    esa sesion, y el update le pisaba Status/Resumen/Commit a la fila equivocada.
     """
     for _sec_header, hdr, _sep, rows in find_tables(lines):
         if len(split_cells(lines[hdr])) != ncols:
             continue
         for i in rows:
-            if key_re.search(lines[i]):
+            if cell is None:
+                hay = lines[i]
+            else:
+                cells = split_cells(lines[i])
+                hay = cells[cell] if len(cells) > cell else ""
+            if key_re.search(hay):
                 return i
     return None
 
@@ -1695,6 +1705,62 @@ def session_alias(slug):
     return slug[11:] if re.match(r"^\d{4}-\d{2}-\d{2}-.+", slug) else slug
 
 
+# La celda Sesion ENTERA es el wikilink de la sesion (asi la escribe apply_session_add). Anclado a
+# la celda, no buscado en la fila: un Resumen que CITA otra sesion no es una fila de esa sesion.
+SESSION_CELL_RE = re.compile(r"^\[\[sessions/([^\]|\\]+)(?:\\\|[^\]]*)?\]\]$")
+
+
+def heal_session_table(lines, hdr, sep, rows):
+    """Repara en sitio la tabla `## Sessions` de una instalacion vieja. Devuelve True si cambio algo.
+
+    Caso real (Will-Ops, 2026-09-21, hallazgo de Codex): la cabecera tenia 4 columnas
+    (`Fecha | Sesion | Status | Resumen`, sin `Commit`). `find_row_anywhere(lines, 5, ...)` salta
+    toda tabla que no tenga 5, asi que el segundo `session.add` de una sesion (el del commit) nunca
+    encontraba la fila del primero e insertaba OTRA. Cada sesion ocupaba dos filas, y la poda de
+    `MAX_SESSIONS` (cuenta filas, no sesiones) dejaba el indice en 5 sesiones, no 10.
+
+    1. Cabecera de 4 columnas -> se le agrega `Commit` (y su celda al separador). Solo 4: es la
+       unica forma vieja medida; otro ancho no se adivina.
+    2. Filas de la MISMA sesion dentro de esta tabla -> una sola, y SOLO si la cabecera ya tiene 5
+       columnas (tras el paso 1): otro ancho no es la forma que este bug deja. La sesion se lee de
+       la celda Sesion (SESSION_CELL_RE), nunca del resto de la fila. Gana la fila de ARRIBA, celda
+       por celda donde no este vacia, y queda en su lugar. No porque la tabla este ordenada por
+       fecha (Vecinex no lo esta), sino porque el bug crea cada duplicado insertando en `sep + 1`,
+       por encima de TODAS las filas existentes, incluida la anterior de su misma sesion: en un par
+       creado asi la de arriba siempre es el evento posterior, sea cual sea el orden del resto.
+       Es lo mismo que habria hecho el update que el bug salto. Un grupo con alguna fila de mas de
+       5 celdas no se toca.
+    """
+    changed = False
+    if len(split_cells(lines[hdr])) == 4:
+        lines[hdr] = join_cells(split_cells(lines[hdr]) + ["Commit"])
+        lines[sep] = "|" + "|".join(split_cells(lines[sep]) + ["---"]) + "|"
+        changed = True
+    if len(split_cells(lines[hdr])) != 5:
+        return changed
+    groups = {}
+    for i in rows:
+        cells = split_cells(lines[i])
+        m = SESSION_CELL_RE.match(cells[1]) if len(cells) > 1 else None
+        if m:
+            groups.setdefault(m.group(1), []).append(i)
+    drop = []
+    for idxs in groups.values():
+        if len(idxs) < 2 or any(len(split_cells(lines[i])) > 5 for i in idxs):
+            continue
+        merged = pad(split_cells(lines[idxs[-1]]), 5)
+        for i in reversed(idxs[:-1]):   # de abajo (vieja) hacia arriba (nueva)
+            for c, v in enumerate(pad(split_cells(lines[i]), 5)):
+                if v:
+                    merged[c] = v
+        lines[idxs[0]] = join_cells(merged)
+        drop.extend(idxs[1:])
+    if drop:
+        delete_rows(lines, drop)
+        changed = True
+    return changed
+
+
 def apply_session_add(mem, p):
     path = os.path.join(mem, "_session-index.md")
     if not os.path.isfile(path):
@@ -1702,16 +1768,16 @@ def apply_session_add(mem, p):
     lines = read_lines(path)
     orig = list(lines)
     (start, end), (hdr, sep, rows) = need_table(lines, "## Sessions", "_session-index.md")
+    if heal_session_table(lines, hdr, sep, rows):
+        (start, end), (hdr, sep, rows) = need_table(lines, "## Sessions", "_session-index.md")
     key = link_re("sessions/", p["slug"])
-    hit = find_row_anywhere(lines, 5, key)
+    hit = find_row_anywhere(lines, 5, key, cell=1)
     if hit is not None:
         cells = pad(split_cells(lines[hit]), 5)
         new = list(cells)
         for idx, k in ((2, "status"), (3, "summary"), (4, "commit")):
             if p.get(k):
                 new[idx] = p[k]
-        if new == cells:
-            return False
         lines[hit] = join_cells(new)
     else:
         row = join_cells([p["date"], f"[[sessions/{p['slug']}\\|{session_alias(p['slug'])}]]",
