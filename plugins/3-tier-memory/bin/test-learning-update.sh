@@ -276,52 +276,54 @@ has "motivo bloque-multilinea" "$(motivo)" "bloque-multilinea"
 chk "el fichero intacto byte a byte" "$ANTES" "$(cat "$M/learnings/fence.md")"
 chk "las dos vallas siguen ahi" "2" "$(grep -c '^```' "$M/learnings/fence.md")"
 
-echo "== 18. sangria con TABULADOR: tambien se niega =="
+echo "== 18. regla con sangria: se niega por su FORMA, antes de mirar a la sublista =="
 # La sangria se medía en CARACTERES. Un tabulador es 1 caracter y varias columnas, asi que una
 # sublista indentada con tabulador bajo una regla indentada con espacios salia "menos indentada"
 # que su padre, pasaba por regla hermana, y la regla se reescribia dejando la sublista vieja
-# pegada — sin cuarentena y sin aviso. Ahora se mide en COLUMNAS (expandtabs).
-# (Adversario externo, 4a ronda, con el caso ['    1. parent', '\t- child'].)
+# pegada — sin cuarentena y sin aviso. (Adversario externo, 4a ronda, con el caso
+# ['    1. parent', '\t- child'].) Desde la ronda acotada del 2026-09-21 no se mide sangria en
+# absoluto: una regla que no empieza en la columna 0 se niega por su forma (`regla_reescribible`).
 fixture
 printf -- '---\ntype: learnings\ntopic: tabs\n---\n# T\n\n## Rules\n\n    1. **Regla indentada** - cabecera\n\t- sublista con tabulador\n\n## Related\n' > "$M/learnings/tabs.md"
 ANTES=$(cat "$M/learnings/tabs.md")
 emit --type learning.update --topic tabs --match-prefix "Regla indentada" --text "**Regla indentada** - nueva" >/dev/null
 compact --quiet >/dev/null 2>&1 || true
 chk "cuarentena 1" "1" "$(cuar)"
-has "motivo bloque-multilinea" "$(motivo)" "bloque-multilinea"
+has "motivo forma" "$(motivo)" "forma"
 chk "el fichero intacto byte a byte" "$ANTES" "$(cat "$M/learnings/tabs.md")"
 
-echo "== 19. sangria mixta: la propiedad, no unos ejemplos =="
-# Tres versiones se rompieron aqui y las tres respondian a una pregunta mas facil que la de verdad:
-# contar caracteres, contar columnas con una anchura fija, y MUESTREAR unas anchuras. La tercera
-# parecia bien y fallaba igual: '  \t ' contra '   \t' coincide a anchura 1,2,4,8 y discrepa a 3.
-# Un sondeo no puede cerrar un "para todo", asi que la funcion lo DECIDE (sangrias identicas, o sin
-# ningun tabulador; cualquier otra cosa se niega). Este caso comprueba la PROPIEDAD por fuerza
-# bruta, no una lista de ejemplos: ninguna escritura puede depender de cuanto mida un tabulador.
+echo "== 19. ninguna escritura con sangria ni con blancos que markdown no cuenta =="
+# Tres versiones de la comparacion de sangrias cayeron por responder a una pregunta mas facil que
+# la de verdad, y la cuarta (decidir con cualquier anchura de tabulador) respondia bien a SU
+# pregunta, que tampoco era la de verdad: un espacio duro o un U+3000 contaban como sangria, y una
+# regla dentro de un bloque de codigo se reescribia. Ahora la propiedad es de FORMA, y se comprueba
+# por fuerza bruta: si hubo escritura, la regla y la linea siguiente empiezan en la columna 0 (o la
+# siguiente esta en blanco de verdad). La correccion completa contra un parser CommonMark esta en
+# tools/oraculo-rewrite-rule.py; este caso es el suelo que corre sin dependencias.
 R=$(python3 - "$BIN/journal-compact.py" <<'BRUTO'
 import importlib.util, sys, itertools
 spec = importlib.util.spec_from_file_location('jc', sys.argv[1])
 m = importlib.util.module_from_spec(spec); sys.argv = ['x']; spec.loader.exec_module(m)
-ws = [''.join(c) for n in range(6) for c in itertools.product(' \t', repeat=n)]
+ws = [''.join(c) for n in range(3) for c in itertools.product(' \t\u00a0\v\u3000', repeat=n)]
+sigs = ['- c', '1. c', 'c', '', '# h']
 malos = escrituras = 0
 for wa in ws:
     for wb in ws:
-        L = ['x', f"{wa}1. p", f"{wb}- c"]
-        try:
-            m.rewrite_rule(L, 1, len(L), 'NUEVO', 'd')
-        except m.Quarantine:
-            continue
-        escrituras += 1
-        # Escribio: entonces "el hijo no esta mas adentro" tiene que ser cierto con CUALQUIER
-        # anchura de tabulador, porque el formato no fija ninguna.
-        vistas = {len(wb.expandtabs(w)) <= len(wa.expandtabs(w)) for w in range(1, 33)}
-        if len(vistas) != 1 or not vistas.pop():
-            malos += 1
+        for sg in sigs:
+            L = ['', f"{wa}1. p", f"{wb}{sg}"]
+            try:
+                m.rewrite_rule(L, 1, len(L), 'NUEVO', 'd')
+            except m.Quarantine:
+                continue
+            escrituras += 1
+            sig = f"{wb}{sg}"
+            if wa or not (sig.strip(' \t') == '' or not sig[:1].isspace()):
+                malos += 1
 print(f"{escrituras} {malos}")
 BRUTO
 )
 chk "hay escrituras legitimas (el guardian no lo bloquea todo)" "1" "$([ "${R% *}" -gt 0 ] && echo 1 || echo 0)"
-chk "ninguna escritura depende de la anchura del tabulador" "0" "${R#* }"
+chk "ninguna escritura con sangria o blanco no ASCII" "0" "${R#* }"
 
 echo "== 20. los dos casos exactos con que se rompio la version anterior =="
 fixture
@@ -341,6 +343,27 @@ compact --log "$M/.journal/c.log" --quiet >/dev/null 2>&1 || true
 chk "no cuarentena (es un replay plausible)" "0" "$(cuar)"
 has "pero lo dice en el log" "$(cat "$M/.journal/c.log" 2>/dev/null)" "se toma como replay"
 chk "y no escribio nada" "1" "$(cuerpo | grep -c 'gitignore:134')"
+
+echo "== 22. los contraejemplos de la ronda acotada: se niegan y el fichero queda intacto =="
+# Cada uno lo reescribia la version publicada en 2.31.0. El primero lo encontro el adversario
+# externo; los demas, el oraculo CommonMark (tools/oraculo-rewrite-rule.py).
+caso22() {  # $1 etiqueta, $2 cuerpo de ## Rules (printf), $3 motivo esperado
+  fixture
+  printf -- "---\ntype: learnings\ntopic: c22\n---\n# C\n\n## Rules\n\n$2\n\n## Related\n" > "$M/learnings/c22.md"
+  local antes; antes=$(cat "$M/learnings/c22.md")
+  emit --type learning.update --topic c22 --match-prefix "Vieja" --text "**Nueva** - texto" >/dev/null
+  compact --quiet >/dev/null 2>&1 || true
+  chk "$1: cuarentena" "1" "$(cuar)"
+  has "$1: motivo $3" "$(motivo)" "$3"
+  chk "$1: intacto" "$antes" "$(cat "$M/learnings/c22.md")"
+}
+caso22 "dentro de una valla" '```\n1. **Vieja** - dentro\n\n```' "codigo-antes"
+caso22 "dentro de HTML" '<div>\n- **Vieja** - dentro\n\n</div>' "codigo-antes"
+caso22 "espacio duro como sangria" '\xc2\xa0- **Vieja** - regla' "forma"
+caso22 "codigo sangrado tras linea en blanco" 'x\n\n    - **Vieja** - regla' "forma"
+caso22 "2. tras un parrafo es el parrafo" 'Un parrafo\n2. **Vieja** - regla' "anterior"
+caso22 "#t no es cabecera" '- **Vieja** - regla\n#etiqueta' "bloque-multilinea"
+caso22 "continuacion tras linea en blanco" '- **Vieja** - regla\n\n  sigue siendo del item' "bloque-multilinea"
 
 echo
 echo "pass=$pass fail=$fail"

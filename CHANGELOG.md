@@ -1,6 +1,45 @@
 # Changelog
 
 
+## [2.31.1] - 2026-09-21
+Origen: el estado final de 2.31.0 no lo habia revisado nadie de fuera (`p-bc9432d258`). Una ronda
+adversaria externa, acotada a la comparacion de sangrias de `rewrite_rule` (`learning.update`),
+la rompio con tres hallazgos; un parser CommonMark usado como oraculo encontro 133 clases de
+fallo (`tools/oraculo-rewrite-rule.py` con sus valores por defecto, contra 2.31.0).
+
+### Fixed
+- **`learning.update` podia reescribir algo que no era una regla, o dejar contenido de la regla
+  colgando, sin cuarentena.** Casos: una regla dentro de un bloque de codigo o de HTML; una linea
+  con sangria de 4 tras una linea en blanco (es codigo); `2. x` tras un parrafo (es continuacion
+  del parrafo, no un item); `- - -` (raya horizontal); `#t` tomado por cabecera; un espacio duro o
+  un U+3000 contados como sangria; una continuacion sangrada tras una linea en blanco. Medido en los
+  learnings de 42 proyectos del autor (corpus privado y vivo, 26002 reglas el 2026-09-21): 2.31.0
+  aceptaba 24268 y reescribia MAL 167 (0 en este repo). La pregunta al usuario citaba 24266: el
+  corpus cambio entre las dos corridas porque otras sesiones escriben en el.
+- La correccion NO es otra heuristica de sangrias. `b_no_mas_adentro_que_a` desaparece y
+  `regla_reescribible` acepta solo una LISTA BLANCA: regla en la columna 0 con marcador ASCII, una
+  cadena de items que arranca donde CommonMark abre lista, lo siguiente cierra el item, y ninguna
+  valla ni HTML antes en el fichero. Lo demas se niega con motivo (`forma`, `anterior`,
+  `bloque-multilinea`, `codigo-antes`).
+- **Coste declarado** (misma corrida): acepta 19015 de 26002 y se niega a 6987, el 27% (2.31.0 se
+  negaba a 1734, el 7%; en este repo, 0%). Cero reescrituras malas contra el oraculo, en ese corpus
+  y en 985849 documentos generados (`N3=500000 N4=400000 SEED=19`). Recuperar las 4150 reglas que
+  se niegan por `codigo-antes` pide un parser; se valoro
+  vendorizar uno y se descarto por ahora (seria la primera dependencia externa del plugin).
+- El docstring de `rewrite_rule` afirmaba "0 de 247 reglas multilinea" como si valiera para todo
+  corpus. Era de este repo solo.
+
+### Added
+- `tools/oraculo-rewrite-rule.py`: fuerza bruta de `rewrite_rule` contra markdown-it-py. Lo corre
+  `tools/run-tests.sh`. Contra 2.31.0 da 133 clases de fallo, contra 2.31.1 cero.
+- `tools/run-tests.sh` distingue un SKIP de un ok: una suite que sale 0 con ultima linea `SKIP`
+  se lista como `skip` y el resumen dice `VERDE CON SALTOS`, nunca `TODO VERDE`. Antes el SKIP del
+  oraculo (sin markdown-it-py, el estado normal) contaba como verde (subagente adversario).
+- `test-learning-update.sh`: caso 19 reescrito (la propiedad de forma, por fuerza bruta sobre
+  blancos ASCII y no ASCII) y caso 22 (los contraejemplos de la ronda, fichero intacto byte a byte).
+  80 asertos. Seis mutaciones de las ramas nuevas: todas las detectan la suite y el oraculo.
+
+
 ## [2.31.0] - 2026-09-20
 Origen: una sesion par reporto que no existe forma de corregir un learning ya escrito, y el
 usuario pidio revisar si el mismo hueco afecta a pendientes, planes, research y sesiones. Se midio

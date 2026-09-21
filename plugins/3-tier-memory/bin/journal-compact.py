@@ -1921,44 +1921,93 @@ def find_rule_anchored(lines, start, end, prefix, nuevo, donde):
         f"texto nuevo — no se reescribe una regla a ciegas. Las que hay empiezan por: {muestra}")
 
 
-def blancos_iniciales(linea):
-    return linea[:len(linea) - len(linea.lstrip())]
+# Lo que `rewrite_rule` acepta como "regla de una linea" es una LISTA BLANCA cuya correccion esta
+# comprobada contra un parser CommonMark de referencia, no una heuristica de sangrias. La version
+# anterior (b_no_mas_adentro_que_a) resolvia bien la pregunta que se hacia —con que anchura de
+# tabulador cambia la respuesta— pero esa no era la pregunta: el adversario externo de la ronda
+# acotada mostro una regla dentro de un bloque de codigo reescrita, y un oraculo (markdown-it-py,
+# tools/oraculo-rewrite-rule.py tal cual) encontro 133 clases de fallo en documentos de 2 a 4 lineas: sangria de 4 tras una linea en
+# blanco (es codigo, no una regla), `2. x` tras un parrafo (es continuacion del parrafo), `- - -`
+# (es una raya horizontal), `#t` (no es cabecera), un espacio duro contado como sangria. Sobre los
+# learnings de 42 proyectos del autor (corpus privado y vivo, medido el 2026-09-21), la version
+# 2.31.0 reescribia MAL 167 de las 24268 reglas que aceptaba.
+#
+# Asi que no se mide sangria en absoluto: solo se reescribe una regla que empieza en la columna 0,
+# en un contexto donde CommonMark no deja otra lectura. Lo demas se niega con su motivo. Cuesta el
+# 27% de las reglas de ese corpus (0% en este repo) y cero reescrituras malas contra el oraculo:
+# en el corpus y en 985849 documentos generados (N3=500000 N4=400000 SEED=19).
+
+REGLA_PLANA = re.compile(r"^(?:([-*])|\d{1,9}\.) (?=\S)")   # columna 0, marcador ASCII + espacio
+RAYA = re.compile(r"^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$")  # `- - -` es raya horizontal, no item
+ATX = re.compile(r"^#{1,6}(?:[ \t]|$)")                     # `#t` NO es cabecera
+ABRE_BLOQUE = re.compile(r"```|~~~|^[ \t>]*<")              # valla o HTML en cualquier sitio
 
 
-def b_no_mas_adentro_que_a(a, b):
-    """True/False cuando la respuesta es la misma con CUALQUIER anchura de tabulador; None si no.
-
-    Tres versiones se rompieron aqui antes que esta, y las tres por el mismo motivo de fondo:
-    respondian a una pregunta MAS FACIL que la de verdad.
-      1. Contar CARACTERES. Un tabulador es 1 caracter y varias columnas, asi que `\\t- hijo` bajo
-         `    1. padre` salia "menos indentado" que su padre y pasaba por hermana.
-      2. Contar columnas con anchura fija, negandose solo si el tabulador estaba en UN lado. Con
-         las dos sangrias mezclando tabulador y espacios en posiciones distintas
-         (`'    \\t- padre'` contra `'\\t - hijo'`) la respuesta sigue dependiendo de la anchura y
-         la funcion respondia igual, con aplomo.
-      3. MUESTREAR unas cuantas anchuras (1, 2, 4, 8) y exigir que coincidieran. Mejor, pero sigue
-         siendo un sondeo: `'  \\t '` contra `'   \\t'` coincide en las cuatro y discrepa en 3.
-         Una comprobacion por muestreo no puede cerrar un "para todo".
-
-    Asi que no se muestrea: se DECIDE, y para eso basta partir en los dos casos en que la respuesta
-    es demostrable sin fijar ninguna anchura.
-      - Sangrias identicas byte a byte -> estan al mismo nivel con cualquier anchura. Comparables.
-      - Sin ningun tabulador -> la columna es la longitud, sin ambiguedad. Comparables.
-      - Cualquier otra cosa (hay tabulador y las sangrias difieren) -> no se decide, None.
-
-    Lo que cuesta la tercera rama son sangrias mixtas que ademas difieren, y eso, medido sobre el
-    corpus real, son cero reglas de 247. Negarse ahi es gratis; adivinar cuesta un fichero roto.
-    """
-    wa, wb = blancos_iniciales(a), blancos_iniciales(b)
-    if wa == wb:
-        return True
-    if "\t" in wa or "\t" in wb:
+def familia(linea):
+    """'-' / '*' / '.' si la linea es un item de lista demostrable en columna 0; None si no."""
+    m = REGLA_PLANA.match(linea)
+    if not m or RAYA.match(linea):
         return None
-    return len(wb) <= len(wa)
+    return m.group(1) or "."
+
+
+def interrumpe_parrafo(linea):
+    """Una vineta, o un ordenado que empieza por 1, abre lista aunque siga a un parrafo. `2.` no:
+    tras un parrafo es texto de ese parrafo (CommonMark 5.2)."""
+    m = REGLA_PLANA.match(linea)
+    return bool(m) and (m.group(1) is not None or linea.startswith("1. "))
+
+
+def en_blanco(linea):
+    """En blanco para markdown: solo espacios y tabuladores. Un espacio duro NO deja la linea en
+    blanco, y `str.strip()` si lo quitaria."""
+    return linea.strip(" \t") == ""
+
+
+def regla_reescribible(lines, i, end):
+    """None si la linea `i` es, con certeza, un item de lista de UNA linea; si no, el motivo."""
+    f = familia(lines[i])
+    if not f:
+        return "forma"
+    # Hacia atras: la cadena de items de la misma familia tiene que arrancar en algo que abra lista
+    # de verdad (una linea en blanco, una cabecera, el principio, o un item que interrumpe parrafo).
+    k = i
+    while k >= 0 and familia(lines[k]) == f and not interrumpe_parrafo(lines[k]):
+        k -= 1
+    if k >= 0 and familia(lines[k]) != f and not (en_blanco(lines[k]) or ATX.match(lines[k])):
+        return "anterior"
+    # Hacia delante: lo siguiente cierra el item, y tras lineas en blanco nada sangrado lo reabre.
+    if i + 1 < end:
+        sig = lines[i + 1]
+        if not (en_blanco(sig) or ATX.match(sig) or familia(sig) == f):
+            return "bloque-multilinea"
+    k = i + 1
+    while k < len(lines) and en_blanco(lines[k]):
+        k += 1
+    if k > i + 1 and k < len(lines) and lines[k][:1] in (" ", "\t"):
+        return "bloque-multilinea"
+    # Una valla o un bloque HTML antes, en CUALQUIER parte del fichero, puede contener la regla.
+    # Saber si esta cerrado pide emparejar vallas y los siete finales de HTML: eso es un parser, y
+    # la decision (del usuario, 2026-09-21) fue negarse antes que escribir otro a medias.
+    if any(ABRE_BLOQUE.search(x) for x in lines[:i]):
+        return "codigo-antes"
+    return None
+
+
+MOTIVOS_REGLA = {
+    "forma": "la regla no empieza en la columna 0 con '- ', '* ' o 'N. ' y texto (tiene sangria, "
+             "un espacio que no es ASCII, o es una raya horizontal)",
+    "anterior": "la regla sigue a un parrafo y su numero no puede interrumpirlo: en markdown es "
+                "continuacion de ese parrafo, no un item",
+    "bloque-multilinea": "la regla arrastra contenido (una continuacion, una sublista, una tabla, "
+                         "un bloque sangrado tras una linea en blanco)",
+    "codigo-antes": "hay un bloque de codigo o HTML antes de la regla en el fichero y no se puede "
+                    "saber sin un parser si la regla cae dentro",
+}
 
 
 def rewrite_rule(lines, i, end, nuevo, donde):
-    """Reescribe la regla de UNA LINEA que empieza en `i`, conservando numero, vineta y sangria.
+    """Reescribe la regla de UNA LINEA que empieza en `i`, conservando numero y vineta.
 
     SOLO reescribe reglas de una linea. Si la regla arrastra cualquier otra cosa —una continuacion,
     una sublista, una tabla, un bloque de codigo— se cuarentena y no se toca el fichero.
@@ -1972,19 +2021,19 @@ def rewrite_rule(lines, i, end, nuevo, donde):
     valla de cierre huerfana y el markdown roto — EN SILENCIO, porque no se absorbia ninguna linea y
     el aviso no llegaba a dispararse. Cada arreglo cerraba un caso y abria el siguiente.
 
-    Lo que cierra el problema no es un parser mejor, es el alcance. Medido sobre el corpus real:
-    **0 de 247 reglas de `memory/learnings/` tienen lineas de continuacion**, y las 131 del Quick
-    Reference tampoco. O sea que la capacidad de reescribir bloques no servia a NINGUN caso real y
-    era la unica fuente de estos fallos. Negarse cuesta cero casos de verdad y cambia el peor
-    resultado posible de "te corrompo el fichero sin avisar" a "no lo toco y te digo por que".
+    Lo que cierra el problema no es un parser mejor, es el alcance. En ESTE repo, 0 de 247 reglas
+    de `memory/learnings/` tienen lineas de continuacion y las 131 del Quick Reference tampoco. Esa
+    cifra era de un solo corpus y se uso como si valiera para todos: en los learnings de 42
+    proyectos del mismo usuario (2026-09-21) hay continuaciones, sublistas y bloques de codigo, y la
+    heuristica de sangrias reescribia mal 167 reglas. Por eso la negativa ya no se decide por
+    sangria sino con `regla_reescribible` (ver el comentario sobre ella): el peor resultado posible
+    sigue siendo "no lo toco y te digo por que", nunca "te corrompo el fichero sin avisar".
 
-    Que quede claro lo que esto NO afirma, porque una version anterior de este comentario si lo
-    afirmaba y un adversario lo marco con razon: **no es que delimitar un bloque de markdown sea
+    Que quede claro lo que esto NO afirma: **no es que delimitar un bloque de markdown sea
     imposible**. Con un parser de markdown de verdad se puede, y si algun dia hace falta, ese es el
-    camino — no otra heuristica de sangria. Es una decision de ALCANCE apoyada en dos hechos
-    medidos: cero casos reales que la necesiten hoy, y tres rondas adversarias seguidas rompiendo
-    la heuristica casera con casos distintos. Si el corpus cambia y aparecen reglas multilinea de
-    verdad, la decision se revisa con una dependencia de parser, no reabriendo esta funcion.
+    camino — no otra heuristica. Se valoro vendorizar uno (2026-09-21) y se descarto por ahora: seria
+    la primera dependencia externa del plugin. Si el 27% de negativas pesa en el uso real, la
+    decision se revisa con esa dependencia, no reabriendo esta funcion.
 
     El numero es la identidad publica de un learning: las reglas se citan por numero en fichas de
     sesion, en comentarios del codigo y en los propios learnings (37 citas en `plugins/`, 118
@@ -1995,38 +2044,16 @@ def rewrite_rule(lines, i, end, nuevo, donde):
     La VINETA se conserva tal cual (`-` o `*`): `rule_text` acepta las dos y reconstruir siempre
     con `-` reescribia el estilo de un fichero ajeno sin que nadie lo hubiera pedido.
     """
-    # Una regla ocupa una sola linea si lo siguiente es el final de la region, una linea en blanco,
-    # una cabecera, u otra regla. Cualquier otra cosa es contenido que le pertenece y que este
-    # evento no sabe reescribir sin riesgo.
-    j = i + 1
-    if j < end:
-        sig = lines[j]
-        s = sig.strip()
-        _n, t = rule_text(sig)
-        al_mismo_nivel = b_no_mas_adentro_que_a(lines[i], sig)
-        # Hermana solo si esta a la MISMA sangria o menos. Una vineta INDENTADA es una sublista que
-        # pertenece a esta regla, no la siguiente — `rule_text` no distingue las dos, y tratarlas
-        # igual dejaba la sublista vieja pegada al texto nuevo sin avisar de nada.
-        #
-        # `al_mismo_nivel is None` = la respuesta cambia segun cuanto midas un tabulador, o sea que
-        # no se puede decidir sin inventarse una anchura que el formato no define. Entonces NO es
-        # hermana y se cae a la cuarentena de abajo: negarse cuando no se sabe, que es la politica
-        # de toda esta funcion. `is True` y no un booleano suelto, porque None tambien es falso y
-        # aqui los dos "no" significan cosas distintas.
-        hermana = bool(t) and al_mismo_nivel is True
-        if s and not s.startswith("#") and not hermana:
-            raise Quarantine(
-                f"bloque-multilinea: la regla de {donde} arrastra contenido en la linea siguiente "
-                f"('{s[:50]}'). learning.update solo reescribe reglas de UNA linea — es una "
-                f"decision de alcance: ninguna regla de este corpus lo necesita y las heuristicas "
-                f"para delimitar sublistas, tablas y bloques de codigo ya rompieron ficheros tres "
-                f"veces. Corrigela a mano, o simplificala a una linea y reemite.")
-    line = lines[i]
-    sangria = line[:len(line) - len(line.lstrip())]
-    s = line.strip()
+    motivo = regla_reescribible(lines, i, end)
+    if motivo:
+        raise Quarantine(
+            f"{motivo}: en {donde}, {MOTIVOS_REGLA[motivo]}. learning.update solo reescribe una "
+            f"regla cuando markdown no deja otra lectura; corrigela a mano, o simplificala a una "
+            f"linea sin sangria y reemite.")
+    s = lines[i]                               # columna 0 garantizada: no hay sangria que conservar
     m = re.match(r"^(\d+)\.\s", s)
     cabeza = f"{m.group(1)}. " if m else f"{s[0]} "
-    lines[i] = f"{sangria}{cabeza}{nuevo}"
+    lines[i] = f"{cabeza}{nuevo}"
 
 
 def find_topic_row(lines, topic):
