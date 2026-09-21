@@ -36,6 +36,16 @@ jobs:
           bash --version | head -1
           python3 --version
           git --version
+      # Solo para las pruebas: el oraculo de rewrite_rule (tools/oraculo-rewrite-rule.py) necesita un
+      # parser CommonMark de referencia. El plugin NO lo usa ni lo distribuye. Sin este paso el
+      # oraculo sale como skip en las tres plataformas. El import final hace que falle aqui, a la
+      # vista, si la instalacion no llego (macOS/Linux pueden rechazar --user sin el flag de PEP 668).
+      - name: oraculo (markdown-it-py)
+        shell: bash
+        run: |
+          python3 -m pip install --user markdown-it-py \
+            || python3 -m pip install --user --break-system-packages markdown-it-py
+          python3 -c "import markdown_it; print('markdown-it-py', markdown_it.__version__)"
       - name: suites
         shell: bash
         run: bash tools/run-tests.sh

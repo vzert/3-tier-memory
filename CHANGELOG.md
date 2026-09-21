@@ -1,6 +1,12 @@
 # Changelog
 
 
+## [2.31.3] - 2026-09-21
+### Changed
+- CI instala `markdown-it-py` (solo para las pruebas) para que `tools/oraculo-rewrite-rule.py`
+  corra en ubuntu, macos y windows en cada push, en vez de salir como skip. El plugin no lo usa.
+
+
 ## [2.31.2] - 2026-09-21
 ### Fixed
 - **CI de Windows en rojo desde 2.29.0**: `test-pendiente-update.sh` (caso 16) sumaba con
