@@ -1,6 +1,180 @@
 # Changelog
 
 
+## [2.31.9] - 2026-09-22
+Cierra el hueco estructural detrás de `p-ccc013b53d`: `header_unrecognized=1` de
+`repair-research-index.py` (o de `repair-plans-index.py`) solo se imprimía en el stdout de Step
+6 del checkpoint — nada lo volvía a medir después, así que una tabla real que el reparador no
+puede migrar sin adivinar (columna ambigua, ej. "Session" sosteniendo el wikilink real en una
+instalación y siendo solo metadata en otras) se quedaba de solo lectura para siempre en cualquier
+instalación de un usuario, sin que nadie viniera a mirarla, salvo que el agente que corrió Step 6
+recordara ese número veinte pasos después en el reporte de Step 7. Mismo patrón exacto que motivó
+`checkpoint-audit.py` (`header_issues=1` de `repair-dualwrite.py`, medido tres veces sin
+reportarse en 14 sesiones reales) — pero ese audit solo re-medía `repair-dualwrite.py`, nunca
+`repair-plans-index.py` ni `repair-research-index.py`.
+
+### Fixed
+- **`checkpoint-audit.py`**: Step 7a ahora re-mide en seco (sin `--apply`) los tres reparadores de
+  Step 3-pre — antes solo `repair-dualwrite.py`. `header_unrecognized`, `unrepairable_rows` y
+  `possible_duplicates` de `repair-plans-index.py`, y `active_header_unrecognized`,
+  `completed_header_unrecognized`, `*_unrepairable`, `*_possible_duplicates` de
+  `repair-research-index.py`, ahora fuerzan un `SALTADO` que Step 7a exige pegar literal en el
+  reporte — ya no dependen de que el agente recuerde un número de veinte pasos atrás. No hay
+  arreglo automático (`corrige=` vacío a propósito): la ambigüedad que produjo el
+  `header_unrecognized` es justo la que ningún script debe adivinar; esto solo garantiza que nadie
+  deje de verla, en cualquier instalación que actualice el plugin, no solo en la de quien lo
+  detectó.
+- Refactor interno: la lógica de "correr un reparador en seco y listar sus avisos" se extrajo a
+  `avisos_script_en_seco()`, reutilizada por los tres reparadores en vez de repetida solo para
+  `repair-dualwrite.py`.
+- **Confirmado por el adversario externo (codex exec) en la ronda de verificación de este mismo
+  cambio**: `avisos_script_en_seco()` no revisaba el código de salida del reparador — si
+  `repair-research-index.py` (o cualquiera de los tres) terminaba con `exit!=0` y solo stderr
+  (ej. `_research-index.md` con bytes que no son UTF-8 válido, o cualquier error de lectura), la
+  búsqueda de claves conocidas no encontraba ninguna en ese stderr y reportaba `HECHO ... sin
+  avisos` — el mismo falso negativo silencioso que esta función entera existe para cerrar, ahora
+  en la propia auditoría. Ahora un `returncode != 0` fuerza `SALTADO` con el código y la cola de
+  stderr, nunca `HECHO`. Caso nuevo en `test-checkpoint-audit.sh` (bytes inválidos forzando el
+  error real de `repair-research-index.py`, no un mock).
+
+## [2.31.8] - 2026-09-22
+Cierra `p-5457992187`, dejado abierto por 2.31.6: `ROLE_ALIAS` en `repair-research-index.py` no
+cubría todos los nombres de columna reales medidos fuera de las 5 instalaciones originales — 16
+cabeceras en 11 instalaciones quedaban `header_unrecognized`, sin camino de migración (el pendiente
+original hablaba de "15 tablas"; medido de nuevo contra el código real en HEAD, la cifra exacta es
+16 — la diferencia es una cabecera de una instalación cuyo problema no era un nombre fuera del
+diccionario sino la falta total de una columna con rol archivo, y por eso el pendiente no la había
+distinguido de las otras).
+
+### Added
+- **`ROLE_ALIAS`**: 11 nombres nuevos — `finding`/`hallazgo clave`/`outcome`/`summary`/`resumen`
+  → resultado (sinónimos de los ya existentes: conclusion/key finding/hallazgo); `iniciado` →
+  fecha (sinónimo de completado/completed/date); `goal`/`context`/`nota`/`notas`/`notes` → extra
+  (mismo patrón que sesion/status/estado/started: texto libre sin celda propia, se anexa al
+  Archivo, nunca se descarta). Medido contra 11 instalaciones reales de un mismo workspace — este
+  release no agrega ningún nombre real de instalación nuevo a un archivo commiteado (ver
+  `_pendientes.md` local, `memory/` no se commitea, para el detalle con nombres).
+- **Medición previa a ampliar** (pedida explícitamente por el pendiente): de las 16 cabeceras
+  `header_unrecognized` medidas en las 11 instalaciones nombradas, **una** SÍ es lenient-canónica
+  hoy (última columna File) — una tabla vacía con `Finding` fuera del diccionario, sin filas que
+  perder hoy pero expuesta a que la próxima inserción le cruzara columnas, cerrada con
+  `finding → resultado`. Las otras 15 estaban uniformemente en cuarentena segura, ninguna expuesta.
+  Fuera de esas 11 instalaciones se encontró una tabla ADICIONAL, no nombrada en el pendiente
+  original, también lenient-canónica pero con **filas reales** (no vacía) — esa sí escribía por
+  posición en producción hoy: un `research.upsert` real le habría puesto el Resultado sobre la
+  columna de fecha y una marca de completado sobre el texto del hallazgo, sin tocar nunca el
+  Archivo real (que vive en una cuarta columna que el camino de escritura por posición no sabía que
+  existía). Cerrada con `outcome → resultado`; verificado con una copia de la tabla real (nunca el
+  archivo en vivo), las filas migran sin perder nada.
+- **`"Research"` y `"Session"` NO se agregan, a propósito**: el mismo nombre de columna tiene DOS
+  significados reales medidos en dos instalaciones distintas — `Research` significa tema en una
+  (con una columna `Slug` aparte para el enlace) y significa archivo en otra (el wikilink vive
+  directo ahí, sin columna separada); `Session`/`Sesión` ya mapeaba a extra (correcto en varias
+  instalaciones) pero en otra sostiene el wikilink. El guardián de `header_recognized` (exactamente
+  1 columna tema y 1 archivo) de hecho SÍ protege contra migrar mal la instalación donde el nombre
+  significa lo contrario — no es un riesgo de corrupción silenciosa. Para `Research`, la instalación
+  que se beneficiaría de agregarlo tiene la tabla vacía (solo la fila placeholder) — no hay dato real
+  en juego hoy. Para `Session` el costo SÍ es real: la instalación donde sostiene el wikilink tiene 3
+  filas de research completado con contenido genuino, que se quedan en cuarentena de solo lectura
+  mientras esto no se resuelva — se documenta como pendiente de seguimiento, no se fuerza una
+  decisión de diseño apresurada solo por tener datos en juego. Ambas formas se quedan
+  `header_unrecognized`, el comportamiento seguro que este script ya documenta ("no adivinar").
+- Test: `test-repair-research-index.sh`, casos X/X2 (nombres nuevos migran a su rol, con nombres
+  genéricos, sin datos ni rutas reales del usuario; la tabla lenient-canónica con filas reales
+  descrita arriba, reproducida genéricamente, migra sin pérdida), Y/Y2 (Research y Session
+  confirmados `header_unrecognized` cada uno por separado, con el archivo verificado BYTE IGUAL
+  tras el intento — no solo la cabecera), Z (tabla vacía lenient-canónica con `Finding` se
+  re-cabecea sin filas que migrar, y un research nuevo entra limpio después). Suite completa del
+  repo verde (36/37, mismo SKIP preexistente).
+- Corregida una fuga de privacidad que quedó del ciclo anterior (2.31.7): un comentario en
+  `journal-compact.py` nombraba 3 instalaciones reales del mismo workspace de negocio. Encontrada
+  por el adversario de este ciclo al auditar `git diff` completo, no solo los archivos que este
+  ciclo tocó — genericizada.
+
+
+## [2.31.7] - 2026-09-22
+Cierra parcialmente `p-115356214b`, dejado abierto por 2.31.6: cuando `research.upsert`
+(`journal-compact.py`) madura una fila de `## Active Research` a `## Completed Research`, la fila
+vieja se borra entera y la nueva se reconstruye solo con lo que trae el evento — `Next step` y
+`Origen` no tienen celda en el esquema de Completed y se pierden a propósito (documentado, no se
+arregla: ver `setup-memory.md` y `checkpoint-3t.md`), pero el Archivo también se reconstruía desde
+cero, perdiendo cualquier decoración o texto ajeno anexado ahí (por `repair-research-index.py`
+desde 2.31.6, o a mano) — verificado sobre una fila 100% nativa de 2.12.0, nunca tocada por ninguna
+migración.
+
+### Fixed
+- **`journal-compact.py` (`apply_research_upsert`)**: al madurar, se captura lo que el Archivo de la
+  fila vieja de Active trae MÁS ALLÁ del enlace desnudo (`[[research/<slug>]]` o `(inline)`, con o
+  sin alias — `[[research/<slug>\|alias]]`, la forma usual en instalaciones reales, ver ronda 1 de
+  adversario abajo) antes de borrarla, y se anexa a la celda Archivo de la fila NUEVA de Completed.
+  Si ese extra trae una marca `_completado: <fecha>_` REAL (fila reabierta a mano tras una
+  maduración anterior), se defusa con el mismo algoritmo de `_defuse_completado` de
+  `repair-research-index.py` (quitar el guion bajo inicial, retroceder sobre guiones apilados) antes
+  de anexarla, para que la poda por fecha use la fecha de ESTA maduración y no la vieja. Si ya
+  existía una fila de Completed para el mismo slug (estado anómalo, solo alcanzable a mano: Active y
+  Completed coexistiendo), el extra NO se anexa ahí — se pierde, en vez de arriesgar un duplicado que
+  un chequeo por substring no puede detectar de forma fiable una vez que el texto pasó por el
+  defusado. El regex que reconoce el enlace propio (con alias opcional) EXCLUYE `]` por completo del
+  cuerpo del alias (`[^\]]*`, nunca un match perezoso ni un lookahead — ver rondas 2-4 abajo): si el
+  alias trae cualquier `]`, el reconocimiento falla entero y la celda completa se trata como texto
+  ajeno (duplica el enlace, visible, nunca pierde nada) — decisión de diseño explícita, no un caso
+  sin cubrir.
+- Test: `test-research-row-lookup.sh`, casos 20-26 nuevos (decoración sobrevive a la maduración;
+  marca vieja real se defusa; enlace aliasado no se duplica; Active+Completed coexistentes no
+  duplican; alias con `]` cae al `else` a propósito; alias sin cerrar + wikilink propio y + `]]`
+  escapado en la decoración no pierden texto). Suite completa del repo verde (36/37, mismo SKIP
+  preexistente).
+- `repair-research-index.py`: los dos docstrings que describen este comportamiento (líneas ~67 y
+  ~305) se corrigieron dos veces cada uno a lo largo de las 4 rondas de abajo — ver el detalle de
+  cada ronda para qué decían mal y qué dicen ahora.
+
+### Docs
+- `setup-memory.md` y `checkpoint-3t.md`: documentan explícitamente que Next step/Origen se pierden
+  al madurar (Completed no tiene esas columnas, a propósito) y que solo Archivo sobrevive — en vez
+  de seguir moviendo el límite de celda en celda. `setup-memory.md` corregido: la salida real para
+  no perder Next step/Origen es `--resultado` en el evento `completed`, no "copiarlo a Resultado a
+  mano" (Active no tiene celda Resultado).
+
+### Adversario (subagente en Opus — mismo modelo que el ejecutor, mismo modelo declarado en la
+atribución de commits de esta sesión; verificación independiente por contexto fresco, no por
+modelo distinto. Backend externo, `codex exec`, intentado 4 veces: exit 1 sin veredicto las 4,
+fallo de entorno consistente — degradación declarada, `backends=subagent-only`)
+
+4 rondas, TODAS `break` — la más seria de las 4 fue la última, y llevó a revertir el enfoque de
+regex a uno estructuralmente más simple y seguro en vez de seguir parchando. Detalle completo en
+`.goalspec/checkpoint-7b3a6de0-1dd9-4431-89db-2a83aeecbf4c.md` (si aún existe al leer esto) y en la
+sesión de este ciclo; resumen:
+- **Ronda 1**: `break unfalsified=2 incomplete=2`. `_archivo_extra` no reconocía enlace con alias
+  (forma usual en instalaciones reales) y duplicaba el enlace completo; Active+Completed
+  coexistiendo duplicaba el extra; 2 docstrings desactualizados; consejo irrealizable en
+  `setup-memory.md`. Los 4 corregidos.
+- **Ronda 2 (delta-scoped)**: `break incomplete=1`. Un docstring recién corregido decía que el
+  enlace CON alias se copiaba entero a Completed — falso, el enlace siempre se reconstruye desde el
+  evento. Corregido. De paso: `_archivo_extra` pasó de excluir `]` del alias a un match perezoso
+  (`.*?`) hasta el primer `]]`, para cerrar un hueco cosmético (alias con `]` suelto duplicaba el
+  enlace) que el adversario encontró pero no contó como violación.
+- **Ronda 3 (delta-scoped)**: `break incomplete=1`. El match perezoso de la ronda 2 fue el error:
+  con un alias SIN CERRAR seguido de decoración con su propio wikilink, el `.*?` cruzaba el `]]`
+  AJENO de ese wikilink y perdía texto real EN SILENCIO — exactamente el defecto que `p-115356214b`
+  existe para cerrar, reintroducido por el propio arreglo. Corregido con un negative lookahead
+  (`(?:(?!\[\[|\]\]).)*`) que no cruza `[[`/`]]` literales.
+- **Ronda 4 (re-diseño, no delta — 3 breaks consecutivos ya habían tocado el piso de convergencia
+  del método; se justificó como reconsiderar el enfoque, no un parche más)**: `break unfalsified=1
+  incomplete=1`. El lookahead de la ronda 3 solo bloqueaba `[[`/`]]` LITERALES — un `]` suelto
+  seguido, más adelante, de un `]]` que no era suyo (un span de código, un link markdown anidado, un
+  espacio entre corchetes, un `]]` escapado) seguía perdiendo texto real en silencio, con 4
+  reproducciones reales distintas. El adversario lo enmarcó como una elección de diseño, no un bug
+  más: un alias que legítimamente contiene un `]` y un alias mal cerrado seguido de contenido ajeno
+  son la MISMA forma de cadena — ningún regex puede distinguirlas. Se revirtió a excluir `]` del
+  cuerpo del alias por completo (`[^\]]*`, el diseño original de antes de la ronda 2): es la única
+  garantía estructural real — el cuerpo del alias JAMÁS puede cruzar ningún `]`, sea legítimo o de
+  un cierre roto — a cambio de aceptar el costo cosmético que la ronda 2 quiso evitar (un alias con
+  `]` legítimo, nunca visto en instalaciones reales, cae al `else` y duplica el enlace).
+  **No se corrió una ronda 5**: al tocar el piso de convergencia una segunda vez con un hallazgo
+  estructural (no una palabra mal puesta), se paró y se llevó la decisión al usuario en vez de
+  seguir iterando — ver el cierre de la sesión.
+
+
 ## [2.31.6] - 2026-09-22
 Cierra `p-cd33654290`, dejado abierto por 2.31.5: las 5 instalaciones cuya tabla anclada de
 research quedó de solo lectura (omniroute, scalar-api-docs, seedance-generator, time-tracker,

@@ -248,6 +248,61 @@ def corre_git(repo_root, *args):
     return r.stdout.strip()
 
 
+def avisos_script_en_seco(h, memory_dir, nombre_script, claves_problema):
+    """Corre <nombre_script> en seco (sin --apply) contra memory_dir y agrega un Hallazgo con
+    cualquier clave de `claves_problema` que salga > 0 en su stdout/stderr.
+
+    Por que existe: `header_unrecognized=1` (repair-plans-index.py, repair-research-index.py) es
+    el mismo patron que `header_issues=1` (repair-dualwrite.py) que motivo este archivo entero —
+    una tabla que el reparador no pudo migrar sin adivinar (columna ambigua, ej. p-ccc013b53d:
+    "Session" sostiene el wikilink real en una instalacion y es solo metadata en otras) se queda
+    de solo lectura para siempre, y sin este chequeo el cierre solo la reporta si el agente que
+    corrio Step 6 se acuerda de un numero que vio antes en Step 3-pre. No se repara aqui — la
+    ambiguedad que produjo `header_unrecognized` es precisamente la que ningun script debe
+    adivinar; esto solo garantiza que nadie deje de VERLA."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    ruta = os.path.join(script_dir, nombre_script)
+    etiqueta = nombre_script.replace(".py", "").replace("repair-", "")
+    clave_hallazgo = f"avisos.scripts.{etiqueta}"
+    if not os.path.exists(ruta):
+        return
+    try:
+        r = subprocess.run([sys.executable, ruta, memory_dir],
+                           capture_output=True, text=True, timeout=120)
+        salida = (r.stdout or "") + (r.stderr or "")
+    except Exception as exc:
+        h.append(Hallazgo(SALTADO, clave_hallazgo,
+                          f"no se pudo medir {nombre_script} en seco: {exc}"))
+        return
+    if r.returncode != 0:
+        # No confundir "el script crasheo" con "el script no encontro avisos" — ambos dejan
+        # `avisos` vacio si solo se mira si las claves conocidas aparecen en la salida (rio abajo),
+        # y sin este chequeo un traceback en stderr (encoding, permisos, un bug del propio
+        # reparador) se reportaba como `HECHO ... sin avisos`, exactamente el falso negativo que
+        # esta funcion existe para evitar (adversario externo, ronda de p-ccc013b53d).
+        h.append(Hallazgo(SALTADO, clave_hallazgo,
+                          f"{nombre_script} en seco termino con codigo {r.returncode} — no midio "
+                          "nada, no asumas 'sin avisos'",
+                          [(salida or "(sin salida)").strip()[-500:]]))
+        return
+    if not salida:
+        return
+    avisos = []
+    for clave in claves_problema:
+        m = re.search(clave + r"=(\d+)", salida)
+        if m and int(m.group(1)) > 0:
+            avisos.append(f"{clave}={m.group(1)}")
+    if avisos:
+        h.append(Hallazgo(SALTADO, clave_hallazgo,
+                          f"{nombre_script} en seco reporta avisos que el cierre debe decir",
+                          avisos,
+                          corrige="ninguno automatico: son migraciones o ambiguedades que piden "
+                                  "criterio humano. Reportalos en Step 7 diciendo que bloquean, no "
+                                  "solo el numero"))
+    else:
+        h.append(Hallazgo(HECHO, clave_hallazgo, f"{nombre_script} en seco: sin avisos"))
+
+
 def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
     h = []
     texto = leer(session_file)
@@ -630,32 +685,20 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
     # 13. Avisos de los scripts de Step 3-pre que el cierre suele no reportar.
     # Se vuelven a MEDIR aqui en seco (sin --apply) en vez de confiar en que el agente recuerde lo
     # que imprimieron hace veinte pasos: `header_issues=1` salio tres veces en el corpus medido y
-    # nunca llego al usuario.
-    repair = os.path.join(os.path.dirname(os.path.abspath(__file__)), "repair-dualwrite.py")
-    if os.path.exists(repair):
-        try:
-            r = subprocess.run([sys.executable, repair, memory_dir],
-                               capture_output=True, text=True, timeout=120)
-            salida = (r.stdout or "") + (r.stderr or "")
-        except Exception as exc:
-            salida = ""
-            h.append(Hallazgo(SALTADO, "avisos.scripts",
-                              f"no se pudo medir repair-dualwrite en seco: {exc}"))
-        if salida:
-            avisos = []
-            for clave in ("header_issues", "odd_values", "unaligned_rows", "unrepairable",
-                          "ids_invented", "missing_data", "pipes_broken"):
-                m = re.search(clave + r"=(\d+)", salida)
-                if m and int(m.group(1)) > 0:
-                    avisos.append(f"{clave}={m.group(1)}")
-            if avisos:
-                h.append(Hallazgo(SALTADO, "avisos.scripts",
-                                  "repair-dualwrite en seco reporta avisos que el cierre debe decir",
-                                  avisos,
-                                  corrige="ninguno automatico: son migraciones. Reportalos en Step 7 "
-                                          "diciendo que bloquean, no solo el numero"))
-            else:
-                h.append(Hallazgo(HECHO, "avisos.scripts", "repair-dualwrite en seco: sin avisos"))
+    # nunca llego al usuario. Los tres reparadores de Step 3-pre comparten la misma forma de
+    # aviso ("no pude migrar esto sin adivinar, quedo de solo lectura") asi que los tres se miden
+    # igual — `repair-plans-index.py` y `repair-research-index.py` faltaban aqui hasta esta
+    # version: header_unrecognized=1 en cualquiera de los dos es EXACTAMENTE el mismo patron de
+    # hueco que motivo este archivo, solo que en una tabla distinta (ver p-ccc013b53d).
+    avisos_script_en_seco(h, memory_dir, "repair-dualwrite.py",
+                          ("header_issues", "odd_values", "unaligned_rows", "unrepairable",
+                           "ids_invented", "missing_data", "pipes_broken"))
+    avisos_script_en_seco(h, memory_dir, "repair-plans-index.py",
+                          ("header_unrecognized", "unrepairable_rows", "possible_duplicates"))
+    avisos_script_en_seco(h, memory_dir, "repair-research-index.py",
+                          ("active_header_unrecognized", "completed_header_unrecognized",
+                           "active_unrepairable", "completed_unrepairable",
+                           "active_possible_duplicates", "completed_possible_duplicates"))
 
     # 14/15. Git: lo que el skill NO hace a proposito, dicho como tal y no como falla.
     if usar_git:

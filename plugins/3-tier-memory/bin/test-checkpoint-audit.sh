@@ -677,6 +677,66 @@ O=$($AUD "$M8" --session-file "$SA" --no-git --hoy $HOY 2>&1)
 chk "cuenta 1 de 2" "1" "$(printf '%s' "$O" | grep -c '1 de 2 revisados')"
 chk "la linea cuadra" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*pendientes.reconciliacion_linea')"
 
+echo "== header_unrecognized de repair-research-index.py NO se pierde en el cierre (p-ccc013b53d) =="
+# Mismo patron que motivo este archivo (header_issues=1 de repair-dualwrite, tres veces sin
+# reportar): una tabla de research con una columna que el reparador no puede leer sin adivinar
+# (aqui, "Session" sosteniendo el wikilink real en vez de ser metadata) se queda de solo lectura
+# para siempre si nadie la mide en cada cierre.
+M9="$T/memory9"; nueva_memoria "$M9"
+cat > "$M9/_research-index.md" <<'EOF'
+# Research
+
+## Active Research
+
+| Tema | Next step | Origen | Archivo |
+|---|---|---|---|
+
+## Completed Research
+
+| Topic | Result | Session |
+|-------|--------|---------|
+| Tema de prueba | Resultado de prueba | [[research/tema-de-prueba]] |
+EOF
+S9="$M9/sessions/2026-09-19-demo.md"; ficha_completa "$S9"
+O=$($AUD "$M9" --session-file "$S9" --no-git --hoy $HOY 2>&1)
+chk "sale SALTADO, no se calla" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*avisos.scripts.research-index')"
+chk "nombra la clave exacta" "1" "$(printf '%s' "$O" | grep -c 'completed_header_unrecognized=1')"
+chk "no trae arreglo automatico" "1" "$(printf '%s' "$O" | grep -c 'ninguno automatico: son migraciones o ambiguedades')"
+
+echo "== un reparador que CRASHEA (exit!=0, solo stderr) no se confunde con 'sin avisos' =="
+# Confirmado por el adversario externo (ronda de p-ccc013b53d): repair-research-index.py sale con
+# codigo 1 y solo stderr cuando no puede LEER _research-index.md (bytes invalidos, permisos). Sin
+# chequear returncode, avisos_script_en_seco no encontraba ninguna clave conocida en ese stderr y
+# reportaba HECHO "sin avisos" — el mismo falso negativo silencioso que este archivo entero existe
+# para cerrar, solo que en la propia auditoria.
+M11="$T/memory11"; nueva_memoria "$M11"
+printf '# Research\n\n## Completed Research\n\n| Tema | Resultado | Archivo |\n|---|---|---|\n\xff\xfe bytes invalidos\n' > "$M11/_research-index.md"
+S11="$M11/sessions/2026-09-19-demo.md"; ficha_completa "$S11"
+O=$($AUD "$M11" --session-file "$S11" --no-git --hoy $HOY 2>&1)
+chk "sale SALTADO, no HECHO" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*avisos.scripts.research-index')"
+chk "nombra el codigo de salida" "1" "$(printf '%s' "$O" | grep -c 'codigo 1')"
+chk "NO sale como HECHO" "0" "$(printf '%s' "$O" | grep -c 'HECHO .*avisos.scripts.research-index')"
+
+echo "== y una tabla de research canonica no dispara nada =="
+M10="$T/memory10"; nueva_memoria "$M10"
+cat > "$M10/_research-index.md" <<'EOF'
+# Research
+
+## Active Research
+
+| Tema | Next step | Origen | Archivo |
+|---|---|---|---|
+
+## Completed Research
+
+| Tema | Resultado | Archivo |
+|---|---|---|
+| Tema de prueba | Resultado de prueba | [[research/tema-de-prueba]] |
+EOF
+S10="$M10/sessions/2026-09-19-demo.md"; ficha_completa "$S10"
+O=$($AUD "$M10" --session-file "$S10" --no-git --hoy $HOY 2>&1)
+chk "HECHO, sin avisos" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*avisos.scripts.research-index')"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
