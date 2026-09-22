@@ -1,6 +1,148 @@
 # Changelog
 
 
+## [2.31.6] - 2026-09-22
+Cierra `p-cd33654290`, dejado abierto por 2.31.5: las 5 instalaciones cuya tabla anclada de
+research quedó de solo lectura (omniroute, scalar-api-docs, seedance-generator, time-tracker,
+unifi-expert) no tenían camino de vuelta a la cabecera canónica salvo migrarlas a mano, una por
+una. Ahora hay un script y corre solo, la próxima vez que cada instalación actualice el plugin y
+corra `/checkpoint-3t` — el mismo mecanismo que ya usa `repair-plans-index.py` desde 2.25.5, nunca
+un aviso que dependa de que alguien lo lea.
+
+### Added
+- **`repair-research-index.py`**: migra por NOMBRE de columna cualquier tabla anclada de
+  `## Active Research`/`## Completed Research` cuya cabecera no sea EXACTAMENTE canónica (nombre Y
+  orden de `TABLE_COLUMNS`). A diferencia de `repair-plans-index.py` (una sola forma legacy,
+  reconocida por el ANCHO de la fila + una fecha en la celda 0), aquí las 5 instalaciones medidas
+  tienen 10 cabeceras distintas entre las dos tablas y el mismo ancho no significa lo mismo en dos
+  de ellas (`Topic|Result|File|Fecha` vs `Topic|Completed|File|Conclusion`: la fecha vive en una
+  celda distinta en cada una) — anclar por posición ahí adivina, así que cada columna se resuelve
+  por su NOMBRE (`ROLE_ALIAS`: tema, archivo, resultado, next_step, origen, fecha, extra) contra la
+  cabecera de su propia tabla. Reconoce una cabecera solo si todos sus nombres tienen rol conocido
+  y hay exactamente una columna tema y una archivo; cualquier otra cosa se reporta
+  `header_unrecognized` y no se toca. Una columna sin celda propia en el esquema canónico (Fecha,
+  Sesion, Status, Started, Estado…) se anexa como texto DESPUÉS del enlace, en el Archivo — nunca
+  se descarta. Nunca fusiona dos filas, y si alguna fila de una tabla no migra limpio (ancho
+  ambiguo, o un Tema que colisiona con otro ya migrado), la tabla entera se deja intacta SOLO
+  cuando bloquear preserva una protección real (su cabecera hoy NO es lenient-canónica): si la
+  tabla YA es lenient-canónica (última columna ya Archivo/File, aunque el resto no esté en orden —
+  ya se escribe por posición en producción con o sin este script), migra lo que sí puede y
+  reescribe la cabecera de todos modos; bloquear ahí no protegía nada. Medido contra las 5
+  instalaciones
+  reales: 10/10 tablas migran limpio, 0 filas sin reparar, 0 duplicados; tras migrar, un
+  `research.upsert` real entra sin cuarentena. Prueba: `test-repair-research-index.sh` (80 `check`
+  calls, 24 escenarios A-W).
+
+  Siete rondas de adversario (subagente en Opus, con acceso de lectura a los ~24 proyectos reales
+  del usuario, no solo a los 5 medidos; y `codex exec`, backend externo) encontraron y esta versión
+  corrige:
+  - **Una cabecera cuya ÚLTIMA columna ya se llama Archivo/File, pero el resto NO está en el orden
+    canónico (`Topic|Started|Sesion|File`), se reportaba sana sin tocarla** — `research_table_is_
+    canonical` en journal-compact.py (la puerta que usa `apply_research_upsert` en producción para
+    decidir si escribe por posición) solo mira esa última celda. Esa forma YA escribe hoy por
+    posición en producción, mal, y el script la heredaba en vez de cerrarla — reproducido sobre
+    copia de una instalación real (`goal-spec-skill`): un hallazgo curado se pisaba en la escritura
+    siguiente. Ahora "ya canónica" exige nombre Y orden exactos; cualquier otra cosa se reconoce
+    como legacy, igual que cualquier otra, y se migra al orden canónico real.
+  - **Una columna sin celda propia (Fecha, Sesion, Started…) se anexa AL ARCHIVO, nunca a
+    Resultado/Origen.** La primera corrección de lo anterior anexaba a Resultado/Origen — la celda
+    más parecida por significado —, pero esas dos son justo las que `apply_research_upsert`
+    REEMPLAZA por completo cuando un evento normal trae `next_step`/`origen`/`resultado`: un
+    `research.upsert --origen` de lo más normal, sobre una fila recién migrada, borraba en el
+    mismo golpe el Started/Sesion que la migración acababa de preservar ahí — el arreglo solo
+    trasladaba el riesgo, no lo cerraba (reproducido con un evento real). Archivo es la ÚNICA
+    celda que `apply_research_upsert` nunca reescribe por posición — solo la lee, anclada al
+    INICIO, para encontrar la fila —, así que texto anexado DESPUÉS del enlace sobrevive a
+    cualquier UPDATE futuro (verificado en los dos caminos: `--next-step`/`--origen` en Active,
+    `--resultado` en Completed) MIENTRAS la fila se quede en su tabla actual. No sobrevive al
+    ÚNICO evento de maduración (Active → Completed): ahí `apply_research_upsert` borra la fila
+    vieja entera y construye la nueva desde cero con solo lo que trae el evento — pero esto ya le
+    pasaba a una nota escrita A MANO en esas mismas celdas antes de que este script existiera
+    (verificado sobre una fila 100% nativa de 2.12.0): no es un hueco que esta migración abra, es
+    una característica de `apply_research_upsert` fuera de su alcance — pendiente aparte
+    (`p-115356214b`), no bloqueante.
+  - **Un valor de columna que por casualidad TIENE la forma exacta de la marca (`_completado:
+    <fecha>_`) ya no se cuela como marca real al anexarse.** La exclusión de esa marca estaba
+    declarada pero no implementada para texto anexado — solo protegía el Archivo original. Se
+    neutraliza (`_defuse_completado`) antes de anexar, y no solo en los extras: `COMPLETADO_RE` en
+    journal-compact.py escanea la FILA COMPLETA al podar, no solo el Archivo, así que Tema y
+    Resultado/Next step/Origen también se neutralizan — reproducido con una nota de Key Findings
+    que describía la marca en prosa ("...decía `_completado: 2026-01-0N_` en su día"): sin este
+    arreglo, migrar 10 filas históricas así seguía dejando 6 borradas tras un solo evento normal,
+    igual que antes de cerrar el hueco original.
+  - **La primera neutralización (meter un espacio: `_completado:` → `_completado :`) rompía la
+    identidad de una fila `(inline)` (sin wikilink).** `apply_research_upsert` encuentra esas filas
+    comparando `plain(Tema)` contra el Tema del evento, y `plain()` (journal-compact.py) quita
+    guiones bajos/asteriscos/backtick pero NO un espacio de más — con el espacio, el Tema
+    neutralizado ya no hacía `plain()`-match contra el Tema original del evento: la fila migrada
+    quedaba huérfana y el evento le insertaba una fila NUEVA al lado, duplicando en silencio — el
+    mismo modo de fallo que el todo-o-nada de la primera ronda existe para impedir, reintroducido
+    por otra puerta. Ahora se QUITA el guion bajo inicial en vez de meter un espacio: sigue
+    rompiendo `COMPLETADO_RE` (exige ese guion bajo) y es neutro para `plain()` (que de todos modos
+    lo iba a quitar). Sin prevalencia medida hoy (0 de 24 instalaciones tienen esta combinación:
+    marca literal en el Tema + fila `(inline)`), pero el arreglo es de una línea y ya verificado.
+  - **Quitar solo UN guion bajo no bastaba si había varios apilados.** Un valor con guiones bajos
+    apilados justo antes de la marca (`__completado: 2020-01-01__`) hace que `COMPLETADO_RE`
+    matchee empezando en el SEGUNDO guion bajo — quitar solo el que el match consumió deja el
+    PRIMERO todavía pegado a "completado:", reconstruyendo la marca (`replace` de una sola pasada
+    no lo veía). `_defuse_completado` ahora retrocede sobre TODOS los guiones bajos contiguos antes
+    del match, no solo uno, y repite hasta que no quede ningún match — sigue siendo neutro para
+    `plain()` (que también los quita todos). Sin prevalencia medida hoy.
+  - Migrar una fila cuyo Archivo ORIGINAL ya trae una marca `_completado:` genuina, en una tabla
+    que ANTES de migrar estaba en cuarentena, ahora lo avisa explícitamente en el resumen impreso
+    (esa marca nunca competía en la poda; desde que la cabecera es canónica, sí compite) — antes
+    quedaba solo documentado en el docstring, sin avisar cuando de verdad ocurre.
+  - **El todo-o-nada de "ninguna fila migra si alguna no puede" dejaba tablas YA lenient-canónicas
+    completamente sin arreglar.** El arreglo anterior (última columna Archivo/File pero el resto
+    fuera de orden) migra bien una tabla LIMPIA, pero si esa misma tabla tenía además una fila de
+    ancho ambiguo, el todo-o-nada bloqueaba TODA la tabla — incluidas las filas que sí calificaban
+    — dejando la cabecera lenient intacta y el hallazgo curado expuesto igual que antes. Bloquear
+    ahí no protegía nada (esa tabla nunca tuvo cuarentena que perder): ahora migra lo que puede y
+    reescribe la cabecera; la fila sin migrar queda tan expuesta como ya estaba, nunca más. El
+    todo-o-nada original sigue intacto para una tabla genuinamente en cuarentena hoy.
+  - **Una columna de rol fecha ya NO se anexa como `_completado: <fecha>_` al Archivo** (la única
+    marca que sigue prohibida ahí, más allá de la neutralización de arriba). Una fila legacy sin
+    esa marca nunca compite en la poda por fecha (`COMPLETADO_RE`/`MAX_RESEARCH_DONE`, tope 5):
+    sobrevive para siempre. Marcar toda una tabla histórica de una vez la vuelve podable de golpe,
+    y el PRIMER `research.upsert --status completed` normal que llega después borra el excedente
+    sin aviso — medido en una instalación real (`sms-masivos/customer-success`): 10 filas
+    históricas sin marca, 0 borradas antes de migrar; tras migrar y un solo evento normal, 6
+    borradas. Ninguna fila gana poda por un valor que este script haya escrito o plegado —
+    excepción única y documentada, no observada en ninguna instalación real (medido: 0 de 24): una
+    marca GENUINA que ya vivía en el Archivo original de una tabla que ANTES de migrar era de solo
+    lectura nunca competía en la poda (esa tabla nunca se escaneaba); tras migrar, la poda sí la ve
+    — no porque este script la haya escrito, sino porque el header ahora refleja lo que esa celda
+    siempre decía. `_defuse_completado` nunca toca el Archivo original a propósito (el caso O exige
+    preservar una marca legítima) y no hay forma de distinguir por código una marca genuina de una
+    coincidencia en una celda que ya existía antes de que este script la tocara.
+  - El lock del journal se adquiere antes de leer, no después (una lectura sin lock puede
+    sobreescribir la escritura de un compactador concurrente con una copia ya vieja).
+  - La plantilla de `/checkpoint-3t` (Step 3-pre) y su copia local congelada de este propio repo
+    describían el criterio insuficiente ("última columna no es Archivo/File") como el disparador —
+    corregidas a describir el chequeo real (nombre Y orden exactos).
+  - **"Nunca se descarta" se leía como garantía general y no lo era.** Solo aplica a una columna
+    SIN celda propia (rol `extra`/`fecha`, que se anexa a Archivo). Una columna que SI mapea a un
+    rol canónico (Resultado, o Next step/Origen en Active) va a SU PROPIA celda, tal cual — y esa
+    celda queda sujeta al mismo ciclo de vida que ya tiene en una fila nativa: un evento legítimo
+    con `--resultado`/`--next-step`/`--origen` la reemplaza por completo, exactamente como se
+    espera de ese campo, migrado o no. Afecta a ~49 filas en 13 instalaciones donde la prosa
+    curada vive bajo un nombre legacy que SI mapea a un rol (`Key Findings`, `Conclusion`…):
+    reemplazarla con un valor nuevo es la semántica correcta del campo, no un defecto de la
+    migración — la prosa del docstring/CHANGELOG lo decía de forma más amplia de lo que el código
+    garantiza, ya corregido.
+  - Migrar una fila cuyo texto original tenía la forma de la marca (y se neutralizó) ahora lo
+    anuncia en el resumen impreso — antes ese cambio de un carácter no se veía en ningún lado.
+
+  Sigue abierto, no bloqueante (`p-5457992187`): `ROLE_ALIAS` no cubre todos los nombres de columna
+  que existen en instalaciones fuera de las 5 medidas (medido: al menos 9 más, en 11
+  instalaciones) — esas tablas se quedan tal como estaban, sin tocar. No siempre es "de solo
+  lectura": alguna de esas 15 tablas puede YA ser lenient-canónica hoy (independiente de este
+  script), y en ese caso ya está expuesta con o sin `ROLE_ALIAS` — medir eso antes de ampliar el
+  diccionario.
+- `/checkpoint-3t` Step 3-pre corre `repair-research-index.py "$MEMORY_DIR" --apply` justo después
+  de `repair-plans-index.py` y antes de `check-active-research.py` — el mismo camino automático que
+  ya usa la migración de planes, con el commit de checkpoint como red de seguridad.
+
 ## [2.31.5] - 2026-09-21
 Cierra los dos pendientes que dejó 2.31.4 (`p-e1d9cb75fa`, `p-63801135fd`). Tres rondas de
 `/goalspec:adversary` (Codex) rompieron tres reglas que decidían de quién es una fila de research
