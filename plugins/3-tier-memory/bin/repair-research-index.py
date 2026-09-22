@@ -65,13 +65,21 @@ Como migra una fila reconocida (por rol, nunca por posicion fija):
     `apply_research_upsert` nunca reescribe por posicion — solo la lee, anclado al INICIO
     (`RESEARCH_OPEN_RE.match`), para encontrar la fila — asi que texto anexado despues del enlace
     sobrevive a cualquier UPDATE futuro mientras la fila se quede en su tabla actual (verificado:
-    `--next-step`/`--origen` en Active, `--resultado` en Completed). NO sobrevive al UNICO evento
-    de maduracion (Active -> Completed): `apply_research_upsert` borra esa fila entera y construye
-    la nueva desde cero con solo lo que trae el evento — pero esto ya le pasaba a una nota escrita
-    A MANO en esas mismas celdas antes de que este script existiera
-    (verificado sobre una fila 100% nativa de 2.12.0), asi que no es un hueco que esta migracion
-    abra, es una caracteristica de `apply_research_upsert` fuera de su alcance (ronda 4 de
-    adversario externo, 2.31.6). Un valor de columna que por casualidad TENGA la forma exacta de
+    `--next-step`/`--origen` en Active, `--resultado` en Completed). Hasta 2.31.6 tampoco sobrevivia
+    al UNICO evento de maduracion (Active -> Completed): `apply_research_upsert` borraba esa fila
+    entera y construia la nueva desde cero con solo lo que traia el evento — le pasaba tambien a una
+    nota escrita A MANO en esas mismas celdas desde antes de que este script existiera (verificado
+    sobre una fila 100% nativa de 2.12.0), asi que no era un hueco que esta migracion abriera, sino
+    una caracteristica de `apply_research_upsert` fuera de su alcance (ronda 4 de adversario
+    externo, 2.31.6; documentado como `p-115356214b`). **Desde 2.31.7 SI sobrevive** (salvo la
+    excepcion de abajo): `apply_research_upsert` captura lo que el Archivo de la fila vieja trae mas
+    alla del enlace (con o sin alias) antes de borrarla, y lo anexa a la nueva celda Archivo de
+    Completed — Next step/Origen siguen sin celda propia en Completed y se siguen perdiendo, a
+    proposito (ver setup-memory.md). Excepcion: si ya existia una fila de Completed para el mismo
+    slug (estado solo alcanzable a mano), el texto tampoco sobrevive — se pierde igual que antes de
+    2.31.7, para no arriesgar un duplicado indetectable de forma fiable (ver el comentario en
+    `apply_research_upsert`).
+    Un valor de columna que por casualidad TENGA la forma exacta de
     la marca se neutraliza antes de anexarse (`_defuse_completado`), para que la UNICA marca que
     este metodo se niega a escribir ahi — `_completado: <fecha>_` — no se cuele por accidente:
     anexarla de verdad vuelve podable (`COMPLETADO_RE`/`MAX_RESEARCH_DONE`) a una fila que antes no
@@ -201,8 +209,35 @@ ROLE_ALIAS = {
     "archivo": "archivo", "file": "archivo", "slug": "archivo",
     "resultado": "resultado", "result": "resultado",
     "conclusion": "resultado", "conclusiones": "resultado",
-    "key finding": "resultado", "key findings": "resultado",
+    "key finding": "resultado", "key findings": "resultado", "finding": "resultado",
     "findings": "resultado", "hallazgo": "resultado", "hallazgos": "resultado",
+    "hallazgo clave": "resultado", "outcome": "resultado", "summary": "resultado",
+    "resumen": "resultado",
+    # p-5457992187 (v2.31.8): medido contra 11 instalaciones reales de un mismo workspace, fuera de
+    # las 5 originales de arriba (16 cabeceras header_unrecognized ahi antes de esta version, una
+    # de ellas ya lenient-canonica y vacia — ver CHANGELOG). "Research" y "Session" quedan AFUERA a
+    # proposito, no son un olvido: "Research" significa tema en una instalacion (una columna Slug
+    # aparte sostiene el enlace) pero significa archivo en otra (el wikilink vive directo en esa
+    # celda, sin columna separada). "Session"/"Sesion" ya mapeaba a `extra` (correcto en varias
+    # instalaciones medidas) pero en otra sostiene el wikilink en vez de ser una nota de metadata —
+    # mismo patron. Motivo real de no agregarlas (adversario en Opus, este ciclo, verificado
+    # probando las dos lecturas contra las 37 instalaciones a mano): NO es que el guardian de
+    # `header_recognized` (mas abajo en este archivo — exactamente 1 tema y 1 archivo) fuera a
+    # dejar pasar una migracion mala — ese guardian SI protege: en la instalacion donde "Research"
+    # es archivo, no hay ninguna otra columna con nombre de tema, asi que mapear "research":"tema"
+    # ahi tampoco pasaria el guardian (archivo=0), migrar o no migrar. El motivo real es que
+    # codificar un significado para "Research"/"Session" en el diccionario asumiria SIEMPRE la
+    # lectura mas comun sin poder distinguir la otra desde el nombre solo. Para "Research" el costo
+    # de no agregarlo es bajo: la instalacion que se beneficiaria tiene la tabla vacia (solo la fila
+    # placeholder), nada real que perder por seguir sin poder migrar. Para "Session" el costo SI es
+    # real: la instalacion donde sostiene el wikilink tiene filas de research completado con
+    # contenido genuino, que se quedan en cuarentena de solo lectura — documentado como pendiente de
+    # seguimiento, no resuelto aqui para no forzar una lectura del nombre solo porque hay datos en
+    # juego. Las tablas afectadas se quedan `header_unrecognized`, el comportamiento seguro ya
+    # documentado arriba ("no adivinar"), no una migracion resuelta a medias.
+    "iniciado": "fecha",
+    "goal": "extra", "context": "extra",
+    "nota": "extra", "notas": "extra", "notes": "extra",
     "next step": "next_step", "siguiente paso": "next_step", "proximo paso": "next_step",
     "origen": "origen", "source": "origen",
     "completed": "fecha", "fecha": "fecha", "completado": "fecha", "date": "fecha",
@@ -305,14 +340,25 @@ def migrate_row(jc, cells, roles, header, header_cells, plain_of):
 
     Limite CONOCIDO y PRE-EXISTENTE, no introducido por este script: cuando un research MADURA de
     Active a Completed, `apply_research_upsert` BORRA la fila de Active entera y construye la de
-    Completed desde cero con solo lo que trae el evento (`tema`/`resultado`/`slug`) — nunca copia
-    Next step, Origen NI Archivo de la fila vieja. Esto ya le pasaba a una nota escrita A MANO en
-    esas celdas antes de que este script existiera (verificado: una fila 100% nativa de 2.12.0,
-    sin tocar por esta migracion, pierde su Next step/Origen igual al madurar) — no es un hueco que
-    esta migracion abra, es una caracteristica de `apply_research_upsert` que esta fuera de su
-    alcance (ronda 4 de adversario externo, 2.31.6). El texto que este metodo anexa a Archivo
-    sobrevive a TODO update mientras el research se quede en su tabla actual; no sobrevive al UNICO
-    evento de maduracion, exactamente como tampoco sobrevivia antes de que existiera este script."""
+    Completed desde cero con solo lo que trae el evento (`tema`/`resultado`/`slug`) — Next step y
+    Origen NUNCA se copian de la fila vieja porque Completed no tiene celda para ellos (a
+    proposito; ver setup-memory.md). Esto ya le pasaba a una nota escrita A MANO en esas celdas
+    antes de que este script existiera (verificado: una fila 100% nativa de 2.12.0, sin tocar por
+    esta migracion, pierde su Next step/Origen igual al madurar) — no es un hueco que esta
+    migracion abra, es una caracteristica de `apply_research_upsert` que esta fuera de su alcance
+    (ronda 4 de adversario externo, 2.31.6; documentado como `p-115356214b`). El texto que este
+    metodo anexa a Archivo sobrevive a TODO update mientras el research se quede en su tabla
+    actual; **desde 2.31.7 el TEXTO tambien sobrevive al evento de maduracion** (el enlace mismo
+    NO: `apply_research_upsert` lo reconstruye siempre desde el propio evento — `slug`/`--inline` —
+    nunca lo copia, con o sin alias) — antes de borrar la fila vieja de Active, se captura lo que su
+    Archivo trae MAS ALLA del enlace (con o sin alias, `_archivo_extra` lo reconoce igual) y eso
+    se anexa a la celda Archivo de la fila nueva de Completed (adversario en Opus, ronda 2 de este
+    ciclo: una version anterior de este parrafo decia que el enlace se copiaba entero, cosa falsa —
+    ver setup-memory.md, que si lo dice bien). Antes de 2.31.7 ni el enlace ni el texto sobrevivian,
+    exactamente igual que tampoco sobrevivian antes de que existiera este script. Excepcion
+    documentada aparte (no aqui): si una fila de Completed para el mismo slug YA existia junto a la
+    de Active (estado solo alcanzable a mano), el texto tampoco sobrevive — ver el comentario en
+    `apply_research_upsert` mismo."""
     tema_i = roles.index("tema")
     archivo_i = roles.index("archivo")
     tema = _defuse_completado(jc, cells[tema_i])

@@ -57,7 +57,16 @@ All index files must have:
 > and the `## Quick Reference` section in `_learnings.md`; the `## Plans` table (Plan, Status, Fecha, Sesion,
 > Pendientes, Learnings); the `## Active Research` table (Tema, Next step, Origen, Archivo) and the
 > `## Completed Research` table (Tema, Resultado, Archivo). Keep them verbatim, each followed by its table
-> header + separator row. Since 2.22.0 (`## Alta/Media/Baja prioridad`) and 2.24.0 (`## Sessions`,
+> header + separator row. **Known limit (since 2.12.0, documented in 2.31.7)**: when a `research.upsert`
+> matures a row from Active to Completed, its Next step and Origen are dropped — Completed's schema has
+> no column for them, on purpose (a finished research has no next step to track). Only the Archivo cell
+> carries forward: whatever the old Archivo cell held past its bare link (decoration, or text folded
+> there by `repair-research-index.py`) gets appended to the new Archivo cell — the link itself is
+> always rebuilt fresh from the `completed` event's own `--slug`/`--inline`, never copied. If you need
+> Next step/Origen preserved past completion, pass it as `--resultado` on the `completed` event itself
+> (there is no Resultado cell to write into beforehand — Active doesn't have one) — the compactor never
+> reconstructs it after the fact.
+> Since 2.22.0 (`## Alta/Media/Baja prioridad`) and 2.24.0 (`## Sessions`,
 > `## Plans`, `## Topic Files`, `## Active Research`, `## Completed Research` — five of the anchors
 > above, all of them table-shaped), a COMPLETELY MISSING anchor is created by the compactor itself
 > and the event still applies — a memory older than the anchor's introduction normally has its own

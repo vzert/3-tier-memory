@@ -656,7 +656,12 @@ quedaba ciega para ese eslabón — hallazgo adversarial (2026-09-14), con repro
   completed research never moves back to Active (reopen by hand). Archivo is `[[research/<slug>]]`
   or `(inline)`, followed by `_completado: DATE_` on completed rows (DATE = `--date`, today by
   default): the compactor prunes Completed Research to the 5 most recent by that date; rows without
-  it (hand-written, or older than 2.12.0) are never pruned.
+  it (hand-written, or older than 2.12.0) are never pruned. **Known limit**: Next step/Origen have
+  no column in Completed and are dropped on maturation, on purpose (a finished research has no next
+  step to track) — if either mattered, fold it into `--resultado` before the `completed` event
+  fires. Anything already appended to Archivo past the bare link (decoration, or text folded there
+  by `repair-research-index.py`) DOES carry forward since 2.31.7 — before that it was rebuilt from
+  scratch and lost too, on every maturation (`p-115356214b`).
 - Add wikilink in session log ## Research section and ## Related
 
 **Fallback (no JBIN)**: add/update the row in memory/_research-index.md by hand.

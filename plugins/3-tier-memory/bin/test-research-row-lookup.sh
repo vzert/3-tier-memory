@@ -29,6 +29,38 @@
 #      ultima columna es File, asi que `completed` de B no toca la fila de A y B entra en Completed.
 #  15. Tabla vieja con File al final (forma de goal-spec-skill, `Topic | Started | Sesion | File`):
 #      un research nuevo entra, y su `completed` lo saca de Active sin cuarentena.
+#  20. Madurar de Active a Completed preserva lo que el Archivo trae mas alla del enlace desnudo
+#      (decoracion, o texto plegado por repair-research-index.py) — antes se perdia siempre, la
+#      fila de Completed se reconstruia desde cero (p-115356214b, v2.31.7).
+#  21. Madurar defusa una marca `_completado:` REAL que ya viviera en el Archivo de una fila de
+#      Active (reapertura a mano de un research previamente completado) antes de anexarla, para no
+#      confundir la poda por fecha con la marca vieja.
+#  22. Madurar una fila con enlace ALIASADO (`[[research/x\|alias]]`, forma usual en instalaciones
+#      reales) no duplica el enlace completo en el Archivo de Completed (adversario en Opus, ronda
+#      1 de v2.31.7: el primer intento solo reconocia el enlace desnudo).
+#  23. Si la fila de Active Y una de Completed para el mismo slug coexisten (estado anomalo, solo
+#      alcanzable a mano) al madurar, el extra de Active NO se anexa a la fila de Completed ya
+#      existente — se pierde, en vez de arriesgar un duplicado que un chequeo de substring no puede
+#      detectar de forma fiable (adversario en Opus, ronda 1: el primer intento de guardia por
+#      substring seguia duplicando).
+#  24. DECISION DE DISENO (rondas 2-4 de adversario en Opus, v2.31.7): un alias con un `]` SIN
+#      escapar cae al `else` a proposito y duplica el enlace completo (visible, se limpia a mano) —
+#      NO se intenta reconocerlo. Rondas 2-3 probaron reconocerlo (perezoso, luego un lookahead) y
+#      las dos veces un adversario encontro una entrada donde ese reconocimiento CRUZABA a un `]]`
+#      AJENO (un wikilink, un link markdown, un span de codigo, un `]]` escapado en la decoracion) y
+#      perdia texto real EN SILENCIO — peor que el duplicado visible que vino a evitar. Un alias con
+#      `]` legitimo y un alias mal cerrado seguido de contenido ajeno son la MISMA forma de cadena;
+#      ningun regex puede distinguirlas. `[^\]]*` (excluye `]` del todo) es la unica garantia real:
+#      si el alias trae CUALQUIER `]`, el match entero falla, nunca hay lectura parcial que perder.
+#      Nunca visto en instalaciones reales (solo el caso hipotetico original de la ronda 2); el
+#      costo (duplicado cosmetico) se acepta a cambio de la garantia que p-115356214b pide.
+#  25. Un alias SIN CERRAR (falta el `]` final) seguido de decoracion con su propio wikilink no
+#      pierde esa decoracion en silencio — mismo mecanismo del caso 24: el `]` sin escapar hace
+#      fallar el match entero y cae al `else`, que conserva la celda COMPLETA.
+#  26. Alias sin cerrar seguido de un `]]` ESCAPADO en la decoracion (`nota \]] resto`) tampoco
+#      pierde texto — la forma mas afilada que encontro el adversario en la ronda 4 (el `]]` real
+#      del cierre roto y el `\]]` escapado de la decoracion son indistinguibles para cualquier
+#      regex; `[^\]]*` los trata igual: ambos hacen fallar el match).
 # Casos (otra ultima columna: solo lectura):
 #   3. Enlace propio en la celda 0 (forma de seedance-generator, `Slug | Topic | Fecha | Sesion`):
 #      no se duplica; como el evento pide cambiarla, cuarentena y archivo intacto.
@@ -277,6 +309,76 @@ emit --slug x19b --tema "X19b" --status active --next-step "paso" --origen "[[se
 compact
 has '| X19b | paso | [[sessions/s]] | [[research/x19b]] |' || fail "X19b no entro"
 grep -q 'Sin research activo' "$IDX" && fail "el marcador propio no se borro al insertar"
+[ "$FAIL" = 0 ] && echo "  ok"
+
+echo "== caso 20: madurar preserva lo que el Archivo trae mas alla del enlace desnudo (p-115356214b) =="
+canon "| Nativa | paso viejo | [[sessions/s]] | [[research/nativa20]] . sesion: [[sessions/2026-01-01-x]] |
+" ""
+emit --slug nativa20 --tema "Nativa" --status completed --resultado "r20" --date 2026-09-22
+compact
+has '| Nativa | r20 | [[research/nativa20]] . sesion: [[sessions/2026-01-01-x]] _completado: 2026-09-22_ |' \
+  || fail "la decoracion del Archivo no sobrevivio a la maduracion: $(grep 'nativa20' "$IDX")"
+[ "$(count '[[research/nativa20]]')" = 1 ] || fail "nativa20 se duplico"
+[ "$FAIL" = 0 ] && echo "  ok"
+
+echo "== caso 21: madurar defusa una marca _completado real de una reapertura a mano =="
+canon "| Reabierta | paso | [[sessions/s]] | [[research/reabierta21]] _completado: 2026-01-01_ |
+" ""
+emit --slug reabierta21 --tema "Reabierta" --status completed --resultado "r21" --date 2026-09-22
+compact
+has '| Reabierta | r21 | [[research/reabierta21]] completado: 2026-01-01_ _completado: 2026-09-22_ |' \
+  || fail "la marca vieja no se defuso o la nueva no se escribio: $(grep 'reabierta21' "$IDX")"
+grep -c '_completado: 2026-01-01_' "$IDX" | grep -qx 0 || fail "sobrevivio una marca real vieja sin defusar"
+[ "$FAIL" = 0 ] && echo "  ok"
+
+echo "== caso 22: madurar un enlace aliasado no duplica el enlace completo =="
+canon "| Stack comparison | paso | [[sessions/s]] | [[research/arch\\|arch]] . sesion: [[sessions/2026-04-16-x]] |
+" ""
+emit --slug arch --tema "Stack comparison" --status completed --resultado "Next.js" --date 2026-09-22
+compact
+has '| Stack comparison | Next.js | [[research/arch]] . sesion: [[sessions/2026-04-16-x]] _completado: 2026-09-22_ |' \
+  || fail "el alias no se reconocio o el enlace se duplico: $(grep 'research/arch' "$IDX")"
+[ "$(count '[[research/arch')" = 1 ] || fail "arch se duplico"
+[ "$FAIL" = 0 ] && echo "  ok"
+
+echo "== caso 23: Active y Completed coexisten para el mismo slug (estado a mano) — sin duplicado =="
+canon "| Re | paso | [[sessions/s]] | [[research/re23]] sesion: X _completado: 2026-01-01_ |
+" "| Re | r1 | [[research/re23]] sesion: X _completado: 2026-01-01_ |
+"
+emit --slug re23 --tema "Re" --status completed --resultado "r2" --date 2026-09-22
+compact
+has '| Re | r2 | [[research/re23]] sesion: X _completado: 2026-01-01_ |' \
+  || fail "la fila de Completed no se actualizo como se esperaba: $(grep 're23' "$IDX")"
+[ "$(count 'sesion: X')" = 1 ] || fail "el extra de Active se duplico en Completed"
+[ "$FAIL" = 0 ] && echo "  ok"
+
+echo "== caso 24: alias con corchete sin escapar cae al else (duplica, pero no pierde nada) =="
+canon "| Br | paso | [[sessions/s]] | [[research/br24\\|a]b]] |
+" ""
+emit --slug br24 --tema "Br" --status completed --resultado "r" --date 2026-09-22
+compact
+grep -qF 'a]b]]' "$IDX" || fail "se perdio texto: $(grep 'research/br24' "$IDX")"
+has '| Br | r | [[research/br24]] [[research/br24\|a]b]] _completado: 2026-09-22_ |' \
+  || fail "no cayo al else esperado: $(grep 'research/br24' "$IDX")"
+[ "$FAIL" = 0 ] && echo "  ok"
+
+echo "== caso 25: alias SIN CERRAR con decoracion propia no pierde texto en silencio =="
+canon "| T | paso | [[sessions/s]] | [[research/x25\\|alias] . sesion: [[sessions/2026-01-01-y]] nota importante |
+" ""
+emit --slug x25 --tema "T" --status completed --resultado "r" --date 2026-09-22
+compact
+grep -qF 'sesion: [[sessions/2026-01-01-y]] nota importante' "$IDX" \
+  || fail "se perdio texto en silencio: $(grep 'research/x25' "$IDX")"
+has '[[research/x25]] [[research/x25\|alias] . sesion: [[sessions/2026-01-01-y]] nota importante _completado: 2026-09-22_' \
+  || fail "no cayo al else esperado (duplicado visible, sin perdida): $(grep 'research/x25' "$IDX")"
+[ "$FAIL" = 0 ] && echo "  ok"
+
+echo "== caso 26: alias sin cerrar con un ]] ESCAPADO despues no pierde texto en silencio =="
+canon "| T | paso | [[sessions/s]] | [[research/x26\\|alias] nota \\]] resto |
+" ""
+emit --slug x26 --tema "T" --status completed --resultado "r" --date 2026-09-22
+compact
+grep -qF 'nota \]] resto' "$IDX" || fail "se perdio texto en silencio: $(grep 'research/x26' "$IDX")"
 [ "$FAIL" = 0 ] && echo "  ok"
 
 [ "$FAIL" = 0 ] && echo "PASS test-research-row-lookup" || { echo "FAIL test-research-row-lookup"; exit 1; }

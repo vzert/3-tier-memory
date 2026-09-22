@@ -2611,6 +2611,61 @@ def find_research_row(lines, header, slug, tplain):
     return sep, rows, hit
 
 
+def _defuse_completado_mark(text):
+    """Rompe cualquier subcadena con la forma literal `_completado: <fecha>_` dentro de `text`,
+    quitando el guion bajo inicial (nunca metiendo un espacio, que rompe la identidad `plain()` de
+    una fila `(inline)`) y retrocediendo sobre TODOS los guiones bajos contiguos antes del match
+    (guiones apilados sobreviven a una sola pasada) — mismo algoritmo verificado en
+    `_defuse_completado` de repair-research-index.py (rondas 5-7 de adversario, 2.31.6), aqui para
+    el unico otro lugar del codebase que anexa texto ajeno a una fila de research."""
+    result = text
+    while True:
+        m = COMPLETADO_RE.search(result)
+        if not m:
+            return result
+        start = m.start()
+        while start > 0 and result[start - 1] == "_":
+            start -= 1
+        result = result[:start] + "completado: " + m.group(1) + "_" + result[m.end():]
+
+
+def _archivo_extra(cell, slug):
+    """Lo que sigue al enlace propio (o a `(inline)`) en una celda Archivo de una fila CANONICA de
+    Active Research: decoracion externa (`[[research/x]] . sesion: ...`) o texto plegado ahi por
+    repair-research-index.py (`fold_extra`, 2.31.6) porque es la unica celda que apply_research_
+    upsert nunca reescribe por posicion en un update. Vacio si la celda es solo el enlace desnudo.
+    Defusado por si trae, de una reapertura a mano, una marca `_completado:` real de una
+    maduracion anterior (ver p-115356214b).
+
+    El enlace se reconoce con un ALIAS opcional (`[[research/x\\|alias]]`), no solo el desnudo
+    (adversario en Opus, ronda 1 de este ciclo): la forma con alias es la USUAL en instalaciones
+    reales y son exactamente las filas que repair-research-index.py migra — un match solo del
+    desnudo caia al `else` y duplicaba el enlace COMPLETO (con su alias) en la celda Archivo de la
+    fila de Completed."""
+    # El cuerpo del alias EXCLUYE `]` del todo (`[^\]]*`, nunca `.*?` ni un lookahead): ronda 2
+    # probo perezoso sin restriccion (cruzaba el `]]` de un wikilink AJENO cuando el alias no
+    # cerraba, ronda 3) y ronda 3 probo un lookahead que solo bloquea en `[[`/`]]` literal (seguia
+    # perdiendo texto ante un `]` suelto seguido, mas adelante, de un `]]` que no es suyo — un span
+    # de codigo, un link markdown anidado, un espacio entre corchetes, un `]]` escapado: la misma
+    # forma de cadena que un alias legitimo con un `]` en su interior, ningun regex puede
+    # distinguirlas (adversario en Opus, ronda 4 de este ciclo, con 4 reproducciones reales
+    # distintas). La UNICA garantia real es que el cuerpo del alias nunca consuma NINGUN `]`: si el
+    # alias trae uno (legitimo o por un cierre roto, no hay forma de saber cual), el match entero
+    # falla y cae al `else`, que conserva la celda COMPLETA — duplica el enlace (visible, se limpia
+    # a mano) en vez de arriesgar perder texto (invisible, irrecuperable). Sacrifica el caso donde
+    # un alias SI contenia un `]` legitimo (ronda 2, caso 24 original: nunca visto en instalaciones
+    # reales, solo barato de cerrar) a cambio de la garantia real que p-115356214b pide: nunca
+    # perder datos en silencio al madurar.
+    m = re.match(r"^\[\[research/" + re.escape(slug) + r"(?:\\\|[^\]]*)?\]\]", cell)
+    if m:
+        rest = cell[m.end():].strip()
+    elif cell.startswith("(inline)"):
+        rest = cell[len("(inline)"):].strip()
+    else:
+        rest = cell.strip()
+    return _defuse_completado_mark(rest) if rest else rest
+
+
 def apply_research_upsert(mem, p):
     slug = check_slug(p["slug"], "slug")
     path = os.path.join(mem, "_research-index.md")
@@ -2652,8 +2707,17 @@ def apply_research_upsert(mem, p):
                 del lines[sep + 2]
     else:
         sep, rows, hit = find_research_row(lines, "## Active Research", slug, tplain)
+        # Lo que la fila vieja de Active traiga en su Archivo MAS ALLA del enlace desnudo (decoracion,
+        # o texto plegado ahi por repair-research-index.py) no tiene celda propia en el esquema de
+        # Completed (Tema | Resultado | Archivo) y la fila vieja se borra entera abajo: sin esto se
+        # pierde en silencio en cada maduracion, incluso sobre una fila nativa nunca tocada por
+        # ninguna migracion (p-115356214b, verificado 2.31.6). Next step/Origen SI se pierden aqui
+        # a proposito — Completed no tiene esas columnas y no hay donde ponerlos sin ampliar el
+        # esquema en toda la base instalada; ver CHANGELOG.
+        old_archivo_extra = ""
         if hit is not None:            # madura: sale de Active
             guard_research_legacy_write(lines, hit, "sacarla de Active (completed)")
+            old_archivo_extra = _archivo_extra(pad(split_cells(lines[hit]), 4)[3], slug)
             del lines[hit]
             changed = True
             a0, a1 = section_bounds(lines, "## Active Research")
@@ -2665,6 +2729,17 @@ def apply_research_upsert(mem, p):
         sep, rows, hit = find_research_row(lines, "## Completed Research", slug, tplain)
         fecha = p.get("date") or time.strftime("%Y-%m-%d", time.gmtime(int(p.get("_ts", 0)) / 1e9))
         if hit is not None:
+            # Esta rama NO es un replay normal (ese llega con old_archivo_extra vacio: la fila de
+            # Active ya no estaba, find_research_row no la encuentra). Es una fila de Completed que
+            # YA existia junto a una de Active para el mismo slug — solo alcanzable a mano (research
+            # reabierto copiando la fila de vuelta a Active sin borrar la de Completed; "reabrir es
+            # una edicion a mano" es una operacion soportada). old_archivo_extra NO se anexa aqui a
+            # proposito: un intento de detectar "ya esta" por substring no es fiable (el extra pasa
+            # por `_defuse_completado_mark`, que cambia su texto si trae una marca real, asi que ya
+            # no calza contra lo que la fila de Completed ya tenia — adversario en Opus, ronda 1 de
+            # este ciclo, reproducido con esa forma exacta: duplicaba igual con el guardian puesto).
+            # Se pierde en este caso, igual que se perdia SIEMPRE antes de 2.31.7 — mismo limite
+            # documentado (p-115356214b), acotado al unico camino donde preservarlo es ambiguo.
             cells = pad(split_cells(lines[hit]), 3)
             new = list(cells)
             if p.get("resultado"):
@@ -2679,8 +2754,9 @@ def apply_research_upsert(mem, p):
                 changed = True
         else:
             guard_research_legacy_insert(lines, sep, "## Completed Research")
+            archivo_cell = f"{archivo} {old_archivo_extra}".strip() if old_archivo_extra else archivo
             lines.insert(sep + 1, join_cells([p["tema"], p.get("resultado") or "",
-                                              f"{archivo} _completado: {fecha}_"]))
+                                              f"{archivo_cell} _completado: {fecha}_"]))
             changed = True
         # Poda por fecha, nunca por posicion: solo compiten las filas con `_completado:`; una fila
         # sin fecha (a mano, o anterior a 2.12.0) se conserva. Asi un `completed` viejo re-aplicado

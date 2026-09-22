@@ -83,6 +83,30 @@
 #      pegado a "completado:", reconstruyendo la marca — `_defuse_completado` retrocede sobre
 #      TODOS los guiones bajos contiguos, no solo uno (hallazgo de la septima ronda de adversario
 #      externo, 2.31.6).
+#   X. p-5457992187 (v2.31.8): nombres de columna nuevos en ROLE_ALIAS (Iniciado, Outcome, Summary,
+#      Resumen, Hallazgo clave, Goal, Context, Notas, Finding) migran cada uno a su rol — medido
+#      contra 11 instalaciones reales fuera de las 5 originales, con nombres genericos aqui (no se
+#      publican rutas ni nombres de proyectos privados del usuario);
+#  X2. una tabla YA lenient-canonica (ultima columna File) con filas REALES y 'Outcome' fuera de
+#      ROLE_ALIAS: HOY (antes de este ciclo) ya escribe por posicion en produccion — un
+#      research.upsert real la habria corrompido (Resultado sobre la columna Completed, marca de
+#      completado sobre el texto de Outcome, Archivo real nunca leido). Prioridad de reparacion
+#      real que el pendiente original no habia medido (adversario en Opus la encontro, no nombrada
+#      aqui por privacidad); las 2 filas reales migran sin perder nada;
+#   Y. "Research" NO se agrega a ROLE_ALIAS a proposito: significa tema en una instalacion medida
+#      (columna Slug aparte sostiene el enlace) y significa archivo en otra (el wikilink vive
+#      directo ahi) — decision explicita, no un hueco sin cerrar; el archivo queda BYTE IGUAL
+#      (no solo la cabecera: la fila de datos tambien, chequeado con `cmp`, adversario en Opus
+#      encontro que el chequeo anterior solo contaba lineas de cabecera).
+#  Y2. "Session"/"Sesion" TAMPOCO se toca (ya mapeaba a extra) por el mismo motivo: es metadata en
+#      varias instalaciones medidas (Topic|File|Session sigue reconocida, correcto) pero en otra
+#      sostiene el wikilink — esa forma se queda `header_unrecognized`, la fila con el enlace en
+#      Session queda intacta.
+#   Z. una tabla lenient-canonica (ultima columna File) pero VACIA (sin filas) y con un nombre de
+#      columna antes fuera de ROLE_ALIAS ("Finding") se reconoce y re-cabecea sin filas que migrar
+#      — el caso que motivo esta ronda: una tabla vacia hoy expuesta a que un evento futuro le
+#      inserte una fila con mas celdas que su cabecera (Topic|Finding|File, 3 columnas, contra las
+#      4 de la fila que `apply_research_upsert` insertaria por su cabecera lenient).
 #
 # Uso: test-repair-research-index.sh   (exit 0 = todo verde)
 set -u
@@ -714,6 +738,167 @@ python3 "$BIN/journal-emit.py" --type research.upsert --memory-dir "$MW" --slug 
 python3 "$BIN/journal-compact.py" --memory-dir "$MW" >/dev/null
 check "la fila con guiones apilados sigue ahi tras un research.upsert normal (no la podo)" \
   "$(grep -c '^| Tema con guiones apilados |' "$MW/_research-index.md")" "1"
+
+echo "X. p-5457992187: Iniciado/Context/Notas (Active) y Hallazgo clave/Outcome (Completed) migran a sus roles"
+MX="$TMP/mx/memory"; mkdir -p "$MX"
+cat > "$MX/_research-index.md" <<'EOF'
+---
+type: index
+---
+# Research Index
+
+## Active Research
+
+| Slug | Topic | Iniciado | Goal | Context | Notas |
+|---|---|---|---|---|---|
+| [[research/x-activo]] | Tema Activo X | 2026-05-01 | meta del research | dato de contexto | nota libre |
+
+## Completed Research
+
+| Slug | Topic | Hallazgo clave |
+|---|---|---|
+| [[research/x-completo]] | Tema Completo X | hallazgo final X |
+
+## Related
+EOF
+OUT=$(python3 "$BIN/repair-research-index.py" "$MX" --apply)
+check "X active_header_rewritten=si" "$(campo "$OUT" active_header_rewritten)" "active_header_rewritten=si"
+check "X active_rows_migrated=1" "$(campo "$OUT" active_rows_migrated)" "active_rows_migrated=1"
+check "X completed_header_rewritten=si" "$(campo "$OUT" completed_header_rewritten)" "completed_header_rewritten=si"
+check "X completed_rows_migrated=1" "$(campo "$OUT" completed_rows_migrated)" "completed_rows_migrated=1"
+check "X: Iniciado/Goal/Context/Notas anexados al Archivo, Next step/Origen vacios" \
+  "$(grep -c '^| Tema Activo X |  |  | \[\[research/x-activo\]\] — Iniciado: 2026-05-01; Goal: meta del research; Context: dato de contexto; Notas: nota libre |$' "$MX/_research-index.md")" "1"
+check "X: Hallazgo clave migro a Resultado" \
+  "$(grep -c '^| Tema Completo X | hallazgo final X | \[\[research/x-completo\]\] |$' "$MX/_research-index.md")" "1"
+OUT2=$(python3 "$BIN/journal-emit.py" --type research.upsert --memory-dir "$MX" --slug x-nuevo \
+  --tema "X nuevo" --status completed --resultado "r" 2>&1 && python3 "$BIN/journal-compact.py" --memory-dir "$MX" 2>&1)
+check "X: tras migrar, un research.upsert real entra sin cuarentena" "$(echo "$OUT2" | grep -c 'quarantined=0')" "1"
+
+echo "X2. tabla lenient-canonica (ultima columna File) con 'Outcome' fuera de ROLE_ALIAS y filas REALES (adversario en Opus encontro una asi, no nombrada en el pendiente original): expuesta HOY a escritura por posicion, cerrada por este ciclo"
+MX2="$TMP/mx2/memory"; mkdir -p "$MX2"
+cat > "$MX2/_research-index.md" <<'EOF'
+---
+type: index
+---
+# Research Index
+
+## Completed Research
+
+| Topic | Completed | Outcome | File |
+|---|---|---|---|
+| Hallazgo uno | 2026-06-13 | primer hallazgo real, con detalle tecnico | [[research/x2-uno]] |
+| Hallazgo dos | 2026-06-09 | segundo hallazgo, causa raiz distinta | [[research/x2-dos]] |
+
+## Active Research
+
+| Topic | Started | Status | File |
+|---|---|---|---|
+
+## Related
+EOF
+check "X2: ANTES de migrar, ya era lenient-canonica (research_table_is_canonical vía journal-compact.py)" \
+  "$(python3 -c "
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location('jc', '$BIN/journal-compact.py')
+jc = importlib.util.module_from_spec(spec); spec.loader.exec_module(jc)
+print(jc.research_table_is_canonical('| Topic | Completed | Outcome | File |'))
+")" "True"
+OUT=$(python3 "$BIN/repair-research-index.py" "$MX2" --apply)
+check "X2 completed_header_unrecognized=0 (Outcome ahora reconocido)" "$(campo "$OUT" completed_header_unrecognized)" "completed_header_unrecognized=0"
+check "X2 completed_rows_migrated=2 (las 2 filas reales migran, ninguna se pierde)" "$(campo "$OUT" completed_rows_migrated)" "completed_rows_migrated=2"
+check "X2: Outcome migro a Resultado sin perder texto, Completed se anexo al Archivo" \
+  "$(grep -c '^| Hallazgo uno | primer hallazgo real, con detalle tecnico | \[\[research/x2-uno\]\] — Completed: 2026-06-13 |$' "$MX2/_research-index.md")" "1"
+check "X2: la segunda fila tambien migro completa" \
+  "$(grep -c '^| Hallazgo dos | segundo hallazgo, causa raiz distinta | \[\[research/x2-dos\]\] — Completed: 2026-06-09 |$' "$MX2/_research-index.md")" "1"
+
+echo "Y. 'Research' NO se agrega a ROLE_ALIAS: significa tema en una instalacion y archivo en otra (ambiguo), se queda header_unrecognized en ambas formas"
+MY="$TMP/my/memory"; mkdir -p "$MY"
+cat > "$MY/_research-index.md" <<'EOF'
+---
+type: index
+---
+# Research Index
+
+## Active Research
+
+| Research | Slug | Iniciado |
+|---|---|---|
+| Tema con Research=tema | [[research/y-a]] | 2026-05-01 |
+
+## Completed Research
+
+| Research | Fecha | Resultado |
+|---|---|---|
+| [[research/y-b]] | 2026-05-01 | Research=archivo aqui, texto libre |
+
+## Related
+EOF
+cp "$MY/_research-index.md" "$MY/_research-index.md.antes"
+OUT=$(python3 "$BIN/repair-research-index.py" "$MY" --apply)
+check "Y active_header_unrecognized=1 (Research ambiguo, no se adivina)" "$(campo "$OUT" active_header_unrecognized)" "active_header_unrecognized=1"
+check "Y completed_header_unrecognized=1 (Research ambiguo, no se adivina)" "$(campo "$OUT" completed_header_unrecognized)" "completed_header_unrecognized=1"
+check "Y: el archivo quedo BYTE IGUAL (ninguna fila de datos se toco, no solo la cabecera)" \
+  "$(cmp -s "$MY/_research-index.md" "$MY/_research-index.md.antes" && echo igual)" "igual"
+
+echo "Y2. 'Session' NO se agrega a archivo por el mismo motivo: sostiene el wikilink en una instalacion, es metadata en otras — se queda header_unrecognized"
+MY2="$TMP/my2/memory"; mkdir -p "$MY2"
+cat > "$MY2/_research-index.md" <<'EOF'
+---
+type: index
+---
+# Research Index
+
+## Active Research
+
+| Topic | File | Session |
+|---|---|---|
+| Investigacion con Session=metadata | [[research/y2-a]] | sesion de origen |
+
+## Completed Research
+
+| Topic | Result | Session |
+|---|---|---|
+| Investigacion completada | hallazgo con Session=archivo aqui | [[research/y2-b]] |
+
+## Related
+EOF
+cp "$MY2/_research-index.md" "$MY2/_research-index.md.antes"
+OUT=$(python3 "$BIN/repair-research-index.py" "$MY2" --apply)
+check "Y2 active_header_unrecognized=0 (Topic/File/Session YA reconocidos: Session=extra es correcto aqui)" "$(campo "$OUT" active_header_unrecognized)" "active_header_unrecognized=0"
+check "Y2 completed_header_unrecognized=1 (Session sosteniendo el wikilink: sin columna archivo, no se adivina)" "$(campo "$OUT" completed_header_unrecognized)" "completed_header_unrecognized=1"
+check "Y2: la fila Completed (donde Session=archivo) quedo intacta" \
+  "$(grep -c '^| Investigacion completada | hallazgo con Session=archivo aqui | \[\[research/y2-b\]\] |$' "$MY2/_research-index.md")" "1"
+
+echo "Z. Tabla lenient-canonica (ultima columna File) pero VACIA, con 'Finding' antes fuera de ROLE_ALIAS: se re-cabecea sin filas que migrar"
+MZ="$TMP/mz/memory"; mkdir -p "$MZ"
+cat > "$MZ/_research-index.md" <<'EOF'
+---
+type: index
+---
+# Research Index
+
+## Active Research
+
+| Topic | Finding | File |
+|---|---|---|
+
+## Completed Research
+
+| Tema | Resultado | Archivo |
+|---|---|---|
+
+## Related
+EOF
+OUT=$(python3 "$BIN/repair-research-index.py" "$MZ" --apply)
+check "Z active_header_rewritten=si (antes lenient pero fuera de orden, ahora canonica)" "$(campo "$OUT" active_header_rewritten)" "active_header_rewritten=si"
+check "Z active_rows_migrated=0 (tabla vacia, nada que migrar)" "$(campo "$OUT" active_rows_migrated)" "active_rows_migrated=0"
+check "Z: cabecera canonica de Active tras el re-cabeceo" \
+  "$(grep -c '^| Tema | Next step | Origen | Archivo |$' "$MZ/_research-index.md")" "1"
+OUT2=$(python3 "$BIN/journal-emit.py" --type research.upsert --memory-dir "$MZ" --slug z-nuevo \
+  --tema "Z nuevo" --status active --next-step "paso" 2>&1 && python3 "$BIN/journal-compact.py" --memory-dir "$MZ" 2>&1)
+check "Z: tras re-cabecear, un research.upsert activo entra sin cuarentena ni columnas cruzadas" "$(echo "$OUT2" | grep -c 'quarantined=0')" "1"
+check "Z: la fila nueva entra con 4 celdas limpias (no 3 de la cabecera vieja)" \
+  "$(grep -c '^| Z nuevo | paso |  | \[\[research/z-nuevo\]\] |$' "$MZ/_research-index.md")" "1"
 
 echo
 [ $FAIL -eq 0 ] && echo "TODO VERDE" || echo "HAY FALLOS"
