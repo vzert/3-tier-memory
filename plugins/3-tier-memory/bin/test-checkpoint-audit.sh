@@ -737,6 +737,276 @@ S10="$M10/sessions/2026-09-19-demo.md"; ficha_completa "$S10"
 O=$($AUD "$M10" --session-file "$S10" --no-git --hoy $HOY 2>&1)
 chk "HECHO, sin avisos" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*avisos.scripts.research-index')"
 
+echo "== plan.mencionado_no_enlazado: nombrado por ruta en el snippet, ## Plans dice Ninguno =="
+# Caso real: claude-vzert, 2026-09-22-verificacion-cierre-pr238.md. `## Plans` decia "Ninguno —
+# sin cambios al plan desde el checkpoint anterior" y el snippet nombraba el plan por ruta en
+# prosa suelta en vez de enlazarlo y dejar que el caso 1 de <next-step> leyera su ## Estado.
+M12="$T/memory12"; nueva_memoria "$M12"
+S12="$M12/sessions/2026-09-19-demo.md"; ficha_completa "$S12"
+cat > "$M12/plans/plan-demo.md" <<'EOF'
+---
+type: plan
+---
+# Plan demo
+
+## Estado
+- Fase actual: 7
+- Proxima accion: pieza 3
+EOF
+python3 - "$S12" <<'PY'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Como retomar\nNinguno — la sesion cerro sin continuidad.",
+            "## Como retomar\n\n```\nRetomamos: verificacion puntual.\n\n"
+            "Proximo paso: revisar pendientes; el trabajo activo real es la Fase 7, "
+            "ver memory/plans/plan-demo.md.\n```")
+open(p,'w',encoding='utf-8').write(t)
+PY
+O=$($AUD "$M12" --session-file "$S12" --no-git --hoy $HOY 2>&1)
+chk "avisa del plan sin enlazar" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*plan.mencionado_no_enlazado')"
+chk "lo nombra por ruta" "1" "$(printf '%s' "$O" | grep -c 'plans/plan-demo.md')"
+
+echo "== el mismo caso, pero ## Plans SI lo enlaza: HECHO =="
+python3 - "$S12" <<'PY'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Plans\n- Ninguno", "## Plans\n- [[plans/plan-demo]] — sin cambios de contenido")
+open(p,'w',encoding='utf-8').write(t)
+PY
+O=$($AUD "$M12" --session-file "$S12" --no-git --hoy $HOY 2>&1)
+chk "ya no avisa" "0" "$(printf '%s' "$O" | grep -c 'SALTADO .*plan.mencionado_no_enlazado')"
+chk "sale HECHO" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*plan.mencionado_no_enlazado')"
+
+echo "== wikilink con ruta relativa ../plans/x tambien cuenta como enlazado (no es falso positivo) =="
+# Encontrado en el barrido de sombra contra claude-vzert (pr199-rescate-bloque-b,
+# candidatos-upstream-2195-2315): [[../plans/x]] es un wikilink valido, WIKILINK_PLAN no lo casa
+# por el prefijo `../`, y comparar solo contra el regex estricto marcaba un plan ya enlazado como
+# si no lo estuviera.
+python3 - "$S12" <<'PY'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("- [[plans/plan-demo]] — sin cambios de contenido",
+            "- [[../plans/plan-demo]] — sin cambios de contenido")
+open(p,'w',encoding='utf-8').write(t)
+PY
+O=$($AUD "$M12" --session-file "$S12" --no-git --hoy $HOY 2>&1)
+chk "sigue HECHO con ../plans/" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*plan.mencionado_no_enlazado')"
+
+echo "== snippet.futuro_duplicado: un id reservado por el calendario reaparece en Sigue abierto =="
+# Casos reales: claude-vzert, 2026-09-18-verificar-avance-pr192-censo-grep.md y
+# 2026-09-19-restos-213-pr220.md. El mismo id vencia en ## Recordatorios de calendario Y volvia a
+# aparecer en la linea `Sigue abierto:` del bloque de hoy.
+M13="$T/memory13"; nueva_memoria "$M13"
+S13="$M13/sessions/2026-09-19-demo.md"; ficha_completa "$S13"
+python3 - "$S13" <<'PY'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace(
+    "## Como retomar\nNinguno — la sesion cerro sin continuidad.",
+    "## Como retomar\n\n```\nRetomamos: demo.\n\n"
+    "Sigue abierto: disco al 97% _id: p-b25ac1ef68_.\n```\n\n"
+    "## Recordatorios de calendario\n\n"
+    "### 2026-09-25 — [demo] revisar disco otra vez\n\n"
+    "```\n"
+    "Retomamos: medir disco del VPS otra vez _id: p-b25ac1ef68_\n"
+    "```")
+open(p,'w',encoding='utf-8').write(t)
+PY
+O=$($AUD "$M13" --session-file "$S13" --no-git --hoy $HOY 2>&1)
+chk "avisa del duplicado" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*snippet.futuro_duplicado')"
+chk "nombra el id" "1" "$(printf '%s' "$O" | grep -A1 'snippet.futuro_duplicado' | grep -c 'p-b25ac1ef68')"
+
+echo "== el mismo id, pero solo citado en Proximo paso como motivo del caso 5: NO es duplicado =="
+# Dos falsos positivos reales de esta forma (remedicion-goalspec-precondicion-no-cumplida,
+# nudge-devs-encendido) antes de acotar el check a la linea Sigue abierto: unicamente. Citar el id
+# para explicar por que no hay nada accionable hoy no es lo mismo que listarlo como pendiente.
+M14="$T/memory14"; nueva_memoria "$M14"
+S14="$M14/sessions/2026-09-19-demo.md"; ficha_completa "$S14"
+python3 - "$S14" <<'PY'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace(
+    "## Como retomar\nNinguno — la sesion cerro sin continuidad.",
+    "## Como retomar\n\n```\nRetomamos: demo.\n\n"
+    "Proximo paso: ninguno -- el pendiente de esta sesion queda con fecha futura "
+    "_id: p-b25ac1ef68_, ver Recordatorios de calendario.\n\n"
+    "Sigue abierto: otro pendiente sin relacion _id: p-1111111111_.\n```\n\n"
+    "## Recordatorios de calendario\n\n"
+    "### 2026-09-25 — [demo] revisar disco otra vez\n\n"
+    "```\n"
+    "Retomamos: medir disco del VPS otra vez _id: p-b25ac1ef68_\n"
+    "```")
+open(p,'w',encoding='utf-8').write(t)
+PY
+O=$($AUD "$M14" --session-file "$S14" --no-git --hoy $HOY 2>&1)
+chk "no lo marca como duplicado" "0" "$(printf '%s' "$O" | grep -c 'SALTADO .*snippet.futuro_duplicado')"
+chk "sale HECHO" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*snippet.futuro_duplicado')"
+
+echo "== sin bloque de calendario: no aplica =="
+O=$($AUD "$M9" --session-file "$S9" --no-git --hoy $HOY 2>&1)
+chk "HECHO, no aplica" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*snippet.futuro_duplicado.*no aplica')"
+
+echo "== plan.mencionado_no_enlazado: 'sin cambios en plans/x' en prosa NO es un enlace =="
+# Hallazgo del adversario (ronda 1, 2.32.0): el respaldo anterior por substring `plans/{p} in
+# sec_plans` aceptaba CUALQUIER texto que contuviera la subcadena, no solo un wikilink real. Con
+# "Ninguno — sin cambios en plans/plan-demo (sigue igual)." el plan seguia sin estar enlazado de
+# verdad y el check debe seguir avisando.
+M15="$T/memory15"; nueva_memoria "$M15"
+S15="$M15/sessions/2026-09-19-demo.md"; ficha_completa "$S15"
+python3 - "$S15" <<'PY'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Plans\n- Ninguno",
+            "## Plans\n- Ninguno — sin cambios en plans/plan-demo (sigue igual).")
+t=t.replace("## Como retomar\nNinguno — la sesion cerro sin continuidad.",
+            "## Como retomar\n\n```\nRetomamos: demo.\n\n"
+            "Proximo paso: revisar pendientes; ver memory/plans/plan-demo.md.\n```")
+open(p,'w',encoding='utf-8').write(t)
+PY
+cat > "$M15/plans/plan-demo.md" <<'EOF'
+---
+type: plan
+---
+# Plan demo
+
+## Estado
+- Fase actual: 1
+EOF
+O=$($AUD "$M15" --session-file "$S15" --no-git --hoy $HOY 2>&1)
+chk "prosa que solo MENCIONA la ruta no cuenta como enlace" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*plan.mencionado_no_enlazado')"
+
+echo "== plan.mencionado_no_enlazado: prefijo de slug no confunde plan-x con plan-x-v2 =="
+# Hallazgo del adversario: comparar por substring dejaba pasar la mencion de `plan-x` cuando lo
+# enlazado era `plan-x-v2` (mismo prefijo). Con WIKILINK_PLAN_LAXO + comparacion por slug exacto,
+# ambos siguen siendo planes DISTINTOS y el mencionado sin enlazar debe seguir avisando.
+M16="$T/memory16"; nueva_memoria "$M16"
+S16="$M16/sessions/2026-09-19-demo.md"; ficha_completa "$S16"
+python3 - "$S16" <<'PY'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Plans\n- Ninguno", "## Plans\n- [[plans/plan-demo-v2]] — otro plan, mismo prefijo")
+t=t.replace("## Como retomar\nNinguno — la sesion cerro sin continuidad.",
+            "## Como retomar\n\n```\nRetomamos: demo.\n\n"
+            "Proximo paso: revisar pendientes; ver memory/plans/plan-demo.md.\n```")
+open(p,'w',encoding='utf-8').write(t)
+PY
+cat > "$M16/plans/plan-demo.md" <<'EOF'
+---
+type: plan
+---
+# Plan demo
+
+## Estado
+- Fase actual: 1
+EOF
+cat > "$M16/plans/plan-demo-v2.md" <<'EOF'
+---
+type: plan
+---
+# Plan demo v2
+
+## Estado
+- Fase actual: 1
+EOF
+O=$($AUD "$M16" --session-file "$S16" --no-git --hoy $HOY 2>&1)
+chk "plan-demo distinto de plan-demo-v2, sigue avisando" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*plan.mencionado_no_enlazado')"
+
+echo "== plan.mencionado_no_enlazado: mencion en 'No repitas' no es 'proximo paso' =="
+# Hallazgo del adversario: "No repitas: el enfoque de memory/plans/plan-demo.md ya se descarto"
+# citaba la ruta de un plan sin afirmar que sea el proximo paso. Contarlo ahi era un falso
+# positivo real. El check ahora solo mira las lineas `Proximo paso:` y `Lee `.
+M17="$T/memory17"; nueva_memoria "$M17"
+S17="$M17/sessions/2026-09-19-demo.md"; ficha_completa "$S17"
+python3 - "$S17" <<'PY'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Como retomar\nNinguno — la sesion cerro sin continuidad.",
+            "## Como retomar\n\n```\nRetomamos: demo.\n\n"
+            "Proximo paso: revisar _pendientes.md y proponer siguiente prioridad.\n\n"
+            "No repitas: el enfoque de memory/plans/plan-demo.md ya se descarto.\n```")
+open(p,'w',encoding='utf-8').write(t)
+PY
+cat > "$M17/plans/plan-demo.md" <<'EOF'
+---
+type: plan
+---
+# Plan demo
+
+## Estado
+- Fase actual: 1
+EOF
+O=$($AUD "$M17" --session-file "$S17" --no-git --hoy $HOY 2>&1)
+chk "mencion en No repitas no dispara" "0" "$(printf '%s' "$O" | grep -c 'SALTADO .*plan.mencionado_no_enlazado')"
+chk "sale HECHO" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*plan.mencionado_no_enlazado')"
+
+echo "== plan.mencionado_no_enlazado: ruta de otra convencion (docs/plans/) no dispara =="
+# Hallazgo del adversario: \bplans/ casaba con CUALQUIER `*/plans/*.md`, no solo `memory/plans/`.
+# En un repo con la convencion docs/plans/ eso era un SALTADO garantizado sobre algo que no es
+# "un plan de este proyecto sin enlazar".
+M18="$T/memory18"; nueva_memoria "$M18"
+S18="$M18/sessions/2026-09-19-demo.md"; ficha_completa "$S18"
+python3 - "$S18" <<'PY'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Como retomar\nNinguno — la sesion cerro sin continuidad.",
+            "## Como retomar\n\n```\nRetomamos: demo.\n\n"
+            "Proximo paso: implementar la tarea 3 de docs/plans/2026-09-rollout.md en el repo de workspace.\n```")
+open(p,'w',encoding='utf-8').write(t)
+PY
+O=$($AUD "$M18" --session-file "$S18" --no-git --hoy $HOY 2>&1)
+chk "ruta docs/plans/ no dispara" "0" "$(printf '%s' "$O" | grep -c 'SALTADO .*plan.mencionado_no_enlazado')"
+
+echo "== plan.mencionado_no_enlazado: wikilink con .md o #ancla sigue siendo el mismo plan =="
+# Hallazgo del adversario (ronda 3): [[plans/x.md]] y [[plans/x#Estado]] son wikilinks reales al
+# mismo plan `x`, pero la comparacion por slug exacto los perdia por la extension/ancla de mas.
+M19="$T/memory19"; nueva_memoria "$M19"
+S19="$M19/sessions/2026-09-19-demo.md"; ficha_completa "$S19"
+python3 - "$S19" <<'PY'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Plans\n- Ninguno", "## Plans\n- [[plans/plan-demo.md#Estado]] — enlazado con ancla")
+t=t.replace("## Como retomar\nNinguno — la sesion cerro sin continuidad.",
+            "## Como retomar\n\n```\nRetomamos: demo.\n\n"
+            "Proximo paso: revisar pendientes; ver memory/plans/plan-demo.md.\n```")
+open(p,'w',encoding='utf-8').write(t)
+PY
+cat > "$M19/plans/plan-demo.md" <<'EOF'
+---
+type: plan
+---
+# Plan demo
+
+## Estado
+- Fase actual: 1
+EOF
+O=$($AUD "$M19" --session-file "$S19" --no-git --hoy $HOY 2>&1)
+chk "wikilink con .md y #ancla sigue contando como enlazado" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*plan.mencionado_no_enlazado')"
+
+echo "== plan.mencionado_no_enlazado: 'Próximo paso:' con tilde y '**negrita**' tambien se revisan =="
+# Hallazgo del adversario (ronda 3): el filtro de linea solo reconocia 'proximo paso:' sin tilde
+# y sin markdown — dos formas reales del corpus que antes se saltaban sin aviso.
+M20="$T/memory20"; nueva_memoria "$M20"
+S20="$M20/sessions/2026-09-19-demo.md"; ficha_completa "$S20"
+python3 - "$S20" <<'PY'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Como retomar\nNinguno — la sesion cerro sin continuidad.",
+            "## Como retomar\n\n```\nRetomamos: demo.\n\n"
+            "**Próximo paso:** revisar pendientes; ver memory/plans/plan-demo.md.\n```")
+open(p,'w',encoding='utf-8').write(t)
+PY
+cat > "$M20/plans/plan-demo.md" <<'EOF'
+---
+type: plan
+---
+# Plan demo
+
+## Estado
+- Fase actual: 1
+EOF
+O=$($AUD "$M20" --session-file "$S20" --no-git --hoy $HOY 2>&1)
+chk "tilde + negrita en Proximo paso tambien se revisan" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*plan.mencionado_no_enlazado')"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

@@ -1,6 +1,81 @@
 # Changelog
 
 
+## [2.32.0] - 2026-09-22
+Víctor pidió (vía `/goalspec:interview`) revisar el JSONL de las sesiones recientes de
+`claude-vzert` buscando una sospecha de regresión: el mecanismo de "próximo paso lee el plan
+activo" (2.25.0/2.25.1) y el de "no repitas un id que ya tiene su propio recordatorio futuro"
+(2.25.7/8/9) llevan semanas sin tocarse en el template, pero Víctor los vio fallar en vivo — en
+la sesión "fase 7" el agente dio un `<next-step>` genérico teniendo el paso concreto documentado
+en el propio plan, y no corrigió hasta que se lo señaló.
+
+Confirmado en el JSONL crudo de `claude-vzert` (turno por turno, no solo la ficha ya corregida):
+el primer intento de cierre de `2026-09-22-verificacion-cierre-pr238.md` escribió `## Plans`
+como "Ninguno — sin cambios al plan desde el checkpoint anterior" y el propio `<next-step>` decía
+en prosa suelta "el trabajo activo real es la Fase 7 pieza 3... ver memory/plans/plan-....md" en
+vez de usar el caso 1 (que habría leído el `## Estado` real del plan). "Sin cambios al plan" no
+es lo mismo que "el plan no es el contexto de esta sesión" — la misma confusión que la regla 214
+de aprendizajes ya nombra (fallo de RELACIÓN, no de PERSISTENCIA).
+
+Un barrido de las fichas de `claude-vzert` posteriores a 2.25.9 (2026-09-17..22, 101-102 según el
+día de la medición: el proyecto sigue en uso a diario) confirmó además la segunda sospecha: 2
+sesiones reales (`verificar-avance-pr192-censo-grep`, `restos-213-pr220`) repetían en
+`Sigue abierto:` un id que ya tenía su propio recordatorio en `## Recordatorios de calendario` con
+fecha futura — la regla de 2.25.7 ("la escalera descarta candidatos con `_revisar` futuro") se
+escribió solo para los casos 2-3 de la escalera y nunca se extendió al caso 1; otras 2 sesiones
+(`medicion-fase15-sin-punto-ciego`, `verificar-parche-tier3-vps-semana`) mostraron exactamente ese
+hueco: el caso 1 imprimió íntegro el texto de una `Proxima accion` fechada a futuro, duplicando el
+recordatorio que Step 8c ya iba a mandar por separado.
+
+Varias rondas de `/goalspec:adversary` (Opus 5.5, subagente — el backend externo `codex exec`
+falló repetidamente sin completar ninguna ronda, tratado como `hold` no verificado) encontraron
+defectos reales en el primer diseño, todos corregidos antes de esta entrada: el respaldo por
+substring de `plan.mencionado_no_enlazado` daba falso NEGATIVO (una mención en prosa sin wikilink
+real contaba como "enlazado") y falso POSITIVO (una mención en `No repitas:` o una ruta
+`docs/plans/…` de otra convención contaba como "el próximo paso"); un wikilink real con `.md` o
+`#ancla` (`[[plans/x.md]]`, `[[plans/x#Estado]]`) tampoco se reconocía, ni una línea `Próximo
+paso:` con tilde o en `**negrita**`; y la prosa nueva del caso 1 contradecía dos reglas ya
+existentes de colapso del caso 5 en `checkpoint-3t.md` (la condición de "subir hasta la raíz" y
+la exclusión de pendientes Alta de otras sesiones).
+
+### Added
+- **`checkpoint-audit.py`**: dos checks nuevos, mismo patrón que el resto del archivo (solo lee,
+  mide la FORMA del artefacto).
+  - **`plan.mencionado_no_enlazado`**: un plan que las líneas `Proximo paso:`/`Próximo paso:`/
+    `Lee ` de `## Como retomar` nombran por ruta `memory/plans/<slug>.md`, cuyo archivo existe en
+    disco, y que `## Plans` no enlaza — el hueco exacto de `verificacion-cierre-pr238`. El enlace
+    se reconoce con un wikilink real (`[[plans/<slug>]]`, con cualquier prefijo `../` y opcional
+    `.md`/`#ancla`/alias), comparado por SLUG EXACTO, nunca por substring. Acotado a esas dos
+    líneas y exigiendo el archivo real a propósito: una mención en `No repitas:` (un plan
+    descartado, citado para no repetirlo) o una ruta de otra convención (`docs/plans/…`) no son
+    "el próximo paso sin enlazar" — contarlas ahí fue el primer defecto que encontró el adversario.
+  - **`snippet.futuro_duplicado`**: un id que Step 8c ya reservó para su propio recordatorio de
+    calendario (el de la línea `Retomamos:` de ESE recordatorio, no cualquier id que su
+    Descripción/Comprueba mencionen de paso) y reaparece en la línea `Sigue abierto:` del bloque
+    de hoy. Acotado a esa línea únicamente: `Proximo paso` puede citar el mismo id de forma
+    legítima para explicar por qué no hay nada accionable hoy (el motivo del caso 5, no una
+    duplicación) — dos falsos positivos reales de esa forma
+    (`remedicion-goalspec-precondicion-no-cumplida`, `nudge-devs-encendido`) se corrigieron
+    acotando el check antes de esta entrada, no después.
+  - `test-checkpoint-audit.sh`: 84 → 101 casos (17 nuevos), incluidos los falsos positivos y
+    negativos reales de las rondas de adversario como regresión permanente.
+
+### Fixed
+- **`checkpoint-3t.md`, caso 1 de `<next-step>`** (Step 8): si la `Proxima accion` del `## Estado`
+  de un plan es integramente esperar a una fecha que ya tiene su propio recordatorio de
+  calendario, el texto del slot pasa a `ninguno — <plan> Fase <N> esta bloqueada hasta <fecha>,
+  ver Recordatorios de calendario` en vez de repetir el texto completo de la acción futura. Es
+  una variante MÁS del caso 5 (mismo mecanismo que la variante ya existente para casos 2-3, no uno
+  nuevo, y ahora enlazada desde ambos lados de la prosa existente): si además no queda ningún
+  pendiente PROPIO de esta sesión que listar en `Sigue abierto` (un Alta de otra sesión no cuenta
+  — mismo criterio que ya regía el colapso general), `<next-step>` en su conjunto ES el caso 5 y
+  el bloque colapsa a una línea por el mecanismo de 8a de siempre; si `Sigue abierto` sí tiene
+  contenido propio real, el caso 5 no aplica y el bloque completo de 6 líneas se genera igual, con
+  esta media-línea en `Proximo paso`. Es una corrección de prosa, no un check mecánico: distinguir
+  "el plan está bloqueado hasta tal fecha" de "aquí está la acción completa para cuando llegue esa
+  fecha" es la misma clase de juicio semántico que la regla 216 ya prohíbe automatizar en Step 8;
+  el check mecánico de `Sigue abierto:` de arriba no cubre este caso a propósito.
+
 ## [2.31.9] - 2026-09-22
 Cierra el hueco estructural detrás de `p-ccc013b53d`: `header_unrecognized=1` de
 `repair-research-index.py` (o de `repair-plans-index.py`) solo se imprimía en el stdout de Step

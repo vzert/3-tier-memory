@@ -1028,6 +1028,32 @@ Reglas para llenar los slots:
      que el plan ya tiene. Si el plan no tiene `## Estado` todavia (uno viejo, sin retro-adaptar),
      cae al caso 2 como cualquier sesion sin plan.
 
+     **Si la `Proxima accion` del `## Estado` es integramente esperar a una fecha que Step 8c ya
+     reservo para su propio recordatorio de calendario** (el plan no tiene nada que hacer HOY,
+     solo una revision futura), NO la repitas verbatim como `<next-step>`: el texto del slot pasa
+     a `ninguno — <plan> Fase <N> esta bloqueada hasta <fecha>, ver Recordatorios de calendario`
+     (mismo formato de media linea que ya usa la variante de casos 2-3 mas abajo). La regla de mas
+     abajo ("la escalera descarta candidatos con `_revisar` futuro") se escribio pensando en casos
+     2-3 y nunca se extendio a este caso 1 — medido en `claude-vzert` (2026-09-18 y 2026-09-21, dos
+     sesiones reales): el caso 1 imprimio integro el texto de una `Proxima accion` fechada a futuro
+     (el script exacto a correr, la fecha, el criterio), y el snippet pensado para "copia y arranca
+     AHORA" termino siendo una copia del recordatorio que Step 8c ya iba a mandar por separado.
+
+     **Esto es una variante MAS del caso 5, no un mecanismo nuevo de colapso** — mismo principio
+     que la variante ya documentada para casos 2-3 mas abajo ("Tambien aplica cuando..."): si,
+     ADEMAS de que la `Proxima accion` es puro futuro, no queda ningun pendiente PROPIO de esta
+     sesion que listar en `Sigue abierto` (sin contar el id ya cubierto por el calendario — regla
+     de la linea `Sigue abierto:` mas abajo), entonces `<next-step>` en su conjunto ES el caso 5, y
+     8a colapsa el bloque a una linea con la media-linea de arriba como motivo — el MISMO mecanismo
+     de 8a, sin condicion nueva que agregarle ahi. **Un pendiente Alta de OTRA sesion, sin relacion
+     con esta, no cuenta para esta cuenta** — mismo criterio que ya rige el colapso general (ver
+     mas arriba, "Un pendiente Alta del backlog general... NO es motivo para generar el bloque
+     completo"): ese backlog ya lo reporta el hook de inicio de sesion, y exigirlo aqui volveria el
+     colapso inalcanzable en la practica, el mismo defecto que 2.25.9 ya cerro para casos 2-3. Si en
+     cambio `Sigue abierto` SI tiene contenido propio real, el caso 5 no aplica (sigue siendo el
+     caso 1, no colapsa): el bloque completo de 6 lineas se genera igual, con la media-linea de
+     arriba en `Proximo paso` y el resto normal.
+
      **"Toco" incluye el plan padre que actualizaste por la regla de subir de Step 5, no solo el
      plan que era el tema explicito de la sesion.** Hallazgo adversarial (2026-09-14): si el
      trabajo de hoy fue CERRAR un hijo, ese hijo mismo ya no esta `active` — leer el caso 1 en
@@ -1040,9 +1066,11 @@ Reglas para llenar los slots:
      **Si el plan que da el `<next-step>` quedo sin trabajo propio Y tiene `--parent`** (subiste
      al padre en Step 5 y no encontraste otro hijo abierto ahi tampoco todavia), sube otra vez y
      usa el `## Estado` de ESE padre. Repite mientras haga falta — es la misma regla de Step 5,
-     aplicada al armar el snippet en vez de al cerrar el evento. El caso 5 (`ninguno`) solo aplica
-     si subiste hasta la raiz y la raiz tambien esta sin trabajo abierto, nunca porque el hijo de
-     hoy ya cerro.
+     aplicada al armar el snippet en vez de al cerrar el evento. Por esta via de escalar
+     padre/hijo, el caso 5 (`ninguno`) solo aplica si subiste hasta la raiz y la raiz tambien esta
+     sin trabajo abierto, nunca porque el hijo de hoy ya cerro — esto no excluye la OTRA variante
+     de caso 5 de este mismo caso 1 (plan bloqueado por fecha futura, unas lineas arriba): las dos
+     son condiciones independientes que, si se cumplen, hacen que `<next-step>` sea el caso 5.
 
      **Si al subir encuentras un padre SIN bloque `## Estado`** (uno viejo, sin retro-adaptar —
      el caso real de varios planes del port al VPS), NO sigas subiendo asumiendo que esta bien:
@@ -1100,6 +1128,11 @@ Reglas para llenar los slots:
      Recordatorios de calendario`. Ejemplo: si la sesion del 2026-09-08 no hubiera dejado el
      pendiente suelto sin fecha `p-9445bed4b6`, el texto habria sido `ninguno — el snapshot semanal
      de SQL-LIVE y la confirmacion de N8n-Crons ya tienen su propio recordatorio (09-16, 09-20)`.
+
+     **Tambien aplica, por la misma razon, cuando el candidato es el caso 1** (plan activo con
+     `## Estado`) y su `Proxima accion` es integramente esperar una fecha ya cubierta por el
+     calendario, sin ningun otro pendiente propio de esta sesion en `Sigue abierto` — ver el
+     parrafo de esa variante en el caso 1, arriba, para el detalle y el ejemplo real.
 
      **Antes de declarar este caso, relee la seccion `## Pendientes` que este mismo Step ya
      escribio (3a/3b) de ESTE archivo.** Si queda algun `- [ ]` sin marcar ahi **y su id, buscado en

@@ -96,6 +96,12 @@ FECHA_FRONTMATTER = re.compile(r"^date:\s*(\d{4}-\d{2}-\d{2})\s*$", re.M)
 MAS_PENDIENTES = re.compile(r"\+\s*(\d+)\s+m[aá]s", re.I)
 LINEA_PENDIENTE = re.compile(r"^-\s*\[[ xX]\]\s")
 BLOQUE_CALENDARIO = re.compile(r"^###\s+\d{4}-\d{2}-\d{2}\b", re.M)
+# El id RESERVADO por un recordatorio de calendario es el de su propia linea `Retomamos:` (Step
+# 8c-2, dentro del "Pega esto dentro del evento"), no cualquier id que su Descripcion/Comprueba
+# mencionen de paso para dar contexto o decir explicitamente "esto NO es lo que hay que retomar".
+# Usar ID_PENDIENTE a secas sobre toda la seccion conto como "duplicado" un id que el propio
+# recordatorio citaba solo para excluirlo — falso positivo real, `restos-213-pr220`.
+RETOMAMOS_ID_CALENDARIO = re.compile(r"^Retomamos:.*?_id:\s*(p-[0-9a-f]{10})(?![0-9a-f])", re.M)
 
 # Version en la que `## Pendientes` empezo a llevar la linea `RECONCILIACION:` (Step 3d, 2.28.0).
 # Una ficha anterior no pudo escribirla: exigirsela es un falso positivo garantizado en toda
@@ -310,6 +316,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
     slug = os.path.basename(session_file)
     if slug.endswith(".md"):
         slug = slug[:-3]
+    sec_retomar = seccion_por_prefijo(secs, "Como retomar") or ""
 
     # 1. Secciones obligatorias de la ficha
     faltan = [n for n in SECCIONES_OBLIGATORIAS if seccion_por_prefijo(secs, n) is None]
@@ -476,6 +483,62 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
             h.append(Hallazgo(HECHO, "plan.indice",
                               "la fila de cada plan enlazado apunta a esta sesion"))
 
+    # 5-bis. Un plan mencionado por su RUTA dentro de `## Como retomar` que `## Plans` no enlaza.
+    # Medido en `claude-vzert` (2026-09-22, PR#238): la ficha escribio `## Plans` con "Ninguno —
+    # sin cambios al plan desde el checkpoint anterior", y el propio snippet decia en prosa suelta
+    # "el trabajo activo real es la Fase 7 pieza 3... ver memory/plans/plan-....md" en vez de usar
+    # el caso 1 de `<next-step>` (que lee el `## Estado` de ESE plan y lo habria dado como accion
+    # concreta, no generica). Sin el wikilink en `## Plans`, el caso 1 nunca puede aplicar: "sin
+    # cambios al plan" no es lo mismo que "el plan no es el contexto de esta sesion", y confundir
+    # una cosa con la otra es la misma fuente que la regla 214 de aprendizajes ya nombra (fallo de
+    # RELACION, no de PERSISTENCIA). Victor lo vio en vivo ("no hay un paso siguiente de la fase 7
+    # en vez de que me des un prompt generico") y el propio agente lo corrigio en la misma sesion.
+    # La membresia NO se mide solo contra `planes` (WIKILINK_PLAN exige `[[plans/…]]` exacto):
+    # una ficha real enlaza con `[[../plans/plan-x]]` (ruta relativa desde `sessions/`) y ese
+    # wikilink es valido, solo que otra forma — `WIKILINK_PLAN_LAXO` acepta cualquier numero de
+    # `../` y compara por SLUG exacto, no por substring (un substring `plans/{p}` en el cuerpo de
+    # `## Plans` da un falso NEGATIVO: "sin cambios en plans/plan-x (sigue igual)" en prosa suelta
+    # cuenta como "enlazado" sin serlo, y un plan `plan-x-v2` enlazado deja pasar la mencion de
+    # `plan-x` por prefijo — las dos formas se probaron en la ronda de adversario de esta sesion).
+    #
+    # La busqueda de menciones se acota a las lineas `Proximo paso:` y `Lee ` — las UNICAS donde
+    # Step 8 declara la ruta de un plan (caso 1, y la extension de la linea `Lee` que Step 8
+    # documenta mas abajo) — no a `## Como retomar` completo: un plan citado en `No repitas:`
+    # ("el enfoque de memory/plans/plan-x.md ya se descarto") o en `Sigue abierto` no es una
+    # afirmacion de "este es el proximo paso", y contarlo ahi disparaba SALTADO sobre una mencion
+    # inocua (hallazgo real de la ronda de adversario). Ademas exige que el archivo exista: una
+    # ruta rota o de otra convencion (`docs/plans/…`) no es "un plan de este proyecto sin
+    # enlazar", es un problema distinto que este check no cubre.
+    RUTA_PLAN = re.compile(r"\bmemory/plans/([\w.-]+?)\.md\b")
+    # `(?:\.md)?` y `(?:#[^\]|]*)?`: un wikilink real puede traer la extension o un ancla de
+    # seccion (`[[plans/x.md]]`, `[[plans/x#Estado]]`) sin dejar de ser el mismo plan `x` — sin
+    # esto, ese wikilink SI enlaza pero la comparacion por slug exacto no lo reconocia (hallazgo
+    # de la ronda de adversario, cero casos en el corpus real pero reproducible).
+    WIKILINK_PLAN_LAXO = re.compile(r"\[\[(?:\.\./)*plans/([^\]|#]+?)(?:\.md)?(?:#[^\]|]*)?"
+                                    r"(?:\|[^\]]*)?\]\]")
+    # El prefijo se compara sin `**negrita**` y admitiendo la tilde real de "Próximo" — dos
+    # fichas del corpus la usan (ninguna nombraba un plan ahi, pero el hueco es real, no
+    # hipotetico).
+    lineas_plan = "\n".join(l for l in sec_retomar.splitlines()
+                            if l.strip().strip("*").lower()
+                                .startswith(("proximo paso:", "próximo paso:", "lee ")))
+    mencionados = set(RUTA_PLAN.findall(lineas_plan))
+    planes_laxo = set(WIKILINK_PLAN_LAXO.findall(sec_plans))
+    sin_enlazar = sorted(p for p in mencionados
+                         if p not in planes_laxo
+                         and os.path.isfile(os.path.join(memory_dir, "plans", p + ".md")))
+    if sin_enlazar:
+        h.append(Hallazgo(SALTADO, "plan.mencionado_no_enlazado",
+                          f"{len(sin_enlazar)} plan(es) que `## Como retomar` nombra por ruta y "
+                          "`## Plans` no enlaza",
+                          [f"plans/{p}.md" for p in sin_enlazar],
+                          corrige="si el plan es el contexto real de esta sesion, enlazalo en "
+                                  "`## Plans` con `[[plans/<slug>]]` y deja que el caso 1 de Step "
+                                  "8 lea su `## Estado`, en vez de nombrarlo suelto en prosa"))
+    else:
+        h.append(Hallazgo(HECHO, "plan.mencionado_no_enlazado",
+                          "todo plan que el snippet nombra por ruta esta enlazado en `## Plans`"))
+
     # 6. Learnings: el topico existe en disco y esta indexado en _learnings.md
     sec_learn = seccion_por_prefijo(secs, "Learnings generados") or ""
     topicos = sorted(set(WIKILINK_LEARNING.findall(sec_learn)))
@@ -523,7 +586,6 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
                               f"los {len(ids_ficha)} id(s) tienen su fila mensual"))
 
     # 8. El snippet de continuidad nombra los pendientes que la sesion deja abiertos
-    sec_retomar = seccion_por_prefijo(secs, "Como retomar") or ""
     # Step 8 excluye de `Sigue abierto` todo pendiente con `_revisar` FUTURO respecto a la ficha:
     # ese ya sale con su Titulo/Descripcion completos en `## Recordatorios de calendario` (Step
     # 8c), y repetirlo pone la misma fecha dos veces en el mismo snippet. Exigirlo aqui era un
@@ -599,6 +661,46 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
                               f"ni cubre con el tope de {TOPE_SIGUE_ABIERTO}",
                               faltan_snip,
                               corrige="anade su id a la linea `Sigue abierto:` del bloque Como retomar"))
+
+    # 8-bis. Un id que Step 8c ya reservo para el bloque de calendario (con su Titulo y
+    # Descripcion completos, fecha futura) no puede reaparecer en la linea `Sigue abierto:` de
+    # `## Como retomar` — esa linea es la lista de lo que "sigue abierto y toca retomar", y listar
+    # ahi un id que ya tiene su propio recordatorio con fecha duplica la misma informacion en dos
+    # formas. Medido en `claude-vzert` (2026-09-18/19, dos sesiones reales): el mismo id vencia en
+    # el bloque de calendario Y volvia a aparecer en `Sigue abierto` del snippet de hoy. La regla
+    # de 2.25.7 ("la escalera de `<next-step>` descarta candidatos con `_revisar` futuro") solo
+    # mira que ningun id FALTE de esa linea; el check 8 de arriba hereda esa misma direccion —
+    # nunca mira si un id que YA tiene su propio recordatorio se colo de vuelta.
+    #
+    # Acotado a ESTA linea a proposito, no a todo `## Como retomar`: `Proximo paso` puede citar el
+    # mismo id de forma legitima para EXPLICAR por que no hay nada accionable hoy ("Proximo paso:
+    # ninguno -- el pendiente de esta sesion queda con fecha futura, ver Recordatorios de
+    # calendario", o su variante "nada accionable hoy... ver Recordatorios de calendario") — esa
+    # cita es el motivo del caso 5, no una duplicacion. Dos falsos positivos reales de esa forma
+    # (`remedicion-goalspec-precondicion-no-cumplida`, `nudge-devs-encendido`) salieron en el
+    # barrido de sombra antes de acotar el check a `Sigue abierto:`; distinguir "cita como motivo"
+    # de "duplica como accion" en `Proximo paso` pide juicio semantico que Step 8 no debe hacer
+    # (regla 216) — sigue sin cubrir mecanicamente ese caso, ver el pendiente que deja esta sesion.
+    #
+    # Solo cuenta el id de la propia linea `Retomamos:` de cada recordatorio (el que Step 8c-2
+    # reservo), no cualquier id que su Descripcion/Comprueba mencionen de paso para dar contexto.
+    ids_calendario = set(RETOMAMOS_ID_CALENDARIO.findall(_sec_cal)) if BLOQUE_CALENDARIO.search(_sec_cal) else set()
+    ids_retomar = set(ID_PENDIENTE.findall(linea_sigue_abierto(sec_retomar)))
+    colados = sorted(ids_calendario & ids_retomar)
+    if not ids_calendario:
+        h.append(Hallazgo(HECHO, "snippet.futuro_duplicado",
+                          "sin recordatorios de calendario en esta ficha: no aplica"))
+    elif colados:
+        h.append(Hallazgo(SALTADO, "snippet.futuro_duplicado",
+                          f"{len(colados)} id(s) del bloque de calendario reaparecen en la linea "
+                          "`Sigue abierto:`",
+                          colados,
+                          corrige="quita el id de la linea `Sigue abierto:`: ya tiene su propio "
+                                  "recordatorio con fecha en `## Recordatorios de calendario`, no "
+                                  "repitas la misma fecha en el bloque de hoy"))
+    else:
+        h.append(Hallazgo(HECHO, "snippet.futuro_duplicado",
+                          "ningun id del bloque de calendario se repite en `Sigue abierto:`"))
 
     # 9. Research con recomendaciones sin resolver que ESTA ficha enlaza
     sec_res = seccion_por_prefijo(secs, "Research") or ""
