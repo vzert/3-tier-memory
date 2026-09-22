@@ -1,6 +1,29 @@
 # Changelog
 
 
+## [2.32.1] - 2026-09-22
+Al cerrar la propia sesión de 2.32.0, Víctor señaló en vivo un tercer defecto del mismo tipo que
+los dos que esa versión acababa de arreglar: el `## Como retomar` que el agente generó promovía a
+`Proximo paso` un pendiente (`p-a4439fa8fd`) cuyo único trabajo era "verificar... una vez OTRA
+instalación actualice el plugin" — bloqueado por una decisión ajena, no accionable de inmediato.
+La regla existente en `checkpoint-3t.md` contra esto ("no inventes 'revisar si X respondió'") no
+lo impidió porque la frase real no coincidía literal con el patrón que la regla buscaba.
+
+### Fixed
+- **`checkpoint-3t.md`, Step 8, `<next-step>`**: la regla contra pasos bloqueados por terceros ya
+  no depende de reconocer una frase literal. Antes de fijar cualquier candidato de los casos 2, 3
+  o 4, el Step ahora exige hacerse la pregunta explícita "¿esto se puede hacer de inmediato, sin
+  esperar una decisión o acción de algo fuera de esta sesión?" — si la respuesta es no, el
+  candidato baja a pendiente (a `Sigue abierto` si no depende de que pase tiempo) y la escalera
+  sigue al siguiente caso. La forma de reconocerlo sin esas palabras exactas ("revisar si X
+  respondió/actuó") se conserva como síntoma más común, no como la regla completa. Documentado con
+  dos incidentes reales, no uno: 2026-09-14, y este mismo (2026-09-22, en la sesión que escribió
+  la regla anterior).
+- Es una corrección de prosa, no un check mecánico: decidir si un pendiente depende de una acción
+  externa es la misma clase de juicio semántico que la regla 216 ya prohíbe automatizar en Step 8.
+  Queda un pendiente (`p-e685e9c92a`, `_revisar: 2026-09-27`) para verificar en uso real si la
+  regla más explícita se sigue mejor que la anterior.
+
 ## [2.32.0] - 2026-09-22
 Víctor pidió (vía `/goalspec:interview`) revisar el JSONL de las sesiones recientes de
 `claude-vzert` buscando una sospecha de regresión: el mecanismo de "próximo paso lee el plan

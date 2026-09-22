@@ -1158,14 +1158,28 @@ Reglas para llenar los slots:
   haciendo falta para el resto de las fases que no caben en una linea. Fuera del caso 1, la
   linea queda como siempre, sin la segunda clausula.
 
-  **No inventes un `<next-step>` de la forma "revisar si X respondio/actuo"** cuando X es un
-  agente, persona o proceso FUERA de esta sesion (un peer, un mantenedor ajeno, un PR de otro
-  repo). Eso no es trabajo que la sesion siguiente pueda avanzar — es una espera sobre una
-  decision ajena, y escribirlo como si fuera un paso accionable le hace perder tiempo a quien lo
-  lea despues (2026-09-14: paso en una sesion real — "revisar si goal-spec-skill-7d respondio" en
-  vez del caso 5, `ninguno`, que era la respuesta honesta). Si de verdad hace falta un
-  seguimiento programado mas adelante, eso es un recordatorio (`routine-followup` u otro
-  mecanismo de seguimiento), no una linea de este snippet.
+  **Antes de fijar cualquier candidato de los casos 2, 3 o 4 como `<next-step>`, hazte la
+  pregunta explicita: "¿esto se puede hacer de inmediato, en la sesion siguiente, sin esperar una
+  decision o accion de alguien o algo FUERA de esta sesion?"** Si la respuesta es no, ese
+  candidato no es un `<next-step>` — es un pendiente futuro (con `--revisar` si depende de que
+  pase tiempo, o sin fecha pero fuera de `Proximo paso` si depende de una decision o condicion
+  ajena), y el siguiente candidato de la escalera (o el caso 5, `ninguno`) es el que corresponde.
+  Esta pregunta no es un ejercicio retorico: se salto DOS veces, en dos formas de superficie
+  distintas, y la segunda ocurrio en la propia sesion que escribio esta regla mas amplia — la
+  variante estrecha de abajo no bastaba porque el patron con otras palabras no la disparaba.
+
+  **Sintoma mas comun, para reconocerlo aunque no use estas palabras exactas: "revisar si X
+  respondio/actuo"**, cuando X es un agente, persona o proceso FUERA de esta sesion (un peer, un
+  mantenedor ajeno, un PR de otro repo, OTRA instalacion que tiene que actualizar algo). Escribirlo
+  como si fuera un paso accionable le hace perder tiempo a quien lo lea despues. Dos casos reales:
+  2026-09-14, "revisar si goal-spec-skill-7d respondio" en vez del caso 5, `ninguno`; 2026-09-22,
+  esta misma sesion (`2026-09-22-snippet-cierre-regresion-claude-vzert`) promovio a `Proximo paso`
+  un pendiente formulado como "verificar... una vez OTRA instalacion actualice el plugin" — mismo
+  defecto, palabras distintas, sin la frase literal "revisar si X respondio" que la version
+  anterior de esta regla buscaba. El usuario lo senalo en vivo, en el propio cierre del cambio que
+  arreglaba justo esta clase de fallo en otro proyecto. Si de verdad hace falta un seguimiento
+  programado mas adelante, eso es un recordatorio (`routine-followup` u otro mecanismo de
+  seguimiento), no una linea de este snippet.
 
   Incluye aqui los umbrales o criterios que ya se acordaron en esta sesion (un numero, un limite,
   una condicion de exito), si los hay. Sin ellos la sesion siguiente los vuelve a negociar contigo.
