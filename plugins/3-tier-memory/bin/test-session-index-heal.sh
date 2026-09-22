@@ -21,6 +21,12 @@
 #      aunque el resto de la tabla vaya de vieja a nueva.
 #   9. Un session.add para una sesion que otra fila CITA en su Resumen (forma de unifi-expert,
 #      con la fila que cita ARRIBA) actualiza la fila de la sesion, no la que la cita (ronda 2).
+#   10. Tabla de 4 columnas (forma vieja, por nombre) bajo OTRO titulo: se adopta como
+#       '## Sessions', gana Commit y el session.add de una sesion que ya tenia fila la actualiza
+#       (antes: tabla nueva vacia al lado y fila duplicada, limite declarado en 2.31.4). Una
+#       tabla de 4 con otros nombres no se adopta, y una de 5 sigue ganando a una de 4.
+#   11. DOS tablas de 4 con la cabecera vieja y ninguna de 5: cuarentena, archivo intacto (antes:
+#       tabla nueva vacia y la sesion duplicada; ronda 1 de adversario de 2.31.5).
 #
 # Uso: bash bin/test-session-index-heal.sh    (sin dependencias; sale != 0 si algo falla)
 
@@ -175,6 +181,44 @@ grep -q '^| 2026-08-02 | \[\[sessions/2026-08-02-build\]\] | completada | valida
 grep -q '^| 2026-08-02 | \[\[sessions/2026-08-02-skill\]\] | completada | skill construido | `c0ffee1` |$' "$IDX" \
   || fail "la fila de la sesion no recibio el commit: $(grep '^| 2026-08-02 | \[\[sessions/2026-08-02-skill' "$IDX")"
 [ "$(grep -c '^| 2026-08-02 ' "$IDX")" = 2 ] || fail "cambio el numero de filas"
+[ "$FAIL" = 0 ] && echo "  ok"
+
+echo "== caso 10: tabla de 4 bajo otro titulo =="
+rm -rf "$M/.journal"
+printf -- '---\ntype: index\n---\n# Session Index\n\n## Historial\n\n| Fecha | Sesión | Status | Resumen |\n|---|---|---|---|\n| 2026-09-20 | [[sessions/2026-09-20-h\\|h]] | con pendientes | h |\n\n## Convención\n\n- x\n' > "$IDX"
+emit --slug 2026-09-20-h --date 2026-09-20 --commit '`h0h0h0h`'
+compact
+[ "$(grep -c '^## Sessions$' "$IDX")" = 1 ] || fail "no quedo un solo '## Sessions'"
+grep -q '^## Historial$' "$IDX" && fail "'## Historial' no se renombro"
+[ "$(rows_of 2026-09-20-h)" = 1 ] || fail "h se duplico: $(rows_of 2026-09-20-h) filas"
+grep -q 'h\]\] | con pendientes | h | `h0h0h0h` |$' "$IDX" || fail "h no recibio el commit: $(grep 'sessions/2026-09-20-h' "$IDX")"
+grep -q '^| Fecha | Sesión | Status | Resumen | Commit |$' "$IDX" || fail "la cabecera adoptada no gano Commit"
+# 4 columnas con otros nombres: no se adopta
+rm -rf "$M/.journal"
+printf -- '---\ntype: index\n---\n## Notas\n\n| A | B | C | D |\n|---|---|---|---|\n| 1 | 2 | 3 | 4 |\n' > "$IDX"
+emit --slug 2026-09-21-n --date 2026-09-21 --summary n
+compact
+grep -q '^## Notas$' "$IDX" || fail "una tabla ajena de 4 se renombro"
+grep -q '^| 1 | 2 | 3 | 4 |$' "$IDX" || fail "una tabla ajena de 4 se altero"
+grep -q '^| Fecha | Sesion | Status | Resumen | Commit |$' "$IDX" || fail "no se creo la tabla canonica nueva"
+# una de 5 bajo otro titulo sigue ganando aunque haya una de 4 con los nombres viejos
+rm -rf "$M/.journal"
+printf -- '---\ntype: index\n---\n## Viejas\n\n| Fecha | Sesion | Status | Resumen |\n|---|---|---|---|\n\n## Otra\n\n| Fecha | Sesion | Status | Resumen | Commit |\n|---|---|---|---|---|\n' > "$IDX"
+emit --slug 2026-09-21-o --date 2026-09-21 --summary o
+compact
+grep -q '^## Viejas$' "$IDX" || fail "la de 4 se adopto habiendo una de 5"
+[ "$(sed -n '/^## Sessions$/,$p' "$IDX" | grep -c 'Commit |$')" = 1 ] || fail "la de 5 no se adopto como '## Sessions'"
+[ "$FAIL" = 0 ] && echo "  ok"
+
+echo "== caso 11: dos tablas viejas de 4 =="
+rm -rf "$M/.journal"
+printf -- '---\ntype: index\n---\n## A\n\n| Fecha | Sesion | Status | Resumen |\n|---|---|---|---|\n| 2026-09-20 | [[sessions/2026-09-20-q\\|q]] | x | q |\n\n## B\n\n| Fecha | Sesion | Status | Resumen |\n|---|---|---|---|\n' > "$IDX"
+cp "$IDX" "$M/antes11"
+emit --slug 2026-09-20-q --date 2026-09-20 --commit '`q1`'
+python3 bin/journal-compact.py --quiet >/dev/null 2>&1
+cmp -s "$M/antes11" "$IDX" || fail "el archivo cambio: $(diff "$M/antes11" "$IDX" | head -3)"
+grep -qs "tablas con la cabecera vieja" "$M"/.journal/quarantine/*.reason || fail "no se cuarenteno con el motivo esperado"
+rm -rf "$M/.journal"
 [ "$FAIL" = 0 ] && echo "  ok"
 
 [ "$FAIL" = 0 ] && echo "PASS test-session-index-heal" || { echo "FAIL test-session-index-heal"; exit 1; }

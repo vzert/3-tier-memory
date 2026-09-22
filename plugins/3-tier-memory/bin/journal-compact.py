@@ -132,6 +132,11 @@ class Quarantine(Exception):
 
 
 # ----------------------------------------------------------------------------- utilidades
+def strip_accents(text):
+    return "".join(ch for ch in unicodedata.normalize("NFD", text or "")
+                   if unicodedata.category(ch) != "Mn")
+
+
 def normalize_text(text):
     return re.sub(r"\s+", " ", unicodedata.normalize("NFC", text or "")).strip()
 
@@ -1604,6 +1609,27 @@ def need_table(lines, header, fname):
         # verdad no hay ninguna) se crea una tabla vacia nueva, que es el unico caso donde la
         # version anterior de este cambio era correcta.
         candidatas = [t for t in find_tables(lines) if len(split_cells(lines[t[1]])) == len(columns)]
+        if not candidatas and header == "## Sessions":
+            # Segundo intento, SOLO si no hay ninguna de 5: la forma vieja de 4 columnas (sin
+            # Commit), reconocida por los nombres de su cabecera, no solo por el ancho. Sin esto,
+            # una tabla de 4 bajo otro titulo quedaba al lado de un `## Sessions` nuevo y vacio, y
+            # su fila invisible para find_row_anywhere (limite declarado en 2.31.4). Al adoptarla,
+            # heal_session_table le agrega Commit. Por nombre y solo como segundo intento para no
+            # cambiar nada de lo que ya adoptaba: _research-index.md distingue sus dos tablas
+            # por ancho, asi que alli el filtro sigue siendo estricto.
+            candidatas = [t for t in find_tables(lines)
+                          if [strip_accents(c).lower() for c in split_cells(lines[t[1]])]
+                          == ["fecha", "sesion", "status", "resumen"]]
+            if len(candidatas) > 1:
+                # Dos o mas tablas viejas: no se sabe cual es la real, y crear una vacia al lado
+                # dejaria las filas de todas invisibles — cada session.add de una sesion que ya
+                # esta ahi la duplicaria en silencio (ronda 1 de adversario de 2.31.5). Cuarentena:
+                # visible y recuperable, el mismo criterio que las filas huerfanas de arriba.
+                raise Quarantine(
+                    f"no-anchor: falta '{header}' en {fname} y hay {len(candidatas)} tablas con la "
+                    f"cabecera vieja de 4 columnas (Fecha | Sesion | Status | Resumen) — no se puede "
+                    f"saber cual es la real. Deja una sola bajo '## Sessions' y devuelve este evento "
+                    f"de .journal/quarantine/ a .journal/pending/ (no se rescata solo).")
         if len(candidatas) == 1:
             sec_header, hdr, _sep, _rows = candidatas[0]
             if sec_header is not None:
@@ -2478,16 +2504,110 @@ def apply_plan_upsert(mem, p):
 ACTIVE_PLACEHOLDER = "<!-- Sin research activo -->"
 
 
-def find_research_row(lines, header, key, tplain):
+RESEARCH_OPEN_RE = re.compile(r"^\[\[research/([^\]|\\]+)(?:\\\||\||\]\])")
+
+
+def research_owners(line):
+    """Los slugs de research cuyo wikilink ABRE alguna celda de la fila."""
+    return {m.group(1) for c in split_cells(line) for m in [RESEARCH_OPEN_RE.match(c)] if m}
+
+
+def research_table_is_canonical(header_line):
+    """True si la ULTIMA columna de la cabecera se llama Archivo o File: la columna donde el
+    compactador escribe el enlace propio (`Tema | ... | Archivo`, y las cabeceras viejas en ingles
+    `Topic | ... | File`). Las filas que el compactador inserta en una tabla vieja asi tambien
+    llevan el enlace ahi, asi que su ciclo active -> completed sigue funcionando."""
+    cells = split_cells(header_line)
+    return bool(cells) and strip_accents(cells[-1]).lower() in ("archivo", "file")
+
+
+def research_row_is_canonical(lines, i):
+    """True si la fila `i` vive en una tabla con la cabecera canonica de research."""
+    for _sec_header, hdr, _sep, rows in find_tables(lines):
+        if i in rows:
+            return research_table_is_canonical(lines[hdr])
+    return False
+
+
+def find_research_owned_row(lines, ncols, slug):
+    """La fila de ESTE research, en cualquier tabla de `ncols` columnas (mismo motivo que
+    find_row_anywhere: con 2+ tablas candidatas, la fila puede vivir en una vieja).
+
+    - Tabla cuya ultima columna es Archivo/File (research_table_is_canonical): solo cuenta esa
+      ultima celda, que es donde el compactador escribe el enlace. Una fila que cita el research en
+      otra celda no es suya.
+    - Cualquier otra tabla (formato viejo: `Topic | File | Resultado`, `Slug | Topic | ...`,
+      `... | Key findings`): la busqueda de siempre, el enlace en cualquier parte de la fila. No se
+      adivina que celda es el archivo. En cambio esas filas son de SOLO LECTURA: sirven para no
+      duplicar, y cualquier cambio que el evento pida sobre ellas va a cuarentena
+      (guard_research_legacy_write). Si la tabla ANCLADA es de este tipo, tampoco se inserta en
+      ella (guard_research_legacy_insert) ni se poda.
+
+    Por que asi (2.31.5): buscando en toda la fila, un `completed` de X borraba de Active la fila
+    que solo citaba a X (cloudflare-expert:25 lo tiene vivo), y un update le pisaba celdas. Tres
+    reglas por la forma de la fila rompieron, una por ronda de adversario, siempre con una fila
+    construida. Aqui ningun error de clasificacion llega a borrar ni a escribir: en la tabla
+    con Archivo/File la regla es exacta, y en la otra no se escribe. Medido 2026-09-21 en 12
+    instalaciones: las 572 busquedas dan la misma fila que en 2.31.4 salvo cloudflare-expert:25
+    (el arreglo); 88 caen en tablas con Archivo/File y solo 13 en tablas de solo lectura.
+    """
+    key = link_re("research/", slug)
+    for _sec_header, hdr, _sep, rows in find_tables(lines):
+        if len(split_cells(lines[hdr])) != ncols:
+            continue
+        canon = research_table_is_canonical(lines[hdr])
+        for i in rows:
+            if canon:
+                cells = split_cells(lines[i])
+                m = RESEARCH_OPEN_RE.match(cells[-1]) if cells else None
+                if m and m.group(1) == slug:
+                    return i
+            elif key.search(lines[i]):
+                return i
+    return None
+
+
+def guard_research_legacy_write(lines, i, que):
+    """Cuarentena antes de escribir (o borrar) una fila de research de formato viejo."""
+    if research_row_is_canonical(lines, i):
+        return
+    raise Quarantine(
+        f"research-legacy: la fila {i + 1} de _research-index.md esta en una tabla de formato viejo "
+        f"(su ultima columna no es Archivo ni File) y el evento pide {que}. El compactador no escribe en "
+        f"esas filas: no sabe que celda es cual, y escribir por posicion corrompe la fila (o la de "
+        f"otro research que solo cita a este). Hazlo a mano y borra este evento de "
+        f".journal/quarantine/ (no se rescata solo).")
+
+
+def guard_research_legacy_insert(lines, sep, header):
+    """Cuarentena antes de insertar en una tabla anclada de research de solo lectura. La fila nueva
+    tiene la forma canonica (Tema | ... | Archivo) y en esa tabla quedaria con las columnas
+    cruzadas — y ademas su propio `completed` iria despues a cuarentena, porque la fila viviria en
+    una tabla de solo lectura (ronda 4 de adversario de 2.31.5)."""
+    if research_table_is_canonical(lines[sep - 1]):
+        return
+    canon = " | ".join(TABLE_COLUMNS[header])
+    raise Quarantine(
+        f"research-legacy: la tabla de '{header}' en _research-index.md (linea {sep}) no termina en "
+        f"Archivo ni File, asi que el compactador no inserta en ella: la fila nueva quedaria con las "
+        f"columnas cruzadas. Migra esa tabla a '| {canon} |' (o agrega la fila a mano) y devuelve "
+        f"este evento de .journal/quarantine/ a .journal/pending/ (no se rescata solo).")
+
+
+def find_research_row(lines, header, slug, tplain):
     _, (hdr, sep, rows) = need_table(lines, header, "_research-index.md")
-    # find_row_anywhere, no solo `rows`: mismo motivo que apply_session_add/apply_plan_upsert
+    # En TODO el archivo, no solo `rows`: mismo motivo que apply_session_add/apply_plan_upsert
     # (hallazgo adversarial 2026-09-14) — con 2+ tablas candidatas del mismo ancho, `need_table`
     # crea una nueva y una fila que ya vivia en una vieja quedaba invisible para el duplicado.
-    hit = find_row_anywhere(lines, len(TABLE_COLUMNS[header]), key)
+    hit = find_research_owned_row(lines, len(TABLE_COLUMNS[header]), slug)
     if hit is None:
         # Fallback por titulo plano SOLO en la tabla canonica: mismo riesgo de colision ajena que
-        # en apply_plan_upsert si se ampliara a todo el archivo. Ver find_row_anywhere.
-        hit = next((i for i in rows if plain(split_cells(lines[i])[0]) == tplain), None)
+        # en apply_plan_upsert si se ampliara a todo el archivo. Ver find_row_anywhere. Y solo
+        # sobre filas SIN dueno (`(inline)`, para lo que existe): una fila que ya pertenece a
+        # otro research por su enlace no se toma por coincidir el titulo — un `completed` la
+        # borraria de Active (ronda 1 de adversario de 2.31.5).
+        hit = next((i for i in rows if plain(split_cells(lines[i])[0]) == tplain
+                    and not research_owners(lines[i])), None)
     return sep, rows, hit
 
 
@@ -2499,18 +2619,17 @@ def apply_research_upsert(mem, p):
     lines = read_lines(path)
     need_table(lines, "## Active Research", "_research-index.md")
     need_table(lines, "## Completed Research", "_research-index.md")
-    key = link_re("research/", slug)
     tplain = plain(p["tema"])
     archivo = "(inline)" if p.get("inline") else f"[[research/{slug}]]"
     changed = False
 
     if p["status"] == "active":
-        sep, rows, hit = find_research_row(lines, "## Completed Research", key, tplain)
+        sep, rows, hit = find_research_row(lines, "## Completed Research", slug, tplain)
         if hit is not None:
             return False               # ya maduro: un research no vuelve a Active (monotono;
                                        # reabrir es una edicion a mano). Asi un replay de un
                                        # `active` viejo no deshace el `completed`.
-        sep, rows, hit = find_research_row(lines, "## Active Research", key, tplain)
+        sep, rows, hit = find_research_row(lines, "## Active Research", slug, tplain)
         if hit is not None:
             cells = pad(split_cells(lines[hit]), 4)
             new = list(cells)
@@ -2518,27 +2637,32 @@ def apply_research_upsert(mem, p):
                 if p.get(k):
                     new[idx] = p[k]
             if new != cells:
+                guard_research_legacy_write(lines, hit, "actualizar Next step/Origen")
                 lines[hit] = join_cells(new)
                 changed = True
         else:
+            guard_research_legacy_insert(lines, sep, "## Active Research")
             lines.insert(sep + 1, join_cells([p["tema"], p.get("next_step") or "",
                                               p.get("origen") or "", archivo]))
             changed = True
-            a0, a1 = section_bounds(lines, "## Active Research")
-            for j in range(a0, a1):
-                if lines[j].strip() == ACTIVE_PLACEHOLDER:
-                    del lines[j]
-                    break
+            # El marcador de "vacia" se inserta justo debajo del separador de SU tabla, asi que tras
+            # la fila nueva queda en sep + 2. Solo se borra ese: buscarlo en toda la seccion borraba
+            # el de otra tabla, quiza de solo lectura (ronda 6 de adversario de 2.31.5).
+            if sep + 2 < len(lines) and lines[sep + 2].strip() == ACTIVE_PLACEHOLDER:
+                del lines[sep + 2]
     else:
-        sep, rows, hit = find_research_row(lines, "## Active Research", key, tplain)
+        sep, rows, hit = find_research_row(lines, "## Active Research", slug, tplain)
         if hit is not None:            # madura: sale de Active
+            guard_research_legacy_write(lines, hit, "sacarla de Active (completed)")
             del lines[hit]
             changed = True
             a0, a1 = section_bounds(lines, "## Active Research")
             tab = table_in(lines, a0, a1)
-            if tab and not tab[2]:
+            # El marcador de "vacia" tambien es una escritura: no va en una tabla de solo lectura
+            # (ronda 5 de adversario de 2.31.5).
+            if tab and not tab[2] and research_table_is_canonical(lines[tab[0]]):
                 lines.insert(tab[1] + 1, ACTIVE_PLACEHOLDER)
-        sep, rows, hit = find_research_row(lines, "## Completed Research", key, tplain)
+        sep, rows, hit = find_research_row(lines, "## Completed Research", slug, tplain)
         fecha = p.get("date") or time.strftime("%Y-%m-%d", time.gmtime(int(p.get("_ts", 0)) / 1e9))
         if hit is not None:
             cells = pad(split_cells(lines[hit]), 3)
@@ -2550,17 +2674,22 @@ def apply_research_upsert(mem, p):
                 # desde ahora compite en la poda por fecha.
                 new[2] = f"{new[2]} _completado: {fecha}_".strip()
             if new != cells:
+                guard_research_legacy_write(lines, hit, "actualizar Resultado/_completado")
                 lines[hit] = join_cells(new)
                 changed = True
         else:
+            guard_research_legacy_insert(lines, sep, "## Completed Research")
             lines.insert(sep + 1, join_cells([p["tema"], p.get("resultado") or "",
                                               f"{archivo} _completado: {fecha}_"]))
             changed = True
         # Poda por fecha, nunca por posicion: solo compiten las filas con `_completado:`; una fila
         # sin fecha (a mano, o anterior a 2.12.0) se conserva. Asi un `completed` viejo re-aplicado
         # entra con su fecha vieja y es el que sale, no una fila mas nueva del fondo.
-        sep, rows, _ = find_research_row(lines, "## Completed Research", key, tplain)
+        sep, rows, _ = find_research_row(lines, "## Completed Research", slug, tplain)
         dated = []
+        if not research_table_is_canonical(lines[sep - 1]):
+            rows = []   # tabla de solo lectura: no se poda, y en silencio — el evento no pidio podar,
+                        # asi que no hay nada que mandar a cuarentena (ronda 4 de adversario)
         for i in rows:
             m = COMPLETADO_RE.search(lines[i])
             if m:

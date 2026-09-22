@@ -1,6 +1,60 @@
 # Changelog
 
 
+## [2.31.5] - 2026-09-21
+Cierra los dos pendientes que dejó 2.31.4 (`p-e1d9cb75fa`, `p-63801135fd`). Tres rondas de
+`/goalspec:adversary` (Codex) rompieron tres reglas que decidían de quién es una fila de research
+por su forma: el enlace abre la celda, un solo dueño, Archivo primero. Cada ronda construyó una
+fila que la regla clasificaba mal y que un `completed` terminaba borrando. La versión final no
+intenta clasificar mejor: limita lo que un error puede hacer. Las rondas cuarta a sexta
+encontraron que la poda, la inserción y el marcador de "Active vacía" seguían escribiendo en las
+tablas de solo lectura; ya no lo hacen.
+
+### Fixed
+- **`research.upsert` podía actualizar, o BORRAR, la fila de otro research.** `find_research_row`
+  buscaba `[[research/<slug>]]` en toda la fila, así que una fila que citaba el research en su Next
+  step o su Resultado pasaba por la fila de ese research. Un update le pisaba celdas, y un
+  `--status completed` la borraba de Active. Caso vivo: `cloudflare-expert:25` cita
+  `barrido-owasp-sql-live-2026-07-30` en prosa, y ese research no tiene fila propia. Ahora
+  (`find_research_owned_row`):
+  - En una tabla cuya última columna se llama `Archivo` o `File`, la fila de X es la que tiene el
+    enlace de X al inicio de esa última celda, que es donde lo escribe el compactador. Lo que diga
+    el resto de la fila no cuenta.
+  - En cualquier otra tabla (formatos viejos como `Topic | File | Resultado`,
+    `Slug | Topic | Fecha | Sesion` o `... | Key findings`), la búsqueda es la de siempre, pero la
+    tabla es de solo lectura. Sus filas sirven para no duplicar. Si el evento pide cambiar o borrar
+    una fila, o insertar una nueva (cuando esa es la tabla anclada de `## Active Research` o
+    `## Completed Research`), va a cuarentena (`research-legacy:`, no se rescata sola) y el archivo
+    no se toca. La poda y el marcador de "Active vacía" (ni ponerlo ni quitarlo) tampoco escriben
+    en ella; eso no va a cuarentena, porque el evento no los pidió: simplemente no ocurren. Escribir ahí por posición ya corrompía: en `Topic | File | Resultado`, un
+    `completed` escribía el resultado encima de la celda File, y una fila nueva entraba con las
+    columnas cruzadas. **Efecto visible:** en las instalaciones cuya tabla anclada es de este tipo
+    (medidas: omniroute, scalar-api-docs, seedance-generator, time-tracker y unifi-expert), un
+    research nuevo va a cuarentena con el mensaje de cómo migrar la tabla a la cabecera canónica de
+    esa sección (`Tema | Next step | Origen | Archivo` o `Tema | Resultado | Archivo`). paperclip
+    ya iba a cuarentena antes de este cambio, por otra causa: su título `## Completed Research
+    (recent)` no tiene tabla (`no-anchor:`). Ninguna de las seis tiene un `research.upsert` en el
+    historial de su journal (de los 57 aplicados en las 12 instalaciones al 2026-09-21).
+  - La búsqueda por título (para filas `(inline)`) ya no toma una fila que tiene el enlace de otro
+    research al inicio de alguna celda.
+  Medido en 12 instalaciones (2026-09-21): las 572 búsquedas dan la misma fila que en 2.31.4 salvo
+  `cloudflare-expert:25`, que es el arreglo. De las filas encontradas, 88 están en tablas con
+  `Archivo`/`File` y 13 en tablas de solo lectura; en el historial del journal de esas
+  instalaciones, ninguno de los 57 `research.upsert` aplicados al 2026-09-21 tocó una de esas 13. `plan.upsert`
+  no cambia: `find_plan_rows` ya anclaba a la celda 0 desde 2.25.1.
+  Test: `bin/test-research-row-lookup.sh`, 19 casos. Con 2.31.4 fallan 1, 2, 3, 7, 8, 10, 11, 12,
+  13, 16, 17, 18 y 19; los casos 4, 5, 6, 9, 14 y 15 vigilan que no cambie lo que ya funcionaba (Archivo
+  decorado, `_completado:`, fila `(inline)`, fila propia que cita a otro research, evento sin
+  cambios, ciclo completo en una tabla vieja con `File` al final).
+- **Tabla de sesiones de 4 columnas bajo otro título** (límite declarado en 2.31.4): si no hay
+  ninguna tabla de 5 columnas, `need_table` adopta como `## Sessions` una de 4 cuya cabecera sea
+  `Fecha | Sesión | Status | Resumen` (por nombre, no solo por ancho), y `heal_session_table` le
+  agrega `Commit`. Una tabla de 5 sigue ganando, y una de 4 con otros nombres no se toca. Si hay
+  DOS o más tablas de 4 con esa cabecera, el evento va a cuarentena con el motivo y la salida (no
+  se adivina cuál es la real, y no se rescata solo). Ningún proyecto medido tiene esta forma; el
+  arreglo es preventivo. Test: casos 10 y 11 de `bin/test-session-index-heal.sh`.
+
+
 ## [2.31.4] - 2026-09-21
 Origen: Codex revisó en Will-Ops el diff que sincronizaba las plantillas de 2.31.x (hallazgos
 enviados por la sesión `will-ops-c3`). Los cuatro se reprodujeron contra el fuente del plugin.
