@@ -1401,6 +1401,17 @@ result:
 Si falta algo, bloquea el cierre una vez y te dice que pegar o corregir. Limite: en el segundo
 intento seguido ya no bloquea, para no entrar en bucle. Solo avisa al usuario.
 
+**El snippet no se congela al terminar el checkpoint (2.33.1).** Si DESPUES, en la misma sesion,
+cierras, caducas o bloqueas un pendiente que el `## Como retomar` cita, el snippet que el usuario
+ya tiene quedo viejo. Rehaz la linea afectada en la ficha, vuelve a correr `print-como-retomar.py`
+y pega el snippet nuevo en esa misma respuesta. Caso real: tras el checkpoint de 2.33.0 se resolvio
+`p-477bb60303` (el push) y la respuesta no aviso; el snippet seguia listandolo en `Sigue abierto`.
+Dos cosas lo vigilan: el hook dispara tambien en un turno que emite `pendiente.resolve`,
+`pendiente.expire` o `pendiente.block` sobre un id citado en la ficha de esta sesion, y
+`checkpoint-audit.py` marca `SALTADO` en `snippet.ids_vivos` si `Sigue abierto:` nombra un id que ya
+no esta abierto. Registrar un pendiente NUEVO tambien puede cambiar el snippet (un Alta nuevo gana
+`Proximo paso`); eso no lo detecta ningun script: revisa la escalera y rehaz el snippet.
+
 **Fallback (no JBIN)**: si `print-como-retomar.py` no existe (instalacion mas vieja que esta
 version, o el sync de comandos aun no llego), redacta el bloque a mano copiando literalmente lo
 que ya escribiste en 8a — el riesgo de divergencia por sustitucion de mas arriba aplica en ese

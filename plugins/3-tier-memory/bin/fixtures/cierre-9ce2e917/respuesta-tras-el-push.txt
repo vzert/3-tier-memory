@@ -1,0 +1,7 @@
+El push funcionó: `main` quedó al día con origin (`5095d3f..ecfb922`). Subieron 5 commits: los tres anteriores de 2.31.9, 2.32.0 y 2.32.1, más `ac4a1f9` y `ecfb922`.
+
+Marqué `p-477bb60303` como resuelto en el journal.
+
+Las instalaciones reciben la 2.33.0 cuando abren una sesión nueva. Desde ese momento corre `p-6071ea6987`: comprobar que el hook de cierre funciona en una instalación real.
+
+El próximo paso sigue siendo el del snippet: `p-272254efc5`.

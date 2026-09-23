@@ -1,6 +1,49 @@
 # Changelog
 
 
+## [2.33.1] - 2026-09-23
+Resuelve `p-c72a33ae7a`, un quinto defecto de cierre que salió en vivo en la misma sesión de
+2.33.0. Tras el checkpoint, Víctor hizo el push y el agente resolvió `p-477bb60303`. La respuesta
+de ese turno no avisó de que el snippet quedaba viejo ni lo reimprimió: seguía listando el push en
+`Sigue abierto`. Víctor tuvo que señalarlo.
+
+### Added
+- `checkpoint-audit.py`: check `snippet.ids_vivos`. Marca `SALTADO` si la línea `Sigue abierto:`
+  nombra un id que ya no está abierto en `_pendientes.md`. Hasta ahora solo se medían los ids de
+  `Proximo paso:`.
+- `checkpoint-close-guard.sh`: dispara también en un turno que emite `pendiente.resolve`,
+  `pendiente.expire` o `pendiente.block` sobre un id citado en el `## Como retomar` de una ficha
+  de esta sesión. Cuenta como ficha de esta sesión la que se escribió o editó en el transcript, o
+  la que solo se imprimió si su frontmatter trae el `session_id` de esta sesión. Entonces exige el
+  snippet en la respuesta y corre los checks del snippet, igual que al cerrar un checkpoint.
+  - Se cuentan todos los ids del comando, no solo el que sigue a `--id `. Así se detectan
+    `--id=p-…`, un id en variable y un bucle. El coste es un aviso de más si `--nota` cita un id
+    que el snippet también cita.
+  - `pendiente.update` no dispara: no cambia si el pendiente está abierto.
+- Fixture real en `bin/fixtures/cierre-9ce2e917/`: el snippet que Víctor tenía, el comando que
+  resolvió el pendiente y la respuesta de ese turno.
+
+### Changed
+- `checkpoint-3t.md` Step 8b: el snippet no se congela al terminar el checkpoint; si después se
+  cierra un pendiente que cita, se rehace y se vuelve a pegar.
+
+### Medido
+- `test-checkpoint-close-guard.sh`: 40 casos (10 nuevos). Contra el hook y el audit de 2.33.0
+  fallan 6, todos del disparo nuevo, y pasan los otros 34. `test-checkpoint-audit.sh`: 125 casos
+  (3 nuevos).
+- Ronda de adversario (subagente Sonnet; codex salió con error sin veredicto). Encontró 3 fallos:
+  `--id=p-…` y el id en variable pasaban en silencio, y una ficha vieja solo impresa disparaba en
+  falso. Los tres están corregidos, con test.
+
+### Límites conocidos
+- Registrar un pendiente nuevo también puede dejar el snippet viejo: un Alta nuevo gana `Proximo
+  paso`, y pasó en esta misma sesión. Ningún script lo detecta; lo pide Step 8b en prosa.
+- El disparo mira el texto del comando Bash. `expire-pendientes.py --apply` llama a
+  `journal-emit.py` por dentro, así que una caducidad hecha con ese script no dispara el hook.
+  Tampoco hay todavía un test de `pendiente.expire`. Lo encontró el adversario y queda como
+  pendiente.
+
+
 ## [2.33.0] - 2026-09-22
 Resuelve `p-daf3051915`. Son los 4 defectos de cierre que `/checkpoint-3t` cometió en vivo, en
 su propio cierre, en la sesión 5790b9f2 de este repo. Son los mismos que Víctor ve en otros

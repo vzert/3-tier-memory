@@ -273,6 +273,114 @@ open(out, "w").write("\n".join(json.dumps(r) for r in R) + "\n")
 PYT
 chk "bloquea por la segunda ficha del mismo comando" "1" "$(corre "$T/t.jsonl" false - | grep -c 'recordatorio de calendario')"
 
+echo "== 2.33.1 (p-c72a33ae7a), caso REAL: se cierra un pendiente que el snippet cita y el snippet no se rehace =="
+# Fixture: bin/fixtures/cierre-9ce2e917/ — el snippet que Victor tenia (con p-477bb60303 en
+# `Sigue abierto`), el comando real que lo resolvio y la respuesta real de ese turno.
+FX2="$BIN/fixtures/cierre-9ce2e917"
+viejo() {   # memoria con la ficha del checkpoint; p-477bb60303 ya NO esta abierto (se resolvio)
+  armar "$M" "$FX2/snippet-antes-del-push.txt"
+  python3 - "$M/_pendientes.md" <<'PYP'
+import sys
+p = sys.argv[1]; t = open(p).read()
+extra = "".join(f"- [ ] pendiente {i} — _origen: [[sessions/2026-09-22-demo]]_ — _creado: 2026-09-22_ — _id: {i}_\n"
+                for i in ("p-272254efc5", "p-6071ea6987", "p-4d784c958f"))
+open(p, "w").write(t.replace("## Baja prioridad", "## Baja prioridad\n\n" + extra))
+PYP
+}
+tx2() {   # $1 transcript  $2 comando del turno nuevo  $3 texto de la respuesta del turno nuevo
+  python3 - "$1" "$F" "$FX2/snippet-antes-del-push.txt" "$2" "$3" <<'PYT'
+import json, sys
+out, ficha, snip, cmd, txt = sys.argv[1:6]
+R = [{"type": "user", "message": {"role": "user", "content": "guarda el checkpoint"}},
+     {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "w", "name": "Write",
+        "input": {"file_path": ficha, "content": "## Como retomar\n..."}}]}},
+     {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "w", "content": "ok"}]}},
+     {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "p", "name": "Bash",
+        "input": {"command": f'python3 x/print-como-retomar.py "{ficha}"'}}]}},
+     {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "p", "content": "x"}]}},
+     {"type": "assistant", "message": {"content": [{"type": "text", "text": open(snip).read()}]}},
+     {"type": "user", "message": {"role": "user", "content": "<bash-input> git push origin main</bash-input>"}},
+     {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "r", "name": "Bash",
+        "input": {"command": open(cmd).read()}}]}},
+     {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "r", "content": "p-477bb60303"}]}},
+     {"type": "assistant", "message": {"content": [{"type": "text", "text": open(txt).read()}]}}]
+open(out, "w").write("\n".join(json.dumps(r, ensure_ascii=False) for r in R) + "\n")
+PYT
+}
+viejo
+tx2 "$T/t.jsonl" "$FX2/comando-resolve.txt" "$FX2/respuesta-tras-el-push.txt"
+O=$(corre "$T/t.jsonl" false -)
+chk "bloquea el turno real" "1" "$(bloquea "$O")"
+chk "nombra el id cerrado que sigue en el snippet" "1" "$(printf '%s' "$O" | grep -c 'snippet.ids_vivos.*p-477bb60303')"
+
+echo "== control: el mismo turno, pero la ficha ya corregida y el snippet nuevo pegado =="
+python3 - "$F" <<'PYX'
+import sys, re
+p = sys.argv[1]; t = open(p).read()
+t = re.sub(r"(?m)^Sigue abierto: .*$", "Sigue abierto: verificar el hook _id: p-6071ea6987_ · medir _id: p-4d784c958f_.", t)
+open(p, "w").write(t)
+PYX
+python3 "$BIN/print-como-retomar.py" "$F" > "$T/nuevo.txt"
+printf 'El push funciono.\n\n%s\n' "$(cat "$T/nuevo.txt")" > "$T/resp-bien.txt"
+tx2 "$T/t.jsonl" "$FX2/comando-resolve.txt" "$T/resp-bien.txt"
+chk "silencio" "" "$(corre "$T/t.jsonl" false -)"
+
+echo "== control: se resuelve un pendiente que el snippet NO cita =="
+viejo
+printf 'python3 bin/journal-emit.py --type pendiente.resolve --id p-0000000001 --estado resolved\n' > "$T/cmd-otro.txt"
+tx2 "$T/t.jsonl" "$T/cmd-otro.txt" "$FX2/respuesta-tras-el-push.txt"
+chk "silencio" "" "$(corre "$T/t.jsonl" false -)"
+
+echo "== control: un pendiente.update (no cambia si esta abierto) sobre un id citado no dispara =="
+printf 'python3 bin/journal-emit.py --type pendiente.update --id p-6071ea6987 --prioridad Alta\n' > "$T/cmd-upd.txt"
+printf 'Listo.\n' > "$T/listo.txt"; tx2 "$T/t.jsonl" "$T/cmd-upd.txt" "$T/listo.txt"
+chk "silencio" "" "$(corre "$T/t.jsonl" false -)"
+
+echo "== adversarial: pendiente.block de un id citado, con --id entre comillas =="
+viejo
+printf "python3 bin/journal-emit.py --type pendiente.block --id 'p-6071ea6987' --bloqueado-por 'x'\n" > "$T/cmd-blk.txt"
+tx2 "$T/t.jsonl" "$T/cmd-blk.txt" "$T/listo.txt"
+chk "dispara y exige el snippet en la respuesta" "1" "$(corre "$T/t.jsonl" false - | grep -c 'no esta en tu respuesta')"
+
+echo "== ronda de 2.33.1: --id=p-… (argparse lo acepta) tambien dispara =="
+viejo
+printf 'python3 bin/journal-emit.py --type pendiente.resolve --id=p-477bb60303 --estado resolved\n' > "$T/cmd-eq.txt"
+tx2 "$T/t.jsonl" "$T/cmd-eq.txt" "$FX2/respuesta-tras-el-push.txt"
+chk "bloquea" "1" "$(bloquea "$(corre "$T/t.jsonl" false -)")"
+
+echo "== ronda de 2.33.1: el id en una variable tambien dispara =="
+printf 'ID=p-477bb60303\npython3 bin/journal-emit.py --type pendiente.resolve --id "$ID" --estado resolved\n' > "$T/cmd-var.txt"
+tx2 "$T/t.jsonl" "$T/cmd-var.txt" "$FX2/respuesta-tras-el-push.txt"
+chk "bloquea" "1" "$(bloquea "$(corre "$T/t.jsonl" false -)")"
+
+echo "== ronda de 2.33.1: una ficha VIEJA solo impresa (triage) no cuenta como de esta sesion =="
+# La ficha de la sesion vieja cita p-6071ea6987 en `Sigue abierto`; esta sesion solo la imprime y
+# luego resuelve ese pendiente. No debe exigir re-pegar el snippet de una sesion cerrada.
+viejo
+python3 - "$T/t.jsonl" "$F" "$T/listo.txt" <<'PYT'
+import json, sys
+out, ficha, txt = sys.argv[1:4]
+cmd = "python3 bin/journal-emit.py --type pendiente.resolve --id p-6071ea6987 --estado resolved"
+R = [{"type": "user", "message": {"role": "user", "content": "haz triage"}},
+     {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "p", "name": "Bash",
+        "input": {"command": f'python3 x/print-como-retomar.py "{ficha}"'}}]}},
+     {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "p", "content": "x"}]}},
+     {"type": "assistant", "message": {"content": [{"type": "text", "text": "leida"}]}},
+     {"type": "user", "message": {"role": "user", "content": "cierra ese pendiente"}},
+     {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "r", "name": "Bash", "input": {"command": cmd}}]}},
+     {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "r", "content": "ok"}]}},
+     {"type": "assistant", "message": {"content": [{"type": "text", "text": open(txt).read()}]}}]
+open(out, "w").write("\n".join(json.dumps(r) for r in R) + "\n")
+PYT
+chk "silencio" "" "$(corre "$T/t.jsonl" false -)"
+echo "== ...pero si esa ficha impresa lleva el session_id de ESTA sesion, si cuenta =="
+python3 - "$F" <<'PYX'
+import sys; p=sys.argv[1]; t=open(p).read()
+open(p,"w").write(t.replace("date: 2026-09-22\n", "date: 2026-09-22\nsession_id: sesion-actual\n", 1))
+PYX
+O=$(python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":False,"session_id":"sesion-actual","cwd":"/tmp"}))' "$T/t.jsonl" | bash "$HOOK" 2>/dev/null)
+chk "bloquea" "1" "$(bloquea "$O")"
+
 echo "== transcript ilegible o ausente: silencio (falla abierto) =="
 chk "sin transcript" "" "$(printf '{"stop_hook_active":false}' | bash "$HOOK" 2>/dev/null)"
 chk "stdin basura" "" "$(printf 'no-json' | bash "$HOOK" 2>/dev/null)"

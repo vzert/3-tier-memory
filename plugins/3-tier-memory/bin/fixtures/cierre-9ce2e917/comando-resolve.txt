@@ -1,0 +1,1 @@
+python3 plugins/3-tier-memory/bin/journal-emit.py --type pendiente.resolve --id p-477bb60303 --estado resolved --sesion "[[sessions/2026-09-22-cierre-4-defectos-2.33.0]]" --nota "Victor hizo git push origin main: 5095d3f..ecfb922 (5 commits, incluye 2.33.0)" && python3 plugins/3-tier-memory/bin/journal-compact.py --memory-dir memory && git status -sb | head -1

@@ -1,0 +1,13 @@
+Retomamos: 2.33.0 cerro los 4 defectos de cierre de /checkpoint-3t; queda la salida `ninguno` sin registrar.
+
+Lee memory/sessions/2026-09-22-cierre-4-defectos-2.33.0.md para el contexto completo.
+
+Proximo paso: cerrar la salida que 2.33.0 dejo abierta — un Como retomar con `Proximo paso: ninguno` cuando la sesion hallo un defecto en vivo y nunca lo registro pasa todos los checks; buscar una senal estructurada (Bugs fixed/Callejones de la ficha, o correcciones del usuario en el transcript desde el hook Stop) sin clasificar prosa (regla 216) _id: p-272254efc5_.
+
+Sigue abierto: push de ac4a1f9 y ecfb922 a origin/main, lo corre Victor _id: p-477bb60303_ · verificar el hook Stop en una instalacion real tras actualizar _id: p-6071ea6987_ · clase_cerrado de medir-proximo-paso.py empareja por substring _id: p-4d784c958f_ · +1 mas en _pendientes.md.
+
+No repitas: no detectes "bloqueado por un tercero" ni defectos leyendo el texto (reglas 216/218) — usa campos estructurados; no reportes una cifra de corpus sin el script que la reproduce; si codex rompe dos rondas seguidas, la siguiente va al subagente.
+
+Terminas cuando: una ficha con `Proximo paso: ninguno` y un defecto hallado en vivo sin pendiente no pueda cerrar sin que checkpoint-audit.py o el hook lo marquen, con casos adversariales en los tests — o una decision documentada de que no hay senal estructurada posible.
+
+Antes de actuar, dime en 3 lineas donde quedamos.

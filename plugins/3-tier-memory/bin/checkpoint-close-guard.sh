@@ -102,6 +102,31 @@ def es_prompt_real(r):
     return not INYECTADO.match(txt)
 
 
+# Fichas de ESTA sesion, vistas en cualquier turno (no solo en el actual): las que se ESCRIBIERON o
+# EDITARON. Una ficha solo impresa con print-como-retomar.py (por ejemplo al leer la de una sesion
+# vieja durante un triage) no es de esta sesion salvo que su frontmatter lleve `session_id:` igual al
+# de esta sesion (lo sella Step 5c-bis): contarla hacia que resolver un pendiente que esa ficha vieja
+# citaba exigiera re-pegar un snippet muerto (adversario, ronda de 2.33.1). Las usa el disparo por
+# cambio de estado (abajo).
+SID = str(d.get("session_id") or "")
+impresas = []
+SESION_RE_G = re.compile(r"(?:^|/)memory/sessions/[^/]+\.md$")
+fichas_sesion = []
+for r in recs:
+    if r.get("type") != "assistant":
+        continue
+    for b in (r.get("message") or {}).get("content") or []:
+        if not isinstance(b, dict) or b.get("type") != "tool_use":
+            continue
+        inp = b.get("input") or {}
+        ruta = inp.get("file_path") or ""
+        if b.get("name") in ("Write", "Edit", "MultiEdit") and SESION_RE_G.search(ruta):
+            fichas_sesion.append(ruta)
+        elif b.get("name") == "Bash":
+            for m in re.finditer(r"print-como-retomar\.py[\"']?\s+(\"[^\"]+\"|'[^']+'|[^\s;&|]+)",
+                                 inp.get("command") or ""):
+                impresas.append(m.group(1).strip("\"'"))
+
 inicio = 0
 for i in range(len(recs) - 1, -1, -1):
     if es_prompt_real(recs[i]):
@@ -109,6 +134,7 @@ for i in range(len(recs) - 1, -1, -1):
         break
 turno = recs[inicio:]
 
+ids_cambiados = set()  # pendientes cerrados/caducados/bloqueados en este turno
 textos = []            # lo que el usuario vio: bloques text del assistant
 disparo = False
 fichas = []            # fichas que el turno CERRO: argumento de print-como-retomar.py o Edit con marca
@@ -150,6 +176,18 @@ for r in turno:
             disparo = True
         elif nombre == "Bash":
             cmd = inp.get("command") or ""
+            # Disparo por CAMBIO DE ESTADO (2.33.1, p-c72a33ae7a): un turno que cierra, caduca o
+            # bloquea un pendiente que el `## Como retomar` de una ficha de esta sesion cita deja
+            # ese snippet viejo. Medido en vivo: tras el checkpoint de 2.33.0 se resolvio
+            # `p-477bb60303` y la respuesta no aviso ni reimprimio el snippet, que seguia
+            # listandolo en `Sigue abierto`. Ese turno no corria ni el skill ni el script.
+            # Se cuentan TODOS los ids del comando, no solo el que sigue a `--id `: argparse acepta
+            # `--id=p-…`, y un `ID=p-…; … --id "$ID"` o un bucle esconden el id detras de una
+            # variable (adversario, ronda de 2.33.1: las dos formas pasaban en silencio). El coste
+            # es un id citado de paso en `--nota`: si una ficha de esta sesion lo cita, el hook
+            # pide revisar el snippet — un aviso de mas, nunca uno de menos.
+            if "journal-emit.py" in cmd and re.search(r"--type[\s=]+[\"']?pendiente\.(?:resolve|expire|block)\b", cmd):
+                ids_cambiados.update(re.findall(r"\b(p-[0-9a-f]{10})\b", cmd))
             if "print-como-retomar.py" not in cmd:
                 continue
             disparo = True
@@ -184,6 +222,40 @@ if lam:
 # externo, ronda 1). Un Write suelto solo cuenta si nada mas nombro la ficha: es el caso de un
 # /checkpoint-3t que se salto Step 8b entero, y entonces vale la ULTIMA escrita (la de Step 2),
 # no todas — /backfill-3t escribe decenas.
+def seccion(texto, nombre):
+    lineas = texto.splitlines()
+    for i, l in enumerate(lineas):
+        if l.strip().lower() == "## " + nombre.lower():
+            fin = next((j for j in range(i + 1, len(lineas)) if lineas[j].startswith("## ")), len(lineas))
+            return "\n".join(lineas[i + 1:fin])
+    return None
+
+
+def de_esta_sesion(ruta):
+    """Una ficha impresa cuenta solo si su frontmatter trae `session_id:` igual al de esta sesion."""
+    if not SID:
+        return False
+    try:
+        cabeza = open(ruta, encoding="utf-8").read(2000)
+    except Exception:
+        return False
+    m = re.search(r"(?m)^session_id:\s*(\S+)\s*$", cabeza)
+    return bool(m and m.group(1) == SID)
+
+
+if ids_cambiados:
+    candidatas = [resolver(r, cwd) for r in fichas_sesion]
+    candidatas += [f for f in (resolver(r, cwd) for r in impresas) if f and de_esta_sesion(f)]
+    for f in dict.fromkeys(candidatas):
+        if not f or not os.path.isfile(f):
+            continue
+        try:
+            sec = seccion(open(f, encoding="utf-8").read(), "Como retomar") or ""
+        except Exception:
+            continue
+        if any(i in sec for i in ids_cambiados):
+            disparo = True
+            fichas.append(f)
 fichas = [f for f in fichas if f and os.path.isfile(f)]
 if not fichas:
     fichas = [f for f in escritas[-1:] if f and os.path.isfile(f)]
@@ -201,15 +273,6 @@ visto = plano("\n".join(textos))
 
 def falta(lineas):
     return [l for l in lineas if plano(l) and plano(l) not in visto]
-
-
-def seccion(texto, nombre):
-    lineas = texto.splitlines()
-    for i, l in enumerate(lineas):
-        if l.strip().lower() == "## " + nombre.lower():
-            fin = next((j for j in range(i + 1, len(lineas)) if lineas[j].startswith("## ")), len(lineas))
-            return "\n".join(lineas[i + 1:fin])
-    return None
 
 
 problemas = []

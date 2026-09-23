@@ -861,6 +861,29 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             h.append(Hallazgo(HECHO, "snippet.proximo_paso",
                               "`Proximo paso:` es caso 1, 5, o un pendiente registrado e inmediato"))
 
+    # 8-quater. `Sigue abierto:` solo nombra pendientes VIVOS (2.33.1, p-c72a33ae7a). Medido en vivo
+    # en la sesion que construyo 2.33.0: tras el checkpoint se resolvio `p-477bb60303` (el push) y
+    # el snippet que el usuario ya tenia seguia listandolo como abierto. Hasta aqui solo se miraba
+    # que los ids de `Proximo paso:` siguieran abiertos. Se mide sobre la LINEA, igual que 8 y 8-bis.
+    linea_sa_viva = linea_sigue_abierto(sec_retomar)
+    ids_sa = sorted(set(ID_PENDIENTE.findall(linea_sa_viva)))
+    if "<filled in Step 8>" in sec_retomar or not ids_sa:
+        h.append(Hallazgo(HECHO, "snippet.ids_vivos",
+                          "`Sigue abierto:` no cita ids que medir"))
+    else:
+        cerrados_sa = [i for i in ids_sa if i not in ids_abiertos]
+        if cerrados_sa:
+            h.append(Hallazgo(SALTADO, "snippet.ids_vivos",
+                              f"{len(cerrados_sa)} id(s) de `Sigue abierto:` ya no estan abiertos en "
+                              "_pendientes.md",
+                              cerrados_sa,
+                              corrige="quita el id de la linea (o cambialo por el pendiente que lo "
+                                      "sustituye), vuelve a correr print-como-retomar.py y pega el "
+                                      "snippet nuevo en tu respuesta"))
+        else:
+            h.append(Hallazgo(HECHO, "snippet.ids_vivos",
+                              f"los {len(ids_sa)} id(s) de `Sigue abierto:` siguen abiertos"))
+
     # 9. Research con recomendaciones sin resolver que ESTA ficha enlaza
     sec_res = seccion_por_prefijo(secs, "Research") or ""
     researches = sorted(set(WIKILINK_RESEARCH.findall(sec_res)))

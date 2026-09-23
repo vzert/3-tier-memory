@@ -1121,6 +1121,16 @@ printf -- '- [ ] rotar una key — _origen: [[sessions/2026-09-01-otra]]_ — _c
 python3 -c 'import sys;p=sys.argv[1];t=open(p).read();open(p,"w").write(t.replace("## Media prioridad\n","## Media prioridad\n\n"+open(sys.argv[2]).read(),1))' "$M/_pendientes.md" "$M/.l"
 chk "ajeno no cuenta como trabajo propio" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.proximo_paso')"
 
+echo "== 2.33.1: un id de 'Sigue abierto:' que ya se cerro es SALTADO (snippet.ids_vivos) =="
+M="$T/mV1"; ficha_pp "$M" - "Proximo paso: arreglar el parser _id: p-1234567890_.\n\nSigue abierto: push a origin _id: p-477bb60303_ · medir algo _id: p-2222222222_." ""
+pend_linea "$M" p-1234567890 "arreglar el parser" ""
+pend_linea "$M" p-2222222222 "medir algo" ""
+O=$(pp_out "$M")
+chk "SALTADO por el id cerrado" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*snippet.ids_vivos')"
+chk "lo nombra" "1" "$(printf '%s' "$O" | grep -A1 'snippet.ids_vivos' | grep -c 'p-477bb60303')"
+pend_linea "$M" p-477bb60303 "push a origin" ""
+chk "con el id abierto: HECHO" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.ids_vivos')"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
