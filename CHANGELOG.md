@@ -1,6 +1,90 @@
 # Changelog
 
 
+## [2.33.0] - 2026-09-22
+Resuelve `p-daf3051915`. Son los 4 defectos de cierre que `/checkpoint-3t` cometió en vivo, en
+su propio cierre, en la sesión 5790b9f2 de este repo. Son los mismos que Víctor ve en otros
+agentes. 2.32.1 los "arregló" solo con prosa, y el cierre siguiente volvió a fallar. Esta
+versión los convierte en checks y en un hook. Cada forma se reprodujo como fixture con el texto
+real del transcript (`bin/fixtures/cierre-5790b9f2/`).
+
+### Added
+- **Hook Stop `checkpoint-close-guard.sh`** (defectos 3 y 4). Mira solo los turnos que
+  corrieron `/checkpoint-3t` o `print-como-retomar.py`, o que editaron `## Como retomar`. En
+  esos turnos exige que el TEXTO de la respuesta (nunca un tool result) contenga:
+  - cada línea que imprime `print-como-retomar.py`;
+  - los 2 primeros recordatorios de calendario de la ficha, completos, y `+N con fecha futura`
+    si hay más.
+
+  Además corre `checkpoint-audit.py --solo-snippet` sobre la ficha final, porque Step 7a corre
+  antes de que Step 8 escriba el snippet y hasta ahora nunca lo veía. Si falta algo, bloquea
+  una vez. En el Stop reentrante solo avisa al usuario (`systemMessage`), para no entrar en
+  bucle. En cualquier otro turno se calla. Un `Write` de ficha a secas (`/backfill-3t`) no lo
+  dispara. Mide todas las fichas que el turno cerró, no solo la última. Un mensaje de teammate
+  o una notificación de tarea a mitad del turno no abre un turno nuevo.
+- **Campo `_bloqueado: <qué>_` en pendientes** (defecto 1): `journal-emit.py --type
+  pendiente.add --bloqueado-por "…"`, y el evento nuevo `pendiente.block --id … (--bloqueado-por
+  "…" | --desbloquear)` para uno que ya existe. No cambia el id. Las 7 expresiones que despojan
+  metadatos lo reconocen. Se decide al CREAR el pendiente, no leyendo su texto (regla 216).
+- **`checkpoint-audit.py`: check `snippet.proximo_paso`** (defectos 1 y 2), medido sobre la
+  línea `Proximo paso:`. Marca `SALTADO` en estos casos:
+  - la línea empieza por el caso 4 genérico;
+  - no cita un `_id` (fuera de `Fase actual:` con un plan enlazado, y de `ninguno`/`nada
+    accionable`);
+  - cita un id que no está abierto en `_pendientes.md`, o uno con `_bloqueado:` o con `_revisar`
+    futuro;
+  - dice `ninguno` mientras la ficha deja un pendiente propio abierto (nacido en esta sesión),
+    sin `_bloqueado` ni `_revisar` futuro;
+  - `## Como retomar` no tiene fence y tampoco es la línea `Ninguno — …` del caso 5 (sin esto,
+    quitar las comillas triples escondía el caso 4).
+- `checkpoint-audit.py --solo-snippet --json`: el modo que usa el hook.
+- `tools/medir-proximo-paso.py`: mide el check sobre una memoria real y separa el artefacto
+  retroactivo.
+
+### Changed
+- `checkpoint-3t.md` Step 8: **se quita el caso 4** (`revisar _pendientes.md y proponer
+  siguiente prioridad`). Los casos 2-3 citan el `_id` del pendiente. Step 3b, punto 9: todo
+  defecto hallado en la sesión que no quedó cerrado y verificado es un pendiente obligatorio,
+  incluso si ya se "arregló" con prosa. Step 3a marca con `pendiente.block` un pendiente
+  `still-open` que espera a un tercero. Step 8b cambia el "límite honesto" por el hook.
+
+### Medido
+- Los fixtures reales de 5790b9f2 dan hoy `SALTADO` o bloqueo: turno 1813 (paso bloqueado y
+  calendario sin pegar), turno 2071 (caso 4) y turno 2129 (snippet solo en el tool result).
+  También el borrador de claude-vzert pr238 (caso 4). Con el código anterior no se marcaban:
+  los 21 casos nuevos de `test-checkpoint-audit.sh` fallan contra el `checkpoint-audit.py` de
+  2.32.1, y los 101 anteriores siguen pasando. `test-checkpoint-close-guard.sh` es nuevo (30
+  casos).
+- Corpus real, reproducible con `tools/medir-proximo-paso.py <memoria de claude-vzert>
+  2026-09-17`: 104 fichas, 44 `HECHO` y 60 `SALTADO`. En 46 de los 60, el único motivo es un id
+  citado que hoy no está abierto y cuya fila en `pendientes/*.md` trae una fecha de cierre igual
+  o posterior a la ficha. Es un artefacto de medir hacia atrás: en el cierre real estaba abierto.
+  Los otros 14 son defectos según las reglas nuevas, o no se puede descartar que lo sean:
+  - paso sin `_id` ×5;
+  - id ya cerrado antes de la ficha, o sin fecha de cierre en la historia ×3;
+  - id que no aparece en esta memoria ×1 (era de otra instalación);
+  - `## Como retomar` sin fence que no es el caso 5 ×2;
+  - caso 4 ×2;
+  - paso con `_revisar` futuro ×1.
+
+  La primera medición de esta versión decía "12", y era de antes de añadir el requisito del id
+  abierto. La segunda llamaba "cerrado después" a todo id no abierto. El adversario externo
+  encontró las dos.
+- Falsos positivos corregidos durante la medición:
+  - `nada accionable hoy — …` como forma del caso 5;
+  - `ninguno` contando pendientes de OTRAS sesiones que Step 3a lista como still-open (ahora
+    solo cuentan los de `_origen` igual a esta ficha);
+  - fichas sin `## Como retomar`, que ya marca `ficha.secciones`.
+
+### Límites conocidos
+- Si Step 3b no pone `--bloqueado-por`, el check no ve el bloqueo (hay un test que lo
+  documenta). No se clasifica el texto.
+- Un defecto hallado en vivo y nunca registrado no lo ve ningún script. Se cierra por la
+  consecuencia: sin pendiente no hay id que citar en `Proximo paso`, y el caso 4 ya no existe.
+  Queda una salida: `ninguno — …` sin pendientes propios. La respalda solo Step 3b, punto 9.
+- La segunda omisión seguida en el mismo turno pasa, con aviso al usuario.
+
+
 ## [2.32.1] - 2026-09-22
 Al cerrar la propia sesión de 2.32.0, Víctor señaló en vivo un tercer defecto del mismo tipo que
 los dos que esa versión acababa de arreglar: el `## Como retomar` que el agente generó promovía a

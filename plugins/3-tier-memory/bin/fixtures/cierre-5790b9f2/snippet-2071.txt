@@ -1,0 +1,11 @@
+Retomamos: Dos regresiones reales del snippet Como retomar en claude-vzert, confirmadas en su JSONL.
+
+Lee memory/sessions/2026-09-22-snippet-cierre-regresion-claude-vzert.md para el contexto completo.
+
+Proximo paso: revisar _pendientes.md y proponer siguiente prioridad — esta sesion no dejo un paso propio accionable hoy; su unico pendiente sin fecha (p-a4439fa8fd) esta condicionado a que otra instalacion actualice el plugin, no a trabajo de esta sesion.
+
+Sigue abierto: p-a4439fa8fd verificar en instalacion real que los dos checks nuevos no dan falsos positivos, condicionado a que esa instalacion actualice a 2.32.0 · p-014255373e plan.upsert sin guardian de reversa, des-completa un plan cerrado en silencio · p-49996efc69 estado FINAL de 2.30.0 sin revisar por adversario, ronda acotada al delta 52f2538..7f03029 · +5 mas en _pendientes.md.
+
+No repitas: no construyas un check mecanico nuevo confiando solo en el corpus real — pruebalo con casos adversariales a proposito (mencion inocua, alias de wikilink, prefijo de otro plan) antes de darlo por bueno; y si el backend externo del adversario (codex exec) falla dos veces seguidas, cambia al backend de subagente en vez de reintentar indefinidamente. Tampoco promuevas a `Proximo paso` un pendiente que depende de que OTRO proceso actue (aqui: que otra instalacion actualice el plugin) — es la misma advertencia que este mismo Step 8 hace contra "revisar si X respondio", y esta sesion estuvo a punto de repetirla en su propio cierre.
+
+Antes de actuar, dime en 3 lineas donde quedamos.

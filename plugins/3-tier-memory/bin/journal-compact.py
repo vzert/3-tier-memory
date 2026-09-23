@@ -98,7 +98,7 @@ HEADERS = {"alta": "## Alta prioridad", "media": "## Media prioridad", "baja": "
 ACTUALIZADO_RE = re.compile(r"\s*—\s*_actualizado: \d{4}-\d{2}-\d{2}_")
 # Donde empieza la cola de metadatos de una linea de Tier 2. La cola se conserva VERBATIM en un
 # update: contiene `_origen:`/`_creado:`/`_id:`/`_revisar:` y cualquier clave que otro escribiera.
-META_START_RE = re.compile(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado):")
+META_START_RE = re.compile(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado|bloqueado):")
 SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$")   # tambien guarda contra '../'
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 CELL_SPLIT = re.compile(r"(?<!\\)\|")   # un `\|` dentro de una celda (alias de wikilink) no separa
@@ -365,7 +365,7 @@ def find_id_line(lines, pid):
 
 def line_text(line):
     s = line.strip()[5:].strip()
-    return normalize_text(re.sub(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado):[^—]*", "", s))
+    return normalize_text(re.sub(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado|bloqueado):[^—]*", "", s))
 
 
 def header_index(lines, prio):
@@ -596,8 +596,9 @@ def apply_add_index(mem, p):
         # antes de llegar aqui. Se queda para que un llamador futuro no inserte en None.
         raise Quarantine(f"no-anchor: prioridad '{p['prioridad']}' no es Alta, Media ni Baja")
     rev = f" — _revisar: {p['revisar']}_" if p.get("revisar") else ""
+    blq = f" — _bloqueado: {p['bloqueado']}_" if p.get("bloqueado") else ""
     new = (f"- [ ] {p['text']} — _origen: {p['origen']}_ — _creado: {p['creado']}_ "
-           f"— _id: {p['id']}_{rev}")
+           f"— _id: {p['id']}_{rev}{blq}")
     # Insertar tras el header y su linea en blanco (si la hay): lo nuevo arriba.
     at = h + 1
     if at < len(lines) and lines[at].strip() == "":
@@ -1105,6 +1106,31 @@ def apply_window(mem, p):
     nueva = f"{nueva} — _revisar: {p['revisar']}_"
     if nueva == lines[i]:
         return False                      # idempotente: ya tiene esa ventana
+    lines[i] = nueva
+    atomic_write(path, lines)
+    return True
+
+
+BLOQUEADO_RE = re.compile(r"\s*—\s*_bloqueado:[^—]*")
+
+
+def apply_block(mem, p):
+    """Pone, cambia o quita `_bloqueado: QUE_` en la linea de Tier 2 (Step 3a), sin tocar el
+    resto. Mismo patron que `apply_window`: sin esto, marcar un pendiente viejo exigia editar
+    `_pendientes.md` a mano, cosa que `journal_strict=1` deniega. `bloqueado` vacio = quitarlo."""
+    path = os.path.join(mem, "_pendientes.md")
+    if not os.path.isfile(path):
+        raise Quarantine("no-index: _pendientes.md no existe")
+    lines = read_lines(path)
+    i = find_id_line(lines, p["id"])
+    if i is None:
+        log(f"WARN block: no hay linea abierta con id {p['id']}")
+        return False
+    nueva = BLOQUEADO_RE.sub("", lines[i].rstrip("\n"))
+    if p.get("bloqueado"):
+        nueva = f"{nueva} — _bloqueado: {p['bloqueado']}_"
+    if nueva == lines[i]:
+        return False                      # idempotente
     lines[i] = nueva
     atomic_write(path, lines)
     return True
@@ -2805,6 +2831,8 @@ def validate(ev):
                 date.fromisoformat(str(v))
             except (ValueError, TypeError):
                 raise Quarantine(f"malformed: pendiente.add con '{campo}' irreal: {v!r}")
+        if "—" in str(p.get("bloqueado", "")) or "\n" in str(p.get("bloqueado", "")):
+            raise Quarantine("malformed: pendiente.add con '—' o salto de linea en 'bloqueado'")
     elif t == "pendiente.resolve":
         for k in ("id", "estado"):
             if not p.get(k):
@@ -2848,6 +2876,11 @@ def validate(ev):
             date.fromisoformat(str(p.get("revisar", "")))
         except (ValueError, TypeError):
             raise Quarantine("malformed: pendiente.window sin 'revisar' con fecha real")
+    elif t == "pendiente.block":
+        if not p.get("id"):
+            raise Quarantine("malformed: pendiente.block sin 'id'")
+        if "—" in str(p.get("bloqueado", "")) or "\n" in str(p.get("bloqueado", "")):
+            raise Quarantine("malformed: pendiente.block con '—' o salto de linea en 'bloqueado'")
     elif t == "session.add":
         for k in ("slug", "date"):
             if not p.get(k):
@@ -2925,6 +2958,8 @@ def apply_event(mem, ev):
         return apply_reopen(mem, p)
     if t == "pendiente.window":
         return apply_window(mem, p)
+    if t == "pendiente.block":
+        return apply_block(mem, p)
     if t == "session.add":
         return apply_session_add(mem, p)
     if t == "learning.add":

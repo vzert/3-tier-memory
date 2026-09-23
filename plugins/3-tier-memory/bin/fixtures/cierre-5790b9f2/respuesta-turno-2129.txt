@@ -1,0 +1,46 @@
+Tienes razón. Caí al caso 4 genérico ("revisar _pendientes.md y proponer prioridad") — exactamente el síntoma de "fase 7". El paso inmediato real existe: resolver de raíz el defecto que vimos en vivo. No lo registré como pendiente, por eso la escalera de `<next-step>` no lo vio y cayó al genérico. Traté un arreglo solo de prosa (2.32.1) como si ya estuviera resuelto.
+
+Lo registro como pendiente Alta, accionable ya, y lo pongo como próximo paso.
+
+Ahora actualizo la ficha: pendientes, learning, callejón y el snippet.
+
+Auditoría limpia (0 SALTADO). Imprimo el snippet con el script:
+
+Cambio: `p-daf3051915` (Alta, sin fecha) registra el defecto que vimos en vivo: el `<next-step>` sale genérico o no inmediato. Ahora es el próximo paso, con opciones concretas, ejemplos reales y un criterio de "terminado". Se sumó la regla 272: un arreglo solo de prosa no cierra un defecto; hay que registrarlo como pendiente.
+
+Archivos: `memory/sessions/2026-09-22-snippet-cierre-regresion-claude-vzert.md`, `memory/_pendientes.md`, `memory/pendientes/2026-09.md`, `memory/learnings/3tier-memory-system.md`.
+
+Verificación: `checkpoint-audit.py` da 0 SALTADO. Queda 1 PARCIAL, que es el backlog de `/triage-3t`, no algo de esta sesión. El snippet de arriba sale de `print-como-retomar.py`.
+
+Riesgo: el borrador de pr238 vive en `/tmp` y se borra al reiniciar. El pendiente indica cómo reconstruirlo desde el JSONL de claude-vzert. No hubo cambios de código en este turno, así que no hay commit nuevo.
+
+El recordatorio de calendario del 2026-09-27 no cambió desde el mensaje anterior:
+
+```
+─── Recordatorio para el 2026-09-27 ───
+Ponlo en tu calendario:
+
+Título: [3-tier-memory] ¿Se siguen en la práctica las dos reglas de prosa del caso 1/Step 8?
+
+Descripción:
+El 2026-09-22 se agregaron dos reglas de prosa en checkpoint-3t.md: (1) una variante del
+caso 5 para cuando un plan activo está bloqueado por una fecha futura ya cubierta por el
+calendario; (2) una pregunta explícita a hacerse antes de fijar cualquier <next-step> de
+los casos 2-4 ("¿esto se puede hacer de inmediato, sin esperar acción de algo fuera de
+esta sesión?"), reescrita después de que el propio agente de esa sesión violara la versión
+anterior de esa regla en su propio cierre, minutos después de escribirla. Ninguna de las
+dos es un check mecánico — el mismo tipo de regla que ya falló en silencio antes (el
+hallazgo de "fase 7" que motivó toda la sesión). Ese día hay que revisar sesiones nuevas
+de claude-vzert (u otro proyecto real) y confirmar si el agente siguió las dos reglas o
+las volvió a violar con otras palabras.
+
+Pega esto dentro del evento (es el prompt para el agente):
+```
+Proyecto: 3-tier-memory — /home/usuario/Projects/3-tier-memory
+Retomamos: verificar si las dos reglas nuevas del caso 1/Step 8 se siguen en la practica _id: p-e685e9c92a_
+Contexto: memory/sessions/2026-09-22-snippet-cierre-regresion-claude-vzert.md
+Comprueba: busca en sesiones reales de claude-vzert (u otro proyecto con el plugin actualizado a 2.32.1+) (a) un plan activo con ## Estado bloqueado por fecha futura ya cubierta por el calendario — el snippet debe usar la media-linea "ninguno — <plan> Fase <N> esta bloqueada...", no repetir la accion completa; (b) un <next-step> de los casos 2-4 que dependa de que algo FUERA de la sesion actue o decida (un peer, otra instalacion, un PR ajeno) — no deberia estar en Proximo paso, sino en Sigue abierto o fuera del snippet. Si cualquiera de las dos se viola, decidir si vale la pena un check mecanico (aunque signifique acercarse al juicio semantico que la regla 216 prohibe) o reforzar la prosa otra vez.
+Si ya no aplica, cierralo con /checkpoint-3t en vez de dejarlo abierto.
+```
+────────────────────────────────────
+```

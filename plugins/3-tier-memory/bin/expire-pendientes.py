@@ -157,7 +157,7 @@ def emit(mem, args):
 
 
 def texto_visible(line, n=88):
-    t = re.sub(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado):[^—]*", "", line.strip()[5:].strip())
+    t = re.sub(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado|bloqueado):[^—]*", "", line.strip()[5:].strip())
     t = re.sub(r"\s+", " ", t)
     return t[:n] + ("…" if len(t) > n else "")
 

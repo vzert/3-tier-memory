@@ -1,0 +1,23 @@
+─── Recordatorio para el 2026-09-27 ───
+Ponlo en tu calendario:
+
+Título: [3-tier-memory] ¿Se sigue en la práctica la nueva regla de prosa del caso 1?
+
+Descripción:
+El 2026-09-22 se agregó una variante del caso 5 para cuando un plan activo está bloqueado
+por una fecha futura ya cubierta por el calendario (checkpoint-3t.md, caso 1 de
+<next-step>). Es una corrección de prosa, no un check mecánico — el mismo tipo de regla
+que ya falló en silencio antes (el hallazgo de "fase 7" que motivó esta sesión). Ese día
+hay que revisar sesiones nuevas de claude-vzert (u otro proyecto real) que hayan pasado
+por un plan bloqueado por fecha, y confirmar si el agente siguió la regla o volvió a
+imprimir la acción futura completa.
+
+Pega esto dentro del evento (es el prompt para el agente):
+```
+Proyecto: 3-tier-memory — /home/usuario/Projects/3-tier-memory
+Retomamos: verificar si la regla nueva del caso 1 se sigue en la practica _id: p-e685e9c92a_
+Contexto: memory/sessions/2026-09-22-snippet-cierre-regresion-claude-vzert.md
+Comprueba: busca en sesiones reales de claude-vzert (u otro proyecto con el plugin actualizado a 2.32.0+) un caso donde un plan activo con ## Estado tenga su Proxima accion bloqueada por una fecha futura ya cubierta por el calendario. Si el snippet Como retomar repite la accion completa en vez de la media-linea "ninguno — <plan> Fase <N> esta bloqueada...", la regla de prosa no se esta siguiendo y hace falta decidir si vale la pena un check mecanico (aunque signifique acercarse al juicio semantico que la regla 216 prohibe) o reforzar la prosa otra vez.
+Si ya no aplica, cierralo con /checkpoint-3t en vez de dejarlo abierto.
+```
+────────────────────────────────────

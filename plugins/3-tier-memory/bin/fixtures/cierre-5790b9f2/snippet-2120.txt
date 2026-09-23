@@ -1,0 +1,13 @@
+Retomamos: el Proximo paso de /checkpoint-3t sale generico o no inmediato: 3 veces hoy, 2 en este cierre.
+
+Lee memory/sessions/2026-09-22-snippet-cierre-regresion-claude-vzert.md para el contexto completo.
+
+Proximo paso: resolver de raiz p-daf3051915. La escalera de <next-step> solo toma candidatos de pendientes; un defecto hallado en vivo y "arreglado" con prosa nunca se registra, y el caso 4 ("revisar _pendientes.md y proponer siguiente prioridad") es una salida generica sin guardia. Decidir entre: quitar o acotar el caso 4; exigir en Step 3b que todo defecto hallado en la sesion sin verificacion de cierre sea pendiente; y un check en checkpoint-audit.py que marque el texto literal del caso 4 cuando la ficha tiene pendientes propios o Bugs fixed de la misma sesion. Fixtures reales: los dos snippets malos de la sesion 5790b9f2 (transcript de este repo) y el borrador original de pr238 (/tmp/audit-shadow/original-pr238.md, reconstruible desde el JSONL de claude-vzert) _id: p-daf3051915_.
+
+Sigue abierto: p-a4439fa8fd verificar en instalacion real que los dos checks de 2.32.0 no dan falsos positivos, condicionado a que esa instalacion actualice · p-014255373e plan.upsert sin guardian de reversa · p-49996efc69 estado FINAL de 2.30.0 sin revisar por adversario · +5 mas en _pendientes.md.
+
+No repitas: no des por resuelto un defecto con solo reescribir prosa — 2.32.1 no cubrio el caso 4 y el siguiente snippet cayo ahi. No promuevas a Proximo paso algo que depende de que otro proceso actue. No construyas un check nuevo confiando solo en el corpus real: pruebalo con casos adversariales construidos. Si codex exec falla dos veces seguidas, usa el subagente.
+
+Terminas cuando: una ficha con Proximo paso generico (caso 4) teniendo trabajo propio sin cerrar, o con un paso bloqueado por un tercero, ya no pueda cerrar el checkpoint sin que checkpoint-audit.py lo marque (o sin que el template lo impida por construccion) — verificado contra los tres fixtures reales, con test en test-checkpoint-audit.sh y ronda de adversario. Es cambio de version del plugin.
+
+Antes de actuar, dime en 3 lineas donde quedamos.

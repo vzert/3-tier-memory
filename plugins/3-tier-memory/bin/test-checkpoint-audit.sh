@@ -1007,6 +1007,120 @@ EOF
 O=$($AUD "$M20" --session-file "$S20" --no-git --hoy $HOY 2>&1)
 chk "tilde + negrita en Proximo paso tambien se revisan" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*plan.mencionado_no_enlazado')"
 
+# ================================================================================================
+# 2.33.0 — p-daf3051915: `Proximo paso:` (snippet.proximo_paso). Fixtures REALES de la sesion
+# 5790b9f2 de este repo (bin/fixtures/cierre-5790b9f2/, extraidos del JSONL) mas el borrador de
+# claude-vzert pr238, y casos adversariales construidos (regla 270: no basta el corpus real).
+FX="$BIN/fixtures/cierre-5790b9f2"
+
+ficha_pp() {   # $1 memoria  $2 fichero-snippet|"-" (usa $3 como linea Proximo paso)  $3 texto  $4 lineas `## Pendientes`
+  local M="$1"; nueva_memoria "$M"; local S="$M/sessions/2026-09-19-demo.md"; ficha_completa "$S"
+  python3 - "$S" "$2" "$3" "$4" <<'PYF'
+import sys
+p, fx, pp, pend = sys.argv[1:5]
+pp = pp.replace("\\n", "\n")
+snip = open(fx, encoding="utf-8").read().strip("\n") if fx != "-" else \
+    "Retomamos: demo.\n\nLee memory/sessions/2026-09-19-demo.md para el contexto completo.\n\n" + pp + \
+    "\n\nAntes de actuar, dime en 3 lineas donde quedamos."
+t = open(p, encoding="utf-8").read()
+t = t.replace("## Como retomar\nNinguno — la sesion cerro sin continuidad.", "## Como retomar\n\n```\n" + snip + "\n```")
+if pend:
+    t = t.replace("## Pendientes\n- Ninguno", "## Pendientes\n" + pend.replace("\\n", "\n"))
+open(p, "w", encoding="utf-8").write(t)
+PYF
+}
+pend_linea() {   # $1 memoria, $2 id, $3 texto, $4 cola extra de metadatos
+  printf -- '- [ ] %s — _origen: [[sessions/2026-09-19-demo]]_ — _creado: 2026-09-19_ — _id: %s_%s\n' "$3" "$2" "$4" > "$1/.linea"
+  python3 - "$1/_pendientes.md" "$1/.linea" <<'PYP'
+import sys
+p, l = sys.argv[1:3]; t = open(p, encoding="utf-8").read(); ln = open(l, encoding="utf-8").read()
+t = t.replace("## Media prioridad\n", "## Media prioridad\n\n" + ln, 1); open(p, "w", encoding="utf-8").write(t)
+PYP
+}
+pp_out() { $AUD "$1" --session-file "$1/sessions/2026-09-19-demo.md" --no-git --hoy 2026-09-22 --solo-snippet 2>&1; }
+
+echo "== F1 real (turno 1813): Proximo paso cita p-a4439fa8fd, que espera a OTRA instalacion =="
+M="$T/mF1"; ficha_pp "$M" "$FX/snippet-1813.txt" "" '- [ ] verificar en instalacion real — `p-a4439fa8fd`\n- [ ] reglas nuevas — `p-e685e9c92a`'
+pend_linea "$M" p-a4439fa8fd "verificar en instalacion real los dos checks" " — _bloqueado: que otra instalacion actualice el plugin_"
+pend_linea "$M" p-e685e9c92a "verificar si las reglas nuevas se siguen" " — _revisar: 2026-09-27_"
+O=$(pp_out "$M")
+chk "F1: SALTADO snippet.proximo_paso" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*snippet.proximo_paso')"
+chk "F1: nombra el bloqueo" "1" "$(printf '%s' "$O" | grep -c 'p-a4439fa8fd esta bloqueado')"
+echo "== F1 limite conocido: SIN el campo _bloqueado (Step 3b no lo puso) el check no lo ve =="
+# Regla 216: la deteccion es solo por el campo estructurado, nunca por el texto ("una vez que
+# esa instalacion actualice"). Este aserto documenta el limite, no lo celebra.
+M="$T/mF1b"; ficha_pp "$M" "$FX/snippet-1813.txt" "" '- [ ] verificar en instalacion real — `p-a4439fa8fd`'
+pend_linea "$M" p-a4439fa8fd "verificar en instalacion real los dos checks" ""
+chk "F1 sin campo: HECHO (limite documentado)" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.proximo_paso')"
+
+echo "== F2 real (turno 2071): caso 4 generico con p-a4439fa8fd propio abierto =="
+M="$T/mF2"; ficha_pp "$M" "$FX/snippet-2071.txt" "" '- [ ] verificar en instalacion real — `p-a4439fa8fd`'
+pend_linea "$M" p-a4439fa8fd "verificar en instalacion real los dos checks" " — _bloqueado: que otra instalacion actualice el plugin_"
+O=$(pp_out "$M")
+chk "F2: SALTADO" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*snippet.proximo_paso')"
+chk "F2: dice caso 4" "1" "$(printf '%s' "$O" | grep -c 'caso 4 generico')"
+
+echo "== pr238 real (claude-vzert): 'revisar _pendientes.md y proponer...' sin pendientes propios =="
+M="$T/mP238"; ficha_pp "$M" - "Proximo paso: revisar _pendientes.md y proponer siguiente prioridad — esta sesión no tuvo próximo paso propio; el trabajo activo real es la Fase 7 pieza 3 del port 3-tier, ver memory/plans/plan-port-3tier-cronologia.md." ""
+chk "pr238: SALTADO caso 4" "1" "$(pp_out "$M" | grep -c 'caso 4 generico')"
+
+echo "== snippet BUENO real (turno 2120): cita el caso 4 entre comillas a mitad de linea =="
+M="$T/mOK"; ficha_pp "$M" "$FX/snippet-2120.txt" "" '- [ ] resolver de raiz — `p-daf3051915`'
+pend_linea "$M" p-daf3051915 "Resolver de raiz los 4 defectos" ""
+pend_linea "$M" p-a4439fa8fd "verificar en instalacion real" " — _bloqueado: otra instalacion_"
+pend_linea "$M" p-014255373e "plan.upsert sin guardian" ""
+pend_linea "$M" p-49996efc69 "estado final 2.30.0" ""
+chk "2120: HECHO (la cita no es el caso 4)" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.proximo_paso')"
+
+echo "== adversariales construidos =="
+M="$T/mA1"; ficha_pp "$M" - "Proximo paso: implementar el hook de cierre y probarlo contra los fixtures." ""
+chk "trabajo concreto sin _id: SALTADO" "1" "$(pp_out "$M" | grep -c 'no cita el `_id`')"
+M="$T/mA2"; ficha_pp "$M" - "Proximo paso: seguir con p-9999999999." ""
+chk "id inventado (no abierto): SALTADO" "1" "$(pp_out "$M" | grep -c 'p-9999999999 no esta abierto')"
+M="$T/mA3"; ficha_pp "$M" - "Proximo paso: ninguno — lo unico propio (p-a4439fa8fd) espera a otra instalacion." '- [ ] verificar — `p-a4439fa8fd`'
+pend_linea "$M" p-a4439fa8fd "verificar en instalacion real" " — _bloqueado: otra instalacion_"
+chk "ninguno citando un bloqueado como motivo: HECHO" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.proximo_paso')"
+M="$T/mA4"; ficha_pp "$M" - "Proximo paso: ninguno — nada que hacer hoy." '- [ ] arreglar el bug — `p-1234567890`'
+pend_linea "$M" p-1234567890 "arreglar el bug visto en vivo" ""
+chk "ninguno con trabajo propio accionable: SALTADO" "1" "$(pp_out "$M" | grep -c 'dice `ninguno` pero')"
+M="$T/mA5"; ficha_pp "$M" - "Proximo paso: confirmar el 2026-09-27 que el cron corrio _id: p-1234567890_." ""
+pend_linea "$M" p-1234567890 "confirmar el cron" " — _revisar: 2026-09-27_"
+chk "id con _revisar futuro: SALTADO" "1" "$(pp_out "$M" | grep -c '_revisar: 2026-09-27` futuro')"
+M="$T/mA6"; ficha_pp "$M" - "Proximo paso: nada accionable hoy — p-1234567890 ya tiene su recordatorio (2026-09-27)." ""
+pend_linea "$M" p-1234567890 "confirmar el cron" " — _revisar: 2026-09-27_"
+chk "'nada accionable hoy' citando un futuro como motivo: HECHO" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.proximo_paso')"
+M="$T/mA7"; ficha_pp "$M" - "Proximo paso: Fase actual: 2 — medir. Correr el script de medicion." ""
+chk "Fase actual SIN plan enlazado: SALTADO (no es caso 1)" "1" "$(pp_out "$M" | grep -c 'SALTADO .*snippet.proximo_paso')"
+python3 - "$M/sessions/2026-09-19-demo.md" <<'PYX'
+import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+open(p,"w",encoding="utf-8").write(t.replace("## Plans\n- Ninguno","## Plans\n- [[plans/plan-demo]]"))
+PYX
+chk "Fase actual CON plan enlazado: HECHO (caso 1)" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.proximo_paso')"
+M="$T/mA8"; ficha_pp "$M" - "Proximo paso: arreglar el parser _id: p-1234567890_.\n\nNo repitas: revisar _pendientes.md y proponer siguiente prioridad no sirve." ""
+pend_linea "$M" p-1234567890 "arreglar el parser" ""
+chk "caso 4 dentro de 'No repitas:' no cuenta: HECHO" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.proximo_paso')"
+M="$T/mA9"; ficha_pp "$M" - "**Próximo paso:** revisar \`_pendientes.md\` y proponer la siguiente prioridad." ""
+chk "caso 4 con tilde, negrita y backticks: SALTADO" "1" "$(pp_out "$M" | grep -c 'caso 4 generico')"
+M="$T/mA10"; ficha_pp "$M" - "Retomamos solo, sin linea de paso." ""
+chk "bloque sin linea Proximo paso: SALTADO" "1" "$(pp_out "$M" | grep -c 'no tiene linea `Proximo paso:`')"
+M="$T/mA11"; nueva_memoria "$M"; ficha_completa "$M/sessions/2026-09-19-demo.md"
+chk "caso 5 colapsado a una linea: HECHO" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.proximo_paso')"
+
+echo "== ronda 1 del adversario: caso 4 SIN fence (quitar las comillas triples no lo esconde) =="
+M="$T/mR1"; nueva_memoria "$M"; S="$M/sessions/2026-09-19-demo.md"; ficha_completa "$S"
+python3 - "$S" <<'PYX'
+import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+t=t.replace("## Como retomar\nNinguno — la sesion cerro sin continuidad.",
+  "## Como retomar\n\nRetomamos: demo.\n\nProximo paso: revisar _pendientes.md y proponer siguiente prioridad.")
+open(p,"w",encoding="utf-8").write(t)
+PYX
+chk "sin fence y no es 'Ninguno': SALTADO" "1" "$(pp_out "$M" | grep -c 'no tiene bloque de codigo')"
+echo "== ronda 1: 'ninguno' con un still-open de OTRA sesion reconciliado en ## Pendientes: HECHO =="
+M="$T/mR2"; ficha_pp "$M" - "Proximo paso: ninguno — la sesion cerro sola." '- [ ] rotar una key — `p-5e75762256` (still-open, de otra sesion)'
+printf -- '- [ ] rotar una key — _origen: [[sessions/2026-09-01-otra]]_ — _creado: 2026-09-01_ — _id: p-5e75762256_\n' > "$M/.l"
+python3 -c 'import sys;p=sys.argv[1];t=open(p).read();open(p,"w").write(t.replace("## Media prioridad\n","## Media prioridad\n\n"+open(sys.argv[2]).read(),1))' "$M/_pendientes.md" "$M/.l"
+chk "ajeno no cuenta como trabajo propio" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.proximo_paso')"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

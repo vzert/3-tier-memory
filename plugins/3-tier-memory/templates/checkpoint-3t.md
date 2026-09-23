@@ -262,6 +262,10 @@ Para los pendientes DENTRO del alcance, clasifica cada uno en exactamente uno de
 
 - **resolved** — the work described was completed in this session, directly or indirectly (e.g., the user asked for X and X happens to satisfy the pendiente).
 - **still-open** — the work is still pending and was not touched this session.
+  If a still-open item that touches this session's work **waits on something outside the
+  session** (another install, a peer, a foreign PR) and its line has no `_bloqueado:`, mark it:
+  `journal-emit.py --type pendiente.block --id p-… --bloqueado-por "<what it waits for>"`.
+  Without the field, Step 8 can promote it to `Proximo paso` (see Step 3b, `--bloqueado-por`).
 - **corregido** — sigue abierto, pero su TEXTO quedo falso (parte del trabajo se adelanto, el
   alcance se ajusto) o su prioridad cambio. No es un cierre: se emite `pendiente.update`, abajo.
 - **superseded** — the item was absorbed by another pendiente or a scope change (reference the new owner/scope).
@@ -328,13 +332,32 @@ Scan the ENTIRE conversation for:
 6. Unfixed bugs discovered this session
 7. Tests not run
 8. Documentation gaps
+9. **Every defect found during this session that is not closed AND verified** — including
+   the ones the user pointed out live, and including the ones you already "fixed" by
+   rewriting prose (a rule, a template paragraph). **This one is mandatory, not a heuristic.**
+   A prose-only fix is not a closed defect. If it has no pendiente, the `<next-step>` ladder
+   in Step 8 cannot see it. Measured in session 5790b9f2 of this repo: the closing snippet
+   fell to the generic case 4 while exactly that work was open (learning 272). Since 2.33.0,
+   `Proximo paso:` must cite a pendiente id, so unregistered work cannot be named there.
 
 For EACH new pendiente, emit one event:
 
 ```bash
 python3 "$JBIN/journal-emit.py" --type pendiente.add --text "<texto del pendiente>" \
-  --prioridad Alta|Media|Baja --origen "[[sessions/DATE-SLUG]]" [--revisar YYYY-MM-DD]
+  --prioridad Alta|Media|Baja --origen "[[sessions/DATE-SLUG]]" [--revisar YYYY-MM-DD] \
+  [--bloqueado-por "<que espera, fuera de esta sesion>"]
 ```
+
+**`--bloqueado-por` cuando el pendiente espera a algo FUERA de esta sesion**: otra instalacion
+que tiene que actualizar, un peer, un mantenedor ajeno, un PR de otro repo, una decision de otra
+persona. Decidelo al CREAR el pendiente, respondiendo "¿se puede hacer de inmediato, sin esperar
+a nadie?". El compactador anade `— _bloqueado: <que>_` a la linea de Tier 2. Ese campo tiene un
+consumidor: `checkpoint-audit.py` rechaza (`snippet.proximo_paso`) un `Proximo paso:` que cite
+ese id. El pendiente sigue saliendo en `Sigue abierto`. No cambia el id. Para un pendiente que ya
+existe: `journal-emit.py --type pendiente.block --id p-… --bloqueado-por "…"` (o
+`--desbloquear` cuando ya no espera). Caso real (2026-09-22, sesion 5790b9f2): `p-a4439fa8fd`
+("verificar... una vez esa instalacion actualice a 2.32.0") llego a `Proximo paso` porque nada
+lo marcaba. La regla en prosa de Step 8 ya lo prohibia y no bastaba.
 
 **`--revisar` cuando el pendiente nombra una fecha futura** (`revisar el 2026-09-22`, `target
 2026-10-01`, `T+7` resuelto a fecha). Escribe la fecha **como campo**, no solo en prosa: el
@@ -1117,13 +1140,19 @@ Reglas para llenar los slots:
   regla). Un pendiente asi se trata como cualquier otro sin `_revisar` (compite por prioridad,
   casos 2-3) hasta que `/triage-3t` u otra revision manual del backlog le asigne fecha — no es
   responsabilidad de este Step arreglar datos que otro paso dejo mal formados.
-  4. Si tampoco aplica, escribir literalmente `revisar _pendientes.md y proponer siguiente prioridad`.
+  4. **(Quitado en 2.33.0.)** Era `revisar _pendientes.md y proponer siguiente prioridad`, una
+     salida generica sin guardia. En la sesion 5790b9f2 de este repo el agente la tomo teniendo
+     trabajo propio sin cerrar: el defecto que el usuario acababa de senalar en vivo, "arreglado"
+     solo con prosa y nunca registrado como pendiente, asi que la escalera no lo veia. Ahora no
+     hay caso 4. O hay un candidato real de los casos 1-3, o es el caso 5. Si el trabajo existe
+     pero no tiene pendiente, **registralo en Step 3b** y sera el caso 2. `checkpoint-audit.py`
+     marca `SALTADO` en `snippet.proximo_paso` si la linea empieza por ese texto.
   5. **Si la sesion genuinamente no dejo trabajo que retomar** (una sesion de reporte, de
      verificacion puntual, o que se cerro sola) — no hay pendiente nuevo, no hay uno relacionado,
      y "revisar _pendientes.md" seria un placeholder vacio, no una pista real — dilo tal cual:
-     `ninguno — <en media linea, por que esta sesion se cierra sola>`. Forzar el caso 4 cuando
-     aplica el 5 no es honesto: implica que hay algo que mirar, y manda a la sesion siguiente a
-     buscar una prioridad que no existe.
+     `ninguno — <en media linea, por que esta sesion se cierra sola>`. Antes de declararlo,
+     preguntate si esta sesion encontro algun defecto o trabajo que no quedo cerrado y
+     verificado. Si lo hay y no tiene pendiente, este caso no aplica: vuelve a Step 3b.
 
      **Tambien aplica cuando el UNICO candidato que encontraste en 2 o 3 quedo excluido por la
      regla de `_revisar` futuro de arriba, y no hay otro sin fecha que lo reemplace** — no es lo
@@ -1163,12 +1192,24 @@ Reglas para llenar los slots:
   haciendo falta para el resto de las fases que no caben en una linea. Fuera del caso 1, la
   linea queda como siempre, sin la segunda clausula.
 
-  **Antes de fijar cualquier candidato de los casos 2, 3 o 4 como `<next-step>`, hazte la
+  **En los casos 2 y 3, la linea `Proximo paso:` cita el `_id: p-…_` del pendiente** (desde
+  2.33.0). Fuera del caso 1 (`Fase actual: …` con el plan enlazado en `## Plans`) y del caso 5
+  (`ninguno — …`), un paso sin id es trabajo que nunca se registro. `checkpoint-audit.py` lo
+  marca `SALTADO` en `snippet.proximo_paso`, igual que un id que no esta abierto en
+  `_pendientes.md`, uno con `_revisar` futuro y uno con `_bloqueado:`. Tambien marca `ninguno`
+  cuando la ficha deja un pendiente propio abierto, sin `_bloqueado` ni `_revisar` futuro.
+
+  **Antes de fijar cualquier candidato de los casos 2 o 3 como `<next-step>`, hazte la
   pregunta explicita: "¿esto se puede hacer de inmediato, en la sesion siguiente, sin esperar una
   decision o accion de alguien o algo FUERA de esta sesion?"** Si la respuesta es no, ese
   candidato no es un `<next-step>` — es un pendiente futuro (con `--revisar` si depende de que
-  pase tiempo, o sin fecha pero fuera de `Proximo paso` si depende de una decision o condicion
-  ajena), y el siguiente candidato de la escalera (o el caso 5, `ninguno`) es el que corresponde.
+  pase tiempo, o con `_bloqueado:` y fuera de `Proximo paso` si depende de una decision, accion
+  o condicion ajena), y el siguiente candidato de la escalera (o el caso 5, `ninguno`) es el que
+  corresponde. **Desde 2.33.0 esta pregunta tiene respaldo mecanico, pero solo si el pendiente
+  lleva el campo**: nace con `--bloqueado-por "<que espera>"` (Step 3b) o se lo pone
+  `pendiente.block` (Step 3a), y entonces el audit rechaza citarlo en `Proximo paso`. El juicio de
+  "esto espera a un tercero" se hace al CREAR el pendiente, no al leer su texto aqui (regla 216:
+  nunca clasificar por prosa).
   Esta pregunta no es un ejercicio retorico: se salto DOS veces, en dos formas de superficie
   distintas, y la segunda ocurrio en la propia sesion que escribio esta regla mas amplia — la
   variante estrecha de abajo no bastaba porque el patron con otras palabras no la disparaba.
@@ -1344,13 +1385,21 @@ sustitucion es la que no le da al agente nada que redactar: correr el script y p
 Si el script sale con codigo 1 (`Step 8a todavia no lleno esta seccion`), 8a no corrio — vuelve
 ahi antes de continuar, no improvises el bloque a mano.
 
-**Limite honesto de lo que esto arregla.** Elimina la SUSTITUCION (redactar un bloque distinto al
-de 8a) — no puede pasar porque no hay nada que redactar. No elimina la OMISION: nada impide que
-el agente no corra el script y devuelva su propio resumen igual, sin pasar por 8b en absoluto. Eso
-requeriria un chequeo fuera de este agente (un hook que audite la respuesta final), que no es lo
-que este cambio construye — verificado por un adversario externo (2026-09-15) sobre este mismo
-commit. Decilo asi si el usuario pregunta que tan a prueba de fallos queda esto: cierra una forma
-del problema, no las dos.
+**La OMISION la vigila un hook Stop desde 2.33.0 (`checkpoint-close-guard.sh`).** El script de
+arriba elimina la SUSTITUCION: no hay nada que redactar. No eliminaba la OMISION: en la sesion
+5790b9f2 el snippet salio solo en la salida del script (un tool result, que el usuario no ve), y
+en otro cierre el recordatorio de calendario quedo "persistido en la ficha" sin pegarse. Al
+terminar un turno que corrio /checkpoint-3t o `print-como-retomar.py`, o que edito `## Como
+retomar` de una ficha, el hook exige varias cosas en el TEXTO de tu respuesta, nunca en un tool
+result:
+- cada linea que imprime `print-como-retomar.py`;
+- los dos primeros recordatorios de `## Recordatorios de calendario`, completos (y `+N con fecha
+  futura` si hay mas);
+- que `checkpoint-audit.py --solo-snippet` no marque `SALTADO` sobre la ficha final. Step 7a corre
+  antes que Step 8 y no ve el snippet.
+
+Si falta algo, bloquea el cierre una vez y te dice que pegar o corregir. Limite: en el segundo
+intento seguido ya no bloquea, para no entrar en bucle. Solo avisa al usuario.
 
 **Fallback (no JBIN)**: si `print-como-retomar.py` no existe (instalacion mas vieja que esta
 version, o el sync de comandos aun no llego), redacta el bloque a mano copiando literalmente lo

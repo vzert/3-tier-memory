@@ -116,7 +116,7 @@ ORIGEN_RE = re.compile(r"_origen:\s*(\[\[[^\]]+\]\])_")
 # que es quien las quita antes de hashear: una clave de menos aqui cambia el texto, cambia el
 # sha1 y el pendiente sale como `ids_invented` con un aviso falso de fila duplicada. Paso con
 # `revisar` (2026-09-11). Si anades una clave alli, anadela aqui.
-META_RE = re.compile(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado):[^—]*")
+META_RE = re.compile(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado|bloqueado):[^—]*")
 # La marca que deja `pendiente.update` al corregir el TEXTO de un pendiente vivo. Mientras este,
 # el `_id:` de esa linea es el hash de NACIMIENTO y no casa con el de su texto: no es un id
 # inventado y `--fix-ids` no debe renombrarlo (renombrarlo romperia las citas del id, que es

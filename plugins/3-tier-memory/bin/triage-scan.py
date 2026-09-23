@@ -66,7 +66,7 @@ CREADO = re.compile(r"_creado: (\d{4}-\d{2}-\d{2})")
 REVISAR = re.compile(r"_revisar: (\d{4}-\d{2}-\d{2})")
 ORIGEN = re.compile(r"_origen: ([^_]+)_")
 ID = re.compile(r"_id: (p-[0-9a-f]{10})_")
-META = re.compile(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado):[^—]*")
+META = re.compile(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado|bloqueado):[^—]*")
 
 
 def parse_date(s):

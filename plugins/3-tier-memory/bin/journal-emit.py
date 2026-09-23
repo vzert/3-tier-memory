@@ -14,6 +14,9 @@ Ver memory/research/concurrent-memory-writes y plans/plan-journal-concurrencia-v
 Tipos de evento:
   pendiente.add     --text T --prioridad Alta|Media|Baja --origen O [--creado YYYY-MM-DD]
                     [--revisar YYYY-MM-DD]   (ventana declarada; la lee expire-pendientes.py)
+                    [--bloqueado-por "QUE"]  (espera a algo FUERA de la sesion: otra
+                    instalacion, un peer, un PR ajeno; checkpoint-audit.py rechaza un
+                    `Proximo paso:` que cite un id con `_bloqueado:`)
                     Imprime el id (p-<10 hex>) por stdout.                              (Fase 1)
   pendiente.resolve --id ID --estado resolved|superseded|abandoned [--sesion S] [--nota N]
   pendiente.update  --id ID [--text T] [--prioridad Alta|Media|Baja] [--text-prefix P]
@@ -30,6 +33,9 @@ Tipos de evento:
   pendiente.expire  --id ID --dias N [--line "<linea verbatim>"]   (caducidad por edad)
   pendiente.reopen  --id ID [--prioridad P]                        (reversa de expire)
   pendiente.window  --id ID --revisar YYYY-MM-DD                  (pone/actualiza la ventana)
+  pendiente.block   --id ID (--bloqueado-por "QUE" | --desbloquear)
+                    Pone, cambia o quita `_bloqueado: QUE_` en un pendiente VIVO. Existe para
+                    marcar en Step 3a uno que nacio sin el campo; no cambia el id.
                     [--text-prefix P]  (si no se da, se toma del archivo si la linea existe)
   session.add       --slug DATE-SLUG --date D --status ST --summary R [--commit C]      (Fase 2)
                     Fila en _session-index.md (arriba de la tabla). Si la fila del slug ya
@@ -252,11 +258,21 @@ def fecha_real(v):
         return False
 
 
+def limpiar_bloqueado(valor):
+    """Texto de `_bloqueado: …_` en una sola linea y sin el separador de la cola de metadatos.
+
+    Un `—` dentro del valor partiria la cola: los despojadores (`[^—]*`) cortarian ahi y el resto
+    del valor se quedaria pegado al TEXTO del pendiente, cambiando su hash re-derivado. Un `_`
+    final cerraria la cursiva antes de tiempo."""
+    v = normalize_text(valor or "").replace("—", "-").strip().strip("_").strip()
+    return v[:160]
+
+
 def strip_meta(text):
     # Las mismas claves que `META_RE` en repair-dualwrite.py, que re-deriva este hash para
     # detectar ids inventados. Si divergen, todo pendiente con la clave que falte se reporta
     # como id inventado. Si anades una clave aqui, anadela alli.
-    text = re.sub(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado):[^—]*", "", text)
+    text = re.sub(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado|bloqueado):[^—]*", "", text)
     return text.strip()
 
 
@@ -299,6 +315,7 @@ def main():
     ap.add_argument("--type", required=True,
                     choices=["pendiente.add", "pendiente.resolve", "pendiente.update",
                              "pendiente.expire", "pendiente.reopen", "pendiente.window",
+                             "pendiente.block",
                              "session.add",
                              "learning.add", "learning.update",
                              "plan.upsert", "research.upsert"])
@@ -310,6 +327,8 @@ def main():
     ap.add_argument("--origen")
     ap.add_argument("--creado")
     ap.add_argument("--revisar")
+    ap.add_argument("--bloqueado-por", dest="bloqueado_por")
+    ap.add_argument("--desbloquear", action="store_true")
     # pendiente.resolve
     ap.add_argument("--id")
     ap.add_argument("--estado")
@@ -377,8 +396,13 @@ def main():
         # `revisar` NO entra en el hash: es la ventana, no la identidad. Anadirla cambiaria el id
         # de un pendiente que ya existe y el compactador lo veria como uno nuevo.
         pid = pendiente_id(text, creado, origen)
+        # `bloqueado` tampoco entra en el hash, por lo mismo que `revisar`: es un estado del
+        # pendiente, no su identidad.
+        bloqueado = limpiar_bloqueado(a.bloqueado_por)
         base["payload"] = {"id": pid, "text": text, "prioridad": prio,
                            "origen": origen, "creado": creado, "revisar": revisar}
+        if bloqueado:
+            base["payload"]["bloqueado"] = bloqueado
         write_event(memory_dir, base)
         print(pid)
         return
@@ -541,6 +565,19 @@ def main():
         if not fecha_real(rev):
             sys.exit("journal-emit: pendiente.window necesita --revisar con una fecha real")
         base["payload"] = {"id": pid, "revisar": rev, "fecha": date.today().isoformat()}
+        write_event(memory_dir, base)
+        print(pid)
+        return
+
+    if a.type == "pendiente.block":
+        pid = (a.id or "").strip()
+        if not ID_RE.match(pid):
+            sys.exit("journal-emit: --id debe tener la forma p-<10 hex>")
+        bloqueado = limpiar_bloqueado(a.bloqueado_por)
+        if bool(bloqueado) == bool(a.desbloquear):
+            sys.exit("journal-emit: pendiente.block necesita --bloqueado-por \"QUE\" o "
+                     "--desbloquear (uno de los dos)")
+        base["payload"] = {"id": pid, "bloqueado": bloqueado}
         write_event(memory_dir, base)
         print(pid)
         return

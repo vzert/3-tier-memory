@@ -186,14 +186,14 @@ chk "la fila mensual quedo cerrada" "1" "$(printf '%s' "$(fila "$ID")" | grep -c
 echo "== 16. las 7 expresiones que despojan metadatos son IDENTICAS caracter a caracter =="
 # No basta con decirlo en un comentario: eso es justo lo que decia el comentario de
 # `journal-emit.strip_meta` mientras `repair-dualwrite.META_RE` ya habia divergido (learning 148).
-N=$(grep -ho 'r"\\s\*—\\s\*_(?:origen|creado|id|revisar|actualizado):\[^—\]\*"' \
+N=$(grep -ho 'r"\\s\*—\\s\*_(?:origen|creado|id|revisar|actualizado|bloqueado):\[^—\]\*"' \
       "$BIN/journal-emit.py" "$BIN/journal-compact.py" "$BIN/repair-dualwrite.py" \
       "$BIN/enrich-memory.py" "$BIN/expire-pendientes.py" "$BIN/triage-scan.py" \
       "$BIN/build-recall-index.py" | sort -u | wc -l | tr -d ' ')
 # Se cuenta la CADENA COMPLETA del despojador, no el juego de claves suelto: journal-compact.py
 # lleva ademas `META_START_RE`, que usa las mismas claves para localizar donde empieza la cola y
 # no para borrarla. Contar el fragmento la daria por un octavo despojador que no existe.
-C=$(grep -hoc 'r"\\s\*—\\s\*_(?:origen|creado|id|revisar|actualizado):\[^—\]\*"' \
+C=$(grep -hoc 'r"\\s\*—\\s\*_(?:origen|creado|id|revisar|actualizado|bloqueado):\[^—\]\*"' \
       "$BIN/journal-emit.py" "$BIN/journal-compact.py" "$BIN/repair-dualwrite.py" \
       "$BIN/enrich-memory.py" "$BIN/expire-pendientes.py" "$BIN/triage-scan.py" \
       "$BIN/build-recall-index.py" | awk '{s+=$1} END{print s+0}')   # no bc: Git Bash de Windows no lo trae
@@ -388,6 +388,25 @@ chk "el replay NO cuarentena" "0" "$(cuarentena)"
 chk "el replay cuenta como noop" "1" "$(printf '%s' "$OUT" | grep -c 'noop=')"
 chk "la linea sigue con el texto corregido, una sola vez" "1" "$(printf '%s' "$(linea "$ID")" | grep -c 'unir el PR #214')"
 chk "y conserva su id de nacimiento" "1" "$(printf '%s' "$(linea "$ID")" | grep -c "_id: ${ID}_")"
+
+echo "== 2.33.0: _bloqueado (--bloqueado-por / pendiente.block) no cambia el id y sobrevive a un update =="
+BID=$(emit --type pendiente.add --text "verificar en otra instalacion" --prioridad Media \
+      --origen "[[sessions/2026-09-01-x]]" --creado 2026-09-01 --bloqueado-por "otra instalacion — actualice_")
+SID=$(emit --type pendiente.add --text "verificar en otra instalacion" --prioridad Media \
+      --origen "[[sessions/2026-09-01-x]]" --creado 2026-09-01)
+chk "el campo no entra en el hash del id" "$SID" "$BID"
+compact --quiet >/dev/null
+chk "la linea lleva el campo, sin el em-dash del valor" "1" "$(printf '%s' "$(linea "$BID")" | grep -c '_bloqueado: otra instalacion - actualice_$')"
+emit --type pendiente.update --id "$BID" --text "verificar en otra instalacion real" >/dev/null
+compact --quiet >/dev/null
+chk "un update de texto conserva el campo" "1" "$(printf '%s' "$(linea "$BID")" | grep -c '_bloqueado: otra instalacion')"
+emit --type pendiente.block --id "$BID" --desbloquear >/dev/null; compact --quiet >/dev/null
+chk "--desbloquear lo quita" "0" "$(printf '%s' "$(linea "$BID")" | grep -c '_bloqueado:')"
+emit --type pendiente.block --id "$BID" --bloqueado-por "un PR ajeno" >/dev/null; compact --quiet >/dev/null
+emit --type pendiente.block --id "$BID" --bloqueado-por "un PR ajeno" >/dev/null; compact --quiet >/dev/null
+chk "pendiente.block es idempotente (un solo campo)" "1" "$(printf '%s' "$(linea "$BID")" | grep -o '_bloqueado:' | wc -l | tr -d ' ')"
+chk "sin cuarentena" "0" "$(cuarentena)"
+chk "repair-dualwrite no lo ve como id inventado" "1" "$(python3 "$BIN/repair-dualwrite.py" "$M" 2>&1 | grep -c 'ids_invented=0')"
 
 echo
 echo "pass=$pass fail=$fail"

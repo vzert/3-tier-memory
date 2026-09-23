@@ -90,6 +90,10 @@ WIKILINK_PLAN = re.compile(r"\[\[plans/([^\]|]+?)(?:\|[^\]]*)?\]\]")
 WIKILINK_LEARNING = re.compile(r"\[\[learnings/([^\]|]+?)(?:\|[^\]]*)?\]\]")
 WIKILINK_RESEARCH = re.compile(r"\[\[research/([^\]|]+?)(?:\|[^\]]*)?\]\]")
 REVISAR = re.compile(r"_revisar:\s*(\d{4}-\d{2}-\d{2})_")
+# `_bloqueado: QUE_` (2.33.0): el pendiente espera a algo FUERA de la sesion. Lo escribe el
+# compactador desde `--bloqueado-por` (pendiente.add) o `pendiente.block`. Es el campo
+# estructurado que hace mecanico el defecto 1 de p-daf3051915 sin clasificar prosa (regla 216).
+BLOQUEADO = re.compile(r"—\s*_bloqueado:\s*([^—]+?)_?\s*(?=—|$)")
 SEPARADOR_CELDA = re.compile(r"(?<!\\)\|")
 RECONCILIACION = re.compile(r"^RECONCILIACION:\s*(\d+)\s+de\s+(\d+)\b", re.M)
 FECHA_FRONTMATTER = re.compile(r"^date:\s*(\d{4}-\d{2}-\d{2})\s*$", re.M)
@@ -178,6 +182,63 @@ def pendientes_abiertos(memory_dir):
         ident = m_id.group(1) if (m_id and m_id.re is CAMPO_ID) else (m_id.group(0) if m_id else None)
         out.append((ident, s[5:].strip(), m_rev.group(1) if m_rev else None))
     return out
+
+
+def bloqueados_abiertos(memory_dir):
+    """{id: que-espera} de las lineas `- [ ]` de _pendientes.md que llevan `_bloqueado:`."""
+    path = os.path.join(memory_dir, "_pendientes.md")
+    if not os.path.exists(path):
+        return {}
+    out = {}
+    for linea in leer(path).splitlines():
+        s = linea.strip()
+        if not s.startswith("- [ ]"):
+            continue
+        m_id = CAMPO_ID.search(s)
+        m_b = BLOQUEADO.search(s)
+        if m_id and m_b:
+            out[m_id.group(1)] = m_b.group(1).strip()
+    return out
+
+
+ORIGEN_SESION = re.compile(r"_origen:\s*\[\[(?:\.\./)*sessions/([^\]|#]+?)(?:\.md)?(?:[|#][^\]]*)?\]\]")
+
+
+def origenes_abiertos(memory_dir):
+    """{id: slug de la sesion de origen} de las lineas `- [ ]` de _pendientes.md."""
+    path = os.path.join(memory_dir, "_pendientes.md")
+    if not os.path.exists(path):
+        return {}
+    out = {}
+    for linea in leer(path).splitlines():
+        s = linea.strip()
+        m_id, m_o = CAMPO_ID.search(s), ORIGEN_SESION.search(s)
+        if s.startswith("- [ ]") and m_id and m_o:
+            out[m_id.group(1)] = m_o.group(1)
+    return out
+
+
+def linea_proximo_paso(sec_retomar):
+    """La linea `Proximo paso: …` del snippet (sin `**` y con o sin tilde), o None."""
+    for l in sec_retomar.splitlines():
+        s = l.strip().strip("*").strip()
+        low = s.lower()
+        for pref in ("proximo paso:", "próximo paso:", "**proximo paso:**", "**próximo paso:**"):
+            if low.startswith(pref):
+                return s[len(pref):].strip().strip("*").strip()
+    return None
+
+
+# El caso 4 de `<next-step>` se QUITO en 2.33.0 (p-daf3051915, defecto 2): era la salida generica
+# que el agente tomaba teniendo trabajo propio sin cerrar (sesion 5790b9f2: "revisar
+# _pendientes.md y proponer siguiente prioridad" mientras el defecto hallado en vivo seguia sin
+# registrar). Se reconoce cuando la linea EMPIEZA por su texto, no cuando lo contiene: el snippet
+# correcto de esa misma sesion citaba la frase entre comillas para explicar el defecto
+# ('el caso 4 ("revisar _pendientes.md…") es una salida generica') y contarla ahi era un falso
+# positivo sobre el cierre bueno. Una variante que no empiece asi y no cite id la atrapa igual
+# el requisito de `_id` de mas abajo.
+CASO4_GENERICO = re.compile(r"^\W*(?:revisar\s+`?_pendientes(?:\.md)?`?|proponer\s+(?:la\s+)?siguiente\s+prioridad)",
+                            re.I)
 
 
 def marcados_rezagados(memory_dir):
@@ -309,7 +370,7 @@ def avisos_script_en_seco(h, memory_dir, nombre_script, claves_problema):
         h.append(Hallazgo(HECHO, clave_hallazgo, f"{nombre_script} en seco: sin avisos"))
 
 
-def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
+def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=False):
     h = []
     texto = leer(session_file)
     secs = secciones(texto)
@@ -702,6 +763,104 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
         h.append(Hallazgo(HECHO, "snippet.futuro_duplicado",
                           "ningun id del bloque de calendario se repite en `Sigue abierto:`"))
 
+    # 8-ter. `Proximo paso:` (2.33.0, p-daf3051915). Los tres defectos de `<next-step>` que la
+    # sesion 5790b9f2 cometio en su propio cierre, medidos sobre la LINEA, no sobre el bloque:
+    #   (a) caso 4 generico: "revisar _pendientes.md y proponer siguiente prioridad". El caso se
+    #       quito del template; su texto literal en esta linea es SALTADO siempre.
+    #   (b) sin `_id`: fuera del caso 1 (`Fase actual:` con un plan enlazado en `## Plans`) y del
+    #       caso 5 (`ninguno — …`), el paso es un pendiente de los casos 2-3, y un pendiente tiene
+    #       id. Un paso sin id es trabajo que NUNCA se registro — el mismo hueco que dejo el
+    #       defecto hallado en vivo fuera de la escalera. Exigir el id obliga a registrarlo.
+    #   (c) no inmediato: un id citado que en `_pendientes.md` trae `_bloqueado:` (espera a algo
+    #       fuera de la sesion) o `_revisar` futuro (ya tiene su recordatorio de calendario). La
+    #       deteccion es SOLO por esos campos estructurados, nunca por el texto (regla 216).
+    #   (d) `ninguno` teniendo trabajo propio: un pendiente de esta ficha abierto, sin
+    #       `_bloqueado` y sin `_revisar` futuro, es un candidato real de los casos 2-3.
+    # Una linea que empieza por `ninguno` puede citar ids como MOTIVO ("lo unico propio espera a
+    # otra instalacion, p-…") — por eso (b) y (c) no miran esa forma; la mira (d).
+    bloqueados = bloqueados_abiertos(memory_dir)
+    origen_por_id = origenes_abiertos(memory_dir)
+    pp = linea_proximo_paso(sec_retomar)
+    if seccion_por_prefijo(secs, "Como retomar") is None:
+        # Sin la seccion no hay paso que medir; la ausencia ya la marca `ficha.secciones`.
+        # Contarla aqui tambien la duplicaba (8 fichas de claude-vzert, todas sin seccion).
+        h.append(Hallazgo(HECHO, "snippet.proximo_paso",
+                          "la ficha no tiene `## Como retomar` (lo marca ficha.secciones)"))
+    elif "<filled in Step 8>" in sec_retomar:
+        h.append(Hallazgo(DISENO, "snippet.proximo_paso",
+                          "`## Como retomar` aun trae su placeholder: Step 8 corre despues de "
+                          "esta auditoria (el hook de cierre la vuelve a correr)"))
+    elif "```" not in sec_retomar and not sec_retomar.strip().strip("*").lower().startswith("ninguno"):
+        # Sin fence, la unica forma valida es la linea del caso 5 (`Ninguno — …`, Step 8a). Tratar
+        # cualquier seccion sin fence como caso 5 dejaba pasar el caso 4 con solo quitarle las
+        # comillas triples (adversario externo, ronda 1, sobre una ficha real de claude-vzert).
+        h.append(Hallazgo(SALTADO, "snippet.proximo_paso",
+                          "`## Como retomar` no tiene bloque de codigo y no es la linea del caso 5 "
+                          "(`Ninguno — …`)",
+                          corrige="escribe el snippet dentro de ``` (Step 8a) o, si nada se retoma, "
+                                  "la linea `Ninguno — <motivo>`"))
+    elif "```" not in sec_retomar:
+        h.append(Hallazgo(HECHO, "snippet.proximo_paso",
+                          "bloque colapsado (caso 5): sin `Proximo paso:` que medir"))
+    elif pp is None:
+        h.append(Hallazgo(SALTADO, "snippet.proximo_paso",
+                          "el bloque `Como retomar` no tiene linea `Proximo paso:`",
+                          corrige="escribe la linea con el candidato de la escalera de Step 8"))
+    else:
+        problemas = []
+        # "nada accionable hoy — …" es la misma forma del caso 5 con otras palabras (medido en
+        # claude-vzert, `verificar-reaper-y-limpiar-default-herdr`): tratarla como paso sin id era
+        # un falso positivo sobre un cierre correcto.
+        es_ninguno = pp.lower().startswith(("ninguno", "nada accionable"))
+        ids_pp = sorted(set(ID_PENDIENTE.findall(pp)))
+        if CASO4_GENERICO.search(pp):
+            problemas.append("es el caso 4 generico (\"revisar _pendientes.md y proponer "
+                             "siguiente prioridad\"), quitado en 2.33.0: o hay un candidato real "
+                             "de los casos 1-3, o es el caso 5 (`ninguno — …`)")
+        elif not es_ninguno:
+            es_caso1 = pp.lower().startswith("fase actual") and bool(planes_laxo)
+            if not ids_pp and not es_caso1:
+                problemas.append("no cita el `_id` de ningun pendiente: si es trabajo real, "
+                                 "registralo en Step 3b (`pendiente.add`) y cita su id; si nada es "
+                                 "accionable hoy, es el caso 5")
+            for i in ids_pp:
+                if i not in ids_abiertos:
+                    # Un id que no esta abierto en `_pendientes.md` no es trabajo registrado: o se
+                    # invento, o ya se cerro. Sin esto, citar cualquier `p-…` bastaba para pasar.
+                    problemas.append(f"{i} no esta abierto en _pendientes.md: cita el id de un "
+                                     "pendiente vivo")
+                elif i in bloqueados:
+                    problemas.append(f"{i} esta bloqueado (`_bloqueado: {bloqueados[i]}`): "
+                                     "espera a algo fuera de la sesion, va en `Sigue abierto`")
+                elif rev_por_id.get(i) and rev_por_id[i] > ref:
+                    problemas.append(f"{i} tiene `_revisar: {rev_por_id[i]}` futuro: ya sale en "
+                                     "`## Recordatorios de calendario`")
+        if es_ninguno:
+            # Solo los que SIGUEN abiertos en `_pendientes.md`: uno ya cerrado no es trabajo. En
+            # el cierre real son todos; importa al re-auditar una ficha vieja (falso positivo
+            # medido en `remedicion-goalspec-precondicion-no-cumplida`).
+            # Y solo los que NACIERON en esta sesion (`_origen: [[sessions/<esta ficha>]]`): la
+            # seccion `## Pendientes` tambien lista los de otras sesiones que Step 3a reconcilio
+            # como still-open, y esos no son "trabajo propio" que el caso 5 tape (medido en
+            # claude-vzert: `verificar-reaper-…` listaba 4 ajenos y salia SALTADO en falso).
+            accionables = [i for i in abiertos_ficha
+                           if i in ids_abiertos and i not in bloqueados
+                           and origen_por_id.get(i) == slug]
+            if accionables:
+                problemas.append("dice `ninguno` pero la sesion deja pendiente(s) propio(s) "
+                                 "accionables hoy (sin `_bloqueado` ni `_revisar` futuro): "
+                                 + ", ".join(accionables))
+        if problemas:
+            h.append(Hallazgo(SALTADO, "snippet.proximo_paso",
+                              "`Proximo paso:` no es un paso inmediato y registrado",
+                              problemas,
+                              corrige="rehaz `Proximo paso:` con la escalera de Step 8 (casos 1-3 "
+                                      "o 5); si falta el pendiente, emitelo antes con "
+                                      "journal-emit.py --type pendiente.add"))
+        else:
+            h.append(Hallazgo(HECHO, "snippet.proximo_paso",
+                              "`Proximo paso:` es caso 1, 5, o un pendiente registrado e inmediato"))
+
     # 9. Research con recomendaciones sin resolver que ESTA ficha enlaza
     sec_res = seccion_por_prefijo(secs, "Research") or ""
     researches = sorted(set(WIKILINK_RESEARCH.findall(sec_res)))
@@ -792,6 +951,10 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy):
     # igual — `repair-plans-index.py` y `repair-research-index.py` faltaban aqui hasta esta
     # version: header_unrecognized=1 en cualquiera de los dos es EXACTAMENTE el mismo patron de
     # hueco que motivo este archivo, solo que en una tabla distinta (ver p-ccc013b53d).
+    if solo_snippet:
+        # Modo del hook de cierre (checkpoint-close-guard.sh): solo lo que Step 8 escribe. Los
+        # reparadores en seco tardan segundos y no dependen del snippet; ya los midio Step 7a.
+        return [x for x in h if x.clave.startswith("snippet.") or x.clave == "plan.mencionado_no_enlazado"]
     avisos_script_en_seco(h, memory_dir, "repair-dualwrite.py",
                           ("header_issues", "odd_values", "unaligned_rows", "unrepairable",
                            "ids_invented", "missing_data", "pipes_broken"))
@@ -854,6 +1017,9 @@ def main():
     ap.add_argument("--no-git", action="store_true")
     ap.add_argument("--count", action="store_true")
     ap.add_argument("--hoy", default=None, help="fecha YYYY-MM-DD; solo para pruebas")
+    ap.add_argument("--solo-snippet", action="store_true",
+                    help="solo los checks `snippet.*` (lo que escribe Step 8); lo usa el hook Stop")
+    ap.add_argument("--json", action="store_true", help="salida JSON (para el hook Stop)")
     args = ap.parse_args()
 
     if not os.path.isdir(args.memory_dir):
@@ -869,10 +1035,17 @@ def main():
 
     hoy = args.hoy or datetime.date.today().isoformat()
     repo_root = args.repo_root or os.getcwd()
-    hallazgos = auditar(args.memory_dir, args.session_file, repo_root, not args.no_git, hoy)
+    hallazgos = auditar(args.memory_dir, args.session_file, repo_root,
+                        not args.no_git and not args.solo_snippet, hoy, args.solo_snippet)
 
     if args.count:
         print(sum(1 for x in hallazgos if x.estado in (SALTADO, PARCIAL)))
+        return
+    if args.json:
+        import json
+        print(json.dumps([{"estado": x.estado, "clave": x.clave, "detalle": x.detalle,
+                           "lineas": x.lineas, "corrige": x.corrige} for x in hallazgos],
+                         ensure_ascii=False))
         return
     imprimir(hallazgos)
 
