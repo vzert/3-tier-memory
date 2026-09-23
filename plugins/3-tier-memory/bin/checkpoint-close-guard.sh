@@ -224,10 +224,13 @@ for r in turno:
             # expire-pendientes.py --apply caduca llamando a journal-emit.py POR DENTRO: ni el
             # script ni los ids aparecen en el comando (2.36.0, p-2dc733a7c3). Los ids salen de la
             # ultima linea que imprime, `EXPIRE ids: …`, leida del tool_result: es salida del
-            # script, no prosa. `--revertir` reabre, no cierra.
-            if (re.search(r"expire-pendientes\.py", cmd) and re.search(r"--apply\b", cmd)
-                    and "--revertir" not in cmd):
-                expiraciones.append(b.get("id"))
+            # script, no prosa. `--revertir` reabre, no cierra. Se mira CADA invocacion por separado
+            # (hasta `;`, `&`, `|` o salto de linea): un `--revertir` en el mismo comando no tapa a
+            # un `--apply` (adversario de 2.36.0).
+            n_apply = sum(1 for s in re.findall(r"expire-pendientes\.py[^;&|\n]*", cmd)
+                          if re.search(r"--apply\b", s) and "--revertir" not in s)
+            if n_apply:
+                expiraciones.append((b.get("id"), n_apply))
             if "print-como-retomar.py" not in cmd:
                 continue
             disparo = True
@@ -258,11 +261,15 @@ for r in turno:
 # Si la linea `EXPIRE ids:` no esta (salida cortada con `| tail`, mandada a /dev/null, el script
 # murio a mitad, o el tool_result aun no llego) no se sabe que caduco: se asume cualquier id que cite
 # una ficha de esta sesion. Un aviso de mas, nunca uno de menos (el mismo criterio de 2.33.1).
-for _tid in expiraciones:
-    _m = re.search(r"(?m)^EXPIRE ids: (.*)$", resultados.get(_tid) or "")
-    if _m:
-        ids_cambiados.update(re.findall(r"p-[0-9a-f]{10}", _m.group(1)))
-    else:
+# TODAS las lineas, no la primera: un bucle `for d in …; do expire-pendientes.py --apply; done` es
+# una invocacion en el texto y varias lineas en la salida (adversario de 2.36.0: leer solo la
+# primera dejaba fuera el id citado y el respaldo no entraba). Menos lineas que invocaciones
+# `--apply` en el texto = alguna salida se perdio: a ciegas.
+for _tid, _n in expiraciones:
+    _lineas = re.findall(r"(?m)^EXPIRE ids: (.*)$", resultados.get(_tid) or "")
+    for _l in _lineas:
+        ids_cambiados.update(re.findall(r"p-[0-9a-f]{10}", _l))
+    if len(_lineas) < _n:
         ids_a_ciegas = True
 
 if lam:

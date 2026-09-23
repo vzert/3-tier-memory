@@ -442,6 +442,31 @@ printf 'python3 "$JBIN/expire-pendientes.py" --apply > /dev/null\n' > "$T/cmd-nu
 tx2 "$T/t.jsonl" "$T/cmd-null.txt" "$T/listo.txt" "$T/vacio.txt"
 chk "bloquea sin ids legibles (un aviso de mas, nunca uno de menos)" "1" "$(bloquea "$(corre "$T/t.jsonl" false -)")"
 
+echo "== adversario de 2.36.0: un bucle corre --apply sobre DOS memorias; el id citado sale en la segunda =="
+# Una sola invocacion en el texto, dos lineas `EXPIRE ids:` en la salida. Leer solo la primera
+# dejaba fuera el id citado y el respaldo a ciegas no entraba (habia una linea).
+viejo; vence p-6071ea6987
+M2="$T/memory-otra"; mkdir -p "$M2/pendientes"
+printf '# Pendientes\n\n## Media prioridad\n\n- [ ] otro — _origen: [[sessions/x]]_ — _creado: 2026-09-01_ — _id: p-0123456789_ — _revisar: 2026-01-01_\n' > "$M2/_pendientes.md"
+for d in "$M2" "$M"; do python3 "$BIN/expire-pendientes.py" --memory-dir "$d" --apply; done > "$T/exp-out.txt"
+chk "la salida trae dos lineas EXPIRE ids" "2" "$(grep -c '^EXPIRE ids:' "$T/exp-out.txt")"
+printf 'for d in "$A" "$B"; do python3 "$JBIN/expire-pendientes.py" --memory-dir "$d" --apply; done\n' > "$T/cmd-loop.txt"
+tx2 "$T/t.jsonl" "$T/cmd-loop.txt" "$T/listo.txt" "$T/exp-out.txt"
+chk "bloquea" "1" "$(bloquea "$(corre "$T/t.jsonl" false -)")"
+
+echo "== adversario de 2.36.0: --apply cortado y --revertir en el MISMO comando: el --revertir no tapa al --apply =="
+viejo; vence p-6071ea6987
+printf 'python3 "$JBIN/expire-pendientes.py" --apply > /dev/null; python3 "$JBIN/expire-pendientes.py" --revertir p-0000000001 --apply\n' > "$T/cmd-mix.txt"
+printf 'REOPEN emitido para p-0000000001. Corre journal-compact.py para aplicarlo.\n' > "$T/mix-out.txt"
+tx2 "$T/t.jsonl" "$T/cmd-mix.txt" "$T/listo.txt" "$T/mix-out.txt"
+chk "bloquea" "1" "$(bloquea "$(corre "$T/t.jsonl" false -)")"
+
+echo "== control: dos --apply en un comando, las dos lineas legibles y ninguna con un id citado =="
+viejo; vence p-014255373e
+for d in "$M2" "$M"; do python3 "$BIN/expire-pendientes.py" --memory-dir "$d" --apply; done > "$T/exp-out.txt"
+tx2 "$T/t.jsonl" "$T/cmd-loop.txt" "$T/listo.txt" "$T/exp-out.txt"
+chk "silencio" "" "$(corre "$T/t.jsonl" false -)"
+
 # ================================================================================================
 # 2.34.0 — p-272254efc5: `ninguno` con el ultimo veredicto del adversario en `break`. La ficha es el
 # caso 5 colapsado; el veredicto va en un turno VIEJO (antes del cierre), como en 5790b9f2/3d0f8bc1.

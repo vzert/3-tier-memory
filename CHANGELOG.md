@@ -13,14 +13,18 @@ pasaba en silencio.
   todos los ids caducados. La lista de arriba se corta en 15.
 
 ### Fixed
-- `checkpoint-close-guard.sh`: un `expire-pendientes.py --apply` (sin `--revertir`) del turno toma
-  los ids de esa linea en su tool_result. Si la linea no esta (salida cortada con `| tail`, mandada a
-  `/dev/null`, o el script murio a mitad), el hook trata como cambiado cualquier id que cite una
-  ficha de esta sesion: un aviso de mas, nunca uno de menos.
-- `test-checkpoint-close-guard.sh`: 56 → 64 casos. El test nuevo corre el `expire-pendientes.py`
-  real sobre la memoria del test y pone su salida real en el tool_result. Sus 4 casos que deben
-  bloquear fallan contra el hook de 2.35.1. Los controles (id no citado, dry-run, `--revertir`)
-  quedan en silencio.
+- `checkpoint-close-guard.sh`: cada invocacion de `expire-pendientes.py --apply` (sin `--revertir`)
+  del turno cuenta por separado. El hook toma los ids de TODAS las lineas `EXPIRE ids:` de su
+  tool_result: un bucle sobre varias memorias es una invocacion con varias lineas. Si hay menos
+  lineas que invocaciones `--apply` (salida cortada con `| tail`, mandada a `/dev/null`, o el script
+  murio a mitad), el hook trata como cambiado cualquier id que cite una ficha de esta sesion: un
+  aviso de mas, nunca uno de menos. Un comando que solo menciona el script (un `grep`) tambien
+  dispara ese respaldo; es el mismo aviso de mas.
+- `test-checkpoint-close-guard.sh`: 56 → 68 casos. Los casos nuevos corren el `expire-pendientes.py`
+  real sobre la memoria del test y ponen su salida real en el tool_result. Sus 6 casos que deben
+  bloquear fallan contra el hook de 2.35.1 (entre ellos el bucle sobre dos memorias y un `--apply`
+  junto a un `--revertir` en el mismo comando). Los controles (id no citado, dry-run, `--revertir`
+  solo, dos `--apply` legibles sin id citado) quedan en silencio.
 
 ## [2.35.1] - 2026-09-23
 El CI de 2.35.0 (corrida 35919265445) confirmó en Windows los dos arreglos de tests: pasan
