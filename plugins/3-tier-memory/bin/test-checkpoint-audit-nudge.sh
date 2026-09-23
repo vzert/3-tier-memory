@@ -213,6 +213,47 @@ impostor "el punto, que es el mismo source"      '. /tmp/falso.sh; python3 plugi
 impostor "cd - imprime el directorio"            'cd -; python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory'
 impostor "pwd imprime"                           'pwd; python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory'
 
+echo "== ADVERSARIO SOBRE 2.30.0: lo que el delta abrio y la familia que ya estaba =="
+# Una ronda sobre el estado publicado de 2.30.0 encontro dos agujeros NUEVOS del delta (el `VAR=`
+# mudo con backticks dentro, y `exec -a` cuyo valor se tomaba por el programa) y reprodujo la
+# familia anterior: `cd`/`unset` repiten su argumento en el error, y `cd` imprime la ruta con CDPATH.
+impostor "VAR= con backticks a stderr"           'A="`cat memory/sessions/vieja.md >/dev/stderr`"; python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory'
+impostor "VAR= con backticks y otra asignacion"  'A="`cat memory/sessions/vieja.md >/dev/stderr`" B=1; python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory'
+impostor "export con backticks"                  'export A="`cat memory/sessions/vieja.md >/dev/stderr`"; python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory'
+impostor "cd con backticks"                      'cd "`cat memory/sessions/vieja.md >/dev/stderr`"; python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory'
+impostor "sustitucion \$( ) en el propio audit"  'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file "$(cat memory/sessions/vieja.md >/dev/stderr)"'
+impostor "sustitucion de proceso <( )"           'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file <(cat memory/sessions/vieja.md)'
+impostor "exec -a con el nombre del audit"       'exec -a checkpoint-audit.py cat memory/sessions/vieja.md'
+impostor "env -P con el nombre del audit"        'env -P checkpoint-audit.py cat memory/sessions/vieja.md'
+impostor "time -o con el nombre del audit"       'time -o checkpoint-audit.py cat memory/sessions/vieja.md'
+impostor "env -S trae el comando en el valor"    'env -S "cat memory/sessions/vieja.md" checkpoint-audit.py'
+impostor "exec con opciones agrupadas -ca"        'exec -ca checkpoint-audit.py cat memory/sessions/vieja.md'
+impostor "uv con una opcion que la tabla no sabe" 'uv run --index-url checkpoint-audit.py cat memory/sessions/vieja.md'
+impostor "comillas ANSI-C con escapes"           "unset \$'r\\x65sumen: h\\x65cho=9'; python3 plugins/3-tier-memory/bin/checkpoint-audit.py --bogus"
+impostor "unset repite su argumento en el error" 'unset "resumen: hecho=9"; python3 plugins/3-tier-memory/bin/checkpoint-audit.py --bogus'
+impostor "cd repite su argumento en el error"    'cd "resumen: hecho=9"; python3 plugins/3-tier-memory/bin/checkpoint-audit.py --bogus'
+impostor "el audit repite un argumento raro"     'python3 plugins/3-tier-memory/bin/checkpoint-audit.py "resumen: hecho=9"'
+impostor "CDPATH en una asignacion suelta"       'CDPATH=/tmp/cp; cd x; python3 plugins/3-tier-memory/bin/checkpoint-audit.py --bogus'
+impostor "CDPATH exportado"                      'export CDPATH=/tmp/cp; cd x; python3 plugins/3-tier-memory/bin/checkpoint-audit.py --bogus'
+impostor "filtro que lee un fichero"             'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory | grep resumen memory/sessions/vieja.md'
+impostor "grep -r sin fichero recorre el cwd"    'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory | grep -r hecho'
+impostor "tail de un fichero"                    'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory; tail -5 memory/sessions/vieja.md'
+impostor "filtro con redireccion de entrada"     'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory; grep hecho < memory/sessions/vieja.md'
+impostor "2>&1 no tapa un cat detras"            'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory 2>&1; cat memory/sessions/vieja.md'
+
+echo "== las formas reales con redirecciones y filtros SI silencian =="
+# Medido sobre transcripts reales: `2>&1` era el falso aviso mas comun (el `&` partia el comando y
+# dejaba un segmento `1`), seguido de las corridas filtradas por un tubo.
+legitimo "con 2>&1"                              'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file x.md --repo-root . 2>&1'
+legitimo "con 2>&1 y tail"                       'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file x.md 2>&1 | tail -20'
+legitimo "con tail -n 5"                         'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file x.md | tail -n 5'
+legitimo "con grep -v"                           'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file x.md | grep -v "^  HECHO"'
+legitimo "con grep -E y cut"                     'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory 2>&1 | grep -E "SALTADO|PARCIAL|POR" | cut -c1-165'
+legitimo "con &> a un fichero y 2>/dev/null"     'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory 2>/dev/null'
+legitimo "con continuacion de linea"             'cd /tmp && \
+python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory 2>&1'
+legitimo "con exec -a delante de la invocacion"  'exec -a audit python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory'
+
 echo "== media prueba tampoco es prueba =="
 chk "invocado pero sin linea de resumen"  "1" "$(avisa "$CMT" "$TMEDIO")"
 chk "linea de resumen huerfana (id ajeno)" "1" "$(avisa "$CMT" "$THUERFANA")"

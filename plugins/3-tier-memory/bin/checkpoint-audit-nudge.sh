@@ -115,12 +115,40 @@ LINEA_RESUMEN = re.compile(r"resumen:\s*hecho=\d+")
 # frontera tras `.py`. Asi que el comando se TOKENIZA y se pregunta cual es el fichero que el
 # segmento ejecuta de verdad: ni `-c` ni `-m` ejecutan un fichero, y `grep`/`cat`/`echo` sobre el
 # script tampoco. Falla cerrado: lo que no se puede tokenizar no cuenta como corrida.
-OPERADORES = re.compile(r"[;&|\n()]+")
+OPERADORES = ";&|()\n"
 LANZADOR = re.compile(r"^(?:python[\d.]*|py)$")
 ASIGNACION = re.compile(r"^[A-Za-z_]\w*=")
 SIN_FICHERO = {"-c", "-m", "--command", "--module"}   # lo que sigue es codigo o modulo, no un fichero
 OPCION_CON_VALOR = {"-X", "-W"}
 ENVOLTURAS = {"env", "uv", "pipx", "nohup", "time", "stdbuf", "nice", "exec"}
+# Opciones de cada envoltura que se COMEN el token siguiente. Sin esta tabla el bucle saltaba la
+# opcion y tomaba su valor por el programa: `exec -a checkpoint-audit.py cat ficha-vieja.md` ejecuta
+# `cat` con ese nombre de proceso, y el hook lo daba por corrida (lo rompio el adversario sobre
+# 2.30.0). `env -S` ademas trae un comando entero dentro de su valor: no se interpreta, se rechaza.
+VALOR_DE_ENVOLTURA = {
+    "env": {"-u", "--unset", "-P", "-C", "--chdir"},
+    "exec": {"-a"},
+    "nice": {"-n", "--adjustment"},
+    "time": {"-f", "--format", "-o", "--output"},
+    "stdbuf": {"-i", "-o", "-e", "--input", "--output", "--error"},
+    "uv": {"--with", "--with-requirements", "--python", "-p", "--project", "--directory",
+           "--from", "--package", "--extra", "--group", "--env-file", "--index"},
+    "pipx": {"--spec", "--python", "--pip-args"},
+}
+
+# Lo que hace que la shell ejecute OTRO comando dentro de un token que shlex ve como uno solo:
+# ``A="`cat ficha-vieja.md >/dev/stderr`"`` pasaba por una asignacion muda y su stderr llegaba al
+# tool_result con la linea de resumen dentro (adversario sobre 2.30.0). Ninguna corrida real del
+# audit lo necesita, asi que su mera presencia deja el comando inconcluyente.
+SUSTITUCION = re.compile(r"`|\$\(|[<>]\(|\$'")   # `$'...'` (ANSI-C) esconde el texto con escapes
+# El texto de la linea de resumen escrito en el propio comando: cualquier segmento que lo repita
+# en un error (`cd 'resumen: hecho=9'`, `unset ...`, un argumento que el audit rechaza) lo pone en
+# la salida sin que el audit lo haya producido.
+RESUMEN_EN_COMANDO = re.compile(r"resumen\s*:|hecho\s*=", re.I)
+# Duplicar descriptores (`2>&1`, `>&2`, `&>fichero`) no produce salida nueva: reordena la que ya
+# hay. Pero `&` es un separador en OPERADORES, asi que `<audit> 2>&1` se partia en `<audit> 2>` y
+# un segmento `1` que no era mudo — el falso aviso mas comun medido en transcripts reales.
+DUPLICA_FD = re.compile(r"\d*[<>]&(?:\d+|-)")
 
 
 def acompanante_mudo(tokens):
@@ -133,9 +161,19 @@ def acompanante_mudo(tokens):
     `python3 checkpoint-audit.py` que fuera detras no llegaba a correr nunca. Los tres silenciaban
     el aviso. Ahora cada forma se admite por lo que hace, no por ser un builtin — y `exec` pasa a
     ser una envoltura, que es lo que si es cuando va DELANTE de la invocacion.
+
+    "Mudo" tiene un limite, y conviene decirlo: `cd`, `unset` y `umask` repiten su argumento en el
+    mensaje de error, y `cd` imprime la ruta si viene de `CDPATH`. Lo que se cierra es el texto de
+    resumen ESCRITO en el comando (ver RESUMEN_EN_COMANDO en `invoca_el_audit`), la sustitucion de
+    comandos y fijar `CDPATH`. Lo que NO se cierra es partir ese texto en variables para
+    recomponerlo al expandir: demostrar que un comando de shell no pudo imprimir algo no tiene
+    fondo, y eso ya no es un descuido de un agente de buena fe sino fabricar la prueba a mano. La
+    salida de verdad es que el audit deje una huella propia en vez de inferirla del transcript.
     """
     if not tokens:
         return True
+    if any(t.split("=", 1)[0] == "CDPATH" for t in tokens if ASIGNACION.match(t)):
+        return False                                   # con CDPATH, `cd dir` imprime la ruta
     if all(ASIGNACION.match(t) for t in tokens):       # `VAR=valor` a secas
         return True
     prog, args = os.path.basename(tokens[0]), tokens[1:]
@@ -144,7 +182,63 @@ def acompanante_mudo(tokens):
     if prog == "export":
         return bool(args) and all(ASIGNACION.match(a) for a in args)   # a secas LISTA las variables
     if prog in ("unset", "umask"):
-        return True                                    # mudos, y `umask` a secas solo da un numero
+        return True                                    # `umask` a secas solo da un numero
+    return False
+
+
+NUMERO = re.compile(r"[+-]?\d+")
+
+
+def filtro_sin_fichero(tokens):
+    """Cierto si este segmento solo puede reescribir lo que le llega por la tuberia.
+
+    `<audit> | tail -20` o `| grep -v HECHO` son de las formas mas comunes de correr el audit en
+    transcripts reales, y cada una hacia avisar en falso. Un filtro asi no puede traer la linea de
+    resumen de otro sitio siempre que no lea un fichero: sin argumentos posicionales mas alla del
+    patron de grep, sin `<`, y sin opciones que busquen solas (`grep -r` sin fichero recorre el
+    directorio actual). Por eso las opciones van en lista cerrada: la que no esta, no pasa.
+    """
+    if not tokens:
+        return False
+    prog, args = os.path.basename(tokens[0]), tokens[1:]
+    if any("<" in a for a in args):
+        return False                            # `grep x < ficha-vieja.md`, `<<<`, heredocs
+    i, n = 0, len(args)
+    if prog in ("head", "tail"):
+        while i < n:
+            a = args[i]
+            if a in ("-n", "-c") and i + 1 < n and NUMERO.fullmatch(args[i + 1]):
+                i += 2
+            elif re.fullmatch(r"-[nc]?[+-]?\d+", a):
+                i += 1
+            else:
+                return False                    # un fichero, `tail -f`, o algo que no se conoce
+        return True
+    if prog in ("grep", "egrep", "fgrep"):
+        patron = False
+        while i < n:
+            a = args[i]
+            if a == "-e" and i + 1 < n:
+                patron, i = True, i + 2
+            elif a in ("-m", "-A", "-B", "-C") and i + 1 < n and NUMERO.fullmatch(args[i + 1]):
+                i += 2
+            elif re.fullmatch(r"-[EFGivwxnchoqsHh]+|-[ABCm]\d+", a):
+                i += 1
+            elif not a.startswith("-") and not patron:
+                patron, i = True, i + 1         # el patron posicional
+            else:
+                return False                    # un fichero tras el patron, `-r`, `-f`, `--...`
+        return patron
+    if prog == "cut":
+        while i < n:
+            a = args[i]
+            if a in ("-c", "-f", "-b", "-d") and i + 1 < n:
+                i += 2
+            elif re.fullmatch(r"-[cfb][\d,-]+|-d.|-s", a):
+                i += 1
+            else:
+                return False
+        return True
     return False
 
 
@@ -160,12 +254,21 @@ def programa_ejecutado(tokens):
         if base in ENVOLTURAS:
             i += 1
             saltos += 1
-            # `uv run`, `pipx run`, y las opciones de `env` (`env -i`, `env -u VAR`)
+            con_valor = VALOR_DE_ENVOLTURA.get(base, set())
+            # `uv run`, `pipx run`, y las opciones de la envoltura (`env -i`, `exec -a NOMBRE`)
             while i < n and (tokens[i] in ("run", "--")
                              or (tokens[i].startswith("-") and tokens[i] != "-")):
-                if tokens[i] in ("-u", "--unset"):
-                    i += 1
+                if base == "env" and (tokens[i].startswith("-S") or tokens[i].startswith("--split-string")):
+                    return None                 # `env -S 'prog args'`: el programa va dentro del valor
+                if tokens[i] in con_valor:
+                    i += 1                      # la opcion se come su valor: no es el programa
                 i += 1
+            # Una opcion que la tabla no conoce, o agrupada (`exec -ca NOMBRE`), puede estar
+            # comiendose el token siguiente. Si ese token es justo el nombre del audit, no se sabe
+            # si es el programa o el valor de la opcion: inconcluyente, que en la duda avisa.
+            if (0 < i < n and tokens[i - 1].startswith("-")
+                    and os.path.basename(tokens[i]) == "checkpoint-audit.py"):
+                return None
             while i < n and ASIGNACION.match(tokens[i]):   # `env VAR=valor programa`
                 i += 1
             continue
@@ -185,6 +288,27 @@ def programa_ejecutado(tokens):
     return None
 
 
+def segmentos(orden):
+    """Parte el comando en segmentos por sus operadores, respetando las comillas.
+
+    Antes se partia con una expresion regular sobre el texto crudo, que cortaba tambien DENTRO de
+    las comillas: `| grep -E "SALTADO|PARCIAL"` dejaba trozos con comillas sin cerrar y la corrida
+    real avisaba en falso. Los comentarios `#` no se interpretan: lo que siga cuenta como codigo,
+    que es la direccion segura (a lo sumo avisa de mas).
+    """
+    lx = shlex.shlex(orden, posix=True, punctuation_chars=OPERADORES)
+    lx.whitespace, lx.whitespace_split, lx.commenters = " \t\r", True, ""
+    partes, actual = [], []
+    for tok in lx:
+        if tok and set(tok) <= set(OPERADORES):
+            partes.append(actual)
+            actual = []
+        else:
+            actual.append(tok)
+    partes.append(actual)
+    return partes
+
+
 def invoca_el_audit(orden):
     """Cierto solo si TODO el comando es una corrida del audit y nada mas.
 
@@ -193,21 +317,26 @@ def invoca_el_audit(orden):
     de probar nada: `true || python3 .../checkpoint-audit.py ; cat ficha-vieja.md` invoca en un
     segmento y trae la linea del otro. Lo encontro un adversario externo. Por eso se exige que
     cada segmento sea o bien la invocacion, o bien un acompanante MUDO (ver `acompanante_mudo`,
-    que lo decide por lo que cada forma hace, no por ser un builtin). Cualquier otra cosa — `cat`,
+    que lo decide por lo que cada forma hace, no por ser un builtin), o bien un filtro que solo
+    reescribe lo que le llega por la tuberia (ver `filtro_sin_fichero`). Cualquier otra cosa — `cat`,
     `echo`, `grep`, `git`, `set`, `source`, un `false &&` que ni siquiera ejecuta lo que sigue —
     deja el comando INCONCLUYENTE, y en la duda se avisa.
     """
+    if SUSTITUCION.search(orden) or RESUMEN_EN_COMANDO.search(orden):
+        return False                            # la linea puede salir de otro sitio que el audit
+    try:
+        # `\` + salto de linea es continuacion: la shell lo quita antes de nada, y sin quitarlo aqui
+        # el salto se pegaba al token siguiente (`\npython3` no es un lanzador) y avisaba en falso.
+        partes = segmentos(DUPLICA_FD.sub(" ", orden.replace("\\\n", " ").replace("&>", ">")))
+    except ValueError:
+        return False                            # comillas sin cerrar: no cuenta como corrida
     visto = False
-    for trozo in OPERADORES.split(orden):
-        if not trozo.strip():
+    for tokens in partes:
+        if not tokens:
             continue
-        try:
-            tokens = shlex.split(trozo)
-        except ValueError:
-            return False                        # comillas sin cerrar: no cuenta como corrida
         if programa_ejecutado(tokens) == "checkpoint-audit.py":
             visto = True
-        elif not acompanante_mudo(tokens):
+        elif not (acompanante_mudo(tokens) or filtro_sin_fichero(tokens)):
             return False                        # el comando mezcla otra cosa: no prueba nada
     return visto
 
