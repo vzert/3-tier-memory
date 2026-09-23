@@ -1,6 +1,17 @@
 # Changelog
 
 
+## [2.35.1] - 2026-09-23
+El CI de 2.35.0 (corrida 35919265445) confirmó en Windows los dos arreglos de tests: pasan
+`test-checkpoint-close-guard` y `test-repair-research-index`. Falló una sola aserción, la de mi
+test nuevo.
+
+### Fixed
+- `test-print-pendiente-opcional.sh`: la aserción de la línea `Proyecto:` comparaba contra la ruta
+  de Git Bash (`/c/...`). En Windows, `print-pendiente-opcional.py` imprime la ruta nativa
+  (`C:\...`), que es la correcta para un prompt que se pega en ese sistema. Ahora se compara el
+  final de la ruta. El producto no cambia.
+
 ## [2.35.0] - 2026-09-23
 El snippet `Como retomar` pierde la línea `Sigue abierto:` y el cierre gana un prompt opcional para
 cerrar un pendiente en otra sesión. Víctor lo pidió al revisar el cierre de 2.34.0. El agente que

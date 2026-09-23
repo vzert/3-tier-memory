@@ -35,7 +35,9 @@ chk "elige la nueva de arriba" "1" "$(printf '%s' "$O" | grep -c 'alta nueva arr
 chk "un solo prompt" "1" "$(printf '%s' "$O" | grep -c '^Retomamos:')"
 chk "motivo Alta" "1" "$(printf '%s' "$O" | grep -c '^Motivo: Alta abierto desde 2026-09-20')"
 chk "texto sin metadatos" "0" "$(printf '%s' "$O" | grep '^Retomamos:' | grep -c '_origen')"
-chk "Proyecto con la ruta del proyecto" "1" "$(printf '%s' "$O" | grep -c "^Proyecto: proyecto — $P\$")"
+# La ruta se compara por su final: en Windows Python imprime la ruta nativa (C:\...) y $P es la de
+# Git Bash (/c/...). Las dos son la misma carpeta; el prompt se pega en el sistema de quien lo lee.
+chk "Proyecto con la ruta del proyecto" "1" "$(printf '%s' "$O" | grep -c '^Proyecto: proyecto — .*[/\\]proyecto$')"
 chk "Contexto de su _origen" "1" "$(printf '%s' "$O" | grep -c '^Contexto: memory/sessions/2026-09-20-origen.md')"
 chk "clausula de cierre" "1" "$(printf '%s' "$O" | grep -c 'cierralo con /checkpoint-3t')"
 
