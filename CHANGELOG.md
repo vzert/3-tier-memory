@@ -44,7 +44,7 @@ no tenia correccion por evento, y con `journal_strict=1` tampoco a mano.
   fila previa conserva el suyo.
 - Mutaciones a mano (copias en temporal, sin tocar el arbol): quitar la guarda de replay, la de
   tema-cambiado, la de sin-identidad, el registro, la guarda legacy, el rename de todas las filas o
-  el tema de Active al madurar hace caer entre 1 y 4 asertos cada una, y `<=` -> `<` en la guarda de
+  el tema de Active al madurar hace caer al menos un aserto cada una, y `<=` -> `<` en la guarda de
   replay tambien (caso 18). No es equivalente, como se creyo primero: el replay del ULTIMO rename
   despues de una edicion a mano de la celda daba noop con `<=` y cuarentena `tema-cambiado` con
   `<` (lo encontro un adversario en Sonnet). 8 mutaciones, 8 caen.
