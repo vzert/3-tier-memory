@@ -226,8 +226,10 @@ for r in turno:
             # ultima linea que imprime, `EXPIRE ids: …`, leida del tool_result: es salida del
             # script, no prosa. `--revertir` reabre, no cierra. Se mira CADA invocacion por separado
             # (hasta `;`, `&`, `|` o salto de linea): un `--revertir` en el mismo comando no tapa a
-            # un `--apply` (adversario de 2.36.0).
-            n_apply = sum(1 for s in re.findall(r"expire-pendientes\.py[^;&|\n]*", cmd)
+            # un `--apply` (adversario de 2.36.0). Antes se unen las lineas continuadas con `\` al
+            # final: un `--apply` en la linea siguiente es la misma invocacion (ronda 2).
+            n_apply = sum(1 for s in re.findall(r"expire-pendientes\.py[^;&|\n]*",
+                                                re.sub(r"\\\r?\n", " ", cmd))
                           if re.search(r"--apply\b", s) and "--revertir" not in s)
             if n_apply:
                 expiraciones.append((b.get("id"), n_apply))

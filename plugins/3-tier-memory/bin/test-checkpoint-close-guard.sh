@@ -461,6 +461,13 @@ printf 'REOPEN emitido para p-0000000001. Corre journal-compact.py para aplicarl
 tx2 "$T/t.jsonl" "$T/cmd-mix.txt" "$T/listo.txt" "$T/mix-out.txt"
 chk "bloquea" "1" "$(bloquea "$(corre "$T/t.jsonl" false -)")"
 
+echo "== adversario de 2.36.0 (ronda 2): --apply en una linea de continuacion con barra invertida =="
+viejo; vence p-6071ea6987
+printf 'python3 "$JBIN/expire-pendientes.py" \\\n  --memory-dir memory \\\n  --apply > /dev/null\n' > "$T/cmd-cont.txt"
+chk "el comando del caso lleva la barra y el salto" "2" "$(grep -c '\\$' "$T/cmd-cont.txt")"
+tx2 "$T/t.jsonl" "$T/cmd-cont.txt" "$T/listo.txt" "$T/vacio.txt"
+chk "bloquea" "1" "$(bloquea "$(corre "$T/t.jsonl" false -)")"
+
 echo "== control: dos --apply en un comando, las dos lineas legibles y ninguna con un id citado =="
 viejo; vence p-014255373e
 for d in "$M2" "$M"; do python3 "$BIN/expire-pendientes.py" --memory-dir "$d" --apply; done > "$T/exp-out.txt"
