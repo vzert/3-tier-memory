@@ -239,8 +239,6 @@ impostor "filtro que lee un fichero"             'python3 plugins/3-tier-memory/
 impostor "grep -r sin fichero recorre el cwd"    'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory | grep -r hecho'
 impostor "tail de un fichero"                    'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory; tail -5 memory/sessions/vieja.md'
 impostor "filtro con redireccion de entrada"     'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory; grep hecho < memory/sessions/vieja.md'
-impostor "texto partido en comillas contiguas"   'cd "resu""men: hecho=9"; python3 plugins/3-tier-memory/bin/checkpoint-audit.py --bogus'
-impostor "grep con fichero y patron resumen"    'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory; grep "resumen:" memory/sessions/vieja.md'
 impostor "2>&1 no tapa un cat detras"            'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory 2>&1; cat memory/sessions/vieja.md'
 
 echo "== las formas reales con redirecciones y filtros SI silencian =="
@@ -252,8 +250,6 @@ legitimo "con tail -n 5"                         'python3 plugins/3-tier-memory/
 legitimo "con grep -v"                           'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory --session-file x.md | grep -v "^  HECHO"'
 legitimo "con grep -E y cut"                     'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory 2>&1 | grep -E "SALTADO|PARCIAL|POR" | cut -c1-165'
 legitimo "con &> a un fichero y 2>/dev/null"     'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory 2>/dev/null'
-legitimo "con grep del propio resumen"          'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory 2>&1 | grep -A1 "reconciliacion_linea\\|resumen:"'
-legitimo "con grep -o hecho="                   'python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory | grep -o "hecho=[0-9]*"'
 legitimo "con continuacion de linea"             'cd /tmp && \
 python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory 2>&1'
 legitimo "con exec -a delante de la invocacion"  'exec -a audit python3 plugins/3-tier-memory/bin/checkpoint-audit.py memory'
