@@ -148,6 +148,20 @@ printf '{"v":1,"type":"plan.reopen","ts":1,"session_id":"x","agent_id":"x","payl
 compact --quiet >/dev/null 2>&1
 has "malformed" "$(cat "$M"/.journal/quarantine/*.reason)" "malformed: plan.reopen sin 'slug'"
 
+echo "== 13b. un plan.reopen sin ts: cuarentena, no reabre (su replay no se podria frenar) =="
+fixture
+up --status completed; compact --quiet >/dev/null
+emit --type plan.reopen --slug demo
+python3 - "$(ls "$M"/.journal/pending/*.json)" <<'PY'
+import json, sys
+p = sys.argv[1]; e = json.load(open(p)); e.pop("ts", None); json.dump(e, open(p, "w"))
+PY
+compact --quiet >/dev/null 2>&1
+chk "sigue completed" "completed" "$(status plan-demo)"
+chk "cuarentena" "1" "$(cuar)"
+has "motivo malformed sin ts" "$(cat "$M"/.journal/quarantine/*.reason)" "plan.reopen sin 'ts'"
+chk "no dejo registro" "0" "$(reab demo)"
+
 echo "== 14. emisor: plan.reopen exige --slug =="
 fixture
 chk "sale con error" "1" "$(python3 "$BIN/journal-emit.py" --memory-dir "$M" --type plan.reopen >/dev/null 2>&1 && echo 0 || echo 1)"

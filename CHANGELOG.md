@@ -30,12 +30,18 @@ des-completaba un plan cerrado, sin aviso.
   peor caso es no ganar la protección, nunca perder la escritura.
 - **Replay del propio reopen.** Si su ts ya está en el registro, es noop. Sin esto, el replay de
   un reopen viejo reabría un plan que se había vuelto a cerrar después.
+  Un `plan.reopen` SIN ts (solo posible escrito a mano: el emisor siempre lo pone) va a
+  cuarentena `malformed`. Sin ts no hay forma de reconocer su replay, y la primera versión de
+  este arreglo lo aplicaba igual: el replay de ese reopen reabría en silencio un plan cerrado
+  después (lo encontró un adversario). El cierre sin ts se aplica con aviso, porque perder un
+  cierre es peor que no protegerlo. Con la reversa es al revés: si no se puede proteger, no se
+  hace.
 - **El segundo campo de `reabiertos.log` significa cosas distintas según la clave**, y el
   docstring de `anotar_reabierto` lo dice. Para `p-…` es el ts del CIERRE revertido (igualdad
   exacta). Para `plan-…` es el ts del propio `plan.reopen` (comparación por orden). Un plan no
   guarda en ningún sitio el ts del evento que lo cerró, así que no hay cierre concreto que anotar.
   A cambio, esto cubre también los planes cerrados antes de esta versión.
-- `test-plan-reopen.sh` (14 casos, 35 asertos). Contra 2.35.1 falla en 17 asertos. Quitar el
+- `test-plan-reopen.sh` (15 casos, 39 asertos). Contra 2.35.1 falla en 19 asertos. Quitar la cuarentena del reopen sin ts lo detectan 4. Quitar el
   guardián del cierre revertido lo detectan 2 asertos.
 - Carriers: `journal-emit.py` (tipo y ayuda), cabecera de `journal-compact.py`, README
   ("Twelve event types"), `journal-guard.sh`, `bash-journal-nudge.sh`, `/checkpoint-3t` Step 5.

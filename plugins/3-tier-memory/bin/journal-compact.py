@@ -2604,11 +2604,11 @@ def apply_plan_reopen(mem, p):
     `.journal/reabiertos.log` para que el replay del cierre viejo no deshaga la reapertura.
     """
     slug = check_slug(p["slug"], "slug")
-    ts = int(p.get("_ts") or 0)
+    ts = p["_ts"]   # validate garantiza > 0
     # Replay de ESTE mismo reopen: ya consta con su ts. Sin esto, el replay de un reopen viejo
     # reabria un plan que se habia vuelto a cerrar DESPUES — el mismo fallo que este evento viene
     # a cerrar, por la puerta de al lado.
-    if ts and ts in reaperturas_plan(mem, slug):
+    if ts in reaperturas_plan(mem, slug):
         return False
     path = os.path.join(mem, "_plans-index.md")
     if not os.path.isfile(path):
@@ -3048,7 +3048,19 @@ def validate(ev):
         if not p.get("slug"):
             raise Quarantine("malformed: plan.reopen sin 'slug'")
         check_slug(p["slug"], "slug")
-        p["_ts"] = ev.get("ts", 0)
+        # Un reopen SIN ts se cuarentena, no se aplica. El ts es lo unico que distingue el replay
+        # de este reopen de uno nuevo: sin el, el replay de un reopen viejo reabria un plan que
+        # se habia vuelto a cerrar despues, en silencio (adversario, ronda 1). El cierre sin ts se
+        # aplica con aviso porque perder un cierre es peor que no protegerlo; aqui es al reves —
+        # una reversa que no se puede proteger no se hace. journal-emit siempre pone el ts, asi
+        # que esto solo alcanza a un evento escrito a mano.
+        try:
+            p["_ts"] = int(ev.get("ts") or 0)
+        except (TypeError, ValueError):
+            p["_ts"] = 0
+        if p["_ts"] <= 0:
+            raise Quarantine("malformed: plan.reopen sin 'ts' — sin el no se distingue su replay "
+                             "de un reopen nuevo; emitelo con journal-emit.py")
         return t, p
     elif t == "research.upsert":
         for k in ("slug", "tema", "status"):
