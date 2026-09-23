@@ -143,7 +143,7 @@ VALOR_DE_ENVOLTURA = {
 SUSTITUCION = re.compile(r"`|\$\(|[<>]\(|\$'")   # `$'...'` (ANSI-C) esconde el texto con escapes
 # El texto de la linea de resumen escrito en el propio comando: cualquier segmento que lo repita
 # en un error (`cd 'resumen: hecho=9'`, `unset ...`, un argumento que el audit rechaza) lo pone en
-# la salida sin que el audit lo haya producido.
+# la salida sin que el audit lo haya producido. Se aplica por segmento, salvo a los filtros.
 RESUMEN_EN_COMANDO = re.compile(r"resumen\s*:|hecho\s*=", re.I)
 # Duplicar descriptores (`2>&1`, `>&2`, `&>fichero`) no produce salida nueva: reordena la que ya
 # hay. Pero `&` es un separador en OPERADORES, asi que `<audit> 2>&1` se partia en `<audit> 2>` y
@@ -322,7 +322,7 @@ def invoca_el_audit(orden):
     `echo`, `grep`, `git`, `set`, `source`, un `false &&` que ni siquiera ejecuta lo que sigue —
     deja el comando INCONCLUYENTE, y en la duda se avisa.
     """
-    if SUSTITUCION.search(orden) or RESUMEN_EN_COMANDO.search(orden):
+    if SUSTITUCION.search(orden):
         return False                            # la linea puede salir de otro sitio que el audit
     try:
         # `\` + salto de linea es continuacion: la shell lo quita antes de nada, y sin quitarlo aqui
@@ -334,9 +334,15 @@ def invoca_el_audit(orden):
     for tokens in partes:
         if not tokens:
             continue
+        filtro = filtro_sin_fichero(tokens)
+        # El texto de resumen en un segmento que puede repetirlo en un error lo pone en la salida.
+        # Se mira DESPUES de tokenizar (asi `"resu""men: ..."` ya va junto) y se salta en un filtro
+        # de tuberia: `<audit> | grep "resumen:"` solo puede devolver lineas que le llegan por el tubo.
+        if not filtro and RESUMEN_EN_COMANDO.search(" ".join(tokens)):
+            return False
         if programa_ejecutado(tokens) == "checkpoint-audit.py":
             visto = True
-        elif not (acompanante_mudo(tokens) or filtro_sin_fichero(tokens)):
+        elif not (acompanante_mudo(tokens) or filtro):
             return False                        # el comando mezcla otra cosa: no prueba nada
     return visto
 
