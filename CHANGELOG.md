@@ -1,6 +1,40 @@
 # Changelog
 
 
+## [2.37.1] - 2026-09-23
+Origen: pendiente `p-49996efc69`. El estado publicado de 2.30.0 de `checkpoint-audit-nudge.sh` no
+lo habia revisado nadie. Una ronda de un verificador independiente sobre el delta `52f2538..7f03029`
+encontro dos agujeros que ese delta abrio y reprodujo la familia que ya estaba antes.
+
+### Fixed
+- **Un `VAR=` o un `export`/`cd` con sustitucion de comandos ya no pasa por acompanante mudo.**
+  ``A="`cat ficha-vieja.md >/dev/stderr`"; python3 .../checkpoint-audit.py`` callaba el aviso: shlex
+  lo ve como una sola asignacion, pero la shell ejecuta la sustitucion y su stderr llega al
+  resultado. Backticks, `$(`, `<(`/`>(` y las comillas ANSI-C `$'...'` dejan el comando inconcluyente.
+- **Las opciones de envoltura que llevan valor ya no se toman por el programa.**
+  `exec -a checkpoint-audit.py cat ficha-vieja.md` ejecuta `cat` y el hook lo daba por corrida. Hay
+  una tabla por envoltura (`env -u/-P/-C`, `exec -a`, `nice -n`, `time -o/-f`, `stdbuf`, `uv`,
+  `pipx`); `env -S` se rechaza; y si el token que sigue a una opcion es el propio nombre del audit,
+  el segmento es inconcluyente.
+- **El texto de la linea de resumen escrito en el comando, y `CDPATH`, lo dejan inconcluyente.**
+  `cd`/`unset` repiten su argumento en el mensaje de error, y `cd` imprime la ruta con `CDPATH`.
+- **`<audit> 2>&1` ya no avisa en falso.** Era el falso aviso mas comun medido en transcripts
+  reales: el `&` partia el comando. Duplicar descriptores y `&>` ya no parten, el corte respeta las
+  comillas (`| grep -E "A|B"` ya no se rompe) y las continuaciones de linea.
+- **Filtros de tuberia sin fichero** (`grep`, `head`, `tail`, `cut`, con opciones en lista cerrada)
+  pueden acompanar a la corrida.
+
+Medido sobre 295 comandos reales que invocan el audit: ninguna corrida aceptada antes pasa a
+avisar, y 41 que avisaban en falso dejan de hacerlo. La bateria pasa de 67 a 98 casos.
+
+### Known limits
+- Partir el texto de resumen en variables y recomponerlo al expandir sigue silenciando el aviso.
+  Demostrar que un comando de shell no pudo imprimir algo no tiene fondo; la salida de verdad es
+  una huella propia del audit (`p-7270a3e258`).
+- `<audit> | grep "resumen:"` sigue avisando en falso. Eximir a los filtros del texto de resumen se
+  probo y se revirtio: un `grep` con un patron mal formado repite el patron en su error (lo hace
+  `ugrep`, no el grep de BSD), y eso volvia a silenciar el aviso sin corrida.
+
 ## [2.37.0] - 2026-09-23
 Origen: pendiente `p-014255373e` (Alta desde 2026-09-20). Diseño en [2.31.0], "3. `plan.reopen`".
 Medido antes del arreglo, sobre un fixture: `plan.upsert --status active` → compactar →
