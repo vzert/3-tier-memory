@@ -1369,8 +1369,10 @@ ahi antes de continuar, no improvises el bloque a mano.
 arriba elimina la SUSTITUCION: no hay nada que redactar. No eliminaba la OMISION: en la sesion
 5790b9f2 el snippet salio solo en la salida del script (un tool result, que el usuario no ve), y
 en otro cierre el recordatorio de calendario quedo "persistido en la ficha" sin pegarse. Al
-terminar un turno que corrio /checkpoint-3t o `print-como-retomar.py`, o que edito `## Como
-retomar` de una ficha, el hook exige varias cosas en el TEXTO de tu respuesta, nunca en un tool
+terminar un turno que corrio /checkpoint-3t o `print-como-retomar.py`, que edito `## Como
+retomar` de una ficha, o que cerro, caduco o bloqueo un pendiente citado en el `## Como retomar`
+de una ficha de esta sesion (con `journal-emit.py` o con `expire-pendientes.py --apply`), el hook
+exige varias cosas en el TEXTO de tu respuesta, nunca en un tool
 result:
 - cada linea que imprime `print-como-retomar.py`;
 - los dos primeros recordatorios de `## Recordatorios de calendario`, completos (y `+N con fecha

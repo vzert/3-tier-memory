@@ -1,6 +1,27 @@
 # Changelog
 
 
+## [2.36.0] - 2026-09-23
+Cierra `p-2dc733a7c3`. Desde 2.33.1 el hook de cierre (`checkpoint-close-guard.sh`) vuelve a pedir el
+snippet cuando un turno cierra, caduca o bloquea un pendiente que cita el `## Como retomar` de una
+ficha de esta sesion. Solo lo veia si `journal-emit.py` y el id iban en el texto del comando.
+`expire-pendientes.py --apply` llama a `journal-emit.py` por dentro, asi que caducar un id citado
+pasaba en silencio.
+
+### Changed
+- `expire-pendientes.py --apply` imprime como ultima linea `EXPIRE ids: <ids>` (o `ninguno`) con
+  todos los ids caducados. La lista de arriba se corta en 15.
+
+### Fixed
+- `checkpoint-close-guard.sh`: un `expire-pendientes.py --apply` (sin `--revertir`) del turno toma
+  los ids de esa linea en su tool_result. Si la linea no esta (salida cortada con `| tail`, mandada a
+  `/dev/null`, o el script murio a mitad), el hook trata como cambiado cualquier id que cite una
+  ficha de esta sesion: un aviso de mas, nunca uno de menos.
+- `test-checkpoint-close-guard.sh`: 56 → 64 casos. El test nuevo corre el `expire-pendientes.py`
+  real sobre la memoria del test y pone su salida real en el tool_result. Sus 4 casos que deben
+  bloquear fallan contra el hook de 2.35.1. Los controles (id no citado, dry-run, `--revertir`)
+  quedan en silencio.
+
 ## [2.35.1] - 2026-09-23
 El CI de 2.35.0 (corrida 35919265445) confirmó en Windows los dos arreglos de tests: pasan
 `test-checkpoint-close-guard` y `test-repair-research-index`. Falló una sola aserción, la de mi

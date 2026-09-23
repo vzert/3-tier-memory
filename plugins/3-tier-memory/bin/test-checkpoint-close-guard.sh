@@ -288,9 +288,17 @@ open(p, "w", encoding="utf-8").write(t.replace("## Baja prioridad", "## Baja pri
 PYP
 }
 tx2() {   # $1 transcript  $2 comando del turno nuevo  $3 texto de la respuesta del turno nuevo
-  python3 - "$1" "$F" "$FX2/snippet-antes-del-push.txt" "$2" "$3" <<'PYT'
+          # $4 (opcional) fichero con la salida REAL del comando, que va en su tool_result;
+          # con `$4` = "bloques:<fichero>" va como lista de bloques `text` en vez de string
+  python3 - "$1" "$F" "$FX2/snippet-antes-del-push.txt" "$2" "$3" "${4:-}" <<'PYT'
 import json, sys
-out, ficha, snip, cmd, txt = sys.argv[1:6]
+out, ficha, snip, cmd, txt, res = sys.argv[1:7]
+if not res:
+    res = "p-477bb60303"
+elif res.startswith("bloques:"):
+    res = [{"type": "text", "text": open(res[8:], encoding="utf-8").read()}]
+else:
+    res = open(res, encoding="utf-8").read()
 R = [{"type": "user", "message": {"role": "user", "content": "guarda el checkpoint"}},
      {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "w", "name": "Write",
         "input": {"file_path": ficha, "content": "## Como retomar\n..."}}]}},
@@ -302,7 +310,7 @@ R = [{"type": "user", "message": {"role": "user", "content": "guarda el checkpoi
      {"type": "user", "message": {"role": "user", "content": "<bash-input> git push origin main</bash-input>"}},
      {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "r", "name": "Bash",
         "input": {"command": open(cmd, encoding="utf-8").read()}}]}},
-     {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "r", "content": "p-477bb60303"}]}},
+     {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "r", "content": res}]}},
      {"type": "assistant", "message": {"content": [{"type": "text", "text": open(txt, encoding="utf-8").read()}]}}]
 open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r, ensure_ascii=False) for r in R) + "\n")
 PYT
@@ -380,6 +388,59 @@ open(p, "w", encoding="utf-8").write(t.replace("date: 2026-09-22\n", "date: 2026
 PYX
 O=$(python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":False,"session_id":"sesion-actual","cwd":"/tmp"}))' "$T/t.jsonl" | bash "$HOOK" 2>/dev/null)
 chk "bloquea" "1" "$(bloquea "$O")"
+
+# ================================================================================================
+# 2.36.0 — p-2dc733a7c3: `expire-pendientes.py --apply` caduca un id que el snippet cita. El script
+# llama a journal-emit.py POR DENTRO, asi que el texto del comando no trae ni `journal-emit.py` ni el
+# id y el disparo por cambio de estado de 2.33.1 no lo veia. Aqui el script corre DE VERDAD sobre la
+# memoria del test y su salida real va al tool_result: nada de ids escritos a mano.
+echo "== 2.36.0 (p-2dc733a7c3): expire-pendientes.py --apply caduca un id citado en la ficha =="
+vence() {   # $1.. ids que reciben `_revisar:` vencido (candidatos de --modo revisar)
+  python3 - "$M/_pendientes.md" "$@" <<'PYV'
+import sys, re
+p = sys.argv[1]; t = open(p, encoding="utf-8").read()
+for i in sys.argv[2:]:
+    t, n = re.subn(rf"(_id: {i}_)", r"\1 — _revisar: 2026-01-01_", t)
+    assert n == 1, i
+open(p, "w", encoding="utf-8").write(t)
+PYV
+}
+EXP="python3 \"\$JBIN/expire-pendientes.py\" --apply"
+printf '%s\n' "$EXP" > "$T/cmd-exp.txt"
+viejo; vence p-6071ea6987
+python3 "$BIN/expire-pendientes.py" --memory-dir "$M" --apply > "$T/exp-out.txt"
+chk "el script caduco el id citado (evento en el journal)" "1" "$(grep -l 'p-6071ea6987' "$M"/.journal/pending/* 2>/dev/null | wc -l | tr -d ' ')"
+tx2 "$T/t.jsonl" "$T/cmd-exp.txt" "$T/listo.txt" "$T/exp-out.txt"
+O=$(corre "$T/t.jsonl" false -)
+chk "bloquea" "1" "$(bloquea "$O")"
+chk "pide el snippet nuevo" "1" "$(printf '%s' "$O" | grep -c 'no esta en tu respuesta')"
+chk "con la salida en bloques text tambien" "1" "$(tx2 "$T/t.jsonl" "$T/cmd-exp.txt" "$T/listo.txt" "bloques:$T/exp-out.txt"; bloquea "$(corre "$T/t.jsonl" false -)")"
+
+echo "== control: expire-pendientes.py --apply caduca un id que la ficha NO cita =="
+viejo; vence p-014255373e
+python3 "$BIN/expire-pendientes.py" --memory-dir "$M" --apply > "$T/exp-out.txt"
+tx2 "$T/t.jsonl" "$T/cmd-exp.txt" "$T/listo.txt" "$T/exp-out.txt"
+chk "silencio" "" "$(corre "$T/t.jsonl" false -)"
+
+echo "== control: dry-run (sin --apply) sobre un id citado no dispara =="
+viejo; vence p-6071ea6987
+python3 "$BIN/expire-pendientes.py" --memory-dir "$M" > "$T/exp-out.txt"
+printf 'python3 "$JBIN/expire-pendientes.py"\n' > "$T/cmd-dry.txt"
+tx2 "$T/t.jsonl" "$T/cmd-dry.txt" "$T/listo.txt" "$T/exp-out.txt"
+chk "silencio" "" "$(corre "$T/t.jsonl" false -)"
+
+echo "== control: --revertir --apply (reabre, no cierra) no dispara =="
+printf 'python3 "$JBIN/expire-pendientes.py" --revertir p-6071ea6987 --apply\n' > "$T/cmd-rev.txt"
+printf 'REOPEN emitido para p-6071ea6987. Corre journal-compact.py para aplicarlo.\n' > "$T/rev-out.txt"
+tx2 "$T/t.jsonl" "$T/cmd-rev.txt" "$T/listo.txt" "$T/rev-out.txt"
+chk "silencio" "" "$(corre "$T/t.jsonl" false -)"
+
+echo "== adversarial: la salida de --apply se corta (| tail -1, > /dev/null): dispara igual =="
+viejo; vence p-014255373e
+printf 'python3 "$JBIN/expire-pendientes.py" --apply > /dev/null\n' > "$T/cmd-null.txt"
+: > "$T/vacio.txt"
+tx2 "$T/t.jsonl" "$T/cmd-null.txt" "$T/listo.txt" "$T/vacio.txt"
+chk "bloquea sin ids legibles (un aviso de mas, nunca uno de menos)" "1" "$(bloquea "$(corre "$T/t.jsonl" false -)")"
 
 # ================================================================================================
 # 2.34.0 — p-272254efc5: `ninguno` con el ultimo veredicto del adversario en `break`. La ficha es el

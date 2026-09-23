@@ -228,14 +228,19 @@ def main():
         print(f"DRY-RUN. Nada escrito. Para aplicarlo: --apply --modo {a.modo}")
         return
 
-    n = 0
+    emitidos = []
     for pid, edad, prio, line in cands:
         emit(mem, ["--type", "pendiente.expire", "--id", pid, "--prioridad", prio,
                    "--dias", str(edad), "--line", line])
-        n += 1
+        emitidos.append(pid)
     print()
-    print(f"EXPIRE emitidos: {n}. Corre journal-compact.py para aplicarlos.")
+    print(f"EXPIRE emitidos: {len(emitidos)}. Corre journal-compact.py para aplicarlos.")
     print(f"Reversa: expire-pendientes.py --revertir <id> --apply")
+    # ULTIMA linea y con TODOS los ids (la lista de arriba se corta en 15): la lee
+    # checkpoint-close-guard.sh del tool_result para saber que pendientes cerro este turno, porque
+    # journal-emit.py corre aqui dentro y el texto del comando no lo trae (2.36.0, p-2dc733a7c3).
+    # Sin esta linea el hook asume lo peor. No cambies su forma sin cambiar el hook.
+    print(f"EXPIRE ids: {' '.join(emitidos) or 'ninguno'}")
 
 
 if __name__ == "__main__":

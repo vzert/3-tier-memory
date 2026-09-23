@@ -21,7 +21,10 @@
 #   - invoco /checkpoint-3t (Skill o comando), o
 #   - corrio print-como-retomar.py, o
 #   - edito con Edit/MultiEdit una ficha de memory/sessions/ tocando `## Como retomar`,
-#     `Proximo paso:` o `## Recordatorios de calendario`.
+#     `Proximo paso:` o `## Recordatorios de calendario`, o
+#   - cerro, caduco o bloqueo un pendiente que cita el `## Como retomar` de una ficha de esta
+#     sesion: con `journal-emit.py` en el comando (2.33.1), o con `expire-pendientes.py --apply`,
+#     cuyos ids se leen de su linea final `EXPIRE ids:` (2.36.0).
 # En cualquier otro turno se calla: un Stop que habla en cada turno se aprende a ignorar. Un
 # `Write` de ficha NO dispara por si solo (lo hace /backfill-3t con decenas de fichas).
 #
@@ -156,6 +159,9 @@ for i in range(len(recs) - 1, -1, -1):
 turno = recs[inicio:]
 
 ids_cambiados = set()  # pendientes cerrados/caducados/bloqueados en este turno
+ids_a_ciegas = False   # un expire-pendientes.py --apply cuya salida no se pudo leer (ver abajo)
+expiraciones = []      # tool_use_id de cada `expire-pendientes.py --apply` del turno
+resultados = {}        # tool_use_id -> texto del tool_result
 textos = []            # lo que el usuario vio: bloques text del assistant
 disparo = False
 fichas = []            # fichas que el turno CERRO: argumento de print-como-retomar.py o Edit con marca
@@ -175,6 +181,12 @@ for r in turno:
     msg = r.get("message") or {}
     c = msg.get("content")
     if r.get("type") == "user":
+        for b in c if isinstance(c, list) else []:
+            if isinstance(b, dict) and b.get("type") == "tool_result":
+                rc = b.get("content")
+                if isinstance(rc, list):
+                    rc = "\n".join(x.get("text", "") for x in rc if isinstance(x, dict))
+                resultados[b.get("tool_use_id")] = rc if isinstance(rc, str) else ""
         # `/checkpoint-3t` tecleado como comando: la marca va en el prompt del usuario.
         txt = c if isinstance(c, str) else " ".join(
             b.get("text", "") for b in (c or []) if isinstance(b, dict) and b.get("type") == "text")
@@ -209,6 +221,13 @@ for r in turno:
             # pide revisar el snippet — un aviso de mas, nunca uno de menos.
             if "journal-emit.py" in cmd and re.search(r"--type[\s=]+[\"']?pendiente\.(?:resolve|expire|block)\b", cmd):
                 ids_cambiados.update(re.findall(r"\b(p-[0-9a-f]{10})\b", cmd))
+            # expire-pendientes.py --apply caduca llamando a journal-emit.py POR DENTRO: ni el
+            # script ni los ids aparecen en el comando (2.36.0, p-2dc733a7c3). Los ids salen de la
+            # ultima linea que imprime, `EXPIRE ids: …`, leida del tool_result: es salida del
+            # script, no prosa. `--revertir` reabre, no cierra.
+            if (re.search(r"expire-pendientes\.py", cmd) and re.search(r"--apply\b", cmd)
+                    and "--revertir" not in cmd):
+                expiraciones.append(b.get("id"))
             if "print-como-retomar.py" not in cmd:
                 continue
             disparo = True
@@ -235,6 +254,16 @@ for r in turno:
             elif any(mk in nuevo for mk in MARCAS_EDIT):
                 disparo = True
                 fichas.append(resolver(ruta, cwd))
+
+# Si la linea `EXPIRE ids:` no esta (salida cortada con `| tail`, mandada a /dev/null, el script
+# murio a mitad, o el tool_result aun no llego) no se sabe que caduco: se asume cualquier id que cite
+# una ficha de esta sesion. Un aviso de mas, nunca uno de menos (el mismo criterio de 2.33.1).
+for _tid in expiraciones:
+    _m = re.search(r"(?m)^EXPIRE ids: (.*)$", resultados.get(_tid) or "")
+    if _m:
+        ids_cambiados.update(re.findall(r"p-[0-9a-f]{10}", _m.group(1)))
+    else:
+        ids_a_ciegas = True
 
 if lam:
     textos.append(lam)
@@ -264,7 +293,7 @@ def de_esta_sesion(ruta):
     return bool(m and m.group(1) == SID)
 
 
-if ids_cambiados:
+if ids_cambiados or ids_a_ciegas:
     candidatas = [resolver(r, cwd) for r in fichas_sesion]
     candidatas += [f for f in (resolver(r, cwd) for r in impresas) if f and de_esta_sesion(f)]
     for f in dict.fromkeys(candidatas):
@@ -274,7 +303,7 @@ if ids_cambiados:
             sec = seccion(open(f, encoding="utf-8").read(), "Como retomar") or ""
         except Exception:
             continue
-        if any(i in sec for i in ids_cambiados):
+        if any(i in sec for i in ids_cambiados) or (ids_a_ciegas and re.search(r"p-[0-9a-f]{10}", sec)):
             disparo = True
             fichas.append(f)
 fichas = [f for f in fichas if f and os.path.isfile(f)]
