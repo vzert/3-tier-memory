@@ -120,7 +120,7 @@ print(
     "puesta a mano no tiene evento que auditar y no genera su fila de Tier 3, asi que al "
     "cerrarla se pierden su fecha de cierre y la sesion que la cerro. "
     "Usa bin/journal-emit.py (pendiente.add/resolve/update/reopen, session.add, learning.add/update, plan.upsert/reopen, "
-    "research.upsert) y luego bin/journal-compact.py. "
+    "research.upsert/rename) y luego bin/journal-compact.py. "
     "Si la escritura es una reparacion manual deliberada, hazla y despues corre "
     "`journal-compact.py --reseal` para que no se reporte como deriva. "
     "Esto es un aviso, no un bloqueo: puede equivocarse y no impide nada."

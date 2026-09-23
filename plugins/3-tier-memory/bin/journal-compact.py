@@ -52,6 +52,15 @@ Fase 2 (sesiones, reglas, planes, research) — mismo principio, anclas de tabla
                    Archivo de una fila completada lleva `_completado: YYYY-MM-DD_` (fecha del
                    evento); la poda de Completed (5 mas recientes) va por esa fecha, y las filas
                    sin ella (a mano, o anteriores a 2.12.0) nunca se podan — igual que sesiones.
+                   Al madurar, la fila de Completed conserva el Tema de la fila de Active (2.38.0):
+                   un upsert no corrige el tema, y un `completed` que trajera el viejo desharia un
+                   research.rename.
+  research.rename  (2.38.0) reescribe SOLO la celda Tema de las filas cuyo Archivo es
+                   [[research/<slug>]] (Active y/o Completed). Guardian de actualizacion perdida:
+                   la celda tiene que seguir siendo --tema-viejo. Anota `research-<slug>` + ts en
+                   .journal/reabiertos.log ANTES de escribir; un rename con ts anterior al ultimo
+                   anotado es noop (su replay no deshace uno posterior). Una fila (inline) no se
+                   renombra: cuarentena sin-identidad.
   Todo indice que se escribe recibe `updated: <hoy>` en su frontmatter.
 
 Lock: memory/.journal/.lock (dir) con acquired_at + owner. TTL 60 s. Un lock vencido lo
@@ -946,7 +955,7 @@ def resueltos_path(mem):
 REABIERTOS_LOG = "reabiertos.log"
 
 
-def anotar_reabierto(mem, pid, ev):
+def anotar_reabierto(mem, pid, ev, que="la reapertura"):
     """Registra en `.journal/reabiertos.log` que ESE cierre concreto se revirtio.
 
     Va en `.journal/` y no como marca dentro de `_resueltos.md`/`_caducados.md` a proposito: esos
@@ -962,6 +971,13 @@ def anotar_reabierto(mem, pid, ev):
       guarda en ningun sitio el ts del evento que lo cerro (la fila del indice no lo lleva y los
       planes no se archivan), asi que no hay cierre concreto que anotar. `reaperturas_plan` + el
       guardian de `apply_plan_upsert` comparan por ORDEN: un cierre con ts anterior al reopen es previo a la decision de reabrir.
+    - `research-<slug>` (research, 2.38.0): el ts del propio evento `research.rename`. No es una
+      reversa sino una correccion, pero tiene el mismo problema de replay: el replay de un rename
+      A->B despues de uno B->C devolveria la fila a B. `apply_research_rename` compara por ORDEN
+      contra el mayor ts anotado. Mismo fichero porque es la misma contabilidad (id + ts de un
+      evento que un replay no debe deshacer); las tres clases de clave no pueden chocar entre si.
+
+    `que` solo cambia el motivo de la cuarentena, para que diga que evento no se aplico.
     """
     d = os.path.join(mem, ".journal")
     try:
@@ -980,9 +996,9 @@ def anotar_reabierto(mem, pid, ev):
         # En la practica esta rama casi no se alcanza: si `.journal/` no se puede escribir, el
         # compactador tampoco puede mover sus eventos a `applied/` y no llega hasta aqui.
         raise Quarantine(
-            f"no-registro: no se pudo anotar la reapertura de {pid} en .journal/{REABIERTOS_LOG} "
-            f"({e}). El reopen NO se aplica: sin ese registro, un replay del cierre original "
-            f"volveria a cerrarlo y la reapertura se perderia en silencio.")
+            f"no-registro: no se pudo anotar {que} de {pid} en .journal/{REABIERTOS_LOG} "
+            f"({e}). El evento NO se aplica: sin ese registro, un replay de un evento anterior "
+            f"lo desharia en silencio.")
 
 
 def fue_revertido(mem, pid, ev):
@@ -1010,10 +1026,16 @@ def fue_revertido(mem, pid, ev):
 
 def reaperturas_plan(mem, slug):
     """Los ts de los `plan.reopen` ya aplicados a ese plan (clave `plan-<slug>` del registro)."""
+    return ts_registrados(mem, "plan-" + slug)
+
+
+def ts_registrados(mem, clave_id):
+    """Los ts anotados en `.journal/reabiertos.log` para una clave (`plan-<slug>`,
+    `research-<slug>`). Solo los numericos: una linea de pendiente (`p-...`) nunca casa."""
     path = os.path.join(mem, ".journal", REABIERTOS_LOG)
     if not os.path.isfile(path):
         return []
-    clave = f"{campo_log('plan-' + slug)}\t"
+    clave = f"{campo_log(clave_id)}\t"
     out = []
     try:
         with open(path, encoding="utf-8") as fh:
@@ -2864,9 +2886,17 @@ def apply_research_upsert(mem, p):
         # a proposito — Completed no tiene esas columnas y no hay donde ponerlos sin ampliar el
         # esquema en toda la base instalada; ver CHANGELOG.
         old_archivo_extra = ""
+        # El Tema de la fila NUEVA de Completed sale de la fila de Active cuando la habia (2.38.0).
+        # Un upsert nunca corrige el tema (la rama active no toca la celda 0), y aqui tampoco debe:
+        # un `completed` emitido por quien aun conoce el tema VIEJO deshacia un research.rename
+        # al madurar, porque la fila se reconstruia con `p["tema"]`. Solo sin fila previa en Active
+        # (research que nace ya completado) manda el tema del evento.
+        tema = p["tema"]
         if hit is not None:            # madura: sale de Active
             guard_research_legacy_write(lines, hit, "sacarla de Active (completed)")
-            old_archivo_extra = _archivo_extra(pad(split_cells(lines[hit]), 4)[3], slug)
+            activa = pad(split_cells(lines[hit]), 4)
+            old_archivo_extra = _archivo_extra(activa[3], slug)
+            tema = activa[0] or tema
             del lines[hit]
             changed = True
             a0, a1 = section_bounds(lines, "## Active Research")
@@ -2904,7 +2934,7 @@ def apply_research_upsert(mem, p):
         else:
             guard_research_legacy_insert(lines, sep, "## Completed Research")
             archivo_cell = f"{archivo} {old_archivo_extra}".strip() if old_archivo_extra else archivo
-            lines.insert(sep + 1, join_cells([p["tema"], p.get("resultado") or "",
+            lines.insert(sep + 1, join_cells([tema, p.get("resultado") or "",
                                               f"{archivo_cell} _completado: {fecha}_"]))
             changed = True
         # Poda por fecha, nunca por posicion: solo compiten las filas con `_completado:`; una fila
@@ -2927,6 +2957,111 @@ def apply_research_upsert(mem, p):
         bump_updated(lines)
         atomic_write(path, lines)
     return changed
+
+
+def research_owned_rows(lines, slug):
+    """TODAS las filas de este research en tablas del ancho de Active (4) o Completed (3), con la
+    misma regla que `find_research_owned_row`: en tabla canonica, el enlace ABRE la ultima celda;
+    en tabla vieja, el enlace en cualquier parte (y esa fila es de solo lectura). A diferencia de
+    aquella, no para en la primera: un research reabierto a mano vive en las dos tablas, y un
+    rename que corrigiera solo una dejaria el mismo research con dos nombres."""
+    key = link_re("research/", slug)
+    widths = {len(TABLE_COLUMNS["## Active Research"]), len(TABLE_COLUMNS["## Completed Research"])}
+    out = []
+    for _sec_header, hdr, _sep, rows in find_tables(lines):
+        if len(split_cells(lines[hdr])) not in widths:
+            continue
+        canon = research_table_is_canonical(lines[hdr])
+        for i in rows:
+            if canon:
+                cells = split_cells(lines[i])
+                m = RESEARCH_OPEN_RE.match(cells[-1]) if cells else None
+                if m and m.group(1) == slug:
+                    out.append(i)
+            elif key.search(lines[i]):
+                out.append(i)
+    return out
+
+
+def apply_research_rename(mem, p):
+    """Corrige el Tema de un research (2.38.0, pendiente p-9a59328616). Diseno: CHANGELOG 2.31.0,
+    "1. research.rename".
+
+    Identidad = el slug; ancla = la CELDA Archivo (`[[research/<slug>]]` abriendo la ultima celda),
+    nunca la fila entera: una fila que solo cita el research no es suya. Solo se escribe la celda
+    0; ninguna fila cambia de forma.
+
+    Tres guardas, en este orden:
+    1. Replay: `research-<slug>` + ts en `.journal/reabiertos.log`. Un rename con ts anterior o
+       igual al mayor anotado es noop. Sin esto, A->B, B->C y el replay de A->B dejaba la fila en
+       B: el replay del PROPIO evento de correccion deshacia la correccion posterior (la leccion
+       de plan.reopen en 2.37.0). Se anota ANTES de escribir; si no se puede anotar, no se hace.
+    2. Actualizacion perdida: la celda tiene que seguir siendo `tema_viejo` (lo rellena el emisor
+       desde la fila viva). Dos renames del mismo tema emitidos antes de compactar: el segundo va
+       a cuarentena `tema-cambiado` en vez de pisar al primero en silencio.
+    3. Fila `(inline)`: no se renombra, cuarentena `sin-identidad`. Su unica identidad es el tema
+       plano, que es justo lo que el rename destruye: despues, un upsert con el tema viejo ya no
+       casaria nada y crearia una fila duplicada.
+    """
+    slug = check_slug(p["slug"], "slug")
+    ts = p["_ts"]   # validate garantiza > 0
+    clave = f"research-{slug}"
+    previos = ts_registrados(mem, clave)
+    if previos and ts <= max(previos):
+        if ts < max(previos):
+            log(f"WARN research.rename de research/{slug} (ts {ts}) es anterior al ultimo rename "
+                f"aplicado a ese research: no se aplica, desharia el posterior. Si de verdad quieres "
+                f"ese tema, emite un research.rename nuevo.")
+        return False
+    path = os.path.join(mem, "_research-index.md")
+    if not os.path.isfile(path):
+        raise Quarantine("no-index: _research-index.md no existe")
+    lines = read_lines(path)
+    nuevo = p["tema"]
+    viejo = plain(p["tema_viejo"])
+    hits = research_owned_rows(lines, slug)
+    if not hits:
+        widths = {len(TABLE_COLUMNS["## Active Research"]),
+                  len(TABLE_COLUMNS["## Completed Research"])}
+        for _sec, hdr, _sep, rows in find_tables(lines):
+            if len(split_cells(lines[hdr])) not in widths:
+                continue
+            for i in rows:
+                if not research_owners(lines[i]) and plain(split_cells(lines[i])[0]) == viejo:
+                    raise Quarantine(
+                        f"sin-identidad: la fila {i + 1} de _research-index.md tiene el tema de "
+                        f"research/{slug} pero no su enlace (es (inline), o esta sin fichero). Una "
+                        f"fila asi no se renombra: su unica identidad es el tema, y cambiarlo haria "
+                        f"que el siguiente research.upsert con el tema viejo creara un duplicado. "
+                        f"Dale fichero primero (memory/research/{slug}.md y research.upsert sin "
+                        f"--inline, o [[research/{slug}]] en su Archivo) y renombra despues.")
+        raise Quarantine(
+            f"no-fila: ninguna fila de _research-index.md tiene [[research/{slug}]] en su Archivo "
+            f"ni el tema '{p['tema_viejo']}'. O el slug esta mal, o la poda la quito (Completed "
+            f"guarda los {MAX_RESEARCH_DONE} mas recientes con fecha).")
+    cambios = []
+    for i in hits:
+        guard_research_legacy_write(lines, i, "renombrar el Tema")
+        cells = split_cells(lines[i])
+        if cells[0] == nuevo:
+            continue
+        if plain(cells[0]) != viejo:
+            raise Quarantine(
+                f"tema-cambiado: la fila {i + 1} de research/{slug} ya no dice "
+                f"'{p['tema_viejo']}' sino '{cells[0]}' — otro evento la cambio despues de que "
+                f"este se emitiera. No se pisa en silencio: si '{nuevo}' sigue siendo el bueno, "
+                f"emite otro research.rename (el emisor toma el tema de hoy).")
+        cells[0] = nuevo
+        cambios.append((i, join_cells(cells)))
+    if not cambios:
+        return False   # idempotente: ya tiene ese tema
+    # PRIMERO el registro, DESPUES el indice: mismo orden que apply_plan_reopen.
+    anotar_reabierto(mem, clave, ts, que="el research.rename")
+    for i, linea in cambios:
+        lines[i] = linea
+    bump_updated(lines)
+    atomic_write(path, lines)
+    return True
 
 
 # ----------------------------------------------------------------------------- dispatch
@@ -3073,6 +3208,24 @@ def validate(ev):
         p["_ts"] = ev.get("ts", 0)   # respaldo para eventos sin `date` (emisor viejo)
         check_slug(p["slug"], "slug")
         return t, p
+    elif t == "research.rename":
+        for k in ("slug", "tema", "tema_viejo"):
+            if not p.get(k):
+                raise Quarantine(f"malformed: research.rename sin '{k}'")
+        if "\n" in p["tema"] or re.search(r"(?<!\\)\|", p["tema"]):
+            raise Quarantine("malformed: research.rename con salto de linea o '|' sin escapar en "
+                             "'tema' — partiria la fila; emitelo con journal-emit.py")
+        check_slug(p["slug"], "slug")
+        # Sin ts no hay forma de saber si es el replay de un rename viejo: cuarentena, igual que
+        # plan.reopen. journal-emit siempre lo pone.
+        try:
+            p["_ts"] = int(ev.get("ts") or 0)
+        except (TypeError, ValueError):
+            p["_ts"] = 0
+        if p["_ts"] <= 0:
+            raise Quarantine("malformed: research.rename sin 'ts' — sin el no se distingue su "
+                             "replay de un rename nuevo; emitelo con journal-emit.py")
+        return t, p
     else:
         raise Quarantine(f"malformed: tipo '{t}' desconocido")
     if not re.match(r"^p-[0-9a-f]{10}$", str(p["id"])):
@@ -3114,6 +3267,8 @@ def apply_event(mem, ev):
         return apply_plan_upsert(mem, p)
     if t == "plan.reopen":
         return apply_plan_reopen(mem, p)
+    if t == "research.rename":
+        return apply_research_rename(mem, p)
     return apply_research_upsert(mem, p)
 
 

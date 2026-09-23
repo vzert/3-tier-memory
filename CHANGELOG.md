@@ -1,6 +1,53 @@
 # Changelog
 
 
+## [2.38.0] - 2026-09-23
+Origen: pendiente `p-9a59328616` (Fase 2 de la familia de correccion y reversa). Diseno en [2.31.0],
+"1. `research.rename`". El hueco: el Tema es la celda 0 de la fila de research y ningun evento la
+reescribe — `research.upsert` no la toca ni en Active ni en Completed —, asi que un tema equivocado
+no tenia correccion por evento, y con `journal_strict=1` tampoco a mano.
+
+### Added
+- **`research.rename --slug S --tema T [--tema-viejo V]`** (13.º tipo de evento). Reescribe SOLO la
+  celda Tema de las filas cuyo Archivo es `[[research/<slug>]]` (con o sin alias), en Active y en
+  Completed: un research reabierto a mano vive en las dos, y renombrar una sola lo dejaria con dos
+  nombres. Anclado a la CELDA Archivo, nunca a la fila: una fila que solo cita el research no es
+  suya. Ninguna fila cambia de forma.
+  - *Replay del propio evento*: anota `research-<slug>` + ts del evento en `.journal/reabiertos.log`
+    ANTES de escribir, y un rename con ts anterior o igual al mayor anotado es noop (con WARN si
+    es anterior). Sin esto, A->B, B->C y el replay de A->B devolvia la fila a B — la leccion de
+    `plan.reopen` en 2.37.0. El contrato de 2.31.0 solo pedia "la celda ya es el tema nuevo ->
+    noop", que no cubre ese caso. Un rename sin ts va a cuarentena `malformed`.
+  - *Actualizacion perdida*: `--tema-viejo` (el emisor lo lee de la fila viva si no se pasa) tiene
+    que seguir siendo el tema de la celda. Dos renames del mismo tema emitidos antes de compactar:
+    el segundo va a cuarentena `tema-cambiado` en vez de pisar al primero. Mismo patron que
+    `pendiente.update --text-prefix`. Es un campo que el contrato no tenia; lo pide tambien la
+    cuarentena siguiente, que sin el tema viejo no se puede distinguir de "no hay fila".
+  - *Filas `(inline)`*: no se renombran, cuarentena `sin-identidad` con el camino (darle fichero
+    primero). Una fila sin ninguna coincidencia: cuarentena `no-fila`. Tabla de formato viejo:
+    `research-legacy`, como el resto de escrituras de research.
+  - El emisor rechaza (exit 1, sin emitir) un rename cuyo slug no tiene fila y sin `--tema-viejo`.
+
+### Changed
+- **Al madurar, la fila de Completed conserva el Tema de la fila de Active.** Antes se reconstruia
+  con el tema del EVENTO, asi que un `research.upsert --status completed` emitido por quien aun
+  conocia el tema viejo deshacia un rename. Coherente con la rama `active`, que nunca toco la celda
+  0. Un research que nace ya completado (sin fila previa en Active) sigue usando el tema del evento.
+  Afecta a instalaciones existentes solo si alguien emitia un `completed` con un tema distinto al
+  de su fila, que era la unica forma (involuntaria) de cambiar un tema; ahora es `research.rename`.
+
+### Tests
+- `bin/test-research-rename.sh` (nuevo, 17 casos / 46 asertos). Contra 2.37.0 fallan 34. Los casos
+  1-3 y 4 son las dos corridas del criterio verificable de 2.31.0; el 6 es el replay del propio
+  rename tras uno posterior.
+- `bin/test-research-row-lookup.sh` caso 27: madurar conserva el Tema de Active, y un research sin
+  fila previa conserva el suyo.
+- Mutaciones a mano (copias en temporal, sin tocar el arbol): quitar la guarda de replay, la de
+  tema-cambiado, la de sin-identidad, el registro, la guarda legacy, el rename de todas las filas o
+  el tema de Active al madurar hace caer entre 1 y 4 asertos cada una. `<=` -> `<` en la guarda de
+  replay no cae: es equivalente (el replay del ultimo rename da noop igual por la guarda de
+  idempotencia).
+
 ## [2.37.1] - 2026-09-23
 Origen: pendiente `p-49996efc69`. El estado publicado de 2.30.0 de `checkpoint-audit-nudge.sh` no
 lo habia revisado nadie. Una ronda de un verificador independiente sobre el delta `52f2538..7f03029`

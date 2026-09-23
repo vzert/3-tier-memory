@@ -68,6 +68,12 @@ Tipos de evento:
                     Fila en Active o Completed de _research-index.md; completed la mueve y
                     marca la celda Archivo con `_completado: D_` (D = --date, hoy por defecto),
                     que es lo que el compactador usa para podar Completed por fecha.
+  research.rename   --slug S --tema T [--tema-viejo V]                               (2.38.0)
+                    Corrige el tema (celda 0) de la fila cuyo Archivo es [[research/S]], en
+                    Active y/o Completed. --tema-viejo es el guardian contra la actualizacion
+                    perdida (dos renames del mismo tema); si no se pasa, se toma de la fila
+                    viva. Una fila --inline NO se renombra (sin wikilink, su unica identidad es
+                    el tema): el compactador la cuarentena. Dale fichero al research primero.
 
 Identidad de un pendiente = sha1(texto normalizado + creado + origen)[:10]. Sin contador,
 sin lock: dos agentes que emiten el mismo pendiente el mismo dia producen el mismo id y el
@@ -252,6 +258,33 @@ def find_line_text(memory_dir, pid):
     return None
 
 
+RESEARCH_OPEN_RE = re.compile(r"^\[\[research/([^\]|\\]+)(?:\\\||\||\]\])")
+CELL_SPLIT = re.compile(r"(?<!\\)\|")
+
+
+def find_research_tema(memory_dir, slug):
+    """Tema (celda 0) de la fila de _research-index.md cuya ULTIMA celda abre con
+    `[[research/<slug>]]`, o None. Misma regla que `find_research_owned_row` del compactador para
+    las tablas canonicas: una fila que solo CITA el research en otra celda no es suya."""
+    path = os.path.join(memory_dir, "_research-index.md")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                s = line.strip()
+                if not s.startswith("|"):
+                    continue
+                s = s[1:]
+                if s.endswith("|") and not s.endswith("\\|"):
+                    s = s[:-1]
+                cells = [c.strip() for c in CELL_SPLIT.split(s)]
+                m = RESEARCH_OPEN_RE.match(cells[-1]) if cells else None
+                if m and m.group(1) == slug and cells[0]:
+                    return cells[0]
+    except OSError:
+        return None
+    return None
+
+
 def fecha_real(v):
     """True solo si `v` es una fecha del calendario. `re` valida la FORMA: `2026-99-99` la pasa,
     y los consumidores (`triage-scan.py`, `expire-pendientes.py`) revientan al parsearla.
@@ -323,7 +356,8 @@ def main():
                              "pendiente.block",
                              "session.add",
                              "learning.add", "learning.update",
-                             "plan.upsert", "plan.reopen", "research.upsert"])
+                             "plan.upsert", "plan.reopen", "research.upsert",
+                             "research.rename"])
     ap.add_argument("--memory-dir")
     ap.add_argument("--session")
     # pendiente.add
@@ -355,6 +389,7 @@ def main():
     ap.add_argument("--inline", action="store_true")
     ap.add_argument("--parent")
     ap.add_argument("--tema")
+    ap.add_argument("--tema-viejo", dest="tema_viejo")   # research.rename
     ap.add_argument("--next-step", default="")
     ap.add_argument("--resultado", default="")
     # learning.add
@@ -536,6 +571,25 @@ def main():
             "inline": bool(a.inline),
         }
         avisar_origen_colgante(a.origen, memory_dir)
+        write_event(memory_dir, base)
+        print(f"r-{slug}")
+        return
+
+    if a.type == "research.rename":
+        slug = check_slug(a.slug, "--slug")
+        viejo = a.tema_viejo
+        if viejo is None:
+            viejo = find_research_tema(memory_dir, slug)
+        if not viejo:
+            sys.exit(f"journal-emit: no encuentro en _research-index.md una fila cuyo Archivo sea "
+                     f"[[research/{slug}]], asi que no se de que tema se parte. Pasa "
+                     f"--tema-viejo \"<tema actual>\" (ojo: una fila --inline no se renombra; "
+                     f"dale fichero al research primero)")
+        base["payload"] = {
+            "slug": slug,
+            "tema": cell(need(a.tema, "research.rename necesita --tema")),
+            "tema_viejo": cell(viejo),
+        }
         write_event(memory_dir, base)
         print(f"r-{slug}")
         return

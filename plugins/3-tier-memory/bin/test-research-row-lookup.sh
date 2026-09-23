@@ -57,6 +57,7 @@
 #  25. Un alias SIN CERRAR (falta el `]` final) seguido de decoracion con su propio wikilink no
 #      pierde esa decoracion en silencio — mismo mecanismo del caso 24: el `]` sin escapar hace
 #      fallar el match entero y cae al `else`, que conserva la celda COMPLETA.
+#  27. Madurar conserva el Tema de la fila de Active, no el del evento (2.38.0, research.rename).
 #  26. Alias sin cerrar seguido de un `]]` ESCAPADO en la decoracion (`nota \]] resto`) tampoco
 #      pierde texto — la forma mas afilada que encontro el adversario en la ronda 4 (el `]]` real
 #      del cierre roto y el `\]]` escapado de la decoracion son indistinguibles para cualquier
@@ -379,6 +380,22 @@ canon "| T | paso | [[sessions/s]] | [[research/x26\\|alias] nota \\]] resto |
 emit --slug x26 --tema "T" --status completed --resultado "r" --date 2026-09-22
 compact
 grep -qF 'nota \]] resto' "$IDX" || fail "se perdio texto en silencio: $(grep 'research/x26' "$IDX")"
+[ "$FAIL" = 0 ] && echo "  ok"
+
+echo "== caso 27: madurar conserva el Tema de la fila de Active, no el del evento (2.38.0) =="
+# Un upsert nunca corrige el tema. Antes de 2.38.0 la fila de Completed se reconstruia con el tema
+# del EVENTO, asi que un `completed` emitido con un tema desfasado (p. ej. el anterior a un
+# research.rename) lo cambiaba al madurar. Un research que nace ya completado sigue usando el suyo.
+canon "| Tema vigente | paso | [[sessions/s]] | [[research/t27]] |
+" ""
+emit --slug t27 --tema "Tema desfasado" --status completed --resultado "ok" --date 2026-09-22
+emit --slug n27 --tema "Nace cerrado" --status completed --resultado "ok" --date 2026-09-22
+compact
+has '| Tema vigente | ok | [[research/t27]] _completado: 2026-09-22_ |' \
+  || fail "el tema de Active no se conservo al madurar: $(grep 'research/t27' "$IDX")"
+[ "$(count 'Tema desfasado')" = 0 ] || fail "el tema del evento piso al de la fila"
+has '| Nace cerrado | ok | [[research/n27]] _completado: 2026-09-22_ |' \
+  || fail "un research sin fila previa perdio su tema: $(grep 'research/n27' "$IDX")"
 [ "$FAIL" = 0 ] && echo "  ok"
 
 [ "$FAIL" = 0 ] && echo "PASS test-research-row-lookup" || { echo "FAIL test-research-row-lookup"; exit 1; }

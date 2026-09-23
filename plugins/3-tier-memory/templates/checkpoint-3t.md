@@ -718,6 +718,13 @@ quedaba ciega para ese eslabón — hallazgo adversarial (2026-09-14), con repro
   fires. Anything already appended to Archivo past the bare link (decoration, or text folded there
   by `repair-research-index.py`) DOES carry forward since 2.31.7 — before that it was rebuilt from
   scratch and lost too, on every maturation (`p-115356214b`).
+  **Correcting a research's Tema** is NOT a `research.upsert` (an upsert never rewrites the Tema
+  cell, and since 2.38.0 maturation keeps the Tema the Active row already had). Emit
+  `python3 "$JBIN/journal-emit.py" --type research.rename --slug <slug> --tema "<new Topic>"`: it
+  rewrites only the Tema cell of the rows whose Archivo is `[[research/<slug>]]`, in Active and/or
+  Completed. The emitter reads the current Tema as `--tema-viejo`; if another event changed it in
+  between, the rename goes to quarantine (`tema-cambiado`) instead of overwriting it. An `(inline)`
+  row is never renamed (quarantine `sin-identidad`): give the research a file first.
 - Add wikilink in session log ## Research section and ## Related
 
 **Fallback (no JBIN)**: add/update the row in memory/_research-index.md by hand.
