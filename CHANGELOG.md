@@ -1,6 +1,58 @@
 # Changelog
 
 
+## [2.35.0] - 2026-09-23
+El snippet `Como retomar` pierde la línea `Sigue abierto:` y el cierre gana un prompt opcional para
+cerrar un pendiente en otra sesión. Víctor lo pidió al revisar el cierre de 2.34.0. El agente que
+recibe el snippet solo actúa sobre `Proximo paso`, y al humano una lista de ids no le da nada que
+hacer. Tampoco había ningún prompt para los pendientes que vencen hoy sin relación con la sesión.
+
+### Added
+- `bin/print-pendiente-opcional.py` (Step 8e): imprime un prompt listo para otra sesión, con el
+  proyecto, el pendiente con su id, la ficha de origen, el motivo y la cláusula de cierre. Elige
+  por campos de `_pendientes.md`, nunca por el texto:
+  1. los que vencen hoy o ya vencieron (`_revisar` <= hoy), el más viejo primero, hasta 2;
+  2. si no hay ninguno, el Alta con `_creado` más reciente.
+
+  Nunca propone uno con `_bloqueado:`, uno con `_revisar` futuro ni el que cita `Proximo paso:`.
+  Sin candidato no imprime nada. Se genera en vivo y no se guarda en la ficha.
+- `checkpoint-close-guard.sh`: en una ficha desde el 2026-09-23, exige en la respuesta cada línea
+  del prompt opcional, generado en vivo en el momento del Stop.
+- `test-print-pendiente-opcional.sh`: 23 casos nuevos. Cubren el orden, las exclusiones, el
+  `_bloqueado` escrito en el texto (no cuenta), el caso 5 y el origen sin ficha.
+
+### Changed
+- `checkpoint-3t.md` Step 8: se quita la línea `Sigue abierto:` de la plantilla, de 8a y del
+  ejemplo. El colapso del caso 5 ahora depende de que no quede un pendiente propio que se pueda
+  hacer ya (sin `_bloqueado:` y sin `_revisar` futuro). Step 8e nuevo.
+- `checkpoint-audit.py`, `snippet.sigue_abierto`: desde el 2026-09-23 ya no exige la línea. Sigue
+  marcando `SALTADO` un caso 5 colapsado con un pendiente propio que se puede hacer ya. Las fichas
+  anteriores se auditan igual que antes.
+- `p-cd965754ec` (medir el 2026-10-11 si `Sigue abierto:` movía el ratio cierra/entra) se redefine
+  para medir el prompt opcional: la línea que medía ya no existe.
+
+### Medido
+- `test-checkpoint-audit.sh`: 168 casos (4 nuevos). `test-checkpoint-close-guard.sh`: 56 casos
+  (5 nuevos). `test-print-pendiente-opcional.sh`: 23 casos.
+- Sobre la memoria real de este repo, el script propone hoy un Alta (`p-014255373e`). Con fecha
+  2026-09-24 propone el que vence ese día (`p-532174ff63`).
+
+### Fixed (CI en Windows, en rojo desde 2.33.0)
+- `test-checkpoint-close-guard.sh`, `test-checkpoint-audit.sh`: los helpers en Python abrían
+  ficheros sin `encoding="utf-8"`. En Windows escribían cp1252 y el `·` del snippet (0xb7) rompía la
+  lectura en utf-8 de `print-como-retomar.py` (`UnicodeDecodeError`). Ahora todo `open()` de esos
+  tests lleva `encoding="utf-8"`. No se usa `PYTHONUTF8=1` global, que taparía fallos reales del
+  producto.
+- `test-repair-research-index.sh` X2: la ruta de `journal-compact.py` iba dentro del código de un
+  `python3 -c`. En Git Bash MSYS no la convierte y Python leía `D:\d/a/...`. Ahora va como argumento.
+- Sin verificar en Windows hasta que corra el CI de este push: macOS pasa y Linux ya pasaba.
+
+### Límites conocidos
+- Si más tarde en la misma sesión se cierra el pendiente que propone el prompt, y ninguno de la
+  ficha cambia, el hook no vuelve a disparar. El prompt dice "si ya no aplica, ciérralo".
+- Los pendientes propios de prioridad Media sin fecha ya no salen en ningún prompt. Quedan en
+  `## Pendientes` de la ficha, que el snippet manda leer.
+
 ## [2.34.0] - 2026-09-23
 Resuelve `p-272254efc5`, la salida que 2.33.0 dejó abierta. Una ficha con `Proximo paso: ninguno`
 pasaba todos los checks aunque la sesión hubiera hallado un defecto en vivo sin registrarlo. Caso

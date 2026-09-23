@@ -377,7 +377,7 @@ que tiene que actualizar, un peer, un mantenedor ajeno, un PR de otro repo, una 
 persona. Decidelo al CREAR el pendiente, respondiendo "¿se puede hacer de inmediato, sin esperar
 a nadie?". El compactador anade `— _bloqueado: <que>_` a la linea de Tier 2. Ese campo tiene un
 consumidor: `checkpoint-audit.py` rechaza (`snippet.proximo_paso`) un `Proximo paso:` que cite
-ese id. El pendiente sigue saliendo en `Sigue abierto`. No cambia el id. Para un pendiente que ya
+ese id. El pendiente sigue en `## Pendientes` de la ficha. No cambia el id. Para un pendiente que ya
 existe: `journal-emit.py --type pendiente.block --id p-… --bloqueado-por "…"` (o
 `--desbloquear` cuando ya no espera). Caso real (2026-09-22, sesion 5790b9f2): `p-a4439fa8fd`
 ("verificar... una vez esa instalacion actualice a 2.32.0") llego a `Proximo paso` porque nada
@@ -421,7 +421,7 @@ misma fecha), y una sola salida sin fecha — la fecha ya vencida o de hoy, dent
 Convierte el resultado a `--revisar YYYY-MM-DD`, la misma disciplina que ya aplicas para "T+7" —
 salvo la fecha ya vencida o de hoy de la regla 1, que va sin `--revisar`. Un pendiente que SI espera
 tiempo y queda sin `--revisar` no cae en la exclusion de Step 8 (2.25.7) — se
-queda flotando indefinidamente como candidato de `<next-step>`/`Sigue abierto` por pura prioridad,
+queda flotando indefinidamente como candidato de `<next-step>` por pura prioridad,
 sin importar que tan pronto sea razonable revisarlo. Caso real (2026-09-16, proyecto
 `claude-vzert`): `p-fd5c8cccb7` ("revisar el log del cron por PUSH FAILED", prioridad Alta, sin
 `--revisar`) gano `<next-step>` el mismo dia que se implemento el cron que monitorea — sin
@@ -1025,7 +1025,7 @@ calendario existe para evitar — mas ruido que senal. Ver la instruccion altern
 **Un pendiente Alta del backlog general (sin relacion con el trabajo de esta sesion) NO es motivo
 para generar el bloque completo cuando el caso 5 aplica.** Caso real (2026-09-17, proyecto
 `claude-vzert`, via `/goalspec:interview`): con 89 pendientes abiertos y 5 en Alta, siempre hay
-alguno suelto que calificaria para `Sigue abierto` — la excepcion anterior ("si hay un Alta que
+alguno suelto que calificaria para la antigua linea `Sigue abierto` — la excepcion anterior ("si hay un Alta que
 agregar, bloque completo") volvia inalcanzable el colapso a una linea en la practica, justo cuando
 la sesion no dejo nada accionable hoy (los unicos pendientes de esa sesion tenian `_revisar`
 futuro y ya su propio recordatorio de calendario). Ese backlog Alta ya lo reporta otro canal (el
@@ -1041,8 +1041,6 @@ Retomamos: <contexto-1-linea>.
 Lee memory/sessions/DATE-SLUG.md para el contexto completo.
 
 Proximo paso: <next-step>.
-
-Sigue abierto: <pendientes de esta sesion>.               <- omitir si no quedo ninguno mas
 
 No repitas: <callejones sin salida>.                      <- omitir si no hubo
 
@@ -1098,15 +1096,14 @@ Reglas para llenar los slots:
      **Esto es una variante MAS del caso 5, no un mecanismo nuevo de colapso** — mismo principio
      que la variante ya documentada para casos 2-3 mas abajo ("Tambien aplica cuando..."): si,
      ADEMAS de que la `Proxima accion` es puro futuro, no queda ningun pendiente PROPIO de esta
-     sesion que listar en `Sigue abierto` (sin contar el id ya cubierto por el calendario — regla
-     de la linea `Sigue abierto:` mas abajo), entonces `<next-step>` en su conjunto ES el caso 5, y
+     sesion que se pueda hacer ya (sin `_bloqueado:` y sin `_revisar` futuro), entonces `<next-step>` en su conjunto ES el caso 5, y
      8a colapsa el bloque a una linea con la media-linea de arriba como motivo — el MISMO mecanismo
      de 8a, sin condicion nueva que agregarle ahi. **Un pendiente Alta de OTRA sesion, sin relacion
      con esta, no cuenta para esta cuenta** — mismo criterio que ya rige el colapso general (ver
      mas arriba, "Un pendiente Alta del backlog general... NO es motivo para generar el bloque
      completo"): ese backlog ya lo reporta el hook de inicio de sesion, y exigirlo aqui volveria el
      colapso inalcanzable en la practica, el mismo defecto que 2.25.9 ya cerro para casos 2-3. Si en
-     cambio `Sigue abierto` SI tiene contenido propio real, el caso 5 no aplica (sigue siendo el
+     cambio queda un pendiente propio que se puede hacer ya, el caso 5 no aplica (sigue siendo el
      caso 1, no colapsa): el bloque completo de 6 lineas se genera igual, con la media-linea de
      arriba en `Proximo paso` y el resto normal.
 
@@ -1195,7 +1192,7 @@ Reglas para llenar los slots:
 
      **Tambien aplica, por la misma razon, cuando el candidato es el caso 1** (plan activo con
      `## Estado`) y su `Proxima accion` es integramente esperar una fecha ya cubierta por el
-     calendario, sin ningun otro pendiente propio de esta sesion en `Sigue abierto` — ver el
+     calendario, sin ningun otro pendiente propio de esta sesion que se pueda hacer ya — ver el
      parrafo de esa variante en el caso 1, arriba, para el detalle y el ejemplo real.
 
      **Antes de declarar este caso, relee la seccion `## Pendientes` que este mismo Step ya
@@ -1208,8 +1205,8 @@ Reglas para llenar los slots:
      seccion `## Pendientes` — el atajo salto directo a este caso sin pasar por el 2, y el
      pendiente se perdio del snippet hasta que se audito el jsonl a mano en una sesion posterior.
      **No es excusa para NO declarar este caso** un pendiente Alta que no sea de esta sesion ni
-     este relacionado con ella — eso va en `Sigue abierto` (regla debajo), no cambia el veredicto
-     de `<next-step>`. **Si TODOS los `- [ ]` sin marcar traen `_revisar` futuro** (en `_pendientes.md`), la relectura no
+     este relacionado con ella — ese puede salir en el prompt opcional de Step 8e, no cambia el
+     veredicto de `<next-step>`. **Si TODOS los `- [ ]` sin marcar traen `_revisar` futuro** (en `_pendientes.md`), la relectura no
      bloquea el caso 5 — es exactamente la variante de arriba ("Tambien aplica cuando..."), no una
      excepcion a esta regla.
 
@@ -1259,59 +1256,16 @@ Reglas para llenar los slots:
 
   Incluye aqui los umbrales o criterios que ya se acordaron en esta sesion (un numero, un limite,
   una condicion de exito), si los hay. Sin ellos la sesion siguiente los vuelve a negociar contigo.
-- `<pendientes de esta sesion>`: **los pendientes que esta sesion dejo abiertos, ademas del que
-  ya va en `Proximo paso`** — los que emitiste en Step 3b mas los que en Step 3a quedaron
-  `still-open` y tocan este trabajo. Nombra cada uno en media linea, con su `_id: p-…_`, separados
-  por ` · `. **Maximo 3**; si hay mas, cierra con `+N mas en _pendientes.md`. **Omite la linea
-  entera si el unico pendiente de la sesion es el que ya esta en `Proximo paso`** — repetirlo no
-  anade nada.
-
-  **Excluye de esta lista (y de la lista Alta cross-sesion de abajo) cualquier pendiente con
-  `_revisar` futuro** — misma regla y mismo motivo que en `<next-step>` de arriba: si esta sesion
-  genero su propio recordatorio de calendario (Step 8c) para esa fecha, listarlo tambien aqui repite
-  la misma fecha dos veces en el mismo snippet, una vez sin contexto (solo el id) y otra con
-  Titulo/Descripcion completos en el bloque de calendario. Un pendiente **sin** `_revisar` (backlog
-  real, sin fecha) se queda en la lista aunque este relacionado con uno que si la tiene — la
-  exclusion es por el campo, no por el tema.
-
-  **Ademas, agrega cualquier pendiente ABIERTO de prioridad Alta en `_pendientes.md`** que no sea
-  ya el `<next-step>` — sin importar si es de esta sesion, de otra, o si toca el mismo tema. Va
-  aqui, NUNCA en `<next-step>` (ese campo no debe cargar con una prioridad ajena al trabajo del
-  dia — ver la advertencia contra "revisar si X respondio" mas arriba). Mismo tope de 3 y mismo
-  `+N mas`, contando junto con los de esta sesion. **Esta regla solo aplica cuando el bloque
-  completo se genera** (`<next-step>` no cayo en el caso 5). **Si `<next-step>` cayo en el caso 5,
-  estos Alta cross-sesion NO se agregan aqui** — el snippet colapsa a una linea (ver 8a) y forzar
-  el bloque completo solo para listarlos fue justo el gap medido 2026-09-17 (proyecto
-  `claude-vzert`: 89 pendientes abiertos / 5 Alta, siempre habia alguno que calificaba, asi que el
-  colapso nunca se alcanzaba en la practica). Ese backlog ya lo reporta el hook de inicio de
-  sesion. Caso real (2026-09-15, antes de este ajuste): un pendiente Alta quedo invisible en el
-  snippet de la sesion siguiente porque no tocaba el mismo tema y este campo solo miraba los
-  pendientes de la sesion misma — esa parte de la regla (mirar tambien fuera del tema de hoy)
-  sigue vigente para el bloque completo.
-
-  **Orden cuando hay mas de 3 candidatos (los de esta sesion mas los Alta cross-sesion)**:
-  primero los de esta sesion (regla ya existente arriba), despues los Alta cross-sesion por
-  `_creado` mas reciente primero — no el mas antiguo. Un backlog de Alta viejas sin triar no debe
-  enterrar el hallazgo que acaba de salir; ese es justo el caso que esta regla existe para
-  resolver. Elegir un orden sin decirlo es la misma eleccion no determinista que el criterio de
-  hijos de plan ya prohibe mas arriba (ver la regla de `<next-step>` caso 1, ultimo parrafo).
-
-  **Empate de `_creado`** (mismo dia — el campo no lleva hora): usa el orden de las FILAS bajo
-  `## Alta prioridad` en `_pendientes.md`, de arriba hacia abajo. No es arbitrario: el compactador
-  (Step 3b) inserta cada pendiente nuevo justo debajo del header de prioridad, asi que dentro del
-  mismo dia la fila mas arriba es, de las que empatan, la insertada mas tarde — la misma señal de
-  "mas reciente primero" que la regla de arriba ya pide, a la resolucion que `_creado` si tiene.
-  Verificado (2026-09-15): los 6 Alta de este mismo repo comparten `_creado: 2026-09-12` — sin
-  este desempate, "el mas reciente primero" no tiene con que decidir y cae de vuelta en el silencio
-  que la regla dice que existe para evitar.
-
-  **Por que existe esta linea.** Medido sobre **491 pendientes de 176 sesiones** (2026-09-11,
-  salidas congeladas en `.goalspec/snippet-rows-empate-*.json`): los que el snippet mencionaba
-  cerraron el **35%**; los que solo quedaron en la lista, el **19%**. Son **16 puntos**, con umbral
-  fijado antes en 15. El emparejador de cierre es un proxy por solape de palabras, y su empate iba
-  a "cerrado": invertido da **31% vs 14% = 17 puntos**, asi que el sesgo no creaba el efecto. La medicion no puede separar el efecto del snippet del hecho de que el agente elige para
-  `Proximo paso` lo que ya juzgaba mas accionable — asi que acota el techo, no lo demuestra. Aun
-  asi, nombrarlos cuesta una linea y no nombrarlos es como se pierden.
+- **(Quitado en 2.35.0) la linea `Sigue abierto:`.** Listaba ids de los pendientes de la sesion
+  y de los Alta de otras sesiones. Victor (2026-09-23) la senalo como inutil en los dos extremos:
+  el agente que recibe el snippet solo actua sobre `Proximo paso`, y al humano una lista de ids no
+  le da nada que hacer. Los pendientes propios siguen en `## Pendientes` de la ficha, que la linea
+  `Lee …` manda leer. Lo que se podia hacer ya con esa lista lo cubre ahora el prompt opcional de
+  **Step 8e**: un prompt completo para otra sesion, sobre un pendiente que vence hoy o un Alta.
+  La medicion que la sostenia (2026-09-11: los pendientes mencionados en el snippet cerraban el 35%
+  frente al 19%) no separaba el efecto de la linea del hecho de que el agente elige para el snippet
+  lo que ya ve mas accionable; `p-cd965754ec` se redefinio para medir el prompt opcional.
+  Las fichas escritas antes del 2026-09-23 conservan su linea y el audit las mide como antes.
 
 - `<callejones sin salida>`: **copia condensada de la seccion `## Callejones sin salida`** del
   session file, solo los que afectan al proximo paso. **Si el session file no tiene esa seccion**
@@ -1340,8 +1294,8 @@ condicionales, no opcionales: si la informacion existe, la linea va.
 
 **Si el caso 5 aplica** (la sesion no dejo trabajo que retomar, en ningun lado), reemplaza el
 placeholder `<filled in Step 8>` con UNA linea, sin bloque de codigo — sin excepcion por
-pendientes Alta del backlog general (ver la regla de `Sigue abierto` mas arriba: esos Alta no
-entran aqui, se reportan por el hook de inicio de sesion, no por este snippet):
+pendientes Alta del backlog general (esos no entran aqui: los reporta el hook de inicio de sesion,
+y uno de ellos puede salir en el prompt opcional de Step 8e):
 
 ```markdown
 ## Como retomar
@@ -1361,8 +1315,6 @@ Lee memory/sessions/DATE-SLUG.md para el contexto completo.
 
 Proximo paso: <next-step>.
 
-Sigue abierto: <pendientes de esta sesion>.
-
 No repitas: <callejones sin salida>.
 
 Terminas cuando: <done-bar>.
@@ -1371,7 +1323,7 @@ Antes de actuar, dime en 3 lineas donde quedamos.
 ```
 ````
 
-Ejemplo real, con las 6 lineas:
+Ejemplo real, con las 6 lineas (sin `Sigue abierto:`, quitada en 2.35.0):
 
 ````markdown
 ```
@@ -1380,8 +1332,6 @@ Retomamos: plan v2.13.0 ratificado para que los pendientes dejen de ser un cemen
 Lee memory/sessions/2026-09-09-pendientes-cementerio-plan.md para el contexto completo.
 
 Proximo paso: medir en seco la precision del cierre por silencio sobre los 98 vencidos (umbrales ya acordados: >=90% de aciertos, cero cierres de items que pedian consultar un dato).
-
-Sigue abierto: mover measure-pendientes-v2.13.0.py a bin/ si el plan se implementa _id: p-ea5dab51be_ · falsificar los dos claims negativos de §3 _id: p-77c1a0b3e2_.
 
 No repitas: clasificar los pendientes con un regex sobre su texto — fallo tres veces y un revisor rompio las tres; leelos y clasifica con criterio declarado.
 
@@ -1435,11 +1385,12 @@ intento seguido ya no bloquea, para no entrar en bucle. Solo avisa al usuario.
 cierras, caducas o bloqueas un pendiente que el `## Como retomar` cita, el snippet que el usuario
 ya tiene quedo viejo. Rehaz la linea afectada en la ficha, vuelve a correr `print-como-retomar.py`
 y pega el snippet nuevo en esa misma respuesta. Caso real: tras el checkpoint de 2.33.0 se resolvio
-`p-477bb60303` (el push) y la respuesta no aviso; el snippet seguia listandolo en `Sigue abierto`.
-Dos cosas lo vigilan: el hook dispara tambien en un turno que emite `pendiente.resolve`,
-`pendiente.expire` o `pendiente.block` sobre un id citado en la ficha de esta sesion, y
-`checkpoint-audit.py` marca `SALTADO` en `snippet.ids_vivos` si `Sigue abierto:` nombra un id que ya
-no esta abierto. Registrar un pendiente NUEVO tambien puede cambiar el snippet (un Alta nuevo gana
+`p-477bb60303` (el push) y la respuesta no aviso; el snippet seguia listandolo en `Sigue abierto`
+(linea quitada en 2.35.0). Lo vigila el hook: dispara tambien en un turno que emite
+`pendiente.resolve`, `pendiente.expire` o `pendiente.block` sobre un id citado en la ficha de esta
+sesion, y en ese turno vuelve a exigir el snippet y el prompt opcional de Step 8e, que se genera en
+vivo. En fichas anteriores al 2026-09-23 `checkpoint-audit.py` sigue marcando `SALTADO` en
+`snippet.ids_vivos` si `Sigue abierto:` nombra un id que ya no esta abierto. Registrar un pendiente NUEVO tambien puede cambiar el snippet (un Alta nuevo gana
 `Proximo paso`); eso no lo detecta ningun script: revisa la escalera y rehaz el snippet.
 
 **Fallback (no JBIN)**: si `print-como-retomar.py` no existe (instalacion mas vieja que esta
@@ -1595,5 +1546,32 @@ otras 3 recomendaciones no aparecieron en ningún lado del cierre — el usuario
 sección `## Recomendaciones de research sin resolver`, entre `## Recordatorios de calendario` (o
 `## Como retomar` si no hubo recordatorios) y `## Related`. Igual que 8c-2: los bloques
 persistidos son idénticos a los impresos.
+
+**8e. Prompt opcional para cerrar un pendiente en otra sesion (2.35.0)**:
+
+```bash
+python3 "$JBIN/print-pendiente-opcional.py" "$SESSION_FILE"
+```
+
+**Pega su salida tal cual** como el ultimo bloque de tu respuesta, despues de los de 8b, 8c y 8d.
+Si no imprime nada, no hay nada que pegar. Es para el humano: un prompt completo (proyecto,
+pendiente con su id, ficha de origen, motivo, clausula de cierre) que puede abrir en otra sesion,
+ahora o cuando tenga tiempo. Reemplaza la linea `Sigue abierto:` que el snippet llevaba hasta
+2.34.0, que el agente no usaba y el humano no podia accionar.
+
+El script elige por campos de `_pendientes.md`, nunca por el texto (regla 216):
+1. los que vencen hoy o ya vencieron (`_revisar` <= hoy), el mas viejo primero — hasta 2;
+2. si no hay ninguno, el Alta con `_creado` mas reciente (a igual fecha, la fila mas arriba).
+
+Nunca propone un pendiente con `_bloqueado:`, uno con `_revisar` futuro (ya tiene su recordatorio
+de calendario) ni el que cita `Proximo paso:`. Sale haya o no recordatorios de calendario: un
+recordatorio es para otra fecha y no compite con lo que se puede hacer hoy. Cuando `Proximo paso`
+es `ninguno`, este es el unico prompt accionable del cierre.
+
+**No se guarda en la ficha.** Se genera en vivo desde `_pendientes.md`, y el hook de cierre
+(`checkpoint-close-guard.sh`) lo vuelve a correr y exige cada linea en tu respuesta. Si en la misma
+sesion cambias el estado de un pendiente citado en la ficha, el hook lo pide otra vez con el estado
+nuevo. Limite: cerrar DESPUES el pendiente que este prompt propone, sin tocar ninguno de la ficha,
+no vuelve a disparar el hook; el propio prompt dice "si ya no aplica, cierralo".
 
 No agregues git commit aqui — el cambio al session file ya quedo dentro del flujo de Step 6, pero como Step 8 corre DESPUES, ni `## Como retomar` ni `## Recordatorios de calendario` ni `## Recomendaciones de research sin resolver` estaran en el commit. Es aceptable: el snippet vive en disco y el commit es best-effort. Si el usuario quiere comitearlo, puede `git add memory/sessions/DATE-SLUG.md && git commit --amend --no-edit` manualmente o esperar al proximo checkpoint.

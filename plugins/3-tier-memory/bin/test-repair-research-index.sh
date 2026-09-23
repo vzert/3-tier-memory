@@ -799,10 +799,12 @@ EOF
 check "X2: ANTES de migrar, ya era lenient-canonica (research_table_is_canonical vía journal-compact.py)" \
   "$(python3 -c "
 import importlib.util, sys
-spec = importlib.util.spec_from_file_location('jc', '$BIN/journal-compact.py')
+# La ruta va por argv, no dentro del codigo: en Git Bash (Windows) MSYS convierte los argumentos
+# que parecen rutas, pero no el texto de un -c, y Python leia '/d/a/...' como 'D:\\d/a/...'.
+spec = importlib.util.spec_from_file_location('jc', sys.argv[1])
 jc = importlib.util.module_from_spec(spec); spec.loader.exec_module(jc)
 print(jc.research_table_is_canonical('| Topic | Completed | Outcome | File |'))
-")" "True"
+" "$BIN/journal-compact.py")" "True"
 OUT=$(python3 "$BIN/repair-research-index.py" "$MX2" --apply)
 check "X2 completed_header_unrecognized=0 (Outcome ahora reconocido)" "$(campo "$OUT" completed_header_unrecognized)" "completed_header_unrecognized=0"
 check "X2 completed_rows_migrated=2 (las 2 filas reales migran, ninguna se pierde)" "$(campo "$OUT" completed_rows_migrated)" "completed_rows_migrated=2"

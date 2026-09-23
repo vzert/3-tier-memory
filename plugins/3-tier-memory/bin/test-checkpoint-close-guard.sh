@@ -175,9 +175,9 @@ R = [{"type": "user", "message": {"role": "user", "content": "cierra"}},
      {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "a", "name": "Bash",
        "input": {"command": f'python3 bin/print-como-retomar.py "{ficha}"'}}]}},
      {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "a", "content": "x"}]}},
-     {"type": "assistant", "message": {"content": [{"type": "text", "text": open(bien).read()}]}},
+     {"type": "assistant", "message": {"content": [{"type": "text", "text": open(bien, encoding="utf-8").read()}]}},
      {"type": "assistant", "message": {"content": [{"type": "text", "text": "Listo."}]}}]
-open(out, "w").write("\n".join(json.dumps(r) for r in R) + "\n")
+open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r) for r in R) + "\n")
 PY
 chk "silencio" "" "$(corre "$T/t.jsonl" false -)"
 
@@ -234,11 +234,11 @@ armar "$M" "$FX/snippet-2120.txt" "$FX/calendario-2129.txt"
 tx "$T/t.jsonl" print "$F" "$FX/respuesta-turno-2129.txt" -
 python3 - "$T/t.jsonl" <<'PYT'
 import json, sys
-p = sys.argv[1]; L = open(p).read().splitlines()
+p = sys.argv[1]; L = open(p, encoding="utf-8").read().splitlines()
 tm = {"type": "user", "message": {"role": "user", "content": "Another Claude session sent a message: <teammate-message teammate_id=\"x\">hola</teammate-message>"}}
 tn = {"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "<task-notification>\n<task-id>b1</task-id>\n</task-notification>"}]}}
 L.insert(len(L) - 1, json.dumps(tm)); L.insert(len(L) - 1, json.dumps(tn))
-open(p, "w").write("\n".join(L) + "\n")
+open(p, "w", encoding="utf-8").write("\n".join(L) + "\n")
 PYT
 chk "sigue bloqueando" "1" "$(bloquea "$(corre "$T/t.jsonl" false -)")"
 
@@ -254,8 +254,8 @@ R = [{"type": "user", "message": {"role": "user", "content": "cierra"}}]
 for i, f in enumerate((f1, f2)):
     R.append({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": f"b{i}", "name": "Bash", "input": {"command": f'python3 x/print-como-retomar.py "{f}"'}}]}})
     R.append({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": f"b{i}", "content": "x"}]}})
-R.append({"type": "assistant", "message": {"content": [{"type": "text", "text": open(txt).read()}]}})
-open(out, "w").write("\n".join(json.dumps(r) for r in R) + "\n")
+R.append({"type": "assistant", "message": {"content": [{"type": "text", "text": open(txt, encoding="utf-8").read()}]}})
+open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r) for r in R) + "\n")
 PYT
 O=$(corre "$T/t.jsonl" false -)
 chk "bloquea por la primera ficha (su calendario falta)" "1" "$(printf '%s' "$O" | grep -c 'recordatorio de calendario')"
@@ -268,8 +268,8 @@ cmd = f'python3 x/print-como-retomar.py "{f2}"; python3 x/print-como-retomar.py 
 R = [{"type": "user", "message": {"role": "user", "content": "cierra"}},
      {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "b", "name": "Bash", "input": {"command": cmd}}]}},
      {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "b", "content": "x"}]}},
-     {"type": "assistant", "message": {"content": [{"type": "text", "text": open(txt).read()}]}}]
-open(out, "w").write("\n".join(json.dumps(r) for r in R) + "\n")
+     {"type": "assistant", "message": {"content": [{"type": "text", "text": open(txt, encoding="utf-8").read()}]}}]
+open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r) for r in R) + "\n")
 PYT
 chk "bloquea por la segunda ficha del mismo comando" "1" "$(corre "$T/t.jsonl" false - | grep -c 'recordatorio de calendario')"
 
@@ -281,10 +281,10 @@ viejo() {   # memoria con la ficha del checkpoint; p-477bb60303 ya NO esta abier
   armar "$M" "$FX2/snippet-antes-del-push.txt"
   python3 - "$M/_pendientes.md" <<'PYP'
 import sys
-p = sys.argv[1]; t = open(p).read()
+p = sys.argv[1]; t = open(p, encoding="utf-8").read()
 extra = "".join(f"- [ ] pendiente {i} — _origen: [[sessions/2026-09-22-demo]]_ — _creado: 2026-09-22_ — _id: {i}_\n"
                 for i in ("p-272254efc5", "p-6071ea6987", "p-4d784c958f"))
-open(p, "w").write(t.replace("## Baja prioridad", "## Baja prioridad\n\n" + extra))
+open(p, "w", encoding="utf-8").write(t.replace("## Baja prioridad", "## Baja prioridad\n\n" + extra))
 PYP
 }
 tx2() {   # $1 transcript  $2 comando del turno nuevo  $3 texto de la respuesta del turno nuevo
@@ -298,13 +298,13 @@ R = [{"type": "user", "message": {"role": "user", "content": "guarda el checkpoi
      {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "p", "name": "Bash",
         "input": {"command": f'python3 x/print-como-retomar.py "{ficha}"'}}]}},
      {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "p", "content": "x"}]}},
-     {"type": "assistant", "message": {"content": [{"type": "text", "text": open(snip).read()}]}},
+     {"type": "assistant", "message": {"content": [{"type": "text", "text": open(snip, encoding="utf-8").read()}]}},
      {"type": "user", "message": {"role": "user", "content": "<bash-input> git push origin main</bash-input>"}},
      {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "r", "name": "Bash",
-        "input": {"command": open(cmd).read()}}]}},
+        "input": {"command": open(cmd, encoding="utf-8").read()}}]}},
      {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "r", "content": "p-477bb60303"}]}},
-     {"type": "assistant", "message": {"content": [{"type": "text", "text": open(txt).read()}]}}]
-open(out, "w").write("\n".join(json.dumps(r, ensure_ascii=False) for r in R) + "\n")
+     {"type": "assistant", "message": {"content": [{"type": "text", "text": open(txt, encoding="utf-8").read()}]}}]
+open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r, ensure_ascii=False) for r in R) + "\n")
 PYT
 }
 viejo
@@ -316,9 +316,9 @@ chk "nombra el id cerrado que sigue en el snippet" "1" "$(printf '%s' "$O" | gre
 echo "== control: el mismo turno, pero la ficha ya corregida y el snippet nuevo pegado =="
 python3 - "$F" <<'PYX'
 import sys, re
-p = sys.argv[1]; t = open(p).read()
+p = sys.argv[1]; t = open(p, encoding="utf-8").read()
 t = re.sub(r"(?m)^Sigue abierto: .*$", "Sigue abierto: verificar el hook _id: p-6071ea6987_ · medir _id: p-4d784c958f_.", t)
-open(p, "w").write(t)
+open(p, "w", encoding="utf-8").write(t)
 PYX
 python3 "$BIN/print-como-retomar.py" "$F" > "$T/nuevo.txt"
 printf 'El push funciono.\n\n%s\n' "$(cat "$T/nuevo.txt")" > "$T/resp-bien.txt"
@@ -369,14 +369,14 @@ R = [{"type": "user", "message": {"role": "user", "content": "haz triage"}},
      {"type": "user", "message": {"role": "user", "content": "cierra ese pendiente"}},
      {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "r", "name": "Bash", "input": {"command": cmd}}]}},
      {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "r", "content": "ok"}]}},
-     {"type": "assistant", "message": {"content": [{"type": "text", "text": open(txt).read()}]}}]
-open(out, "w").write("\n".join(json.dumps(r) for r in R) + "\n")
+     {"type": "assistant", "message": {"content": [{"type": "text", "text": open(txt, encoding="utf-8").read()}]}}]
+open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r) for r in R) + "\n")
 PYT
 chk "silencio" "" "$(corre "$T/t.jsonl" false -)"
 echo "== ...pero si esa ficha impresa lleva el session_id de ESTA sesion, si cuenta =="
 python3 - "$F" <<'PYX'
-import sys; p=sys.argv[1]; t=open(p).read()
-open(p,"w").write(t.replace("date: 2026-09-22\n", "date: 2026-09-22\nsession_id: sesion-actual\n", 1))
+import sys; p=sys.argv[1]; t=open(p, encoding="utf-8").read()
+open(p, "w", encoding="utf-8").write(t.replace("date: 2026-09-22\n", "date: 2026-09-22\nsession_id: sesion-actual\n", 1))
 PYX
 O=$(python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":False,"session_id":"sesion-actual","cwd":"/tmp"}))' "$T/t.jsonl" | bash "$HOOK" 2>/dev/null)
 chk "bloquea" "1" "$(bloquea "$O")"
@@ -394,7 +394,7 @@ veredicto() {
   python3 - "$T/t.jsonl" "$1" "$2" <<'PYV'
 import json, sys
 out, viejo, donde = sys.argv[1:4]
-R = [json.loads(l) for l in open(out) if l.strip()]
+R = [json.loads(l) for l in open(out, encoding="utf-8") if l.strip()]
 if viejo != "-":
     if donde == "text":
         extra = [{"type": "assistant", "message": {"content": [{"type": "text", "text": viejo}]}}]
@@ -402,7 +402,7 @@ if viejo != "-":
         extra = [{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "adv", "name": "Bash", "input": {"command": "external-adversary.sh"}}]}},
                  {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "adv", "content": viejo}]}}]
     R = R[:2] + extra + R[2:]
-open(out, "w").write("\n".join(json.dumps(r) for r in R) + "\n")
+open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r) for r in R) + "\n")
 PYV
   corre "$T/t.jsonl" false "$3"
 }
@@ -445,8 +445,8 @@ chk "bloquea" "1" "$(bloquea "$(veredicto "$HLD" text "$T/v-lam.txt")")"
 echo "== break registrado: Bugs fixed cita un _pendiente: abierto (aunque bloqueado): silencio =="
 armar "$M" -
 python3 - "$F" <<'PYB'
-import sys; p=sys.argv[1]; t=open(p).read()
-open(p,"w").write(t.replace("## Plans\n", "## Bugs fixed\n- lo que rompio el adversario _pendiente: p-a4439fa8fd_\n\n## Plans\n", 1))
+import sys; p=sys.argv[1]; t=open(p, encoding="utf-8").read()
+open(p, "w", encoding="utf-8").write(t.replace("## Plans\n", "## Bugs fixed\n- lo que rompio el adversario _pendiente: p-a4439fa8fd_\n\n## Plans\n", 1))
 PYB
 python3 "$BIN/print-como-retomar.py" "$F" > "$T/v-salida.txt" 2>/dev/null || true
 printf 'Resumen.\n\n%s\n' "$(cat "$T/v-salida.txt")" > "$T/v-bien.txt"
@@ -454,10 +454,41 @@ tx "$T/t.jsonl" skill "$F" "$T/v-bien.txt" "$T/v-salida.txt"
 python3 - "$T/t.jsonl" "$BRK" <<'PYV'
 import json, sys
 out, brk = sys.argv[1:3]
-R = [json.loads(l) for l in open(out) if l.strip()]
+R = [json.loads(l) for l in open(out, encoding="utf-8") if l.strip()]
 R = R[:2] + [{"type": "assistant", "message": {"content": [{"type": "text", "text": brk}]}}] + R[2:]
-open(out, "w").write("\n".join(json.dumps(r) for r in R) + "\n")
+open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r) for r in R) + "\n")
 PYV
+chk "silencio" "" "$(corre "$T/t.jsonl" false -)"
+
+# ================================================================================================
+# 2.35.0 — Step 8e: en una ficha desde el 2026-09-23 el hook exige tambien el prompt opcional que
+# print-pendiente-opcional.py imprime EN VIVO desde _pendientes.md.
+opcional() {   # arma la ficha 2120 con fecha 2026-09-23 y un Alta candidato
+  armar "$M" "$FX/snippet-2120.txt" "$FX/calendario-2129.txt"
+  sed -i.bak 's/^date: 2026-09-22$/date: 2026-09-23/' "$F" && rm -f "$F.bak"
+  python3 - "$M/_pendientes.md" <<'PYO'
+import sys; p=sys.argv[1]; t=open(p, encoding="utf-8").read()
+t=t.replace("## Alta prioridad\n\n","## Alta prioridad\n\n- [ ] alta candidata del prompt opcional — _creado: 2026-09-23_ — _id: p-0a0a0a0a0a_\n",1)
+open(p, "w", encoding="utf-8").write(t)
+PYO
+  python3 "$BIN/print-como-retomar.py" "$F" > "$T/o-snip.txt"
+  python3 "$BIN/print-pendiente-opcional.py" "$F" > "$T/o-opc.txt"
+}
+echo "== 2.35.0: cierre sin el prompt opcional: bloquea =="
+opcional
+chk "el script propone la candidata" "1" "$(grep -c 'p-0a0a0a0a0a' "$T/o-opc.txt")"
+printf 'Resumen.\n\n%s\n\n%s\n' "$(cat "$T/o-snip.txt")" "$(cat "$FX/calendario-2129.txt")" > "$T/o-sin.txt"
+tx "$T/t.jsonl" skill "$F" "$T/o-sin.txt" -
+O=$(corre "$T/t.jsonl" false -)
+chk "bloquea" "1" "$(bloquea "$O")"
+chk "por el prompt opcional" "1" "$(printf '%s' "$O" | grep -c 'prompt opcional (Step 8e)')"
+echo "== 2.35.0: con el prompt opcional pegado: silencio =="
+printf 'Resumen.\n\n%s\n\n%s\n\n%s\n' "$(cat "$T/o-snip.txt")" "$(cat "$FX/calendario-2129.txt")" "$(cat "$T/o-opc.txt")" > "$T/o-con.txt"
+tx "$T/t.jsonl" skill "$F" "$T/o-con.txt" -
+chk "silencio" "" "$(corre "$T/t.jsonl" false -)"
+echo "== 2.35.0: la misma ficha con fecha 2026-09-22 (antes del corte) no lo exige =="
+sed -i.bak 's/^date: 2026-09-23$/date: 2026-09-22/' "$F" && rm -f "$F.bak"
+tx "$T/t.jsonl" skill "$F" "$T/o-sin.txt" -
 chk "silencio" "" "$(corre "$T/t.jsonl" false -)"
 
 echo "== transcript ilegible o ausente: silencio (falla abierto) =="

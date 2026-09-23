@@ -326,6 +326,26 @@ def revisar(ficha):
                 "faltan). Solo lo viste tu en la salida de una herramienta. Corre "
                 f"`python3 \"$JBIN/print-como-retomar.py\" \"{ficha}\"` y pega su salida tal cual.")
 
+    # 1-bis. El prompt opcional (2.35.0, Step 8e): lo que print-pendiente-opcional.py imprime AHORA
+    # desde `_pendientes.md`. Se genera en vivo, no se guarda en la ficha, asi que compararlo aqui
+    # contra el estado real es lo que evita pegar un prompt viejo. Solo para fichas desde el corte:
+    # una ficha anterior se escribio con un template que no tenia Step 8e.
+    m_fecha = re.search(r"^date:\s*(\d{4}-\d{2}-\d{2})\s*$", texto, re.M)
+    if sec is not None and "<filled in Step 8>" not in sec and m_fecha and m_fecha.group(1) >= "2026-09-23":
+        try:
+            r = subprocess.run([sys.executable, os.path.join(BIN, "print-pendiente-opcional.py"), ficha],
+                               capture_output=True, text=True, timeout=20)
+            salida = r.stdout if r.returncode == 0 else ""
+        except Exception:
+            salida = ""
+        esperado = [l for l in salida.splitlines()
+                    if l.strip() and not l.startswith("───") and not l.startswith("Si tienes tiempo")]
+        if esperado and falta(esperado):
+            problemas.append(pref +
+                f"El prompt opcional (Step 8e) no esta en tu respuesta ({len(falta(esperado))} de "
+                f"{len(esperado)} lineas faltan). Corre `python3 \"$JBIN/print-pendiente-opcional.py\" "
+                f"\"{ficha}\"` y pega su salida tal cual.")
+
     # 2. Recordatorios de calendario: los 2 primeros completos; el resto con `+N con fecha futura`.
     cal = seccion(texto, "Recordatorios de calendario")
     if cal:

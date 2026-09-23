@@ -1118,7 +1118,7 @@ chk "sin fence y no es 'Ninguno': SALTADO" "1" "$(pp_out "$M" | grep -c 'no tien
 echo "== ronda 1: 'ninguno' con un still-open de OTRA sesion reconciliado en ## Pendientes: HECHO =="
 M="$T/mR2"; ficha_pp "$M" - "Proximo paso: ninguno — la sesion cerro sola." '- [ ] rotar una key — `p-5e75762256` (still-open, de otra sesion)'
 printf -- '- [ ] rotar una key — _origen: [[sessions/2026-09-01-otra]]_ — _creado: 2026-09-01_ — _id: p-5e75762256_\n' > "$M/.l"
-python3 -c 'import sys;p=sys.argv[1];t=open(p).read();open(p,"w").write(t.replace("## Media prioridad\n","## Media prioridad\n\n"+open(sys.argv[2]).read(),1))' "$M/_pendientes.md" "$M/.l"
+python3 -c 'import sys;p=sys.argv[1];t=open(p, encoding="utf-8").read();open(p, "w", encoding="utf-8").write(t.replace("## Media prioridad\n","## Media prioridad\n\n"+open(sys.argv[2], encoding="utf-8").read(),1))' "$M/_pendientes.md" "$M/.l"
 chk "ajeno no cuenta como trabajo propio" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.proximo_paso')"
 
 echo "== 2.33.1: un id de 'Sigue abierto:' que ya se cerro es SALTADO (snippet.ids_vivos) =="
@@ -1151,7 +1151,7 @@ echo "== C1 real (5790b9f2 contrafactual): ninguno + defecto arreglado solo con 
 M="$T/mC1"; nueva_memoria "$M"; S="$M/sessions/2026-09-22-snippet-cierre-regresion-claude-vzert.md"
 cp "$FX/ficha-contrafactual.md" "$S"
 printf -- '- [ ] verificar instalacion real — _origen: [[sessions/2026-09-22-snippet-cierre-regresion-claude-vzert]]_ — _creado: 2026-09-22_ — _id: p-a4439fa8fd_ — _bloqueado: otra instalacion_\n- [ ] reglas nuevas — _origen: [[sessions/2026-09-22-snippet-cierre-regresion-claude-vzert]]_ — _creado: 2026-09-22_ — _id: p-e685e9c92a_ — _revisar: 2026-09-27_\n' > "$M/.l"
-python3 -c 'import sys;p=sys.argv[1];t=open(p).read();open(p,"w").write(t.replace("## Media prioridad\n","## Media prioridad\n\n"+open(sys.argv[2]).read(),1))' "$M/_pendientes.md" "$M/.l"
+python3 -c 'import sys;p=sys.argv[1];t=open(p, encoding="utf-8").read();open(p, "w", encoding="utf-8").write(t.replace("## Media prioridad\n","## Media prioridad\n\n"+open(sys.argv[2], encoding="utf-8").read(),1))' "$M/_pendientes.md" "$M/.l"
 c1() { $AUD "$M" --session-file "$S" --no-git --hoy 2026-09-23 --solo-snippet 2>&1; }
 O=$(c1)
 chk "C1: proximo_paso sigue en HECHO (lo que 2.33.0 dejaba pasar)" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*snippet.proximo_paso')"
@@ -1164,7 +1164,7 @@ import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
 open(p,"w",encoding="utf-8").write(t.replace("ver `## Cambios realizados`.", "ver `## Cambios realizados`. _pendiente: p-daf3051915_", 1))
 PYX
 printf -- '- [ ] resolver de raiz los 4 defectos — _origen: [[sessions/2026-09-22-snippet-cierre-regresion-claude-vzert]]_ — _creado: 2026-09-22_ — _id: p-daf3051915_\n' > "$M/.l"
-python3 -c 'import sys;p=sys.argv[1];t=open(p).read();open(p,"w").write(t.replace("## Alta prioridad\n","## Alta prioridad\n\n"+open(sys.argv[2]).read(),1))' "$M/_pendientes.md" "$M/.l"
+python3 -c 'import sys;p=sys.argv[1];t=open(p, encoding="utf-8").read();open(p, "w", encoding="utf-8").write(t.replace("## Alta prioridad\n","## Alta prioridad\n\n"+open(sys.argv[2], encoding="utf-8").read(),1))' "$M/_pendientes.md" "$M/.l"
 O=$(c1)
 chk "C1+id: bugs.cierre HECHO" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*bugs.cierre')"
 chk "C1+id: ninguno_defecto SALTADO con p-daf3051915" "1" "$(printf '%s' "$O" | grep -A1 'SALTADO .*snippet.ninguno_defecto' | grep -c 'p-daf3051915')"
@@ -1242,7 +1242,7 @@ chk "linea que EMPIEZA por 'ninguno' pero es un defecto: SALTADO" "SALTADO" "$(b
 echo "== snippet.ninguno_defecto: adversariales construidos =="
 M="$T/mN1"; ficha_pp "$M" - "Proximo paso: ninguno — nada que hacer hoy." ""
 printf -- '- [ ] arreglar el parser — _origen: [[sessions/2026-09-01-otra]]_ — _creado: 2026-09-01_ — _id: p-1234567890_\n' > "$M/.l"
-python3 -c 'import sys;p=sys.argv[1];t=open(p).read();open(p,"w").write(t.replace("## Media prioridad\n","## Media prioridad\n\n"+open(sys.argv[2]).read(),1))' "$M/_pendientes.md" "$M/.l"
+python3 -c 'import sys;p=sys.argv[1];t=open(p, encoding="utf-8").read();open(p, "w", encoding="utf-8").write(t.replace("## Media prioridad\n","## Media prioridad\n\n"+open(sys.argv[2], encoding="utf-8").read(),1))' "$M/_pendientes.md" "$M/.l"
 bugs_ficha "$M" 2026-09-23 "- el parser perdia filas _pendiente: p-1234567890_"
 chk "ninguno + _pendiente: abierto de OTRO origen: SALTADO" "SALTADO" "$(nd "$M")"
 chk "...y proximo_paso no lo veia (el id no esta en ## Pendientes)" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.proximo_paso')"
@@ -1262,6 +1262,35 @@ pend_linea "$M" p-1234567890 "arreglar el parser" ""
 bugs_ficha "$M" 2026-09-23 "- el parser perdia filas _pendiente: p-1234567890_"
 chk "caso 5 colapsado + _pendiente: abierto inmediato: SALTADO" "SALTADO" "$(nd "$M")"
 chk "caso 5 colapsado + veredicto break: SALTADO" "SALTADO" "$(nb "$M" break)"
+
+# ================================================================================================
+# 2.35.0: el snippet ya no lleva `Sigue abierto:` (lo reemplaza el prompt opcional de Step 8e). Desde
+# DESDE_SIN_SIGUE_ABIERTO, snippet.sigue_abierto solo guarda el colapso del caso 5.
+sa() { pp_out "$1" | grep -E "^\s+(HECHO|SALTADO|POR-DISEÑO)\s+snippet\.sigue_abierto" | awk '{print $1}'; }
+echo "== 2.35.0: caso 5 colapsado con un pendiente propio que se puede hacer ya: SALTADO =="
+M="$T/mS1"; nueva_memoria "$M"; ficha_completa "$M/sessions/2026-09-19-demo.md"
+python3 - "$M/sessions/2026-09-19-demo.md" <<'PYS'
+import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+t=t.replace("date: 2026-09-19","date: 2026-09-23",1).replace("## Pendientes\n- Ninguno","## Pendientes\n- [ ] arreglar el parser — `p-1234567890`",1)
+open(p,"w",encoding="utf-8").write(t)
+PYS
+pend_linea "$M" p-1234567890 "arreglar el parser" ""
+chk "colapsado con propio accionable" "SALTADO" "$(sa "$M")"
+echo "== 2.35.0: el mismo colapso con el propio bloqueado: HECHO =="
+M="$T/mS2"; nueva_memoria "$M"; ficha_completa "$M/sessions/2026-09-19-demo.md"
+python3 - "$M/sessions/2026-09-19-demo.md" <<'PYS'
+import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+t=t.replace("date: 2026-09-19","date: 2026-09-23",1).replace("## Pendientes\n- Ninguno","## Pendientes\n- [ ] verificar en otra instalacion — `p-1234567890`",1)
+open(p,"w",encoding="utf-8").write(t)
+PYS
+pend_linea "$M" p-1234567890 "verificar en otra instalacion" " — _bloqueado: otra instalacion_"
+chk "colapsado con propio bloqueado" "HECHO" "$(sa "$M")"
+echo "== 2.35.0: bloque completo sin Sigue abierto y con otro propio abierto: HECHO (antes SALTADO) =="
+M="$T/mS3"; ficha_pp "$M" - "$OK_PP" '- [ ] arreglar el parser — `p-1234567890`\n- [ ] medir algo — `p-2222222222`'
+pend_linea "$M" p-1234567890 "arreglar el parser" ""; pend_linea "$M" p-2222222222 "medir algo" ""
+chk "ficha del 2026-09-19 (antes del corte): sigue exigiendo la linea" "SALTADO" "$(sa "$M")"
+bugs_ficha "$M" 2026-09-23 "- Ninguno"
+chk "ficha del 2026-09-23: ya no la exige" "HECHO" "$(sa "$M")"
 
 echo
 echo "pass=$pass fail=$fail"

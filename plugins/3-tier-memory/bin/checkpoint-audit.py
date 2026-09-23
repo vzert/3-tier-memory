@@ -117,6 +117,8 @@ RETOMAMOS_ID_CALENDARIO = re.compile(r"^Retomamos:.*?_id:\s*(p-[0-9a-f]{10})(?![
 VERIFICADO = re.compile(r"_verificado:\s*(.*?)_(?=\s|$|[.,;:)\]—])", re.S)
 PENDIENTE_BUG = re.compile(r"_pendiente:\s*(p-[0-9a-f]{10})(?![0-9a-f])")
 DESDE_BUGS_CIERRE = "2026-09-23"
+# 2.35.0: desde esta fecha el snippet `Como retomar` no lleva la linea `Sigue abierto:`.
+DESDE_SIN_SIGUE_ABIERTO = "2026-09-23"
 BULLET_PRIMER_NIVEL = re.compile(r"^( {0,3})(?:[-*+]|\d+[.)])[ \t]+")
 SUB_ITEM = re.compile(r"^\s+(?:[-*+]|\d+[.)])[ \t]+")
 
@@ -721,7 +723,29 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             excluidos_por_fecha.append(m.group(0))
         else:
             abiertos_ficha.append(m.group(0))
-    if "<filled in Step 8>" in sec_retomar:
+    sin_sigue_abierto = bool(fecha_ficha and fecha_ficha >= DESDE_SIN_SIGUE_ABIERTO)
+    if sin_sigue_abierto and "<filled in Step 8>" not in sec_retomar:
+        # 2.35.0: el snippet ya no lleva `Sigue abierto:` (Victor, 2026-09-23: el agente solo
+        # actua sobre `Proximo paso` y al humano la lista de ids no le da nada que hacer; lo
+        # reemplaza el prompt opcional de print-pendiente-opcional.py, Step 8e). Los pendientes
+        # propios quedan en `## Pendientes` de la ficha, que el snippet manda leer. Lo que SIGUE
+        # valiendo es la guardia del colapso: el caso 5 de una linea no puede tapar un pendiente
+        # propio que se puede hacer ya (sin `_bloqueado`, sin `_revisar` futuro).
+        _bloq = bloqueados_abiertos(memory_dir)
+        accionables_propios = [i for i in abiertos_ficha if i not in _bloq]
+        if "```" not in sec_retomar and accionables_propios:
+            h.append(Hallazgo(SALTADO, "snippet.sigue_abierto",
+                              f"bloque `Como retomar` colapsado pero la sesion deja "
+                              f"{len(accionables_propios)} pendiente(s) propio(s) que se pueden "
+                              "hacer ya",
+                              accionables_propios,
+                              corrige="escribe el bloque completo con ese pendiente en `Proximo "
+                                      "paso:` (caso 2 de Step 8)"))
+        else:
+            h.append(Hallazgo(HECHO, "snippet.sigue_abierto",
+                              f"desde {DESDE_SIN_SIGUE_ABIERTO} el snippet no lleva `Sigue abierto:`; "
+                              "los pendientes propios estan en `## Pendientes` de la ficha"))
+    elif "<filled in Step 8>" in sec_retomar:
         # Step 7a corre ANTES de Step 8 en el template, asi que aqui la seccion todavia lleva su
         # placeholder. Eso no es una omision — es que el paso no ha llegado. Reportarlo como
         # SALTADO ponia un falso positivo en CADA checkpoint, que es justo el muro de ruido que
@@ -885,7 +909,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                                      "pendiente vivo")
                 elif i in bloqueados:
                     problemas.append(f"{i} esta bloqueado (`_bloqueado: {bloqueados[i]}`): "
-                                     "espera a algo fuera de la sesion, va en `Sigue abierto`")
+                                     "espera a algo fuera de la sesion: no va en `Proximo paso`")
                 elif rev_por_id.get(i) and rev_por_id[i] > ref:
                     problemas.append(f"{i} tiene `_revisar: {rev_por_id[i]}` futuro: ya sale en "
                                      "`## Recordatorios de calendario`")
