@@ -107,6 +107,19 @@ BLOQUE_CALENDARIO = re.compile(r"^###\s+\d{4}-\d{2}-\d{2}\b", re.M)
 # recordatorio citaba solo para excluirlo — falso positivo real, `restos-213-pr220`.
 RETOMAMOS_ID_CALENDARIO = re.compile(r"^Retomamos:.*?_id:\s*(p-[0-9a-f]{10})(?![0-9a-f])", re.M)
 
+# Cierre de cada defecto de `## Bugs fixed` (2.34.0, p-272254efc5). Step 2 escribe cada linea de
+# primer nivel con UNO de dos campos, decididos al escribirla:
+#   `_verificado: <evidencia>_` — el arreglo se comprobo (test, corrida, consulta) en esta sesion;
+#   `_pendiente: p-…_`          — no esta cerrado y verificado: su pendiente (Step 3b punto 9).
+# Es el mismo patron que `_bloqueado:` (2.33.0): un campo estructurado que el agente decide al
+# escribir, no una lectura del texto (regla 216). Sin el, un defecto arreglado "solo con prosa"
+# (sesion 5790b9f2) tenia la misma forma que uno verificado y `Proximo paso: ninguno` pasaba.
+VERIFICADO = re.compile(r"_verificado:\s*(.*?)_(?=\s|$|[.,;:)\]—])", re.S)
+PENDIENTE_BUG = re.compile(r"_pendiente:\s*(p-[0-9a-f]{10})(?![0-9a-f])")
+DESDE_BUGS_CIERRE = "2026-09-23"
+BULLET_PRIMER_NIVEL = re.compile(r"^( {0,3})(?:[-*+]|\d+[.)])[ \t]+")
+SUB_ITEM = re.compile(r"^\s+(?:[-*+]|\d+[.)])[ \t]+")
+
 # Version en la que `## Pendientes` empezo a llevar la linea `RECONCILIACION:` (Step 3d, 2.28.0).
 # Una ficha anterior no pudo escribirla: exigirsela es un falso positivo garantizado en toda
 # corrida retroactiva. La comparacion es ESTRICTA a proposito — un checkpoint de hoy ya corre con
@@ -216,6 +229,47 @@ def origenes_abiertos(memory_dir):
         if s.startswith("- [ ]") and m_id and m_o:
             out[m_id.group(1)] = m_o.group(1)
     return out
+
+
+def bullets_bugs(sec_bugs):
+    """Items de primer nivel de `## Bugs fixed`, excluido `Ninguno`, como pares (propio, bloque).
+    `bloque` = el item con todo lo que cuelga de el; `propio` = solo su texto, hasta el primer
+    sub-item. El campo de cierre se busca en `propio`: un hijo con `_verificado:` no puede tapar a
+    un padre sin campo (adversario, ronda 2: `- defecto sin campo` + `  - otro _verificado: x_`
+    pasaba como un solo defecto verificado)."""
+    out, actual, col = [], None, 0
+    for l in sec_bugs.splitlines():
+        # Primer nivel = marcador de lista de Markdown con 0-3 espacios delante: `-`, `*`, `+` o
+        # `1.`/`1)`. Solo `-`/`*` en la columna 0 dejaba pasar en silencio `+ …`, `1. …` y ` - …`
+        # (adversario, ronda 1; una ficha real de otra instalacion usa lista numerada aqui). Como
+        # en CommonMark, un marcador sangrado hasta la columna del CONTENIDO del item de arriba
+        # (2 espacios bajo `- `, 3 bajo `1. `, o un tab) es un hijo.
+        l = l.expandtabs(4)
+        m = BULLET_PRIMER_NIVEL.match(l)
+        if m and (actual is None or len(m.group(1)) < col):
+            col = m.end()
+            if actual is not None:
+                out.append(actual)
+            actual = [l, [l]]          # [propio, lineas del bloque]
+        elif actual is not None and l.strip():
+            if SUB_ITEM.match(l) or len(actual[1]) > len(actual[0].splitlines()):
+                actual[1].append(l)    # un sub-item, o cualquier cosa despues de uno
+            else:
+                actual[0] += "\n" + l
+                actual[1].append(l)
+    if actual is not None:
+        out.append(actual)
+    return [(propio, "\n".join(bl)) for propio, bl in out
+            if not re.match(r"^ {0,3}(?:[-*+]|\d+[.)])\s+\**\s*ninguno\**\s*\.?\s*$", propio, re.I)]
+
+def ids_historicos(memory_dir):
+    """Todos los `p-…` que la memoria registro alguna vez: abiertos y filas mensuales."""
+    ids = set()
+    for p in [os.path.join(memory_dir, "_pendientes.md")] + \
+            sorted(glob.glob(os.path.join(memory_dir, "pendientes", "*.md"))):
+        if os.path.exists(p):
+            ids |= set(ID_PENDIENTE.findall(leer(p)))
+    return ids
 
 
 def linea_proximo_paso(sec_retomar):
@@ -370,7 +424,7 @@ def avisos_script_en_seco(h, memory_dir, nombre_script, claves_problema):
         h.append(Hallazgo(HECHO, clave_hallazgo, f"{nombre_script} en seco: sin avisos"))
 
 
-def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=False):
+def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=False, veredicto_adv=None):
     h = []
     texto = leer(session_file)
     secs = secciones(texto)
@@ -861,6 +915,80 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             h.append(Hallazgo(HECHO, "snippet.proximo_paso",
                               "`Proximo paso:` es caso 1, 5, o un pendiente registrado e inmediato"))
 
+    # 8-quinquies. Cada defecto de `## Bugs fixed` declara su cierre (2.34.0, p-272254efc5). La
+    # salida que 2.33.0 dejo abierta: un defecto hallado en vivo y "arreglado" solo con prosa
+    # tenia la misma forma que uno verificado, no se registraba, y `Proximo paso: ninguno`
+    # pasaba todo. Ahora cada linea lleva `_verificado: <evidencia>_` o `_pendiente: p-…_`. Solo
+    # se mide el CAMPO (regla 216): un `_verificado:` falso lo pasa — el mismo limite que
+    # `_bloqueado:`, documentado en el test. Un defecto que nunca se escribe en la ficha tampoco
+    # lo ve: no existe senal estructurada para eso (medido: tools/medir-senal-defecto.py).
+    sec_bugs = seccion_por_prefijo(secs, "Bugs fixed") or ""
+    bugs = bullets_bugs(sec_bugs)
+    # Los `_pendiente:` cuentan para 8-sexies aunque la ficha sea anterior al corte: el corte
+    # exime de ESCRIBIR el campo, no ignora el que si se escribio.
+    ids_bugs = [i for _, b in bugs for i in PENDIENTE_BUG.findall(b)]
+    if fecha_ficha and fecha_ficha < DESDE_BUGS_CIERRE:
+        h.append(Hallazgo(DISENO, "bugs.cierre",
+                          f"ficha del {fecha_ficha}, anterior a {DESDE_BUGS_CIERRE}: `## Bugs fixed` "
+                          "no llevaba `_verificado:`/`_pendiente:`"))
+    elif not bugs:
+        h.append(Hallazgo(HECHO, "bugs.cierre", "`## Bugs fixed` sin defectos que medir"))
+    else:
+        historicos = ids_historicos(memory_dir)
+        malos = []
+        for propio, b in bugs:
+            primera = propio.splitlines()[0][:70]
+            ids_b = PENDIENTE_BUG.findall(propio)
+            evid = [e.strip() for e in VERIFICADO.findall(propio)]
+            evid = [e for e in evid if e and not re.fullmatch(r"<[^>]*>", e)]
+            if not ids_b and not evid:
+                malos.append(f"sin `_verificado: <evidencia>_` ni `_pendiente: p-…_`: {primera}")
+            for i in PENDIENTE_BUG.findall(b):
+                if i not in historicos:
+                    malos.append(f"{i} no existe en la memoria (ni abierto ni en pendientes/): {primera}")
+        if malos:
+            h.append(Hallazgo(SALTADO, "bugs.cierre",
+                              f"{len(malos)} defecto(s) de `## Bugs fixed` sin cierre declarado",
+                              malos,
+                              corrige="al final de cada linea: `_verificado: <test o corrida que lo "
+                                      "comprobo>_`, o registra el defecto con journal-emit.py --type "
+                                      "pendiente.add (Step 3b punto 9) y cita `_pendiente: p-…_`"))
+        else:
+            h.append(Hallazgo(HECHO, "bugs.cierre",
+                              f"los {len(bugs)} defecto(s) de `## Bugs fixed` declaran su cierre"))
+
+    # 8-sexies. `ninguno` no puede tapar un defecto abierto (2.34.0, p-272254efc5). Dos senales,
+    # las dos estructuradas: (1) un `_pendiente:` de `## Bugs fixed` que sigue abierto e inmediato
+    # (sin `_bloqueado`, sin `_revisar` futuro) — cualquier origen: la linea dice que es un defecto
+    # de ESTA sesion; (2) el hook de cierre pasa `--veredicto-adversario break` cuando el ultimo
+    # veredicto del adversario en el transcript es `break` sin `[GOAL-CLOSE-WAIVED` detras; se
+    # levanta citando en `## Bugs fixed` un `_pendiente:` todavia abierto (el defecto quedo
+    # registrado). Aplica al caso 5 colapsado y al `Proximo paso: ninguno`/`nada accionable`.
+    colapsado = "```" not in sec_retomar and sec_retomar.strip().strip("*").lower().startswith("ninguno")
+    es_ninguno_snip = colapsado or bool(pp and pp.lower().startswith(("ninguno", "nada accionable")))
+    if "<filled in Step 8>" in sec_retomar or not es_ninguno_snip:
+        h.append(Hallazgo(HECHO, "snippet.ninguno_defecto", "el snippet no es `ninguno`: no aplica"))
+    else:
+        prob = []
+        vivos = [i for i in dict.fromkeys(ids_bugs) if i in ids_abiertos]
+        inmediatos = [i for i in vivos if i not in bloqueados
+                      and not (rev_por_id.get(i) and rev_por_id[i] > ref)]
+        if inmediatos:
+            prob.append("`## Bugs fixed` registra defecto(s) abierto(s) e inmediato(s): "
+                        + ", ".join(inmediatos))
+        if veredicto_adv == "break" and not vivos:
+            prob.append("el ultimo veredicto del adversario es `break` y ningun `_pendiente:` "
+                        "abierto de `## Bugs fixed` lo registra")
+        if prob:
+            h.append(Hallazgo(SALTADO, "snippet.ninguno_defecto",
+                              "el snippet dice `ninguno` con un defecto de la sesion abierto", prob,
+                              corrige="registra el defecto (pendiente.add, Step 3b punto 9), citalo "
+                                      "con `_pendiente: p-…_` en `## Bugs fixed`, y ponlo como "
+                                      "`Proximo paso:` si es inmediato"))
+        else:
+            h.append(Hallazgo(HECHO, "snippet.ninguno_defecto",
+                              "`ninguno` sin defecto abierto registrado ni `break` sin cerrar"))
+
     # 8-quater. `Sigue abierto:` solo nombra pendientes VIVOS (2.33.1, p-c72a33ae7a). Medido en vivo
     # en la sesion que construyo 2.33.0: tras el checkpoint se resolvio `p-477bb60303` (el push) y
     # el snippet que el usuario ya tenia seguia listandolo como abierto. Hasta aqui solo se miraba
@@ -977,7 +1105,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     if solo_snippet:
         # Modo del hook de cierre (checkpoint-close-guard.sh): solo lo que Step 8 escribe. Los
         # reparadores en seco tardan segundos y no dependen del snippet; ya los midio Step 7a.
-        return [x for x in h if x.clave.startswith("snippet.") or x.clave == "plan.mencionado_no_enlazado"]
+        return [x for x in h if x.clave.startswith(("snippet.", "bugs.")) or x.clave == "plan.mencionado_no_enlazado"]
     avisos_script_en_seco(h, memory_dir, "repair-dualwrite.py",
                           ("header_issues", "odd_values", "unaligned_rows", "unrepairable",
                            "ids_invented", "missing_data", "pipes_broken"))
@@ -1043,6 +1171,8 @@ def main():
     ap.add_argument("--solo-snippet", action="store_true",
                     help="solo los checks `snippet.*` (lo que escribe Step 8); lo usa el hook Stop")
     ap.add_argument("--json", action="store_true", help="salida JSON (para el hook Stop)")
+    ap.add_argument("--veredicto-adversario", choices=("break", "hold"), default=None,
+                    help="ultimo veredicto del adversario en el transcript; lo pasa el hook Stop")
     args = ap.parse_args()
 
     if not os.path.isdir(args.memory_dir):
@@ -1059,7 +1189,8 @@ def main():
     hoy = args.hoy or datetime.date.today().isoformat()
     repo_root = args.repo_root or os.getcwd()
     hallazgos = auditar(args.memory_dir, args.session_file, repo_root,
-                        not args.no_git and not args.solo_snippet, hoy, args.solo_snippet)
+                        not args.no_git and not args.solo_snippet, hoy, args.solo_snippet,
+                        args.veredicto_adversario)
 
     if args.count:
         print(sum(1 for x in hallazgos if x.estado in (SALTADO, PARCIAL)))

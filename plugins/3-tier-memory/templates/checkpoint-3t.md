@@ -78,7 +78,9 @@ importance: <0-10>
 - <bullets>
 
 ## Bugs fixed
-- <list or "Ninguno">
+- <defecto> _verificado: <test, corrida o consulta que lo comprobo en esta sesion>_
+- <defecto que NO quedo cerrado y verificado> _pendiente: <id de Step 3b; lo pones en Step 3d>_
+<or "Ninguno">
 
 ## Plans
 - <plans used/created this session with wikilinks, or "Ninguno">
@@ -115,6 +117,26 @@ importance: <0-10>
 - [[_plans-index]] (if plan work this session)
 - [[_research-index]] (if research this session)
 ```
+
+**`## Bugs fixed` — cada defecto declara como se cerro (2.34.0).** Cada linea de primer nivel
+lleva UNO de dos campos, y lo decides al escribirla:
+- `_verificado: <evidencia>_` — el arreglo se comprobo en esta sesion: el test que lo cubre, la
+  corrida que lo mostro, la consulta que lo confirmo. Reescribir una regla o un parrafo NO es
+  evidencia: un arreglo solo en prosa no esta verificado.
+- `_pendiente: p-…_` — el defecto no quedo cerrado y verificado (Step 3b punto 9). En Step 2 aun no
+  hay id: deja el campo con el texto del pendiente y pon el id en Step 3d.
+
+Una linea de primer nivel por defecto. El campo va en el texto propio de esa linea, no en un
+sub-bullet: un hijo con `_verificado:` no cierra a su padre. Cuenta todo defecto hallado en la
+sesion, tambien los que el usuario senalo en vivo.
+`checkpoint-audit.py` marca `SALTADO` en `bugs.cierre` una linea sin ninguno de los dos campos, o
+con un `_pendiente:` que no existe en la memoria. Tambien marca `snippet.ninguno_defecto` si el
+snippet dice `ninguno` y un `_pendiente:` de aqui sigue abierto e inmediato. El hook de cierre
+anade una senal mas: el ultimo veredicto del adversario de goalspec en la sesion es `break` y
+ningun `_pendiente:` abierto de esta seccion lo registra. Limite honesto: el script solo mide el
+campo. No puede saber si un `_verificado:` es verdad, ni ver un defecto que nunca escribiste aqui
+(misma regla 216 que `_bloqueado:`). Caso real: sesion 5790b9f2, un defecto senalado por el usuario
+y "reescrito como pregunta" tenia la misma forma que los verificados, y `ninguno` pasaba.
 
 **`## Callejones sin salida` — la seccion que la sesion siguiente no puede reconstruir sola.**
 Todo lo demas del session file registra lo que SI salio; esto registra lo que se intento y no
@@ -338,7 +360,9 @@ Scan the ENTIRE conversation for:
    A prose-only fix is not a closed defect. If it has no pendiente, the `<next-step>` ladder
    in Step 8 cannot see it. Measured in session 5790b9f2 of this repo: the closing snippet
    fell to the generic case 4 while exactly that work was open (learning 272). Since 2.33.0,
-   `Proximo paso:` must cite a pendiente id, so unregistered work cannot be named there.
+   `Proximo paso:` must cite a pendiente id, so unregistered work cannot be named there. Since
+   2.34.0, its line in `## Bugs fixed` carries `_pendiente: p-…_` (Step 3d writes the id), and
+   `checkpoint-audit.py` rejects a `ninguno` snippet while that pendiente is open and immediate.
 
 For EACH new pendiente, emit one event:
 
@@ -452,6 +476,10 @@ RECONCILIACION: <R> de <N> pendientes abiertos revisados — <N-R> sin revisar, 
 **La linea `RECONCILIACION:` va tambien AQUI, no solo impresa en pantalla.** Impresa se la lleva el
 scroll; en la ficha queda, y `checkpoint-audit.py` (Step 7a) la comprueba. Es la misma linea de
 Step 3a, con los mismos numeros.
+
+**Pon tambien el id en `## Bugs fixed`.** Cada linea que Step 2 dejo con `_pendiente: <texto>_`
+pasa a `_pendiente: p-xxxxxxxxxx_`, con el id que el journal asigno al pendiente de ese defecto
+(Step 3b punto 9).
 
 Take every id from the `journal-emit.py` stdout of Steps 3a/3b, or from the line the compactor
 wrote in `_pendientes.md` — **never type one from memory and never make one up**. If an id you
@@ -1153,6 +1181,8 @@ Reglas para llenar los slots:
      `ninguno — <en media linea, por que esta sesion se cierra sola>`. Antes de declararlo,
      preguntate si esta sesion encontro algun defecto o trabajo que no quedo cerrado y
      verificado. Si lo hay y no tiene pendiente, este caso no aplica: vuelve a Step 3b.
+     `checkpoint-audit.py` marca `SALTADO` en `snippet.ninguno_defecto` un `ninguno` con un
+     `_pendiente:` de `## Bugs fixed` abierto e inmediato (2.34.0).
 
      **Tambien aplica cuando el UNICO candidato que encontraste en 2 o 3 quedo excluido por la
      regla de `_revisar` futuro de arriba, y no hay otro sin fecha que lo reemplace** — no es lo

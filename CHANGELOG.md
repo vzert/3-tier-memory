@@ -1,6 +1,65 @@
 # Changelog
 
 
+## [2.34.0] - 2026-09-23
+Resuelve `p-272254efc5`, la salida que 2.33.0 dejó abierta. Una ficha con `Proximo paso: ninguno`
+pasaba todos los checks aunque la sesión hubiera hallado un defecto en vivo sin registrarlo. Caso
+real: en la sesión 5790b9f2, el defecto que Víctor señaló y se "arregló" reescribiendo una regla
+tenía en `## Bugs fixed` la misma forma que los dos defectos verificados.
+
+### Added
+- `checkpoint-audit.py`, check `bugs.cierre`: cada línea de primer nivel de `## Bugs fixed` lleva
+  `_verificado: <evidencia>_` o `_pendiente: p-…_`. Marca `SALTADO` una línea sin ninguno de los
+  dos, con la evidencia vacía o con el placeholder del template, o con un id que no existe en la
+  memoria. Las fichas anteriores al 2026-09-23 salen `POR-DISEÑO`. Corre también en
+  `--solo-snippet`, así que el hook de cierre lo repite sobre la ficha final.
+- `checkpoint-audit.py`, check `snippet.ninguno_defecto`: un snippet `ninguno` (el caso 5 en una
+  línea o `Proximo paso: ninguno`/`nada accionable`) es `SALTADO` si hay un `_pendiente:` de
+  `## Bugs fixed` abierto e inmediato (sin `_bloqueado` ni `_revisar` futuro), venga de la sesión
+  que venga. También si llega `--veredicto-adversario break` y ningún `_pendiente:` abierto de esa
+  sección registra el defecto.
+- `checkpoint-close-guard.sh`: busca el último `[ADVERSARY-VERDICT: break|hold` de la sesión en el
+  texto del assistant, al inicio de una línea. Nunca lo busca en un tool_result. Un
+  `[GOAL-CLOSE-WAIVED` posterior cierra el break. Pasa el veredicto al audit.
+- `tools/medir-senal-defecto.py`: mide las señales candidatas sobre sesiones reales.
+- Fixture `bin/fixtures/cierre-5790b9f2/ficha-contrafactual.md`: la ficha real de 5790b9f2 sin
+  `p-daf3051915` y con `Proximo paso: ninguno`. Es el cierre que 2.33.1 dejaba pasar.
+
+### Changed
+- `checkpoint-3t.md`: formato de `## Bugs fixed` con los dos campos y un párrafo que lo explica.
+  Step 3b punto 9 y Step 3d escriben el id en la línea del defecto. El caso 5 de Step 8 nombra el
+  check nuevo.
+
+### Medido (`tools/medir-senal-defecto.py`)
+- Candidatas descartadas:
+  - Sección `## Bugs fixed`/`## Callejones` no vacía: en 5790b9f2 las tres líneas tienen la misma
+    forma. Separarlas pide leer prosa (regla 216).
+  - Cierre corrido dos o más veces: 35 de 116 sesiones de claude-vzert y 18 de 36 de este repo.
+    En una muestra de 5, los re-cierres venían de merges, PRs, recargas o de leer la ficha
+    anterior.
+- Veredicto `break` sin `hold` posterior con `ninguno`: 1 de 22 fichas `ninguno` en claude-vzert y
+  1 de 7 aquí. En ambos casos quedaron dos o más `break` sin `hold` posterior.
+- `test-checkpoint-audit.sh`: 164 casos (39 nuevos). `test-checkpoint-close-guard.sh`: 51 casos
+  (11 nuevos). Contra el código de 2.33.1 fallan 39 de los 50 nuevos. Los otros 11 son controles
+  que pasan también con ese código.
+- Un adversario (subagente Sonnet; codex terminó con error y sin veredicto) encontró 2 fallos, ya
+  corregidos y con test. Primero: una línea de `## Bugs fixed` que empezaba con `+`, con `1.` o con
+  un espacio delante pasaba sin campo; ahora vale cualquier marcador de lista y un hijo se reconoce
+  por la columna de su contenido, como en CommonMark. Segundo: un `break` citado como ejemplo dentro
+  de un bloque de código bloqueaba el cierre; ahora se ignoran los bloques de código.
+- Una segunda ronda (otro subagente Sonnet; codex volvió a terminar con error) encontró que un
+  sub-bullet con `_verificado:` tapaba a su línea padre sin campo. Ahora el campo se busca solo en
+  el texto propio de cada línea de primer nivel, hasta su primer sub-bullet. Los `_pendiente:` se
+  siguen leyendo en todo el bloque.
+
+### Límites conocidos
+- El campo lo declara el agente. Un `_verificado:` falso pasa, igual que un `_bloqueado:` que
+  falta. Un test lo deja escrito.
+- Un defecto que nunca se escribe en la ficha no lo ve ninguna señal estructurada. Leerlo en el
+  transcript pediría clasificar lo que dice el usuario.
+- Una ficha escrita hoy con un plugin anterior sale `SALTADO` en `bugs.cierre` si se vuelve a
+  auditar. Pasa solo con las fichas de este día, y el propio mensaje lo explica.
+
 ## [2.33.1] - 2026-09-23
 Resuelve `p-c72a33ae7a`, un quinto defecto de cierre que salió en vivo en la misma sesión de
 2.33.0. Tras el checkpoint, Víctor hizo el push y el agente resolvió `p-477bb60303`. La respuesta

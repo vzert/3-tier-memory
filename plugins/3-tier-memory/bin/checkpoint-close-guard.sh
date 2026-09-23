@@ -127,6 +127,27 @@ for r in recs:
                                  inp.get("command") or ""):
                 impresas.append(m.group(1).strip("\"'"))
 
+# Ultimo veredicto del adversario de goalspec en TODA la sesion (2.34.0, p-272254efc5): solo el
+# marcador a inicio de linea en texto que escribio el assistant — nunca un tool_result, donde el
+# veredicto llega crudo y todavia no es del agente (el gate de goalspec lee igual). Un
+# `[GOAL-CLOSE-WAIVED` despues del break lo cierra a la vista. `last_assistant_message` va al final:
+# el transcript puede no traer aun el ultimo turno.
+VEREDICTO_ADV = re.compile(r"^\[ADVERSARY-VERDICT:\s*(break|hold)\b|^\[GOAL-CLOSE-WAIVED\b", re.M)
+ultimo_veredicto = None
+_textos_asist = []
+for r in recs:
+    if r.get("type") == "assistant":
+        for b in (r.get("message") or {}).get("content") or []:
+            if isinstance(b, dict) and b.get("type") == "text":
+                _textos_asist.append(b.get("text") or "")
+_textos_asist.append(lam)
+# Fuera de los bloques ``` : un veredicto citado DENTRO de un fence es un ejemplo, no el marcador
+# (adversario, ronda 1: un `break` de ejemplo en un fence bloqueaba el cierre).
+FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,}).*?^ {0,3}\1[`~]*\s*$", re.M | re.S)
+for _t in _textos_asist:
+    for m in VEREDICTO_ADV.finditer(FENCE.sub("", _t)):
+        ultimo_veredicto = m.group(1) or "hold"
+
 inicio = 0
 for i in range(len(recs) - 1, -1, -1):
     if es_prompt_real(recs[i]):
@@ -319,11 +340,14 @@ def revisar(ficha):
             problemas.append(pref + f"Hay {len(bloques)} recordatorios de calendario y la respuesta no dice "
                              f"`+{len(bloques) - 2} con fecha futura en _pendientes.md`.")
 
-    # 3. Los checks del snippet sobre la ficha final (Step 7a corrio antes de Step 8).
+    # 3. Los checks del snippet sobre la ficha final (Step 7a corrio antes de Step 8). El ultimo
+    # veredicto del adversario de TODA la sesion va como argumento: un `break` sin cerrar con
+    # `Proximo paso: ninguno` es un defecto hallado en vivo que nadie registro (p-272254efc5).
     memory_dir = os.path.dirname(os.path.dirname(ficha))
+    extra = ["--veredicto-adversario", ultimo_veredicto] if ultimo_veredicto else []
     try:
         r = subprocess.run([sys.executable, os.path.join(BIN, "checkpoint-audit.py"), memory_dir,
-                            "--session-file", ficha, "--solo-snippet", "--json", "--no-git"],
+                            "--session-file", ficha, "--solo-snippet", "--json", "--no-git"] + extra,
                            capture_output=True, text=True, timeout=60)
         for x in json.loads(r.stdout or "[]"):
             if x.get("estado") == "SALTADO":

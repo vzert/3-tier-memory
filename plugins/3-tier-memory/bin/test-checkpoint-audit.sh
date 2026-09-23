@@ -1131,6 +1131,138 @@ chk "lo nombra" "1" "$(printf '%s' "$O" | grep -A1 'snippet.ids_vivos' | grep -c
 pend_linea "$M" p-477bb60303 "push a origin" ""
 chk "con el id abierto: HECHO" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.ids_vivos')"
 
+# ================================================================================================
+# 2.34.0 — p-272254efc5: `## Bugs fixed` declara el cierre de cada defecto (bugs.cierre) y `ninguno`
+# no tapa un defecto abierto (snippet.ninguno_defecto). C1 es la ficha REAL de 5790b9f2 convertida
+# en el cierre que 2.33.0 dejaba pasar: sin p-daf3051915 y con `Proximo paso: ninguno`.
+bugs_ficha() {   # $1 memoria, $2 fecha, $3 contenido de `## Bugs fixed` (\n = salto)
+  python3 - "$1/sessions/2026-09-19-demo.md" "$2" "$3" <<'PYB'
+import sys; p, fecha, bugs = sys.argv[1:4]; t = open(p, encoding="utf-8").read()
+t = t.replace("date: 2026-09-19", "date: " + fecha, 1)
+t = t.replace("## Bugs fixed\n- Ninguno", "## Bugs fixed\n" + bugs.replace("\\n", "\n"), 1)
+open(p, "w", encoding="utf-8").write(t)
+PYB
+}
+bc() { pp_out "$1" | grep -E "^\s+(HECHO|SALTADO|POR-DISEÑO)\s+bugs\.cierre" | awk '{print $1}'; }
+nd() { pp_out "$1" | grep -E "^\s+(HECHO|SALTADO)\s+snippet\.ninguno_defecto" | awk '{print $1}'; }
+OK_PP="Proximo paso: arreglar el parser _id: p-1234567890_."
+
+echo "== C1 real (5790b9f2 contrafactual): ninguno + defecto arreglado solo con prosa, sin campo =="
+M="$T/mC1"; nueva_memoria "$M"; S="$M/sessions/2026-09-22-snippet-cierre-regresion-claude-vzert.md"
+cp "$FX/ficha-contrafactual.md" "$S"
+printf -- '- [ ] verificar instalacion real — _origen: [[sessions/2026-09-22-snippet-cierre-regresion-claude-vzert]]_ — _creado: 2026-09-22_ — _id: p-a4439fa8fd_ — _bloqueado: otra instalacion_\n- [ ] reglas nuevas — _origen: [[sessions/2026-09-22-snippet-cierre-regresion-claude-vzert]]_ — _creado: 2026-09-22_ — _id: p-e685e9c92a_ — _revisar: 2026-09-27_\n' > "$M/.l"
+python3 -c 'import sys;p=sys.argv[1];t=open(p).read();open(p,"w").write(t.replace("## Media prioridad\n","## Media prioridad\n\n"+open(sys.argv[2]).read(),1))' "$M/_pendientes.md" "$M/.l"
+c1() { $AUD "$M" --session-file "$S" --no-git --hoy 2026-09-23 --solo-snippet 2>&1; }
+O=$(c1)
+chk "C1: proximo_paso sigue en HECHO (lo que 2.33.0 dejaba pasar)" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*snippet.proximo_paso')"
+chk "C1: bugs.cierre lo marca SALTADO" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*bugs.cierre')"
+chk "C1: nombra el bullet del arreglo en prosa" "1" "$(printf '%s' "$O" | grep -c 'sin `_verificado.*Propio del cierre de ESTA ficha')"
+chk "C1: los dos verificados no salen" "0" "$(printf '%s' "$O" | grep -c 'sin `_verificado.*Producto\|sin `_verificado.*Propios de esta')"
+echo "== C1 con el defecto registrado y abierto: ahora lo marca snippet.ninguno_defecto =="
+python3 - "$S" <<'PYX'
+import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+open(p,"w",encoding="utf-8").write(t.replace("ver `## Cambios realizados`.", "ver `## Cambios realizados`. _pendiente: p-daf3051915_", 1))
+PYX
+printf -- '- [ ] resolver de raiz los 4 defectos — _origen: [[sessions/2026-09-22-snippet-cierre-regresion-claude-vzert]]_ — _creado: 2026-09-22_ — _id: p-daf3051915_\n' > "$M/.l"
+python3 -c 'import sys;p=sys.argv[1];t=open(p).read();open(p,"w").write(t.replace("## Alta prioridad\n","## Alta prioridad\n\n"+open(sys.argv[2]).read(),1))' "$M/_pendientes.md" "$M/.l"
+O=$(c1)
+chk "C1+id: bugs.cierre HECHO" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*bugs.cierre')"
+chk "C1+id: ninguno_defecto SALTADO con p-daf3051915" "1" "$(printf '%s' "$O" | grep -A1 'SALTADO .*snippet.ninguno_defecto' | grep -c 'p-daf3051915')"
+echo "== C1 limite conocido: un _verificado: FALSO en el arreglo en prosa lo pasa (regla 216) =="
+cp "$FX/ficha-contrafactual.md" "$S"
+python3 - "$S" <<'PYX'
+import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+open(p,"w",encoding="utf-8").write(t.replace("ver `## Cambios realizados`.", "ver `## Cambios realizados`. _verificado: regla reescrita_", 1))
+PYX
+chk "C1 limite: HECHO (el campo es auto-declarado, como _bloqueado)" "1" "$(c1 | grep -c 'HECHO .*bugs.cierre')"
+
+echo "== bugs.cierre: adversariales construidos =="
+M="$T/mB1"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
+bugs_ficha "$M" 2026-09-23 "- el parser perdia la ultima fila"
+chk "bullet sin campo: SALTADO" "SALTADO" "$(bc "$M")"
+M="$T/mB2"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
+bugs_ficha "$M" 2026-09-23 "- el parser perdia la ultima fila _verificado:_"
+chk "_verificado: vacio: SALTADO" "SALTADO" "$(bc "$M")"
+M="$T/mB3"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
+bugs_ficha "$M" 2026-09-23 "- el parser perdia la ultima fila _verificado: <evidencia>_"
+chk "_verificado: con el placeholder del template: SALTADO" "SALTADO" "$(bc "$M")"
+M="$T/mB4"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
+bugs_ficha "$M" 2026-09-23 "- el parser perdia la ultima fila _pendiente: p-9999999999_"
+chk "_pendiente: inventado: SALTADO" "SALTADO" "$(bc "$M")"
+M="$T/mB5"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
+echo '| 1 | cerrado | Media | 2026-09-01 | x | 2026-09-10 | y — _id: p-5555555555_ |' >> "$M/pendientes/2026-09.md"
+bugs_ficha "$M" 2026-09-23 "- el parser perdia la ultima fila _pendiente: p-5555555555_"
+chk "_pendiente: ya cerrado en la historia: HECHO" "HECHO" "$(bc "$M")"
+M="$T/mB6"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
+bugs_ficha "$M" 2026-09-23 "- el parser perdia la ultima fila\n  cuando no habia salto final. _verificado: test-parser.sh caso 7_\n  - sub-bullet: mismo arreglo"
+chk "campo en la linea de continuacion, sub-bullet incluido: HECHO" "HECHO" "$(bc "$M")"
+M="$T/mB7"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
+bugs_ficha "$M" 2026-09-23 "- uno _verificado: test_parser.sh corrio verde_\n- otro sin nada"
+chk "evidencia con guiones bajos vale; el segundo sin campo: SALTADO" "1" "$(pp_out "$M" | grep -c 'sin `_verificado.*otro sin nada')"
+chk "...y el primero no sale" "0" "$(pp_out "$M" | grep -c 'sin `_verificado.*- uno')"
+M="$T/mB8"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
+bugs_ficha "$M" 2026-09-23 "- **Ninguno**"
+chk "Ninguno en negrita: HECHO" "HECHO" "$(bc "$M")"
+M="$T/mB9"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
+bugs_ficha "$M" 2026-09-22 "- el parser perdia la ultima fila"
+chk "ficha anterior al corte: POR-DISEÑO" "POR-DISEÑO" "$(bc "$M")"
+M="$T/mB10"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
+bugs_ficha "$M" 2026-09-23 "* el parser perdia la ultima fila (bullet con asterisco)"
+chk "bullet con asterisco sin campo: SALTADO" "SALTADO" "$(bc "$M")"
+
+echo "== ronda 1 del adversario: otros marcadores de lista de primer nivel =="
+for mk in "+ " "1. " "2) " " - " "   * "; do
+  M="$T/mBm"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
+  bugs_ficha "$M" 2026-09-23 "${mk}el parser perdia la ultima fila"
+  chk "bullet '${mk}' sin campo: SALTADO" "SALTADO" "$(bc "$M")"
+done
+M="$T/mBs"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
+bugs_ficha "$M" 2026-09-23 "1. el parser _verificado: test-parser.sh caso 7_\n    - sub-bullet con 4 espacios, parte del de arriba"
+chk "sub-bullet con 4 espacios bajo uno numerado verificado: HECHO" "HECHO" "$(bc "$M")"
+M="$T/mBh"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
+bugs_ficha "$M" 2026-09-23 "- uno _verificado: test-parser.sh caso 7_\n - otro con 1 espacio, sin campo"
+chk "segundo bullet con 1 espacio (no llega a la columna del contenido): SALTADO" "1" "$(pp_out "$M" | grep -c 'sin `_verificado.*otro con 1 espacio')"
+echo "== ronda 2 del adversario: un hijo con campo no tapa a un padre sin campo =="
+for sep in "  - " $'\t- ' "    * "; do
+  M="$T/mBg"; ficha_pp "$M" - "Proximo paso: ninguno — nada que hacer hoy." ""
+  bugs_ficha "$M" 2026-09-23 "- primer defecto sin evidencia\n${sep}segundo defecto _verificado: test-parser.sh caso 9_"
+  chk "padre sin campo, hijo '${sep}' con campo: SALTADO" "1" "$(pp_out "$M" | grep -c 'sin `_verificado.*primer defecto sin evidencia')"
+done
+M="$T/mBc"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
+bugs_ficha "$M" 2026-09-23 "- el parser perdia filas\n  - detalle del arreglo\n  y el campo tras el hijo _verificado: test-parser.sh_"
+chk "campo solo DESPUES de un hijo: cuenta como del hijo, SALTADO" "SALTADO" "$(bc "$M")"
+M="$T/mBi"; ficha_pp "$M" - "Proximo paso: ninguno — nada que hacer hoy." ""
+pend_linea "$M" p-1234567890 "arreglar el parser" ""
+bugs_ficha "$M" 2026-09-23 "- el parser perdia filas _verificado: test-parser.sh_\n  - queda un caso sin cubrir _pendiente: p-1234567890_"
+chk "_pendiente: abierto en un HIJO sigue contando para ninguno: SALTADO" "SALTADO" "$(nd "$M")"
+M="$T/mBn"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
+bugs_ficha "$M" 2026-09-23 "- ninguno de los tests cubria la fila final"
+chk "linea que EMPIEZA por 'ninguno' pero es un defecto: SALTADO" "SALTADO" "$(bc "$M")"
+
+echo "== snippet.ninguno_defecto: adversariales construidos =="
+M="$T/mN1"; ficha_pp "$M" - "Proximo paso: ninguno — nada que hacer hoy." ""
+printf -- '- [ ] arreglar el parser — _origen: [[sessions/2026-09-01-otra]]_ — _creado: 2026-09-01_ — _id: p-1234567890_\n' > "$M/.l"
+python3 -c 'import sys;p=sys.argv[1];t=open(p).read();open(p,"w").write(t.replace("## Media prioridad\n","## Media prioridad\n\n"+open(sys.argv[2]).read(),1))' "$M/_pendientes.md" "$M/.l"
+bugs_ficha "$M" 2026-09-23 "- el parser perdia filas _pendiente: p-1234567890_"
+chk "ninguno + _pendiente: abierto de OTRO origen: SALTADO" "SALTADO" "$(nd "$M")"
+chk "...y proximo_paso no lo veia (el id no esta en ## Pendientes)" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.proximo_paso')"
+M="$T/mN2"; ficha_pp "$M" - "Proximo paso: ninguno — nada que hacer hoy." ""
+pend_linea "$M" p-1234567890 "confirmar el cron" " — _revisar: 2026-09-27_"
+bugs_ficha "$M" 2026-09-23 "- el cron no corria _pendiente: p-1234567890_"
+chk "ninguno + _pendiente: con _revisar futuro: HECHO" "HECHO" "$(nd "$M")"
+M="$T/mN3"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
+bugs_ficha "$M" 2026-09-23 "- el parser perdia filas _pendiente: p-1234567890_"
+chk "Proximo paso cita el defecto: no aplica (HECHO)" "HECHO" "$(nd "$M")"
+M="$T/mN4"; ficha_pp "$M" - "Proximo paso: ninguno — nada que hacer hoy." ""
+nb() { $AUD "$1" --session-file "$1/sessions/2026-09-19-demo.md" --no-git --hoy 2026-09-22 --solo-snippet --veredicto-adversario "$2" 2>&1 | grep -E "^\s+(HECHO|SALTADO)\s+snippet\.ninguno_defecto" | awk '{print $1}'; }
+chk "ninguno + veredicto break: SALTADO" "SALTADO" "$(nb "$M" break)"
+chk "ninguno + veredicto hold: HECHO" "HECHO" "$(nb "$M" hold)"
+M="$T/mN5"; nueva_memoria "$M"; ficha_completa "$M/sessions/2026-09-19-demo.md"
+pend_linea "$M" p-1234567890 "arreglar el parser" ""
+bugs_ficha "$M" 2026-09-23 "- el parser perdia filas _pendiente: p-1234567890_"
+chk "caso 5 colapsado + _pendiente: abierto inmediato: SALTADO" "SALTADO" "$(nd "$M")"
+chk "caso 5 colapsado + veredicto break: SALTADO" "SALTADO" "$(nb "$M" break)"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

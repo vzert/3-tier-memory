@@ -381,6 +381,85 @@ PYX
 O=$(python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":False,"session_id":"sesion-actual","cwd":"/tmp"}))' "$T/t.jsonl" | bash "$HOOK" 2>/dev/null)
 chk "bloquea" "1" "$(bloquea "$O")"
 
+# ================================================================================================
+# 2.34.0 — p-272254efc5: `ninguno` con el ultimo veredicto del adversario en `break`. La ficha es el
+# caso 5 colapsado; el veredicto va en un turno VIEJO (antes del cierre), como en 5790b9f2/3d0f8bc1.
+# $1 = texto del bloque viejo del assistant ("-" = nada), $2 = donde va (text|tool_result),
+# $3 = fichero de last_assistant_message ("-" = nada).
+veredicto() {
+  armar "$M" -
+  python3 "$BIN/print-como-retomar.py" "$F" > "$T/v-salida.txt" 2>/dev/null || true
+  printf 'Resumen.\n\n%s\n' "$(cat "$T/v-salida.txt")" > "$T/v-bien.txt"
+  tx "$T/t.jsonl" skill "$F" "$T/v-bien.txt" "$T/v-salida.txt"
+  python3 - "$T/t.jsonl" "$1" "$2" <<'PYV'
+import json, sys
+out, viejo, donde = sys.argv[1:4]
+R = [json.loads(l) for l in open(out) if l.strip()]
+if viejo != "-":
+    if donde == "text":
+        extra = [{"type": "assistant", "message": {"content": [{"type": "text", "text": viejo}]}}]
+    else:
+        extra = [{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "adv", "name": "Bash", "input": {"command": "external-adversary.sh"}}]}},
+                 {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "adv", "content": viejo}]}}]
+    R = R[:2] + extra + R[2:]
+open(out, "w").write("\n".join(json.dumps(r) for r in R) + "\n")
+PYV
+  corre "$T/t.jsonl" false "$3"
+}
+BRK='[ADVERSARY-VERDICT: break ungrounded=1 unfalsified=0 incomplete=1 autonomy-violations=0 unsafe=0]'
+HLD='[ADVERSARY-VERDICT: hold ungrounded=0 unfalsified=0 incomplete=0 autonomy-violations=0 unsafe=0]'
+echo "== control: caso 5 sin veredicto: silencio =="
+chk "silencio" "" "$(veredicto - text -)"
+echo "== break sin cerrar + ninguno: bloquea =="
+O=$(veredicto "Ronda 2:
+$BRK" text -)
+chk "bloquea" "1" "$(bloquea "$O")"
+chk "por el veredicto" "1" "$(printf '%s' "$O" | grep -c 'ultimo veredicto del adversario es `break`')"
+echo "== break y despues hold: silencio =="
+chk "silencio" "" "$(veredicto "$BRK
+arreglado.
+$HLD" text -)"
+echo "== break y despues GOAL-CLOSE-WAIVED: silencio =="
+chk "silencio" "" "$(veredicto "$BRK
+[GOAL-CLOSE-WAIVED reason=residuo del sandbox del verificador, no del producto]" text -)"
+echo "== adversarial: el break solo en un tool_result (aun no lo cito el agente): silencio =="
+chk "silencio" "" "$(veredicto "$BRK" tool_result -)"
+echo "== adversarial: break citado a mitad de linea (no es el marcador): silencio =="
+chk "silencio" "" "$(veredicto "la ronda 1 fue $BRK y la arregle" text -)"
+echo "== ronda 1 del adversario: break citado como ejemplo dentro de un fence: silencio =="
+chk "silencio" "" "$(veredicto "Formato de ejemplo:
+
+\`\`\`
+$BRK
+\`\`\`
+
+Eso fue solo un ejemplo." text -)"
+echo "== ...pero un break real DESPUES del fence si cuenta: bloquea =="
+chk "bloquea" "1" "$(bloquea "$(veredicto "\`\`\`
+$HLD
+\`\`\`
+$BRK" text -)")"
+echo "== adversarial: hold viejo y break solo en last_assistant_message: bloquea =="
+printf 'Resumen.\n\n%s\n\n%s\n' "$(cat "$T/v-salida.txt" 2>/dev/null)" "$BRK" > "$T/v-lam.txt"
+chk "bloquea" "1" "$(bloquea "$(veredicto "$HLD" text "$T/v-lam.txt")")"
+echo "== break registrado: Bugs fixed cita un _pendiente: abierto (aunque bloqueado): silencio =="
+armar "$M" -
+python3 - "$F" <<'PYB'
+import sys; p=sys.argv[1]; t=open(p).read()
+open(p,"w").write(t.replace("## Plans\n", "## Bugs fixed\n- lo que rompio el adversario _pendiente: p-a4439fa8fd_\n\n## Plans\n", 1))
+PYB
+python3 "$BIN/print-como-retomar.py" "$F" > "$T/v-salida.txt" 2>/dev/null || true
+printf 'Resumen.\n\n%s\n' "$(cat "$T/v-salida.txt")" > "$T/v-bien.txt"
+tx "$T/t.jsonl" skill "$F" "$T/v-bien.txt" "$T/v-salida.txt"
+python3 - "$T/t.jsonl" "$BRK" <<'PYV'
+import json, sys
+out, brk = sys.argv[1:3]
+R = [json.loads(l) for l in open(out) if l.strip()]
+R = R[:2] + [{"type": "assistant", "message": {"content": [{"type": "text", "text": brk}]}}] + R[2:]
+open(out, "w").write("\n".join(json.dumps(r) for r in R) + "\n")
+PYV
+chk "silencio" "" "$(corre "$T/t.jsonl" false -)"
+
 echo "== transcript ilegible o ausente: silencio (falla abierto) =="
 chk "sin transcript" "" "$(printf '{"stop_hook_active":false}' | bash "$HOOK" 2>/dev/null)"
 chk "stdin basura" "" "$(printf 'no-json' | bash "$HOOK" 2>/dev/null)"
