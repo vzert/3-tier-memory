@@ -37,16 +37,17 @@ no tenia correccion por evento, y con `journal_strict=1` tampoco a mano.
   de su fila, que era la unica forma (involuntaria) de cambiar un tema; ahora es `research.rename`.
 
 ### Tests
-- `bin/test-research-rename.sh` (nuevo, 17 casos / 46 asertos). Contra 2.37.0 fallan 34. Los casos
+- `bin/test-research-rename.sh` (nuevo, 18 casos / 48 asertos). Contra 2.37.0 fallan 35. Los casos
   1-3 y 4 son las dos corridas del criterio verificable de 2.31.0; el 6 es el replay del propio
   rename tras uno posterior.
 - `bin/test-research-row-lookup.sh` caso 27: madurar conserva el Tema de Active, y un research sin
   fila previa conserva el suyo.
 - Mutaciones a mano (copias en temporal, sin tocar el arbol): quitar la guarda de replay, la de
   tema-cambiado, la de sin-identidad, el registro, la guarda legacy, el rename de todas las filas o
-  el tema de Active al madurar hace caer entre 1 y 4 asertos cada una. `<=` -> `<` en la guarda de
-  replay no cae: es equivalente (el replay del ultimo rename da noop igual por la guarda de
-  idempotencia).
+  el tema de Active al madurar hace caer entre 1 y 4 asertos cada una, y `<=` -> `<` en la guarda de
+  replay tambien (caso 18). No es equivalente, como se creyo primero: el replay del ULTIMO rename
+  despues de una edicion a mano de la celda daba noop con `<=` y cuarentena `tema-cambiado` con
+  `<` (lo encontro un adversario en Sonnet). 8 mutaciones, 8 caen.
 
 ## [2.37.1] - 2026-09-23
 Origen: pendiente `p-49996efc69`. El estado publicado de 2.30.0 de `checkpoint-audit-nudge.sh` no

@@ -177,6 +177,16 @@ chk "tema_viejo en el payload" "Tema viejo" "$(python3 -c 'import json,sys; prin
 compact --quiet >/dev/null
 chk "barra escapada, fila de 4 columnas" "1" "$(n '| Con \| barra | leer | [[sessions/s]] | [[research/demo]] |')"
 
+echo "== 18. replay del ULTIMO rename tras una edicion a mano de la celda: noop, sin cuarentena =="
+# Un replay es un replay aunque la celda haya cambiado despues por fuera del journal: la guarda de
+# orden es `<=`, no `<`. Con `<` este caso caia en tema-cambiado (adversario, ronda delta).
+fixture "$FILA" ""
+rn --slug demo --tema "Tema B"; AB=$EV; compact --quiet >/dev/null
+sed -i.bak 's/| Tema B |/| Tema a mano |/' "$IDX"
+replay "$AB"
+chk "sigue la edicion a mano" "1" "$(n '| Tema a mano |')"
+chk "sin cuarentena" "0" "$(cuar)"
+
 echo
 echo "RESULTADO: $pass ok, $fail fallas"
 [ "$fail" = 0 ]
