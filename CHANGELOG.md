@@ -24,8 +24,9 @@ encontro dos agujeros que ese delta abrio y reprodujo la familia que ya estaba a
 - **Filtros de tuberia sin fichero** (`grep`, `head`, `tail`, `cut`, con opciones en lista cerrada)
   pueden acompanar a la corrida.
 
-Medido sobre 295 comandos reales que invocan el audit: ninguna corrida aceptada antes pasa a
-avisar, y 41 que avisaban en falso dejan de hacerlo. La bateria pasa de 67 a 98 casos.
+Medido sobre 295 comandos reales que mencionan el audit, 259 de ellos lo invocan: ninguna corrida
+aceptada antes pasa a avisar, y 41 que avisaban en falso dejan de hacerlo. La bateria pasa de 67 a
+98 casos.
 
 ### Known limits
 - Partir el texto de resumen en variables y recomponerlo al expandir sigue silenciando el aviso.
