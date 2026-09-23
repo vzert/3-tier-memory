@@ -41,6 +41,11 @@ Fase 2 (sesiones, reglas, planes, research) — mismo principio, anclas de tabla
                    --parent <slug> anota la celda Status como '<status> (fase de
                    plan-<slug>)' sin ampliar la tabla; la jerarquia real vive en el
                    propio plan (frontmatter/narrativa), no en el indice.
+  plan.reopen      (2.37.0) reversa explicita de un cierre: pone la celda Status en active
+                   (conserva '(fase de plan-X)') y anota `plan-<slug>` + ts del evento en
+                   .journal/reabiertos.log ANTES de tocar el indice. Un plan.upsert que
+                   retroceda el status (cerrado -> no cerrado) es noop con WARN, y el replay de
+                   un cierre anterior al reopen tambien: reabrir solo se hace con este evento.
   research.upsert  fila en '## Active Research' o '## Completed Research' por
                    [[research/<slug>]] o Tema; completed la mueve de Active a Completed y un
                    research completado no vuelve a Active (monotono: reabrir es a mano). La celda
@@ -104,6 +109,9 @@ DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 CELL_SPLIT = re.compile(r"(?<!\\)\|")   # un `\|` dentro de una celda (alias de wikilink) no separa
 MAX_SESSIONS = 10
 MAX_PLANS_DONE = 5
+# Primer token de la celda Status de un plan que lo da por CERRADO. Lo usan la poda y los dos
+# guardianes de reversa (2.37.0); una sola tupla para que no puedan discrepar.
+PLAN_CERRADO = ("completed", "abandoned", "superseded")
 MAX_RESEARCH_DONE = 5
 COMPLETADO_RE = re.compile(r"_completado: (\d{4}-\d{2}-\d{2})_")
 RESEARCH_STATUS = ("active", "completed")
@@ -946,6 +954,14 @@ def anotar_reabierto(mem, pid, ev):
     en EXACTAMENTE UN sitio. Dejar ahi una entrada "reabierta" lo rompia (aparecia vivo en el
     indice y archivado a la vez). Esto es contabilidad del journal, no contenido de la memoria, y
     `.journal/` ya guarda otros registros de la misma clase (adds-descartados, notas-sin-columna).
+
+    El segundo campo NO significa lo mismo para las dos clases de clave, y por eso se dice aqui:
+    - `p-<10 hex>` (pendientes): el ts del evento de CIERRE que se revirtio. La reversa lo lee de
+      la linea archivada, y `fue_revertido` compara por igualdad exacta.
+    - `plan-<slug>` (planes, 2.37.0): el ts del propio evento `plan.reopen`. Un plan cerrado no
+      guarda en ningun sitio el ts del evento que lo cerro (la fila del indice no lo lleva y los
+      planes no se archivan), asi que no hay cierre concreto que anotar. `reaperturas_plan` + el
+      guardian de `apply_plan_upsert` comparan por ORDEN: un cierre con ts anterior al reopen es previo a la decision de reabrir.
     """
     d = os.path.join(mem, ".journal")
     try:
@@ -990,6 +1006,25 @@ def fue_revertido(mem, pid, ev):
             return any(l.startswith(clave) for l in fh)
     except OSError:
         return False
+
+
+def reaperturas_plan(mem, slug):
+    """Los ts de los `plan.reopen` ya aplicados a ese plan (clave `plan-<slug>` del registro)."""
+    path = os.path.join(mem, ".journal", REABIERTOS_LOG)
+    if not os.path.isfile(path):
+        return []
+    clave = f"{campo_log('plan-' + slug)}\t"
+    out = []
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for l in fh:
+                if l.startswith(clave):
+                    campo = l[len(clave):].split("\t", 1)[0]
+                    if campo.isdigit():
+                        out.append(int(campo))
+    except OSError:
+        return []
+    return out
 
 
 def entradas_archivadas(path, pid):
@@ -2406,6 +2441,40 @@ def apply_plan_upsert(mem, p):
         split_cells(lines[hit])[0].rstrip().endswith("(inline)")
         if hit is not None else bool(p.get("inline"))
     )
+    if hit is not None and status:
+        # Guardianes de reversa (2.37.0, pendiente p-014255373e). Van ANTES de las comprobaciones
+        # de --parent a proposito: un replay viejo no es un error, y no debe acabar en cuarentena
+        # por un ciclo que el indice de hoy ya no tiene — tiene que ser un noop.
+        actual = pad(split_cells(lines[hit]), 2)[1].lower().split()
+        actual = actual[0] if actual else ""
+        entrante = status.lower().split()[0] if status.split() else ""
+        if actual in PLAN_CERRADO and entrante not in PLAN_CERRADO:
+            # Hasta aqui la celda se sobreescribia sin mirar: un replay de un `--status active`
+            # viejo DES-COMPLETABA un plan cerrado, en silencio (medido: applied=1, completed ->
+            # active). research hacia lo contrario —prohibia la reversa con un `return False`
+            # mudo— y los dos extremos estaban mal. Ahora: noop CON aviso, y reabrir de verdad es
+            # un evento aparte, `plan.reopen`, que deja registro. Se descarta el evento entero, no
+            # solo la celda: aplicar sus otras celdas mezclaria un estado viejo con uno nuevo.
+            # Cerrado -> cerrado (completed -> superseded) no es retroceso y pasa.
+            log(f"WARN plan.upsert: plan-{slug} esta '{actual}' y el evento lo pasaria a "
+                f"'{entrante}' — no se aplica (un replay viejo no reabre un plan cerrado). Para "
+                f"reabrirlo a proposito: journal-emit.py --type plan.reopen --slug {slug}")
+            return False
+        if entrante in PLAN_CERRADO and actual not in PLAN_CERRADO:
+            # El replay del CIERRE que un `plan.reopen` ya revirtio. Sin esto, reabrir era
+            # papel mojado: el siguiente replay del cierre viejo lo volvia a cerrar. Un cierre
+            # NUEVO tiene ts posterior al reopen y pasa. Un evento sin ts (escrito a mano, emisor
+            # anterior a que existiera el campo) pasa con aviso: el peor caso de no saber el orden
+            # es no ganar la proteccion, nunca perder una escritura.
+            ts = int(p.get("_ts") or 0)
+            reab = reaperturas_plan(mem, slug)
+            if reab and not ts:
+                log(f"WARN plan.upsert: plan-{slug} se reabrio con plan.reopen y este cierre no "
+                    f"trae ts — no se puede saber si es anterior; se aplica")
+            elif reab and ts < max(reab):
+                log(f"WARN plan.upsert: plan-{slug} se reabrio DESPUES de este cierre — el evento "
+                    f"no se reaplica. Si hay que cerrarlo otra vez, emite un plan.upsert nuevo.")
+                return False
     if parent:
         # Defensa en profundidad: journal-emit.py ya rechaza parent==slug antes de emitir el
         # evento, pero compact es el limite de confianza real (un evento a mano puede saltarselo)
@@ -2514,13 +2583,67 @@ def apply_plan_upsert(mem, p):
     for i in rows:
         c = pad(split_cells(lines[i]), 3)
         st = c[1].lower().split()
-        if st and st[0] in ("completed", "abandoned", "superseded") and DATE_RE.match(c[2]):
+        if st and st[0] in PLAN_CERRADO and DATE_RE.match(c[2]):
             done.append((i, c[2]))
     if len(done) > MAX_PLANS_DONE:
         done.sort(key=lambda x: (x[1], -x[0]), reverse=True)
         delete_rows(lines, [i for i, _ in done[MAX_PLANS_DONE:]])
     if lines == orig:
         return False
+    bump_updated(lines)
+    atomic_write(path, lines)
+    return True
+
+
+
+def apply_plan_reopen(mem, p):
+    """Reversa explicita de un cierre de plan (2.37.0): `completed|abandoned|superseded` -> active.
+
+    Es la otra mitad del guardian de `apply_plan_upsert`: desde que un upsert ya no puede
+    retroceder el status, reabrir tiene que ser un evento con nombre propio, que deja registro en
+    `.journal/reabiertos.log` para que el replay del cierre viejo no deshaga la reapertura.
+    """
+    slug = check_slug(p["slug"], "slug")
+    ts = int(p.get("_ts") or 0)
+    # Replay de ESTE mismo reopen: ya consta con su ts. Sin esto, el replay de un reopen viejo
+    # reabria un plan que se habia vuelto a cerrar DESPUES — el mismo fallo que este evento viene
+    # a cerrar, por la puerta de al lado.
+    if ts and ts in reaperturas_plan(mem, slug):
+        return False
+    path = os.path.join(mem, "_plans-index.md")
+    if not os.path.isfile(path):
+        raise Quarantine("no-index: _plans-index.md no existe")
+    lines = read_lines(path)
+    rows = find_plan_rows(lines, slug)
+    if len(rows) > 1:
+        raise Quarantine(
+            f"parent-cycle: plan-{slug} tiene {len(rows)} filas en _plans-index.md — unificalas "
+            f"a mano antes de reabrirlo; con mas de una fila no se sabe cual es la buena")
+    hit = rows[0] if rows else None
+    if hit is None and p.get("title"):
+        # Un plan `--inline` no lleva wikilink: se busca por titulo, igual que en el upsert y solo
+        # en la tabla canonica. Sin esto, un plan inline cerrado no se podria reabrir nunca, porque
+        # el guardian del upsert ya no deja hacerlo con `--status active`.
+        _, (_hdr, _sep, trows) = need_table(lines, "## Plans", "_plans-index.md")
+        tplain = plain(p["title"])
+        hit = next((i for i in trows if plain(split_cells(lines[i])[0]) == tplain), None)
+    if hit is None:
+        raise Quarantine(
+            f"no-fila: plan-{slug} no tiene fila en _plans-index.md. O la poda la quito (solo se "
+            f"guardan los {MAX_PLANS_DONE} cerrados mas recientes), o es un plan --inline y falta "
+            f"--title. Un plan sin fila se vuelve a registrar con plan.upsert --status active: el "
+            f"guardian de reversa solo mira filas que existen.")
+    cells = pad(split_cells(lines[hit]), 6)
+    st = cells[1].lower().split()
+    if not st or st[0] not in PLAN_CERRADO:
+        return False  # idempotente: ya esta abierto
+    # PRIMERO el registro, ANTES de tocar el indice: si no se puede anotar, anotar_reabierto
+    # cuarentena y no se reabre nada. Un reopen sin registro lo deshace el siguiente replay del
+    # cierre viejo, en silencio. Mismo orden que apply_reopen de pendientes.
+    anotar_reabierto(mem, f"plan-{slug}", ts)
+    fase = PARENT_ANNOTATION_RE.search(cells[1])
+    cells[1] = f"active {fase.group(0)}" if fase else "active"
+    lines[hit] = join_cells(cells)
     bump_updated(lines)
     atomic_write(path, lines)
     return True
@@ -2917,6 +3040,15 @@ def validate(ev):
         if not DATE_RE.match(str(p["date"])):
             raise Quarantine(f"malformed: date '{p['date']}' invalida")
         check_slug(p["slug"], "slug")
+        # El ts viaja al payload para el guardian de reversa (2.37.0): es lo que dice si este
+        # cierre es anterior o posterior a un `plan.reopen` del mismo plan.
+        p["_ts"] = ev.get("ts", 0)
+        return t, p
+    elif t == "plan.reopen":
+        if not p.get("slug"):
+            raise Quarantine("malformed: plan.reopen sin 'slug'")
+        check_slug(p["slug"], "slug")
+        p["_ts"] = ev.get("ts", 0)
         return t, p
     elif t == "research.upsert":
         for k in ("slug", "tema", "status"):
@@ -2968,6 +3100,8 @@ def apply_event(mem, ev):
         return apply_learning_update(mem, p)
     if t == "plan.upsert":
         return apply_plan_upsert(mem, p)
+    if t == "plan.reopen":
+        return apply_plan_reopen(mem, p)
     return apply_research_upsert(mem, p)
 
 

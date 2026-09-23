@@ -572,6 +572,11 @@ Do NOT skip this step. Actively scan the conversation for these signals:
   `## Plans` (`--inline` writes `<title> (inline)` instead of the link). Existing plan (matched by
   `plans/plan-<slug>` or by title) → only the cells you pass are updated; Fecha never changes. The
   compactor prunes completed/abandoned rows to the 5 most recent by date.
+  **Reopening a closed plan** (completed/abandoned/superseded → active) is NOT a `plan.upsert`: since
+  2.37.0 an upsert that moves the status backwards is dropped with a WARN (that is what stops a
+  replayed old event from un-closing a plan). Emit
+  `python3 "$JBIN/journal-emit.py" --type plan.reopen --slug <slug>` (add `--title "<Plan title>"`
+  for an `--inline` plan), then update the plan file's frontmatter yourself.
 - Add wikilink in session log ## Plans section and ## Related
 
 **Fallback (no JBIN)**: add/update the row in memory/_plans-index.md by hand.

@@ -1,6 +1,58 @@
 # Changelog
 
 
+## [2.37.0] - 2026-09-23
+Origen: pendiente `p-014255373e` (Alta desde 2026-09-20). Diseño en [2.31.0], "3. `plan.reopen`".
+Medido antes del arreglo, sobre un fixture: `plan.upsert --status active` → compactar →
+`plan.upsert --status completed` → compactar → devolver el primer evento de `applied/` a
+`pending/` → compactar daba `applied=1` y la fila volvía a `active`. Un replay viejo
+des-completaba un plan cerrado, sin aviso.
+
+### Fixed
+- **`plan.upsert` ya no retrocede un plan cerrado.** Si la fila está en
+  `completed|abandoned|superseded` y el evento trae un status que no lo es, el evento entero pasa a
+  noop con `WARN` en el log. No va a cuarentena: un replay no es un error. Cerrado → cerrado
+  (`completed` → `superseded`) no es retroceso y se aplica. El guardián corre ANTES de las
+  comprobaciones de `--parent`, así que un replay viejo con `--parent` tampoco cae en cuarentena
+  por un ciclo que el índice de hoy ya no tiene. La anotación `(fase de plan-X)` no afecta a la
+  comparación: solo cuenta la primera palabra de la celda, igual que en la poda.
+
+### Added
+- **`plan.reopen --slug S [--title T]` (evento 12).** Es la única forma de reabrir un plan cerrado.
+  Pone la celda Status en `active`, conserva `(fase de plan-X)`, y anota `plan-<slug>` + ts del
+  evento en `.journal/reabiertos.log` ANTES de tocar el índice (si no puede anotar, cuarentena y
+  no reabre). `--title` solo hace falta para un plan `--inline`, que no lleva wikilink. Sin fila:
+  cuarentena `no-fila` con motivo (poda de los 5 cerrados más recientes, o `--inline` sin
+  `--title`). Sobre un plan ya abierto: noop mudo.
+- **Replay del cierre que el reopen revirtió.** Un `plan.upsert` que cierra, con ts ANTERIOR al
+  último `plan.reopen` de ese plan, es noop con `WARN`. Un cierre nuevo (ts posterior) sí se
+  aplica. Un cierre sin ts (evento escrito a mano) se aplica con `WARN`: sin orden conocido, el
+  peor caso es no ganar la protección, nunca perder la escritura.
+- **Replay del propio reopen.** Si su ts ya está en el registro, es noop. Sin esto, el replay de
+  un reopen viejo reabría un plan que se había vuelto a cerrar después.
+- **El segundo campo de `reabiertos.log` significa cosas distintas según la clave**, y el
+  docstring de `anotar_reabierto` lo dice. Para `p-…` es el ts del CIERRE revertido (igualdad
+  exacta). Para `plan-…` es el ts del propio `plan.reopen` (comparación por orden). Un plan no
+  guarda en ningún sitio el ts del evento que lo cerró, así que no hay cierre concreto que anotar.
+  A cambio, esto cubre también los planes cerrados antes de esta versión.
+- `test-plan-reopen.sh` (14 casos, 35 asertos). Contra 2.35.1 falla en 17 asertos. Quitar el
+  guardián del cierre revertido lo detectan 2 asertos.
+- Carriers: `journal-emit.py` (tipo y ayuda), cabecera de `journal-compact.py`, README
+  ("Twelve event types"), `journal-guard.sh`, `bash-journal-nudge.sh`, `/checkpoint-3t` Step 5.
+
+### Límites declarados
+- **Una fila podada no está protegida.** Si la poda ya quitó la fila de un plan cerrado, un replay
+  viejo con `--status active` la vuelve a insertar como `active`. El guardián solo mira filas que
+  existen. Cerrarlo pediría leer el frontmatter del fichero del plan, que hoy el compactador no
+  lee.
+- **La comparación por orden depende del reloj.** El ts es `time.time_ns()` del emisor. Dos
+  máquinas con relojes desfasados que comparten `memory/` podrían ordenar mal un cierre y un
+  reopen emitidos casi a la vez.
+- **El patrón de `pendiente.reopen` tiene el mismo hueco que aquí se cierra para planes:** su
+  reopen no guarda su propio ts, así que el replay de un reopen viejo podría reabrir un pendiente
+  cerrado después. No se tocó en esta versión.
+
+
 ## [2.36.0] - 2026-09-23
 Cierra `p-2dc733a7c3`. Desde 2.33.1 el hook de cierre (`checkpoint-close-guard.sh`) vuelve a pedir el
 snippet cuando un turno cierra, caduca o bloquea un pendiente que cita el `## Como retomar` de una
@@ -25,6 +77,7 @@ pasaba en silencio.
   bloquear fallan contra el hook de 2.35.1 (entre ellos el bucle sobre dos memorias, un `--apply`
   junto a un `--revertir` en el mismo comando, y un `--apply` en una linea continuada con `\`). Los controles (id no citado, dry-run, `--revertir`
   solo, dos `--apply` legibles sin id citado) quedan en silencio.
+
 
 ## [2.35.1] - 2026-09-23
 El CI de 2.35.0 (corrida 35919265445) confirmó en Windows los dos arreglos de tests: pasan

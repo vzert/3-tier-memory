@@ -58,6 +58,11 @@ Tipos de evento:
                     [--pendientes N] [--learnings N] [--inline] [--parent P]            (Fase 2)
                     Fila en _plans-index.md por slug (o titulo); actualiza celdas dadas.
                     --parent anota la celda Status como '<status> (fase de plan-P)'.
+  plan.reopen       --slug S [--title T]                                              (2.37.0)
+                    Reabre un plan cerrado (completed/abandoned/superseded -> active), conserva
+                    '(fase de plan-P)' y deja registro para que el replay del cierre viejo no lo
+                    vuelva a cerrar. Es la UNICA forma de reabrir: un plan.upsert que retroceda
+                    el status se descarta con aviso. --title solo para un plan --inline.
   research.upsert   --slug S --tema T --status active|completed [--date D] [--next-step N]
                     [--resultado R] [--origen O] [--inline]                             (Fase 2)
                     Fila en Active o Completed de _research-index.md; completed la mueve y
@@ -318,7 +323,7 @@ def main():
                              "pendiente.block",
                              "session.add",
                              "learning.add", "learning.update",
-                             "plan.upsert", "research.upsert"])
+                             "plan.upsert", "plan.reopen", "research.upsert"])
     ap.add_argument("--memory-dir")
     ap.add_argument("--session")
     # pendiente.add
@@ -504,6 +509,15 @@ def main():
         avisar_origen_colgante(a.sesion, memory_dir)   # en plan.upsert el campo se llama --sesion
         write_event(memory_dir, base)
         print(f"pl-{slug}")
+        return
+
+    if a.type == "plan.reopen":
+        base["payload"] = {
+            "slug": check_slug(a.slug, "--slug"),
+            "title": cell(a.title or ""),   # solo hace falta para un plan --inline (sin wikilink)
+        }
+        write_event(memory_dir, base)
+        print(f"pl-{base['payload']['slug']}")
         return
 
     if a.type == "research.upsert":
