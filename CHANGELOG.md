@@ -1,6 +1,51 @@
 # Changelog
 
 
+## [2.39.0] - 2026-09-24
+Origen: reporte de usuarios del plugin que dejan que su sesion se compacte una o varias veces antes
+de correr `/checkpoint-3t`. El checkpoint escribe lo que el agente tiene en contexto, y tras una
+compactacion eso es un resumen: los learnings, pendientes, planes y research del tramo compactado se
+perdian. El JSONL de la sesion los conserva todos — la compactacion solo agrega una linea
+`{"type":"system","subtype":"compact_boundary"}` y no borra nada.
+
+### Added
+- **`bin/compaction-recover.py`** — detecta si hubo compactacion despues del ultimo checkpoint de
+  la sesion y escribe ese tramo en bloques limpios (`chunk-NN.md` + `manifest.json`) en un
+  directorio temporal fuera de `memory/`.
+  - *Que tramo*: desde el primer prompt real del usuario tras el checkpoint anterior (asi no entra
+    la ejecucion de ese checkpoint) hasta la ULTIMA compactacion; lo posterior sigue vivo en
+    contexto. Sin checkpoint anterior, desde la linea 1. Varias compactaciones se juntan.
+  - *Checkpoint actual vs anterior*: la marca de la invocacion en curso ya esta en el JSONL cuando
+    corre el script, asi que el ultimo grupo de marcas es el actual y el penultimo el anterior. Una
+    invocacion deja hasta tres marcas (`<command-name>/checkpoint-3t`, `Launching skill:
+    checkpoint-3t`, el isMeta "already loaded"); se agrupan por `promptId`.
+  - *Que conserva*: texto del usuario y del asistente, preguntas AskUserQuestion con su respuesta,
+    argumentos de comandos slash, `cross-session-message` (llegan como isMeta y pueden ser el
+    encargo que origino el tramo), notificaciones de agentes, y un rastro corto de cada
+    herramienta (ruta, comando, 400 caracteres por lado de cada edicion). Descarta resultados de
+    herramientas, subagentes, system-reminders, cuerpos de skills y los resumenes de compactacion.
+    Medido: una sesion real de 983K tokens previos a la compactacion queda en ~105K caracteres,
+    dos bloques balanceados de ~53K; otra de 1.4M tokens, en ~138K.
+  - Siempre sale 0: `recover=0 reason=...` sin compactacion, con checkpoint posterior, sin JSONL o
+    sin session id. `--until-line N` evalua el archivo como si terminara ahi (pruebas/auditoria).
+- **`/checkpoint-3t` Step 0b** (corre siempre, antes del slug): llama al script; si `recover=1`,
+  lanza un subagente Sonnet por bloque, en paralelo, con un prompt fijo que devuelve candidatos en
+  JSON (resumen, cambios, decisiones, learnings, pendientes, planes, research, callejones). Los
+  candidatos son ENTRADA de los Steps 1-5 — pasan por la misma reconciliacion y dedupe que lo que
+  hay en contexto, no emiten eventos por su cuenta — y la evidencia mas reciente gana (contexto
+  vivo > bloque posterior > bloque anterior). Sin herramienta Agent, el agente lee los bloques el
+  mismo. El directorio temporal se borra en cuanto hay candidatos. El hook PreCompact no cambia:
+  checkpointear antes de compactar sigue siendo lo mejor; esto es la red de seguridad.
+- **`bin/test-compaction-recover.sh`** — 31 asertos sobre JSONL sintetico: tramo exacto entre
+  checkpoint y compactacion, checkpoint posterior, dos compactaciones, marcas multiples de una
+  invocacion, isMeta, argumentos de comando, cortes entre entradas y bloques balanceados.
+
+### Limites conocidos
+- Una sesion reanudada con `--resume` que el harness escribe en OTRO archivo JSONL no se sigue
+  hasta el archivo original.
+- `CLAUDE_CODE_SESSION_ID` sigue sin documentar (ver Step 5c-bis); sin ella el paso dice
+  "no verificable" en el reporte y el checkpoint sigue normal.
+
 ## [2.38.0] - 2026-09-23
 Origen: pendiente `p-9a59328616` (Fase 2 de la familia de correccion y reversa). Diseno en [2.31.0],
 "1. `research.rename`". El hueco: el Tema es la celda 0 de la fila de research y ningun evento la
