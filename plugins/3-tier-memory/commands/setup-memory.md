@@ -10,7 +10,7 @@ Initialize a complete 3-tier memory system for this project. Follow ALL steps in
 
 Determine paths:
 ```
-PROJECT_DIR = $CLAUDE_PROJECT_DIR (current project root)
+PROJECT_DIR = ${CLAUDE_PROJECT_DIR:-$PWD} (current project root; CLAUDE_PROJECT_DIR arrives EMPTY in the agent's Bash calls)
 MEMORY_DIR = PROJECT_DIR/memory/
 ```
 
@@ -275,6 +275,7 @@ If the marketplace entry exists, report: "Auto-update: enabled". If the file doe
 Check for existing JSONL conversation files:
 
 ```bash
+PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"   # el shell no conserva variables entre llamadas
 ENCODED=$(echo "$PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
 JSONL_DIR="$HOME/.claude/projects/$ENCODED"
 JSONL_COUNT=$(ls "$JSONL_DIR"/*.jsonl 2>/dev/null | wc -l | tr -d ' ')

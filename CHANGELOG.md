@@ -4,7 +4,9 @@
 ## [2.39.1] - 2026-09-25
 Origen: pendiente `p-6a7cbeb647`. El adversario de 2.39.0 midio que `CLAUDE_PROJECT_DIR` llega
 VACIA a las llamadas Bash del agente; Step 0b se arreglo en 2.39.0, pero el mismo patron
-(`ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed ...)`) seguia en otras cuatro plantillas.
+(`ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed ...)`) seguia en cuatro plantillas mas y en dos
+comandos del plugin (`commands/`), que la primera busqueda —solo en `templates/`— no miro; lo
+encontro el adversario.
 
 ### Fixed
 - **`/checkpoint-3t` Step 5c-bis nunca sellaba el `session_id`.** El dir quedaba en
@@ -21,6 +23,13 @@ VACIA a las llamadas Bash del agente; Step 0b se arreglo en 2.39.0, pero el mism
   `${CLAUDE_PROJECT_DIR:-$PWD}`. Con la variable vacia, `/backfill-3t` se detenia con "No JSONL
   session files found", y `/consolidate-3t` y `/enrich-3t` apuntaban el indice de recall a
   `~/.claude/projects//.recall-index.jsonl`.
+- **`/migrate` y `/setup-memory` Step 8b** contaban 0 JSONL y decian "no hay historial para
+  backfill" con la variable vacia. `migrate.md` usa `${CLAUDE_PROJECT_DIR:-$PWD}`; `setup-memory.md`
+  define `PROJECT_DIR` con ese respaldo en su Step 0 y DENTRO del bloque de 8b (el shell del agente
+  no conserva variables entre llamadas). Medido: los dos bloques, corridos tal cual sin la
+  variable, cuentan los 59 JSONL de este repo. Los hooks de `bin/*.sh` conservan
+  `$CLAUDE_PROJECT_DIR` a proposito: todos hacen `source resolve-project-dir.sh`, que la resuelve
+  del stdin del hook antes de usarla.
 
 ## [2.39.0] - 2026-09-24
 Origen: reporte de usuarios del plugin que dejan que su sesion se compacte una o varias veces antes
