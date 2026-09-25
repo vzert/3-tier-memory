@@ -127,6 +127,16 @@ F="$TMP/h.jsonl"
 OUT=$(run "$F" "$TMP/oh1"); [ "$OUT" = "recover=0 reason=checkpoint-posterior-a-la-compactacion" ] && ok "archivo entero: recover=0" || bad "H1: $OUT"
 OUT=$(run "$F" "$TMP/oh2" --until-line 5); case "$OUT" in "recover=1 "*) ok "hasta la linea 5: recover=1";; *) bad "H2: $OUT";; esac
 
+echo "I. la cadena de una marca DENTRO de otra cosa no es un checkpoint (lectura de la plantilla, prosa)"
+F="$TMP/i.jsonl"
+{ u p1 "TRABAJO-I antes de todo"
+  tres p2 "12  ckskl(){ tres \\\"\$1\\\" \\\"Launching skill: checkpoint-3t\\\"; }  <- linea de un Read"
+  u p3 "recuerda correr /checkpoint-3t y <command-name>/checkpoint-3t</command-name> al final"
+  bound 100000; summ; ckcmd p4; ckskl p4; } > "$F"
+OUT=$(run "$F" "$TMP/oi")
+case "$OUT" in "recover=1 "*) ok "recover=1: ni el Read ni la prosa cuentan como checkpoint anterior";; *) bad "I: $OUT";; esac
+has "recupera el trabajo previo a esas menciones" "TRABAJO-I antes de todo" "$TMP/oi/chunk-01.md"
+
 echo
 [ $FAIL -eq 0 ] && echo "TODO VERDE" || echo "HAY FALLOS"
 exit $FAIL

@@ -19,6 +19,10 @@ perdian. El JSONL de la sesion los conserva todos — la compactacion solo agreg
     corre el script, asi que el ultimo grupo de marcas es el actual y el penultimo el anterior. Una
     invocacion deja hasta tres marcas (`<command-name>/checkpoint-3t`, `Launching skill:
     checkpoint-3t`, el isMeta "already loaded"); se agrupan por `promptId`.
+    Solo cuentan en la forma en que
+    el harness las escribe: un Read o grep que DEVUELVE esa cadena (p. ej. leyendo esta plantilla)
+    o un prompt que la menciona en prosa no es un checkpoint — si lo fuera, esa lectura haria de
+    "checkpoint anterior" y el tramo se perderia en silencio con `recover=0`.
   - *Que conserva*: texto del usuario y del asistente, preguntas AskUserQuestion con su respuesta,
     argumentos de comandos slash, `cross-session-message` (llegan como isMeta y pueden ser el
     encargo que origino el tramo), notificaciones de agentes, y un rastro corto de cada
@@ -36,9 +40,10 @@ perdian. El JSONL de la sesion los conserva todos — la compactacion solo agreg
   vivo > bloque posterior > bloque anterior). Sin herramienta Agent, el agente lee los bloques el
   mismo. El directorio temporal se borra en cuanto hay candidatos. El hook PreCompact no cambia:
   checkpointear antes de compactar sigue siendo lo mejor; esto es la red de seguridad.
-- **`bin/test-compaction-recover.sh`** — 31 asertos sobre JSONL sintetico: tramo exacto entre
+- **`bin/test-compaction-recover.sh`** — 33 asertos sobre JSONL sintetico: tramo exacto entre
   checkpoint y compactacion, checkpoint posterior, dos compactaciones, marcas multiples de una
-  invocacion, isMeta, argumentos de comando, cortes entre entradas y bloques balanceados.
+  invocacion, marcas falsas dentro de un Read o de prosa, isMeta, argumentos de comando, cortes
+  entre entradas y bloques balanceados.
 
 ### Limites conocidos
 - Una sesion reanudada con `--resume` que el harness escribe en OTRO archivo JSONL no se sigue

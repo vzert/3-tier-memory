@@ -110,11 +110,27 @@ def content_texts(content):
 
 
 def is_ckpt_marker(o):
+    """Solo cuenta la marca en la FORMA en que el harness la escribe, nunca el texto dentro de otra
+    cosa. Un tool_result de Read/grep sobre esta plantilla o sus pruebas CONTIENE la cadena
+    `Launching skill: checkpoint-3t`; contarlo como checkpoint haria de esa lectura el "checkpoint
+    anterior" y el tramo real se perderia en silencio (recover=0)."""
     if o.get("type") != "user" or o.get("isSidechain"):
         return False
-    for t in content_texts((o.get("message") or {}).get("content")):
-        if any(p.search(t) for p in CKPT_MARKERS):
-            return True
+    c = (o.get("message") or {}).get("content")
+    items = [{"type": "text", "text": c}] if isinstance(c, str) else (c if isinstance(c, list) else [])
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        if it.get("type") == "tool_result":
+            body = "\n".join(content_texts([it])).strip()
+            if len(body) < 120 and CKPT_MARKERS[1].match(body):
+                return True
+        elif it.get("type") == "text":
+            t = it.get("text", "").lstrip()
+            if CKPT_MARKERS[0].search(t) and (t.startswith("<command-") or t.startswith("<command-message>")):
+                return True
+            if o.get("isMeta") and CKPT_MARKERS[2].match(t):
+                return True
     return False
 
 
