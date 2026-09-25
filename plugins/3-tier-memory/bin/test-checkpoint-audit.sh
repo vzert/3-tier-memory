@@ -1308,6 +1308,36 @@ chk "celda N/A: HECHO" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*indice.commit'
 O=$($AUD "$M9" --session-file "$S9" --no-git --hoy $HOY 2>&1)
 chk "celda con hash: HECHO" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*indice.commit')"
 
+echo "== indice.commit: el relleno del Fallback (no JBIN) 'filled in Step 6' tampoco es un commit =="
+# Adversario, ronda 1 de 2.39.2: con el control mirando solo celda vacia, el texto que Step 2
+# manda escribir sin JBIN pasaba como HECHO para siempre si Step 6 no lo reemplazaba.
+sed -i.bak 's/| demo | N\/A |/| demo | filled in Step 6 |/' "$MC/_session-index.md"
+O=$($AUD "$MC" --session-file "$SC" --no-git --hoy $HOY 2>&1)
+chk "'filled in Step 6': SALTADO" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*indice.commit')"
+sed -i.bak 's/| demo | filled in Step 6 |/| demo | `abc1234`, `def5678` |/' "$MC/_session-index.md"
+O=$($AUD "$MC" --session-file "$SC" --no-git --hoy $HOY 2>&1)
+chk "dos hashes (forma legitima de otra instalacion): HECHO" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*indice.commit')"
+
+echo "== la linea 'ya agendado' de Step 8c cuenta para pendientes.3a y snippet.futuro_duplicado =="
+# Adversario, ronda 1 de 2.39.2: los dos solo reconocian bloques `### FECHA`, asi que la forma
+# nueva dejaba pasar un id repetido en `Sigue abierto:` y no contaba el pendiente como revisado.
+MY="$T/memoryya"; nueva_memoria "$MY"
+SY="$MY/sessions/2026-09-19-demo.md"; ficha_completa "$SY"
+python3 - "$MY/_pendientes.md" "$SY" <<'PY'
+import sys
+pend, ficha = sys.argv[1:3]
+open(pend, 'a', encoding='utf-8').write("\n## Alta prioridad\n- [ ] revisar algo — _origen: [[sessions/2026-09-18-x]]_ — _creado: 2026-09-18_ — _revisar: 2026-09-26_ — _id: p-3333333333_\n")
+t = open(ficha, encoding='utf-8').read()
+t = t.replace("## Como retomar\nNinguno — la sesion cerro sin continuidad.",
+    "## Como retomar\n\n```\nRetomamos: demo.\n\nSigue abierto: revisar algo _id: p-3333333333_.\n```\n\n"
+    "## Recordatorios de calendario\n\n- p-3333333333 ya agendado para 2026-09-26 en [[sessions/2026-09-18-x]]")
+open(ficha, 'w', encoding='utf-8').write(t)
+PY
+O=$($AUD "$MY" --session-file "$SY" --no-git --hoy $HOY 2>&1)
+chk "id 'ya agendado' repetido en Sigue abierto: SALTADO" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*snippet.futuro_duplicado')"
+chk "el pendiente 'ya agendado' cuenta como revisado" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*pendientes.3a')"
+chk "una linea 'ya agendado' no es un bloque duplicado" "0" "$(printf '%s' "$O" | grep -c 'SALTADO .*calendario.duplicado_entre_fichas')"
+
 echo "== calendario.duplicado_entre_fichas: el mismo pendiente con recordatorio vivo en OTRA ficha (2.39.2, p-c9410e7764) =="
 # Caso real (2026-09-25, este repo): p-8472f7f4b7 quedo con un recordatorio para el 26 en la ficha
 # del 24 (viejo, solo 2.39.0) y otro en la del 25. Solo se vio porque el usuario pregunto.

@@ -9,7 +9,9 @@ checkpoint?" tras 2.39.1 salieron dos fallos que `checkpoint-audit.py` habia dad
 - **`checkpoint-audit.py` `indice.commit`**: la fila de la ficha en `_session-index.md` tiene que
   traer algo en la celda Commit (el hash de Step 6c o `N/A` de Step 6d). `indice.sesion` solo
   miraba que la fila existiera. Step 7a corre despues de Step 6, asi que vacia no es un estado
-  intermedio. Sin columna Commit, o sin fila de la ficha, no aplica.
+  intermedio. Tambien marca el relleno conocido: `filled in Step 6` (lo que escribe el Fallback
+  sin JBIN de Step 2) y `<…hash…>`. No exige una forma (hash o N/A): otras instalaciones escriben
+  celdas legitimas distintas, como dos hashes. Sin columna Commit, o sin fila de la ficha, no aplica.
   - Pasado por las 94 fichas reales de este repo: 5 sesiones (2026-09-22..23) tenian la celda
     vacia, ademas de las 2 de 2026-09-24/25 que origino esto; todas sin commit de memoria (`memory/` esta en `.gitignore` y no se comitea desde el
     2026-09-12). Se llenaron con `N/A` por el journal.
@@ -27,8 +29,11 @@ checkpoint?" tras 2.39.1 salieron dos fallos que `checkpoint-audit.py` habia dad
   re-imprimia (de ahi los tres de `p-e685e9c92a`). Ahora: misma fecha y alcance → solo la linea
   `- p-… ya agendado para <FECHA> en [[sessions/…]]`; fecha o alcance distintos → bloque nuevo, y
   el de la ficha vieja se reemplaza por una nota que apunta al nuevo. El hook de cierre solo cuenta
-  bloques `### FECHA`, asi que la linea de referencia no le exige nada.
-- 9 asertos nuevos en `test-checkpoint-audit.sh` (177), todos rojos contra 2.39.1.
+  bloques `### FECHA`, asi que la linea de referencia no le exige nada. `pendientes.3a` y
+  `snippet.futuro_duplicado` si la leen: cuenta como reconciliacion y como id reservado (el
+  adversario midio que, sin eso, la regla nueva dejaba ciegos a los dos).
+- 14 asertos nuevos en `test-checkpoint-audit.sh` (182); los que prueban un fallo son rojos contra
+  2.39.1.
 
 ## [2.39.1] - 2026-09-25
 Origen: pendiente `p-6a7cbeb647`. El adversario de 2.39.0 midio que `CLAUDE_PROJECT_DIR` llega

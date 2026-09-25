@@ -106,6 +106,17 @@ BLOQUE_CALENDARIO = re.compile(r"^###\s+\d{4}-\d{2}-\d{2}\b", re.M)
 # Usar ID_PENDIENTE a secas sobre toda la seccion conto como "duplicado" un id que el propio
 # recordatorio citaba solo para excluirlo — falso positivo real, `restos-213-pr220`.
 RETOMAMOS_ID_CALENDARIO = re.compile(r"^Retomamos:.*?_id:\s*(p-[0-9a-f]{10})(?![0-9a-f])", re.M)
+# La otra forma de reservar un id en `## Recordatorios de calendario` (Step 8c, 2.39.2): el
+# pendiente ya tiene recordatorio vivo en otra ficha y aqui solo va su linea de referencia. Cuenta
+# igual que un bloque para `pendientes.3a` y `snippet.futuro_duplicado` (un adversario midio que,
+# sin esto, la regla nueva dejaba a los dos ciegos); para `calendario.duplicado_entre_fichas` NO es
+# un bloque, es justo lo que evita el duplicado.
+YA_AGENDADO = re.compile(r"^\s*-\s*(p-[0-9a-f]{10})(?![0-9a-f])\s+ya agendado para\s+(\d{4}-\d{2}-\d{2})\b", re.M)
+# Celda Commit que solo PARECE llena: el "Fallback (no JBIN)" de Step 2 escribe `filled in Step 6`
+# y la sintaxis de ejemplo de Step 6c es `<short-hash>`. Si Step 6 no la reemplaza, sigue sin hash
+# ni N/A. Se marca el relleno CONOCIDO, no se exige una forma: otras instalaciones escriben celdas
+# legitimas que una lista blanca (hash o N/A) daria por malas — dos hashes, un "(amend)".
+COMMIT_RELLENO = re.compile(r"^\s*$|filled in|<[^>]*hash[^>]*>", re.I)
 
 # Cierre de cada defecto de `## Bugs fixed` (2.34.0, p-272254efc5). Step 2 escribe cada linea de
 # primer nivel con UNO de dos campos, decididos al escribirla:
@@ -467,7 +478,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     _sec_cal = seccion_por_prefijo(secs, "Recordatorios de calendario") or ""
     _lineas_reconcilian = [l for l in _sec_pend_raw.splitlines()
                            if LINEA_PENDIENTE.match(l.strip())]
-    if BLOQUE_CALENDARIO.search(_sec_cal):
+    if BLOQUE_CALENDARIO.search(_sec_cal) or YA_AGENDADO.search(_sec_cal):
         _lineas_reconcilian.append(_sec_cal)
     ids_en_ficha = set(ID_PENDIENTE.findall("\n".join(_lineas_reconcilian)))
     # Contar por id DISTINTO, no por linea: `_pendientes.md` puede traer el mismo id en dos lineas
@@ -824,6 +835,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     # Solo cuenta el id de la propia linea `Retomamos:` de cada recordatorio (el que Step 8c-2
     # reservo), no cualquier id que su Descripcion/Comprueba mencionen de paso para dar contexto.
     ids_calendario = set(RETOMAMOS_ID_CALENDARIO.findall(_sec_cal)) if BLOQUE_CALENDARIO.search(_sec_cal) else set()
+    ids_calendario |= {pid for pid, _f in YA_AGENDADO.findall(_sec_cal)}
     ids_retomar = set(ID_PENDIENTE.findall(linea_sigue_abierto(sec_retomar)))
     colados = sorted(ids_calendario & ids_retomar)
     if not ids_calendario:
@@ -1108,10 +1120,11 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     if col_commit is None or fila_propia is None:
         h.append(Hallazgo(HECHO, "indice.commit",
                           "sin columna Commit o sin fila de esta ficha: no aplica (lo cubre indice.sesion)"))
-    elif col_commit >= len(fila_propia) or not fila_propia[col_commit].strip():
+    elif col_commit >= len(fila_propia) or COMMIT_RELLENO.search(fila_propia[col_commit]):
         fecha_ficha = slug[:10]
         h.append(Hallazgo(SALTADO, "indice.commit",
-                          "la fila de esta ficha en _session-index.md tiene la celda Commit vacia",
+                          "la celda Commit de esta ficha en _session-index.md no trae hash ni N/A: "
+                          f"[{fila_propia[col_commit].strip() if col_commit < len(fila_propia) else ''}]",
                           corrige=f'python3 "$JBIN/journal-emit.py" --type session.add --slug "{slug}" '
                                   f"--date {fecha_ficha} --commit '`<hash>`'   # o --commit \"N/A\" si "
                                   'Step 6 no comiteo (Step 6d); despues journal-compact.py'))
