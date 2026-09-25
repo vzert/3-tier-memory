@@ -12,9 +12,18 @@ perdian. El JSONL de la sesion los conserva todos — la compactacion solo agreg
 - **`bin/compaction-recover.py`** — detecta si hubo compactacion despues del ultimo checkpoint de
   la sesion y escribe ese tramo en bloques limpios (`chunk-NN.md` + `manifest.json`) en un
   directorio temporal fuera de `memory/`.
-  - *Que tramo*: desde el primer prompt real del usuario tras el checkpoint anterior (asi no entra
-    la ejecucion de ese checkpoint) hasta la ULTIMA compactacion; lo posterior sigue vivo en
-    contexto. Sin checkpoint anterior, desde la linea 1. Varias compactaciones se juntan.
+  - *Que tramo*: desde el primer inicio de turno tras el checkpoint anterior hasta la ULTIMA
+    compactacion; lo posterior sigue vivo en contexto. Inicio de turno es un prompt, pero tambien lo
+    que despierta al agente sin prompt escrito (notificacion de tarea, mensaje de otra sesion, tick
+    de loop): con "solo prompts" un tramo movido por notificaciones daba `recover=0` y se perdia
+    (lo encontro el adversario). Sin ningun inicio de turno, empieza justo tras el checkpoint
+    anterior; con una compactacion en medio nunca devuelve `recover=0`. Sin checkpoint anterior,
+    desde la linea 1. Varias compactaciones se juntan.
+  - *Donde esta el JSONL*: `CLAUDE_PROJECT_DIR` llega VACIA a las llamadas Bash del agente (medido
+    en esta sesion; el mismo patron ya habia fallado en Step 5c-bis). Step 0b usa `$PWD` como
+    respaldo y el script, si `<jsonl-dir>/<session-id>.jsonl` no existe, busca el id bajo
+    `~/.claude/projects/*/` (es un UUID; no puede confundirse). Sin esto el paso quedaba inerte:
+    `recover=0 reason=sin-jsonl` en toda sesion.
   - *Checkpoint actual vs anterior*: la marca de la invocacion en curso ya esta en el JSONL cuando
     corre el script, asi que el ultimo grupo de marcas es el actual y el penultimo el anterior. Una
     invocacion deja hasta tres marcas (`<command-name>/checkpoint-3t`, `Launching skill:
@@ -40,9 +49,10 @@ perdian. El JSONL de la sesion los conserva todos — la compactacion solo agreg
   vivo > bloque posterior > bloque anterior). Sin herramienta Agent, el agente lee los bloques el
   mismo. El directorio temporal se borra en cuanto hay candidatos. El hook PreCompact no cambia:
   checkpointear antes de compactar sigue siendo lo mejor; esto es la red de seguridad.
-- **`bin/test-compaction-recover.sh`** — 33 asertos sobre JSONL sintetico: tramo exacto entre
+- **`bin/test-compaction-recover.sh`** — 40 asertos sobre JSONL sintetico: tramo exacto entre
   checkpoint y compactacion, checkpoint posterior, dos compactaciones, marcas multiples de una
-  invocacion, marcas falsas dentro de un Read o de prosa, isMeta, argumentos de comando, cortes
+  invocacion, marcas falsas dentro de un Read o de prosa, tramo abierto por una notificacion o
+  sin turno nuevo, busqueda del JSONL por session id, isMeta, argumentos de comando, cortes
   entre entradas y bloques balanceados.
 
 ### Limites conocidos

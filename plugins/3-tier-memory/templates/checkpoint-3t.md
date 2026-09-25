@@ -60,7 +60,9 @@ nada). Este paso lo detecta y recupera ese tramo — el que va del ultimo checkp
 hasta la ultima compactacion. Lo posterior a la compactacion ya lo tienes vivo.
 
 ```bash
-ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
+# CLAUDE_PROJECT_DIR llega VACIA a las llamadas Bash del agente (medido): de ahi el $PWD. Si aun asi
+# el directorio no calza, el script busca el <session-id>.jsonl bajo ~/.claude/projects/*/.
+ENCODED=$(echo "${CLAUDE_PROJECT_DIR:-$PWD}" | sed 's/[^A-Za-z0-9]/-/g')
 JSONL_DIR="$HOME/.claude/projects/$ENCODED"
 RECOVER_DIR=$(mktemp -d "${TMPDIR:-/tmp}/3t-recover.XXXXXX")   # FUERA de memory/: texto crudo de la sesion
 if [ -n "$JBIN" ] && [ -f "$JBIN/compaction-recover.py" ]; then

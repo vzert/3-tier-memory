@@ -85,7 +85,7 @@ echo "E. sin compactacion / sin JSONL / sin session id: recover=0 y exit 0"
 F="$TMP/e.jsonl"; { u p1 "hola"; ckcmd p2; } > "$F"
 OUT=$(run "$F" "$TMP/oe"); rc=$?
 [ "$OUT" = "recover=0 reason=sin-compactacion" ] && [ $rc -eq 0 ] && ok "sin-compactacion, exit 0" || bad "E1: $OUT rc=$rc"
-OUT=$(python3 "$BIN/compaction-recover.py" --session-id no-existe --jsonl-dir "$TMP" --out-dir "$TMP/oe2"); rc=$?
+OUT=$(python3 "$BIN/compaction-recover.py" --session-id no-existe --jsonl-dir "$TMP" --projects-root "$TMP" --out-dir "$TMP/oe2"); rc=$?
 case "$OUT" in "recover=0 reason=sin-jsonl "*) [ $rc -eq 0 ] && ok "sin-jsonl, exit 0" || bad "E2 rc=$rc";; *) bad "E2: $OUT";; esac
 OUT=$(python3 "$BIN/compaction-recover.py" --out-dir "$TMP/oe3"); rc=$?
 [ "$OUT" = "recover=0 reason=sin-session-id" ] && [ $rc -eq 0 ] && ok "sin-session-id, exit 0" || bad "E3: $OUT rc=$rc"
@@ -136,6 +136,30 @@ F="$TMP/i.jsonl"
 OUT=$(run "$F" "$TMP/oi")
 case "$OUT" in "recover=1 "*) ok "recover=1: ni el Read ni la prosa cuentan como checkpoint anterior";; *) bad "I: $OUT";; esac
 has "recupera el trabajo previo a esas menciones" "TRABAJO-I antes de todo" "$TMP/oi/chunk-01.md"
+
+echo "J. sin prompt escrito: una notificacion de tarea abre el tramo; sin nada, empieza tras el checkpoint"
+F="$TMP/j.jsonl"
+{ ckcmd p1; ckskl p1; a p1 "EJECUCION-CHECKPOINT-J"
+  u p2 "<task-notification>\\n<task-id>b1</task-id>\\n<summary>TAREA-TERMINO</summary>\\n</task-notification>"
+  edit p2 "src/loop.py" "CAMBIO-AUTONOMO-VIA-NOTIFICACION"
+  bound 100000; summ; ckcmd p3; ckskl p3; } > "$F"
+OUT=$(run "$F" "$TMP/oj")
+case "$OUT" in "recover=1 "*) ok "recover=1 con el turno abierto por una notificacion";; *) bad "J1: $OUT";; esac
+has   "recupera la edicion autonoma"          "CAMBIO-AUTONOMO-VIA-NOTIFICACION" "$TMP/oj/chunk-01.md"
+hasnt "no mete la ejecucion del checkpoint"   "EJECUCION-CHECKPOINT-J" "$TMP/oj/chunk-01.md"
+F="$TMP/j2.jsonl"
+{ ckcmd p1; ckskl p1; edit p1 "src/x.py" "EDICION-SIN-TURNO-NUEVO"; bound 100000; ckcmd p3; } > "$F"
+OUT=$(run "$F" "$TMP/oj2")
+case "$OUT" in "recover=1 "*) ok "sin ningun inicio de turno: recover=1 igual, nunca recover=0 con compactacion";; *) bad "J2: $OUT";; esac
+has "recupera lo que hubo tras el checkpoint" "EDICION-SIN-TURNO-NUEVO" "$TMP/oj2/chunk-01.md"
+
+echo "K. --jsonl-dir equivocado (CLAUDE_PROJECT_DIR vacia): encuentra <session-id>.jsonl bajo --projects-root"
+mkdir -p "$TMP/projects/-proyecto-real"
+{ u p1 "TRABAJO-K"; bound 100000; ckcmd p2; } > "$TMP/projects/-proyecto-real/sesion-uuid-k.jsonl"
+OUT=$(python3 "$BIN/compaction-recover.py" --session-id sesion-uuid-k --jsonl-dir "$TMP/projects/" \
+      --projects-root "$TMP/projects" --out-dir "$TMP/ok")
+case "$OUT" in "recover=1 "*) ok "recover=1 buscando el id bajo todos los proyectos";; *) bad "K: $OUT";; esac
+has "recupera el trabajo" "TRABAJO-K" "$TMP/ok/chunk-01.md"
 
 echo
 [ $FAIL -eq 0 ] && echo "TODO VERDE" || echo "HAY FALLOS"

@@ -22,8 +22,9 @@ Que tramo recupera:
     "Skill /checkpoint-3t is already loaded"), por eso se agrupan por `promptId`: el mismo prompt
     del usuario = la misma invocacion.
   - Hay que recuperar si existe un `compact_boundary` DESPUES del checkpoint anterior y ANTES del
-    actual. El tramo va desde el primer prompt REAL del usuario tras el checkpoint anterior (asi no
-    entra la ejecucion de ese checkpoint, que ya guardo lo suyo) hasta la ULTIMA de esas
+    actual. El tramo va desde el primer INICIO DE TURNO tras el checkpoint anterior —un prompt, o lo que
+    despierta al agente sin prompt: notificacion de tarea, mensaje de otra sesion, tick de loop— (asi
+    no entra la ejecucion de ese checkpoint, que ya guardo lo suyo; sin ninguno, justo despues de el) hasta la ULTIMA de esas
     compactaciones: lo que viene despues sigue en el contexto vivo del agente.
   - Sin checkpoint anterior, el tramo empieza en la linea 1.
 
@@ -134,8 +135,13 @@ def is_ckpt_marker(o):
     return False
 
 
-def is_real_prompt(o):
-    """Un prompt que el usuario escribio: string, no meta, no resumen, no notificacion ni comando."""
+def is_turn_start(o):
+    """Una linea que ABRE un turno nuevo: un prompt del usuario, pero tambien lo que el harness
+    inyecta para despertar al agente sin prompt escrito — una `<task-notification>` de una tarea en
+    segundo plano, un `cross-session-message`, un tick de un loop autonomo. Un adversario lo rompio
+    (2.39.0, ronda 1): con "solo prompts escritos", checkpoint -> notificacion -> Edit ->
+    compactacion daba recover=0 y el Edit se perdia. Lo unico que NO abre turno es lo que forma
+    parte del turno en curso: tool_result, el cuerpo de una skill, las marcas del checkpoint."""
     if o.get("type") != "user" or o.get("isSidechain") or o.get("isCompactSummary"):
         return False
     c = (o.get("message") or {}).get("content")
@@ -146,11 +152,9 @@ def is_real_prompt(o):
     if not isinstance(c, str):
         return False
     s = c.strip()
-    if not s or s.startswith("<task-notification>") or s.startswith("<local-command"):
+    if not s or s.startswith("<local-command") or s.startswith(META_NOISE):
         return False
-    if o.get("isMeta") and (s.startswith(META_NOISE) or "cross-session-message" not in s):
-        return False
-    return not any(p.search(s) for p in CKPT_MARKERS)
+    return not is_ckpt_marker(o)
 
 
 def load(path, until_line):
@@ -199,9 +203,9 @@ def find_range(rows):
     end = lost[-1][0]
     start = 1
     if prev_end:
-        start = next((n for n, o in rows if prev_end < n < end and is_real_prompt(o)), None)
-        if start is None:
-            return None, "sin-prompts-entre-checkpoint-y-compactacion"
+        # Sin ningun inicio de turno en medio, se empieza justo tras el checkpoint anterior: meter
+        # de mas la cola de ese checkpoint cuesta un dedupe; devolver recover=0 perdia el tramo.
+        start = next((n for n, o in rows if prev_end < n < end and is_turn_start(o)), prev_end + 1)
     info = {
         "from_line": start,
         "to_line": end,
@@ -303,6 +307,8 @@ def main():
     ap.add_argument("--jsonl")
     ap.add_argument("--session-id")
     ap.add_argument("--jsonl-dir")
+    ap.add_argument("--projects-root", default=os.path.expanduser("~/.claude/projects"),
+                    help="donde buscar <session-id>.jsonl si no esta en --jsonl-dir")
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--until-line", type=int, default=0,
                     help="evaluar el archivo como si terminara en esta linea (pruebas y auditoria)")
@@ -311,10 +317,20 @@ def main():
 
     path = a.jsonl
     if not path:
-        if not (a.session_id and a.jsonl_dir):
+        if not a.session_id:
             print("recover=0 reason=sin-session-id")
             return 0
-        path = os.path.join(a.jsonl_dir, a.session_id + ".jsonl")
+        path = os.path.join(a.jsonl_dir or "", a.session_id + ".jsonl")
+        if not (a.jsonl_dir and os.path.isfile(path)):
+            # --jsonl-dir sale de CLAUDE_PROJECT_DIR, que en las llamadas Bash del agente llega VACIA
+            # (medido 2026-09-24; el mismo patron ya habia fallado en Step 5c-bis, d971c55a:2569).
+            # El session id es un UUID: buscarlo bajo todos los proyectos no puede confundirse.
+            import glob
+            hits = sorted(glob.glob(os.path.join(glob.escape(a.projects_root), "*",
+                                                 glob.escape(a.session_id) + ".jsonl")),
+                          key=os.path.getmtime)
+            if hits:
+                path = hits[-1]
     if not os.path.isfile(path):
         print(f"recover=0 reason=sin-jsonl path={path}")
         return 0
