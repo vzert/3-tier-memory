@@ -369,6 +369,7 @@ Store `JSONL_COUNT` for inclusion in the report.
 ## Encender `journal_strict` si el proyecto no tiene config
 
 ```bash
+PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"   # el shell no conserva variables entre llamadas; CLAUDE_PROJECT_DIR llega vacia
 if [ ! -f "$PROJECT_DIR/memory/.memory-config" ]; then
   printf '%s\n' '# Config de memoria del proyecto (ver /3-tier-memory:setup-memory Step 3b).' \
                  '# journal_strict=1: los indices los escribe SOLO el compactador del journal.' \

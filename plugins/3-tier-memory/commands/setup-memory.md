@@ -21,6 +21,7 @@ Check if `MEMORY_DIR/MEMORY.md` already exists. If yes, tell the user: "Memory s
 Create ALL directories (none are optional):
 
 ```bash
+PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"   # el shell no conserva variables entre llamadas; CLAUDE_PROJECT_DIR llega vacia
 mkdir -p "$PROJECT_DIR/memory/"{learnings,sessions,pendientes,plans,research}
 ```
 
@@ -82,6 +83,7 @@ All index files must have:
 ## Step 3b: Write `memory/.memory-config` — `journal_strict=1` by default
 
 ```bash
+PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"   # el shell no conserva variables entre llamadas; CLAUDE_PROJECT_DIR llega vacia
 cat > "$PROJECT_DIR/memory/.memory-config" <<'CFGEOF'
 # Config de memoria del proyecto.
 #

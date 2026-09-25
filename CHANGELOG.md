@@ -23,11 +23,17 @@ encontro el adversario.
   `${CLAUDE_PROJECT_DIR:-$PWD}`. Con la variable vacia, `/backfill-3t` se detenia con "No JSONL
   session files found", y `/consolidate-3t` y `/enrich-3t` apuntaban el indice de recall a
   `~/.claude/projects//.recall-index.jsonl`.
-- **`/migrate` y `/setup-memory` Step 8b** contaban 0 JSONL y decian "no hay historial para
-  backfill" con la variable vacia. `migrate.md` usa `${CLAUDE_PROJECT_DIR:-$PWD}`; `setup-memory.md`
-  define `PROJECT_DIR` con ese respaldo en su Step 0 y DENTRO del bloque de 8b (el shell del agente
-  no conserva variables entre llamadas). Medido: los dos bloques, corridos tal cual sin la
-  variable, cuentan los 59 JSONL de este repo. Los hooks de `bin/*.sh` conservan
+- **`/migrate` y `/setup-memory`: cinco bloques bash usaban la ruta del proyecto sin respaldo.**
+  Step 8b de los dos contaba 0 JSONL ("no hay historial para backfill"); `setup-memory` Step 2
+  hacia `mkdir /memory/...` (en la raiz del disco) y Step 3b escribia `/memory/.memory-config`; el
+  bloque `journal_strict` de `migrate` fallaba al escribir y aun asi imprimia "activado". Ahora
+  todo bloque que usa `$PROJECT_DIR` la define en su primera linea con
+  `${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}` (el shell del agente no conserva variables entre
+  llamadas). Comprobado por bloque, no por muestra: un script recorre cada bloque bash de
+  `templates/` y `commands/` y no queda ninguno que use la ruta sin definirla. Medido: los cinco
+  bloques, corridos tal cual sin las variables, escriben dentro de la carpeta de trabajo; los dos
+  de 8b cuentan los 59 JSONL de este repo. (La primera pasada arreglo solo 2 de los 5; lo
+  encontro el adversario.) Los hooks de `bin/*.sh` conservan
   `$CLAUDE_PROJECT_DIR` a proposito: todos hacen `source resolve-project-dir.sh`, que la resuelve
   del stdin del hook antes de usarla.
 
