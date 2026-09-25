@@ -368,6 +368,9 @@ status: backfilled
   `Proyecto: <basename> — <ruta absoluta>`. El proyecto es el del backfill que estas corriendo, no
   el de la sesion reconstruida — son el mismo. Si ninguna fecha sigue viva, borra la seccion
   entera.
+  Misma regla "un pendiente, un recordatorio vivo" de Step 8c: si otra ficha ya trae un
+  recordatorio futuro para ese `_id:`, escribe solo `- p-… ya agendado para <FECHA> en
+  [[sessions/…]]` (misma fecha) o reemplaza el bloque viejo (fecha distinta).
 
 Y sella la ficha con el UUID del `.jsonl` de origen, en cuanto exista el fichero:
 

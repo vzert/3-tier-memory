@@ -1094,6 +1094,74 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                               "la ficha no tiene fila en _session-index.md",
                               corrige=f'python3 "$JBIN/journal-emit.py" --type session.add --slug "{slug}" …'))
 
+    # 10-bis. La celda Commit de ESA fila (2.39.2, p-d1a1ce615f). indice.sesion solo miraba que la
+    # fila existiera: dos checkpoints seguidos de este repo (2026-09-24 y 25, memory/ en
+    # .gitignore) saltaron Step 6 y dejaron la celda vacia en vez de `N/A` (Step 6d), y el audit
+    # dio HECHO. Step 7a corre DESPUES de Step 6, asi que a esa altura la celda ya tiene que traer
+    # el hash (6c) o `N/A` (6d): vacia no es un estado intermedio legitimo. Sin columna Commit en
+    # la cabecera (indice de otra forma) no se inventa nada: no aplica.
+    filas_idx = filas_tabla(idx_ses)
+    col_commit = None
+    if filas_idx:
+        col_commit = next((i for i, c in enumerate(filas_idx[0]) if c.strip().lower() == "commit"), None)
+    fila_propia = next((f for f in filas_idx[1:] if any(f"sessions/{slug}" in c for c in f)), None)
+    if col_commit is None or fila_propia is None:
+        h.append(Hallazgo(HECHO, "indice.commit",
+                          "sin columna Commit o sin fila de esta ficha: no aplica (lo cubre indice.sesion)"))
+    elif col_commit >= len(fila_propia) or not fila_propia[col_commit].strip():
+        fecha_ficha = slug[:10]
+        h.append(Hallazgo(SALTADO, "indice.commit",
+                          "la fila de esta ficha en _session-index.md tiene la celda Commit vacia",
+                          corrige=f'python3 "$JBIN/journal-emit.py" --type session.add --slug "{slug}" '
+                                  f"--date {fecha_ficha} --commit '`<hash>`'   # o --commit \"N/A\" si "
+                                  'Step 6 no comiteo (Step 6d); despues journal-compact.py'))
+    else:
+        h.append(Hallazgo(HECHO, "indice.commit",
+                          f"celda Commit de esta ficha: {fila_propia[col_commit].strip()}"))
+
+    # 10-ter. El mismo pendiente con un recordatorio de calendario VIVO en otra ficha (2.39.2,
+    # p-c9410e7764). Caso real (2026-09-25, este repo): p-8472f7f4b7 quedo con un recordatorio para
+    # el 26 en la ficha del 24 (viejo: solo cubria 2.39.0) y otro en la del 25. Quien pega los dos
+    # en su calendario tiene dos eventos para una tarea, y uno con el alcance equivocado. Solo se
+    # vio porque el usuario pregunto. Cuenta la fecha del ENCABEZADO de cada bloque (`### FECHA`,
+    # Step 8c-2) y el id de su linea `Retomamos:`; un recordatorio cuya fecha ya paso es historia,
+    # no duplicado.
+    def _bloques_calendario(texto_seccion):
+        """[(fecha, id)] por bloque `### FECHA ...` de una seccion de recordatorios."""
+        out = []
+        cortes = [m.start() for m in BLOQUE_CALENDARIO.finditer(texto_seccion)] + [len(texto_seccion)]
+        for a, b in zip(cortes, cortes[1:]):
+            trozo = texto_seccion[a:b]
+            fecha = trozo.lstrip("#").strip()[:10]
+            for pid in RETOMAMOS_ID_CALENDARIO.findall(trozo):
+                out.append((fecha, pid))
+        return out
+
+    propios = {pid for fecha, pid in _bloques_calendario(_sec_cal) if fecha >= hoy}
+    if not propios:
+        h.append(Hallazgo(HECHO, "calendario.duplicado_entre_fichas",
+                          "sin recordatorios con fecha futura en esta ficha: no aplica"))
+    else:
+        repetidos = []
+        propia = os.path.abspath(session_file)
+        for otra in sorted(glob.glob(os.path.join(memory_dir, "sessions", "*.md"))):
+            if os.path.abspath(otra) == propia:
+                continue
+            sec_otra = seccion_por_prefijo(secciones(leer(otra)), "Recordatorios de calendario") or ""
+            for fecha, pid in _bloques_calendario(sec_otra):
+                if pid in propios and fecha >= hoy:
+                    repetidos.append(f"{pid} tambien en sessions/{os.path.basename(otra)} ({fecha})")
+        if repetidos:
+            h.append(Hallazgo(SALTADO, "calendario.duplicado_entre_fichas",
+                              f"{len(repetidos)} recordatorio(s) de esta ficha ya estan vivos en otra",
+                              repetidos,
+                              corrige="deja uno solo: reemplaza el bloque de la ficha vieja por una nota "
+                                      "que apunte a la nueva (Step 8c-2) y avisa al usuario de que "
+                                      "borre el evento viejo si ya lo agendo"))
+        else:
+            h.append(Hallazgo(HECHO, "calendario.duplicado_entre_fichas",
+                              "ningun recordatorio vivo de esta ficha se repite en otra"))
+
     # 11. Lineas `- [x]` rezagadas en _pendientes.md (el compactador las quita al resolver)
     rezagadas = marcados_rezagados(memory_dir)
     if rezagadas:

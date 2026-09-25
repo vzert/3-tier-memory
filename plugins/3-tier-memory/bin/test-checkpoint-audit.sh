@@ -1292,6 +1292,50 @@ chk "ficha del 2026-09-19 (antes del corte): sigue exigiendo la linea" "SALTADO"
 bugs_ficha "$M" 2026-09-23 "- Ninguno"
 chk "ficha del 2026-09-23: ya no la exige" "HECHO" "$(sa "$M")"
 
+echo "== indice.commit: la fila de la ficha tiene la celda Commit VACIA (2.39.2, p-d1a1ce615f) =="
+# Caso real (2026-09-24 y 25, este repo): dos checkpoints seguidos con memory/ en .gitignore
+# saltaron Step 6 y dejaron la celda vacia en vez de `N/A` (Step 6d); indice.sesion daba HECHO
+# porque solo miraba que la fila existiera.
+MC="$T/memorycommit"; nueva_memoria "$MC"
+SC="$MC/sessions/2026-09-19-demo.md"; ficha_completa "$SC"
+sed -i.bak 's/| `abc1234` |/|  |/' "$MC/_session-index.md"
+O=$($AUD "$MC" --session-file "$SC" --no-git --hoy $HOY 2>&1)
+chk "celda vacia: SALTADO" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*indice.commit')"
+chk "el corrige nombra N/A (Step 6d)" "1" "$(printf '%s' "$O" | grep -A3 'indice.commit' | grep -c 'corrige:.*N/A')"
+sed -i.bak 's/| demo |  |/| demo | N\/A |/' "$MC/_session-index.md"
+O=$($AUD "$MC" --session-file "$SC" --no-git --hoy $HOY 2>&1)
+chk "celda N/A: HECHO" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*indice.commit')"
+O=$($AUD "$M9" --session-file "$S9" --no-git --hoy $HOY 2>&1)
+chk "celda con hash: HECHO" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*indice.commit')"
+
+echo "== calendario.duplicado_entre_fichas: el mismo pendiente con recordatorio vivo en OTRA ficha (2.39.2, p-c9410e7764) =="
+# Caso real (2026-09-25, este repo): p-8472f7f4b7 quedo con un recordatorio para el 26 en la ficha
+# del 24 (viejo, solo 2.39.0) y otro en la del 25. Solo se vio porque el usuario pregunto.
+bloque_cal() {   # $1 = ficha, $2 = fecha, $3 = id
+  python3 - "$1" "$2" "$3" <<'PY'
+import sys
+p, fecha, pid = sys.argv[1:4]; t = open(p, encoding='utf-8').read()
+t = t.replace("\n## Related", f"\n## Recordatorios de calendario\n\n### {fecha} — [demo] revisar algo\n\n```\nRetomamos: revisar algo _id: {pid}_\n```\n\n## Related", 1)
+open(p, 'w', encoding='utf-8').write(t)
+PY
+}
+MD="$T/memorydup"; nueva_memoria "$MD"
+SD="$MD/sessions/2026-09-19-demo.md"; ficha_completa "$SD"; bloque_cal "$SD" 2026-09-26 p-8472f7f4b7
+VIEJA="$MD/sessions/2026-09-18-vieja.md"; ficha_completa "$VIEJA"; bloque_cal "$VIEJA" 2026-09-26 p-8472f7f4b7
+O=$($AUD "$MD" --session-file "$SD" --no-git --hoy $HOY 2>&1)
+chk "mismo id vivo en otra ficha: SALTADO" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*calendario.duplicado_entre_fichas')"
+chk "nombra la otra ficha" "1" "$(printf '%s' "$O" | grep -A3 'calendario.duplicado_entre_fichas' | grep -c '2026-09-18-vieja')"
+MD2="$T/memorydup2"; nueva_memoria "$MD2"
+SD2="$MD2/sessions/2026-09-19-demo.md"; ficha_completa "$SD2"; bloque_cal "$SD2" 2026-09-26 p-8472f7f4b7
+V2="$MD2/sessions/2026-09-10-pasada.md"; ficha_completa "$V2"; bloque_cal "$V2" 2026-09-12 p-8472f7f4b7
+O=$($AUD "$MD2" --session-file "$SD2" --no-git --hoy $HOY 2>&1)
+chk "el de la otra ficha ya paso: HECHO" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*calendario.duplicado_entre_fichas')"
+V3="$MD2/sessions/2026-09-11-otro.md"; ficha_completa "$V3"; bloque_cal "$V3" 2026-09-26 p-1234567890
+O=$($AUD "$MD2" --session-file "$SD2" --no-git --hoy $HOY 2>&1)
+chk "otro id el mismo dia: HECHO" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*calendario.duplicado_entre_fichas')"
+O=$($AUD "$M9" --session-file "$S9" --no-git --hoy $HOY 2>&1)
+chk "sin recordatorios en la ficha: no aplica" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*calendario.duplicado_entre_fichas.*no aplica')"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

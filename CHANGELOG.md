@@ -1,6 +1,35 @@
 # Changelog
 
 
+## [2.39.2] - 2026-09-25
+Origen: pendientes `p-d1a1ce615f` y `p-c9410e7764`. Al preguntar el usuario "¿falto algo de tu
+checkpoint?" tras 2.39.1 salieron dos fallos que `checkpoint-audit.py` habia dado por buenos.
+
+### Added
+- **`checkpoint-audit.py` `indice.commit`**: la fila de la ficha en `_session-index.md` tiene que
+  traer algo en la celda Commit (el hash de Step 6c o `N/A` de Step 6d). `indice.sesion` solo
+  miraba que la fila existiera. Step 7a corre despues de Step 6, asi que vacia no es un estado
+  intermedio. Sin columna Commit, o sin fila de la ficha, no aplica.
+  - Pasado por las 94 fichas reales de este repo: 5 sesiones (2026-09-22..23) tenian la celda
+    vacia, ademas de las 2 de 2026-09-24/25 que origino esto; todas sin commit de memoria (`memory/` esta en `.gitignore` y no se comitea desde el
+    2026-09-12). Se llenaron con `N/A` por el journal.
+- **`checkpoint-audit.py` `calendario.duplicado_entre_fichas`**: `SALTADO` si otra ficha tiene un
+  recordatorio con fecha futura (`### FECHA` de su `## Recordatorios de calendario`) para el mismo
+  `_id:` que un recordatorio futuro de esta. Uno ya pasado es historia y no cuenta.
+  - Pasado por las mismas 94 fichas: `p-e685e9c92a` tiene bloque vivo para el 2026-09-27 en tres
+    fichas y `p-68ca78de7e` para el 2026-09-28 en dos. No se tocaron: cual queda es decision del
+    usuario, que puede tener ya agendado cualquiera de ellos.
+
+### Changed
+- **`/checkpoint-3t` Step 8c y 8c-2, `/backfill-3t`: un pendiente, un recordatorio vivo.** El
+  control de arriba chocaba con la regla vieja: Step 8c mandaba imprimir recordatorio por cada
+  pendiente "nuevo o reconciliado" con fecha futura, asi que tocar un pendiente ya agendado lo
+  re-imprimia (de ahi los tres de `p-e685e9c92a`). Ahora: misma fecha y alcance → solo la linea
+  `- p-… ya agendado para <FECHA> en [[sessions/…]]`; fecha o alcance distintos → bloque nuevo, y
+  el de la ficha vieja se reemplaza por una nota que apunta al nuevo. El hook de cierre solo cuenta
+  bloques `### FECHA`, asi que la linea de referencia no le exige nada.
+- 9 asertos nuevos en `test-checkpoint-audit.sh` (177), todos rojos contra 2.39.1.
+
 ## [2.39.1] - 2026-09-25
 Origen: pendiente `p-6a7cbeb647`. El adversario de 2.39.0 midio que `CLAUDE_PROJECT_DIR` llega
 VACIA a las llamadas Bash del agente; Step 0b se arreglo en 2.39.0, pero el mismo patron

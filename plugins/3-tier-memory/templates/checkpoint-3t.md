@@ -1491,6 +1491,19 @@ Si algun pendiente de esta sesion (nuevo o reconciliado) **nombra una fecha post
 `+N con fecha futura en _pendientes.md`. El tope es para no llenar la terminal: en el session
 file (8c-2) van **todos**, sin tope.
 
+**Un pendiente, un recordatorio vivo (2.39.2).** Antes de generar el bloque, busca si OTRA ficha
+ya tiene un recordatorio con fecha futura para ese mismo `_id:`
+(`grep -l "_id: p-…_" memory/sessions/*.md`, seccion `## Recordatorios de calendario`):
+- **misma fecha y mismo alcance** → no generes bloque ni lo imprimas: el usuario ya lo agendo. En
+  8c-2 escribe solo la linea `- p-… ya agendado para <FECHA> en [[sessions/<otra-ficha>]]`.
+- **cambio la fecha o lo que hay que comprobar** → genera el bloque nuevo, reemplaza el bloque de
+  la ficha vieja por `Reemplazado por el recordatorio de [[sessions/<esta-ficha>]]. No agendes
+  este.`, y dile al usuario en el reporte que borre el evento viejo si ya lo agendo.
+Caso real (2026-09-25): reconciliar un pendiente ya agendado re-imprimia su recordatorio, y
+quedaron dos para el mismo dia, uno con el alcance viejo; `p-e685e9c92a` llego a tener tres.
+`checkpoint-audit.py` (`calendario.duplicado_entre_fichas`) marca `SALTADO` cuando dos fichas
+tienen bloque vivo para el mismo id.
+
 **Va fuera del snippet, no dentro.** El snippet se pega al agente de la sesion siguiente; una
 instruccion de calendario pegada ahi es ruido para el agente y se pierde para ti. Este bloque se
 dirige a ti, y lo que lleva dentro del fence es un prompt para que TU lo guardes en el evento.
@@ -1573,7 +1586,9 @@ recordatorio, el prefijo esta mal puesto o se perdio.
 Escribe los mismos bloques en el session file, en la seccion `## Recordatorios de calendario`,
 entre `## Como retomar` y `## Related`. Uno por pendiente con fecha futura, **todos, sin el tope
 de 2** que aplica a la terminal. Encabeza cada uno con `### <FECHA> — <Titulo>` y debajo el bloque
-completo. Si no hubo ninguno, borra la seccion entera en vez de dejarla vacia.
+completo. Un pendiente que ya tenia recordatorio vivo en otra ficha con la misma fecha lleva
+solo su linea `- p-… ya agendado para <FECHA> en [[sessions/…]]` (Step 8c, "Un pendiente, un
+recordatorio vivo"). Si no hubo ninguno, borra la seccion entera en vez de dejarla vacia.
 
 `<Titulo>` del encabezado es **el mismo texto que la linea `Título:` del bloque, caracter por
 caracter** — con su prefijo `[<proyecto>]` y con sus tildes. El resto de este fichero va sin tildes
