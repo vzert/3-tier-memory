@@ -8,8 +8,9 @@ Run ALL verification checklists using parallel Haiku subagents, then compile res
 
 ## Step 0: Determine paths
 
-- `MEMORY_DIR`: `$CLAUDE_PROJECT_DIR/memory` (Model B) or auto-memory path (Model A)
-- `ENCODED_PATH`: `echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g'`
+- `PROJECT_DIR`: `${CLAUDE_PROJECT_DIR:-$PWD}` — `CLAUDE_PROJECT_DIR` llega VACIA a las llamadas Bash del agente (medido 2026-09-24); usa `PROJECT_DIR` donde abajo dice `$CLAUDE_PROJECT_DIR`
+- `MEMORY_DIR`: `$PROJECT_DIR/memory` (Model B) or auto-memory path (Model A)
+- `ENCODED_PATH`: `echo "$PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g'`
 - `AUTO_MEMORY`: `$HOME/.claude/projects/$ENCODED_PATH/memory/MEMORY.md`
 
 ## Step 1: Launch parallel verification agents

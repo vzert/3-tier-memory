@@ -1,6 +1,27 @@
 # Changelog
 
 
+## [2.39.1] - 2026-09-25
+Origen: pendiente `p-6a7cbeb647`. El adversario de 2.39.0 midio que `CLAUDE_PROJECT_DIR` llega
+VACIA a las llamadas Bash del agente; Step 0b se arreglo en 2.39.0, pero el mismo patron
+(`ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed ...)`) seguia en otras cuatro plantillas.
+
+### Fixed
+- **`/checkpoint-3t` Step 5c-bis nunca sellaba el `session_id`.** El dir quedaba en
+  `~/.claude/projects/` y el sello salia `no-hay-jsonl-para-ese-id` (ya visible en la sesion
+  d971c55a, linea 2569). Sin sello, `/backfill-3t` dependia de su segunda capa para no duplicar.
+  - `stamp-session-id.py --projects-root DIR` (por defecto `~/.claude/projects`): si
+    `<jsonl-dir>/<id>.jsonl` no existe, busca `<projects-root>/*/<id>.jsonl`. Si el UUID aparece en
+    mas de un proyecto, falla cerrado (`id-en-varios-proyectos`). Las guardas de fecha y de sello
+    ajeno no cambian: una ficha de otra fecha sigue sin sellarse por la via nueva.
+  - 3 asertos nuevos en `test-backfill-dedup.sh` (45 en total); 2 rojos contra 2.39.0.
+  - Verificado con el bloque de la plantilla corrido tal cual en una sesion real, desde el repo y
+    desde `/tmp`: `stamped=1`. El codigo de 2.39.0 en el mismo caso: `stamped=0`.
+- **Mismo patron en `backfill-3t`, `consolidate-3t`, `enrich-3t` y `audit-3t`**: ahora usan
+  `${CLAUDE_PROJECT_DIR:-$PWD}`. Con la variable vacia, `/backfill-3t` se detenia con "No JSONL
+  session files found", y `/consolidate-3t` y `/enrich-3t` apuntaban el indice de recall a
+  `~/.claude/projects//.recall-index.jsonl`.
+
 ## [2.39.0] - 2026-09-24
 Origen: reporte de usuarios del plugin que dejan que su sesion se compacte una o varias veces antes
 de correr `/checkpoint-3t`. El checkpoint escribe lo que el agente tiene en contexto, y tras una

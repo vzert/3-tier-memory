@@ -28,11 +28,11 @@ Si `BACKFILL_FORCE_ALL=1` está presente en el env al inicio de la sesión:
 
 ## Step 0b: Prerequisites
 
-1. Verify `memory/MEMORY.md` exists in `$CLAUDE_PROJECT_DIR`. If not: tell the user "No memory system found. Run `/setup-memory` first." and **stop**.
+1. Verify `memory/MEMORY.md` exists in `${CLAUDE_PROJECT_DIR:-$PWD}` (the variable arrives EMPTY in the agent's Bash calls). If not: tell the user "No memory system found. Run `/setup-memory` first." and **stop**.
 
 2. Determine the JSONL directory:
 ```bash
-ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
+ENCODED=$(echo "${CLAUDE_PROJECT_DIR:-$PWD}" | sed 's/[^A-Za-z0-9]/-/g')   # CLAUDE_PROJECT_DIR llega vacia al Bash del agente
 JSONL_DIR="$HOME/.claude/projects/$ENCODED"
 ```
 

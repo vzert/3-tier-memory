@@ -33,7 +33,13 @@ marcada como ya-importada que nunca se importo—. Por eso, con `--jsonl-dir`, s
 `.jsonl` exista de verdad, y nunca se pisa un sello distinto que ya estuviera puesto.
 
 Uso:
-    stamp-session-id.py <FICHA.md> <SESSION_ID> [--jsonl-dir DIR]
+    stamp-session-id.py <FICHA.md> <SESSION_ID> [--jsonl-dir DIR] [--projects-root DIR]
+
+Si `<jsonl-dir>/<SESSION_ID>.jsonl` no existe, busca `<projects-root>/*/<SESSION_ID>.jsonl`
+(por defecto `~/.claude/projects`). Motivo (2.39.1): Step 5c-bis deriva --jsonl-dir de
+$CLAUDE_PROJECT_DIR, que llega VACIA a las llamadas Bash del agente; el dir quedaba en
+~/.claude/projects/ y el sello salia siempre `no-hay-jsonl-para-ese-id`. El UUID solo se acepta
+si aparece en UN proyecto (en varios: falla cerrado), y las guardas de fecha no cambian.
 
 Salida (stdout): una linea `stamped=<0|1> reason=<...>`
 Exit 0 si la ficha queda con el sello correcto (puesto ahora o ya puesto); != 0 si no.
@@ -143,10 +149,16 @@ def salir(codigo, sellado, razon):
 def main():
     argv = sys.argv[1:]
     jsonl_dir = ""
+    projects_root = os.path.expanduser("~/.claude/projects")
     if "--jsonl-dir" in argv:
         i = argv.index("--jsonl-dir")
         if i + 1 < len(argv):
             jsonl_dir = argv[i + 1]
+        argv = argv[:i] + argv[i + 2:]
+    if "--projects-root" in argv:
+        i = argv.index("--projects-root")
+        if i + 1 < len(argv):
+            projects_root = argv[i + 1]
         argv = argv[:i] + argv[i + 2:]
     if len(argv) < 2:
         return salir(2, 0, "uso: stamp-session-id.py <FICHA.md> <SESSION_ID> [--jsonl-dir DIR]")
@@ -168,7 +180,14 @@ def main():
     if jsonl_dir:
         transcripcion = os.path.join(jsonl_dir, sid + ".jsonl")
         if not os.path.isfile(transcripcion):
-            return salir(3, 0, "no-hay-jsonl-para-ese-id:%s" % sid)
+            import glob
+            hits = glob.glob(os.path.join(glob.escape(projects_root), "*", glob.escape(sid) + ".jsonl"))
+            if len(hits) > 1:
+                # Un UUID que aparece en dos proyectos no identifica nada: no se adivina cual.
+                return salir(3, 0, "id-en-varios-proyectos")
+            if not hits:
+                return salir(3, 0, "no-hay-jsonl-para-ese-id:%s" % sid)
+            transcripcion = hits[0]
         fecha_ficha = fecha_del_nombre(ficha)
         primera, ultima = rango_local(transcripcion)
         # TODA rama de esta comprobacion falla CERRADO: si no se puede comprobar, no se sella.

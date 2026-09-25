@@ -918,7 +918,7 @@ else
   [ -n "$_B" ] || _B=$(dirname "$(find "$HOME/.claude/plugins" -name "stamp-session-id.py" -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)")
   STAMP=${_B:+$_B/stamp-session-id.py}
 fi
-ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
+ENCODED=$(echo "${CLAUDE_PROJECT_DIR:-$PWD}" | sed 's/[^A-Za-z0-9]/-/g')   # CLAUDE_PROJECT_DIR llega vacia al Bash del agente
 JSONL_DIR="$HOME/.claude/projects/$ENCODED"
 if [ -n "$STAMP" ] && [ -f "$STAMP" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
   python3 "$STAMP" "$SESSION_FILE" "$CLAUDE_CODE_SESSION_ID" --jsonl-dir "$JSONL_DIR"

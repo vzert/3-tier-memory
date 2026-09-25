@@ -326,6 +326,29 @@ if [ -f "$STAMP_PY" ]; then
   if [ $? != 0 ] && grep -q 'ya-sellada-con-otro-id' "$TMP/st4"; then ok
   else fail "sello: piso un sello ajeno" "$(cat "$TMP/st4")"; fi
 
+  # --jsonl-dir EQUIVOCADO (2.39.1). /checkpoint-3t Step 5c-bis lo deriva de $CLAUDE_PROJECT_DIR,
+  # que llega VACIA a las llamadas Bash del agente: el dir resultaba ~/.claude/projects/ y el sello
+  # salia siempre `no-hay-jsonl-para-ese-id` (medido 2026-09-24; sesion d971c55a, linea 2569). El
+  # UUID se busca entonces bajo --projects-root/*/. Las guardas de fecha y de sello ajeno siguen.
+  construir
+  mkdir -p "$TMP/proj/-un-proyecto" "$TMP/vacio"
+  cp "$TMP/jd/$SID.jsonl" "$TMP/proj/-un-proyecto/"
+  python3 "$STAMP_PY" "$BUENA" "$SID" --jsonl-dir "$TMP/vacio" --projects-root "$TMP/proj" >"$TMP/st5" 2>&1
+  if grep -q 'stamped=1' "$TMP/st5" && grep -q "session_id: $SID" "$BUENA"; then ok
+  else fail "sello: con --jsonl-dir equivocado no encontro el UUID bajo --projects-root" "$(cat "$TMP/st5")"; fi
+
+  python3 "$STAMP_PY" "$AJENA" "$SID" --jsonl-dir "$TMP/vacio" --projects-root "$TMP/proj" >"$TMP/st6" 2>&1
+  if [ $? != 0 ] && grep -q 'stamped=0' "$TMP/st6" && ! grep -q 'session_id' "$AJENA"; then ok
+  else fail "sello: por la busqueda global acepto una ficha de fecha ajena" "$(cat "$TMP/st6")"; fi
+
+  construir
+  mkdir -p "$TMP/proj/-otro-proyecto"
+  cp "$TMP/jd/$SID.jsonl" "$TMP/proj/-otro-proyecto/"
+  python3 "$STAMP_PY" "$BUENA" "$SID" --jsonl-dir "$TMP/vacio" --projects-root "$TMP/proj" >"$TMP/st7" 2>&1
+  if [ $? != 0 ] && grep -q 'stamped=0 reason=id-en-varios-proyectos' "$TMP/st7" && ! grep -q 'session_id' "$BUENA"; then ok
+  else fail "sello: el mismo UUID en dos proyectos no fallo cerrado" "$(cat "$TMP/st7")"; fi
+  construir
+
   # EL MARGEN. Ficha de UN dia despues de su transcripcion: con MARGEN_DIAS=0 se rechaza, con 1
   # se aceptaria. Es el unico caso que distingue los dos valores; sin el, revertir el margen no
   # ponia el banco en rojo y el arreglo no estaba fijado por nada.
