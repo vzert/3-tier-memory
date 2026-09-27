@@ -11,7 +11,8 @@ script recorre CADA bloque bash por construccion, no por grafia.
 
 Reglas, por bloque bash:
   R1 `$CLAUDE_PROJECT_DIR` sin respaldo: vale `${CLAUDE_PROJECT_DIR:-...}`; falla la forma
-     desnuda, `${CLAUDE_PROJECT_DIR}` y cualquier otro operador.
+     desnuda, `${CLAUDE_PROJECT_DIR}`, el respaldo vacio `${CLAUDE_PROJECT_DIR:-}` (calla a
+     `set -u` pero sigue dando vacio) y cualquier otro operador.
   R2 `$PROJECT_DIR` usada sin definirla antes en el MISMO bloque (`PROJECT_DIR=` al inicio de
      una linea previa o de la misma linea). Definirla en otro bloque no cuenta: es otra llamada.
 
@@ -42,7 +43,7 @@ for _flujo in (sys.stdout, sys.stderr):
 
 SHELL = {"bash", "sh", "shell", "zsh"}
 FENCE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
-R1 = re.compile(r"\$CLAUDE_PROJECT_DIR\b|\$\{CLAUDE_PROJECT_DIR(?!:-)")
+R1 = re.compile(r"\$CLAUDE_PROJECT_DIR\b|\$\{CLAUDE_PROJECT_DIR(?!:-[^}])")
 R2_USO = re.compile(r"(?<![A-Za-z0-9_])\$\{?PROJECT_DIR\b")
 R2_DEF = re.compile(r"^\s*(export\s+)?PROJECT_DIR=")
 

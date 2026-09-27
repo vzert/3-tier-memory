@@ -11,7 +11,8 @@
 # Lo que esta prueba defiende:
 #   A. cada forma que el adversario encontro en 2.39.1 da rojo en la linea exacta:
 #      ENCODED=$(echo "$CLAUDE_PROJECT_DIR"), mkdir, cat >, if [ -f ] con $PROJECT_DIR sin definir;
-#   B. tambien ${CLAUDE_PROJECT_DIR} con llaves y sin ':-', y una definicion DESPUES del uso;
+#   B. tambien ${CLAUDE_PROJECT_DIR} con llaves y sin ':-', el respaldo vacio ${CLAUDE_PROJECT_DIR:-}
+#      y una definicion DESPUES del uso;
 #   C. un ```bash anidado en un ````markdown y un ```bash con sangria dentro de una lista cuentan;
 #   D. sin falso positivo: ${CLAUDE_PROJECT_DIR:-$PWD}, definicion en la primera linea, prosa en
 #      un bloque sin etiqueta y $CLAUDE_PLUGIN_ROOT quedan en verde;
@@ -88,10 +89,11 @@ ls "$PROJECT_DIR/memory"
 EOF
 
 echo "B. llaves sin ':-' y definicion tardia"
-rojo llaves "2:R1 3:R1" <<'EOF'
+rojo llaves "2:R1 3:R1 4:R1" <<'EOF'
 ```bash
 D="${CLAUDE_PROJECT_DIR}/memory"
 E="${CLAUDE_PROJECT_DIR-$PWD}"
+F="${CLAUDE_PROJECT_DIR:-}/memory"
 ```
 EOF
 rojo def-tardia "2:R2" <<'EOF'
