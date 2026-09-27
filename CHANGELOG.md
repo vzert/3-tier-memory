@@ -1,6 +1,29 @@
 # Changelog
 
 
+## [2.39.3] - 2026-09-27
+Origen: pendiente `p-9d5e07e233`. 2.39.1 limpio a mano, con un recorrido de un solo uso, los
+bloques bash que usaban la ruta del proyecto sin respaldo. Nada impedia que volvieran.
+
+### Added
+- **`bin/check-project-dir-fallback.py` + `bin/test-project-dir-fallback.sh`**: recorre cada
+  bloque bash (```bash/sh/shell/zsh, con sangria o anidado en un ````markdown) de `templates/` y
+  `commands/`. Falla si un bloque usa `$CLAUDE_PROJECT_DIR` sin `:-` (R1) o `$PROJECT_DIR` sin
+  definirla antes en el MISMO bloque (R2). Los bloques sin etiqueta no se revisan: hoy solo traen
+  prosa o salida de ejemplo; un comando para ejecutar va en ```bash.
+  - Contra el arbol de 2.39.0 (025ebb2) marca las 10 lineas que 2.39.1 arreglo, en templates/ y
+    commands/, con las formas `ENCODED=$(echo "$CLAUDE_PROJECT_DIR"`, mkdir, cat > e if -f.
+  - La suite tiene 9 plantillas sinteticas rojas (cada forma, llaves sin `:-`, definicion tardia o
+    en otro bloque, bloque anidado, bloque con sangria) que comprueban `linea:regla`, 2 verdes, y el
+    arbol real en verde con al menos 50 bloques recorridos. Cuatro mutaciones del checker (sin
+    recursion, sin sangria, `:-` relajado, sin definicion) la hacen caer.
+
+### Fixed
+- **`test-checkpoint-close-guard.sh` rojo desde el 2026-09-27**: su `_pendientes.md` de prueba
+  traia `_revisar: 2026-09-27`. `print-pendiente-opcional.py` usa la fecha real, asi que desde ese
+  dia el pendiente pasaba a vencido y le ganaba al Alta que el caso 2.35.0 espera. La fecha pasa a
+  2099-09-27.
+
 ## [2.39.2] - 2026-09-25
 Origen: pendientes `p-d1a1ce615f` y `p-c9410e7764`. Al preguntar el usuario "¿falto algo de tu
 checkpoint?" tras 2.39.1 salieron dos fallos que `checkpoint-audit.py` habia dado por buenos.

@@ -30,7 +30,7 @@ armar() {
 ## Media prioridad
 
 - [ ] verificar en instalacion real — _origen: [[sessions/2026-09-22-demo]]_ — _creado: 2026-09-22_ — _id: p-a4439fa8fd_ — _bloqueado: que otra instalacion actualice el plugin_
-- [ ] verificar si las reglas nuevas se siguen — _origen: [[sessions/2026-09-22-demo]]_ — _creado: 2026-09-22_ — _id: p-e685e9c92a_ — _revisar: 2026-09-27_
+- [ ] verificar si las reglas nuevas se siguen — _origen: [[sessions/2026-09-22-demo]]_ — _creado: 2026-09-22_ — _id: p-e685e9c92a_ — _revisar: 2099-09-27_
 - [ ] plan.upsert sin guardian — _origen: [[sessions/2026-09-01-x]]_ — _creado: 2026-09-01_ — _id: p-014255373e_
 - [ ] estado final 2.30.0 — _origen: [[sessions/2026-09-01-x]]_ — _creado: 2026-09-01_ — _id: p-49996efc69_
 
