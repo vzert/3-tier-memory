@@ -989,6 +989,11 @@ def anotar_reabierto(mem, pid, ev, que="la reapertura"):
       anterior a un amend del alias ya aplicado se descartaba como replay sin serlo. Las clases de
       clave no pueden chocar entre si (prefijos distintos; `p-` exige 10 hex).
 
+    Una linea `clave<TAB>-ts<TAB>fecha` ANULA una anotacion anterior de esa clave y ese ts (2.40.0,
+    `desanotar`): se escribe cuando el indice no se pudo escribir despues de anotar. Un compactador
+    anterior a 2.40.0 la ignora (su campo no es numerico) y veria la anotacion como viva; solo
+    importa si se baja de version con una anulacion de `plan-`/`research-` en el registro.
+
     `que` solo cambia el motivo de la cuarentena, para que diga que evento no se aplico.
     """
     d = os.path.join(mem, ".journal")
@@ -1014,54 +1019,41 @@ def anotar_reabierto(mem, pid, ev, que="la reapertura"):
 
 
 def desanotar(mem, entradas):
-    """Quita de `.journal/reabiertos.log` la ULTIMA linea de cada (clave, ts) de `entradas`.
-    Devuelve True si lo consiguio.
+    """Anula en `.journal/reabiertos.log` cada (clave, ts) de `entradas` AGREGANDO una linea
+    `clave<TAB>-ts<TAB>fecha`. Devuelve las que NO se pudieron anular ([] = todas anuladas).
 
     Deshace un `anotar_reabierto` cuya escritura del indice fallo despues. Sin esto, la correccion
     se perdia para siempre y quedaba contada como aplicada: el evento sigue en pending/, pero el
     siguiente compactador ve su propio ts ya anotado y lo archiva como noop (adversario de 2.40.0,
     `chmod 555` sobre memory/).
 
-    Solo por fichero temporal propio + fsync + rename: el registro protege TODAS las reversas
-    (pendientes, planes, research, sesiones), y una reescritura en sitio lo trunca antes de
-    escribirlo — una muerte del proceso en medio lo vaciaria entero (learnings 86 y 183). Una
-    version de 2.40.0 lo hacia como respaldo; ademas era inalcanzable: si `.journal/` no deja
-    crear ficheros, el compactador no consigue su lock y no llega aqui. Si esto falla, False, y el
-    llamante cuarentena el evento con la linea que hay que borrar.
+    Por append y nunca reescribiendo el fichero. Las versiones de 2.40.0 que lo reescribian (en
+    sitio, y despues por temporal + rename) abrian fallos que el registro append-only no tenia: el
+    truncado lo vaciaba si el proceso moria en medio, el rename le cambiaba los permisos, y un
+    registro que admite append pero no rename (`chflags uappnd`) dejaba la anotacion viva.
+    Anular usa la MISMA operacion que acaba de funcionar al anotar. `ts_registrados` resta cada
+    anulacion de una ocurrencia de ese ts.
     """
     path = os.path.join(mem, ".journal", REABIERTOS_LOG)
-    tmp = f"{path}.{os.getpid()}.tmp"
-    try:
-        with open(path, encoding="utf-8") as fh:
-            lineas = fh.readlines()
-        for clave, ts in entradas:
-            pref = f"{campo_log(clave)}\t{campo_log(str(ts))}\t"
-            for k in range(len(lineas) - 1, -1, -1):
-                if lineas[k].startswith(pref):
-                    del lineas[k]
-                    break
-        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
-            fh.writelines(lineas)
-            fh.flush()
-            os.fsync(fh.fileno())
-        replace_with_retry(tmp, path)
-        return True
-    except OSError:
+    fallidas = []
+    for clave, ts in entradas:
         try:
-            os.unlink(tmp)
+            with open(path, "a", encoding="utf-8", newline="\n") as fh:
+                fh.write(f"{campo_log(clave)}\t-{campo_log(str(ts))}\t{date.today().isoformat()}\n")
         except OSError:
-            pass
-        return False
+            fallidas.append((clave, ts))
+    return fallidas
 
 
 def escribir_anotado(mem, anotaciones, path, lines):
     """Anota cada (clave, ts, que) en reabiertos.log y DESPUES escribe el indice; si la escritura
-    falla, retira las anotaciones y re-lanza (el evento sigue en pending/ y el reintento aplica).
-    El orden anotar-antes-de-escribir se mantiene: sin registro no hay proteccion frente al replay.
+    falla, anula las anotaciones (`desanotar`) y re-lanza: el evento sigue en pending/ y el
+    reintento aplica. El orden anotar-antes-de-escribir se mantiene: sin registro no hay
+    proteccion frente al replay.
 
-    Si ademas retirarlas falla, el evento va a cuarentena `no-registro` en vez de quedarse en
-    pending/: con la anotacion dentro, el reintento lo archivaria como replay sin aplicarlo, en
-    silencio (adversario externo de 2.40.0, ronda 2). La cuarentena es ruidosa y dice que borrar.
+    Si alguna anulacion falla, el evento va a cuarentena `no-registro` nombrando las lineas que
+    quedaron vivas, en vez de quedarse en pending/ para archivarse despues como replay sin
+    aplicarse (adversario externo de 2.40.0, ronda 2).
     """
     hechas = []
     try:
@@ -1070,13 +1062,15 @@ def escribir_anotado(mem, anotaciones, path, lines):
             hechas.append((clave, ts))
         atomic_write(path, lines)
     except BaseException as e:
-        if hechas and not desanotar(mem, hechas):
+        vivas = desanotar(mem, hechas) if hechas else []
+        if vivas:
             raise Quarantine(
                 f"no-registro: fallo la anotacion o la escritura de {os.path.basename(path)} "
-                f"({e}) y tampoco se pudo retirar de .journal/{REABIERTOS_LOG} la anotacion de "
-                f"{', '.join(f'{c} {t}' for c, t in hechas)}. El indice NO cambio. Borra esa(s) "
-                f"linea(s) del registro y devuelve este evento a pending/: con la anotacion "
-                f"dentro, se archivaria como replay sin aplicarse.") from e
+                f"({e}) y tampoco se pudo anular en .journal/{REABIERTOS_LOG} la anotacion de "
+                f"{', '.join(f'{c} {t}' for c, t in vivas)}. El indice NO cambio. Agrega a ese "
+                f"registro una linea '<clave><TAB>-<ts><TAB><fecha>' por cada una (o borra la "
+                f"suya) y devuelve este evento a pending/: con la anotacion viva, se archivaria "
+                f"como replay sin aplicarse.") from e
         raise
 
 
@@ -1110,22 +1104,29 @@ def reaperturas_plan(mem, slug):
 
 def ts_registrados(mem, clave_id):
     """Los ts anotados en `.journal/reabiertos.log` para una clave (`plan-<slug>`,
-    `research-<slug>`, `session-fecha-<slug>`, `session-alias-<slug>`). Solo los numericos: una linea de pendiente (`p-...`) nunca casa."""
+    `research-<slug>`, `session-fecha-<slug>`, `session-alias-<slug>`), descontando las
+    anulaciones (`-ts`, ver `desanotar`). Es un multiconjunto: anotar 100, anular -100 y volver a
+    anotar 100 en el reintento deja 100 vivo — con una diferencia de conjuntos desapareceria y el
+    replay de ese evento ya no seria noop. Solo campos numericos: una linea de pendiente (`p-...`)
+    nunca casa."""
     path = os.path.join(mem, ".journal", REABIERTOS_LOG)
     if not os.path.isfile(path):
         return []
     clave = f"{campo_log(clave_id)}\t"
-    out = []
+    cuenta = {}
     try:
         with open(path, encoding="utf-8") as fh:
             for l in fh:
                 if l.startswith(clave):
                     campo = l[len(clave):].split("\t", 1)[0]
                     if campo.isdigit():
-                        out.append(int(campo))
+                        cuenta[int(campo)] = cuenta.get(int(campo), 0) + 1
+                    elif campo[:1] == "-" and campo[1:].isdigit():
+                        n = int(campo[1:])
+                        cuenta[n] = max(0, cuenta.get(n, 0) - 1)
     except OSError:
         return []
-    return out
+    return [ts for ts, k in cuenta.items() for _ in range(k)]
 
 
 def entradas_archivadas(path, pid):

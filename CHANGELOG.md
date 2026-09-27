@@ -56,7 +56,8 @@ CHANGELOG 2.31.0, "2. session.amend".
   intacto" y de rechazo, que un tipo desconocido tambien cumple).
 - `tools/mutation-session-amend.py`: la lista de mutaciones de este codigo, con el texto exacto
   que cambia cada una y la suite que debe caer. Sale 1 si alguna no se aplica exactamente una vez
-  (SIN PROBAR) o si su suite no cae; al publicar 2.40.0 caen todas. Incluye la poda copiada tal cual de
+  (SIN PROBAR) o si su suite no cae por un aserto `FALLA` (una suite que revienta no cuenta); al
+  publicar 2.40.0 caen todas. Incluye la poda copiada tal cual de
   `session.add` (por eso el caso de la tabla llena usa una fila de mas: con la tabla justa esa
   poda no borra nada) y la inversion del orden anotar/escribir. Se corre a mano, fuera de
   `run-tests.sh`, para no atar el runner a textos que cambian.
@@ -67,20 +68,32 @@ CHANGELOG 2.31.0, "2. session.amend".
   con razon (sin registro no hay proteccion frente al replay). Pero si despues `atomic_write`
   fallaba (disco, permisos), la anotacion quedaba: el evento seguia en `pending/`, y el siguiente
   compactador veia su propio ts ya anotado y lo archivaba como replay, sin aplicarlo. Ahora los
-  tres eventos escriben con `escribir_anotado`: si la escritura falla, retira sus anotaciones y
-  re-lanza; el evento sigue en `pending/` y el reintento aplica. Las retira reescribiendo el
-  registro por fichero temporal propio + fsync + rename, nunca en sitio: el registro protege todas
-  las reversas, y truncarlo para reescribirlo lo dejaria vacio si el proceso muere en medio. Si no
-  se pueden retirar, el evento va a cuarentena `no-registro` con la linea que hay que borrar, en
-  vez de quedarse en `pending/` para archivarse despues como replay sin aplicarse. Lo encontraron los adversarios
-  sobre `session.amend`; el caso `chmod 555` sobre `memory/` de `test-research-rename.sh` y de
-  `test-plan-reopen.sh` es rojo contra 2.39.2. Otro caso en las tres suites (registro de solo
-  lectura: cuarentena `no-registro` y el indice intacto) fija el orden anotar-antes-de-escribir,
-  que el de `chmod 555` no distinguia. En `test-session-amend.sh`, la doble falla real (registro
-  `chflags uappnd` + `memory/` sin escritura; se salta donde no hay `chflags`) y un fallo inyectado
-  a mitad de la reescritura del registro (el original queda intacto). `pendiente.reopen` no tenia el fallo: anota el ts del cierre, no el suyo,
-  y el reintento vuelve a pasar.
-
+  tres eventos escriben con `escribir_anotado`: si la escritura falla, ANULAN sus anotaciones y
+  re-lanzan; el evento sigue en `pending/` y el reintento aplica.
+  - *Anular es agregar, no reescribir*: una linea `clave<TAB>-ts<TAB>fecha` al final del registro,
+    la misma operacion (append) que acaba de funcionar al anotar. `ts_registrados` cuenta cada ts
+    como multiconjunto (anotar, anular y volver a anotar en el reintento lo deja vivo). El registro
+    sigue siendo append-only: no hay truncado, ni rename que cambie sus permisos, ni dependencia de
+    poder mover el evento a `quarantine/`. (Dos versiones intermedias lo reescribian; los
+    adversarios midieron en ellas un registro vaciado por una muerte a mitad, permisos `640` que
+    pasaban a `644`, y la anotacion viva cuando el registro admite append pero no rename.)
+  - Si la anulacion misma no se puede escribir, el evento va a cuarentena `no-registro`, que nombra
+    las anotaciones que quedaron vivas y como anularlas.
+  - *Residuos, declarados*: (1) si el proceso MUERE entre anotar y escribir el indice, no corre
+    codigo que anule, y el reintento archiva el evento como replay; es el mismo hueco que
+    `plan.reopen` y `research.rename` tienen desde que salieron, y no lo cierra esta version. (2) Si
+    el append de la anulacion falla justo despues de que el de la anotacion funciono Y ademas no se
+    puede mover el evento a `quarantine/`, el compactador sale con error y la anotacion queda viva.
+  - *Compatibilidad*: un compactador anterior a 2.40.0 ignora la linea de anulacion (su campo no es
+    numerico) y veria la anotacion como viva. Solo importa si se baja de version con una anulacion
+    de `plan-`/`research-` en el registro.
+  - Tests: el caso `chmod 555` sobre `memory/` de `test-research-rename.sh` y de
+    `test-plan-reopen.sh` es rojo contra 2.39.2; otro caso en las tres suites (registro de solo
+    lectura: cuarentena `no-registro`, indice intacto) fija el orden anotar-antes-de-escribir. En
+    `test-session-amend.sh`: registro que admite append pero no rename con `memory/` y
+    `quarantine/` sin escritura (se salta donde no hay `chflags`), anulacion que falla por
+    inyeccion (cuarentena `no-registro`), y fallo + reintento + edicion a mano + replay (noop: el
+    multiconjunto).
 - **El README contaba un tipo de evento de menos**: nunca nombro `pendiente.block`, asi que decia
   "Thirteen" con catorce. Ahora lo nombra y cuenta los quince del `--type` de `journal-emit.py`
   (lo encontro el adversario externo).

@@ -43,7 +43,10 @@ razon() { cat "$M"/.journal/quarantine/*.reason 2>/dev/null; }
 n() { grep -cF -- "$1" "$IDX"; }
 filas() { grep -c '^| [0-9]' "$IDX"; }
 sha() { shasum -a 256 "$IDX" | cut -d' ' -f1; }
-reg() { cat "$M/.journal/reabiertos.log" 2>/dev/null | grep -c "^session-[a-z]*-$1	"; }
+vivas() {  # anotaciones VIVAS (anotadas menos anuladas) de las claves que casan $1 (regex ERE)
+  awk -F'\t' -v k="$1" '$1 ~ k { if ($2 ~ /^-/) c[substr($2,2)]--; else c[$2]++ }
+    END { n=0; for (t in c) if (c[t]>0) n+=c[t]; print n }' "$M/.journal/reabiertos.log" 2>/dev/null || echo 0; }
+reg() { vivas "^session-(fecha|alias)-$1\$"; }
 am() { emit --type session.amend "$@"; }
 # Escribe a mano un evento session.amend (otro emisor, o un evento editado): $1 = payload JSON,
 # $2 = ts ("" para omitirlo), $3 = nombre del fichero (el compactador aplica por orden de nombre).
@@ -327,24 +330,26 @@ chmod 644 "$M/.journal/reabiertos.log"
 has "motivo no-registro" "$(razon)" "^no-registro:"
 chk "indice intacto" "$ANTES" "$(sha)"
 
-echo "== 29. falla el indice Y no se puede retirar la anotacion: cuarentena no-registro, no un replay mudo =="
-# Doble falla real: el registro admite append (la anotacion entra) pero no rename encima (no se
-# puede retirar), y memory/ no deja escribir el indice. Sin la cuarentena, el evento quedaba en
-# pending/ con su anotacion y el reintento lo archivaba como replay sin aplicarlo.
+echo "== 29. registro que admite append pero no rename, memory/ y quarantine/ sin escritura: el reintento aplica =="
+# La anulacion es un append, la misma operacion que acaba de funcionar al anotar: no necesita
+# rename, ni reescribir el registro, ni mover nada a quarantine/. Con la version que reescribia el
+# registro, este estado dejaba la anotacion viva y el reintento archivaba el evento como replay.
 if command -v chflags >/dev/null 2>&1; then
   fixture "$FILA"
   am --slug "$S" --date 2026-09-12
   ANTES=$(sha)
   : > "$M/.journal/reabiertos.log"; chflags uappnd "$M/.journal/reabiertos.log"
+  mkdir -p "$M/.journal/quarantine"; chmod 555 "$M/.journal/quarantine"
   chmod 555 "$M"
   compact --quiet >/dev/null 2>&1
-  chmod 755 "$M"; chflags nouappnd "$M/.journal/reabiertos.log"
-  has "motivo no-registro" "$(razon)" "^no-registro:"
-  has "nombra la linea a borrar" "$(razon)" "session-fecha-$S"
-  chk "indice intacto, el evento fuera de pending" "$ANTES|0" "$(sha)|$(ls "$M/.journal/pending" | wc -l | tr -d ' ')"
-  chk "sin temporal huerfano" "0" "$(ls "$M/.journal" | grep -c '\.tmp$')"
+  chmod 755 "$M" "$M/.journal/quarantine"; chflags nouappnd "$M/.journal/reabiertos.log"
+  chk "indice intacto, anotacion anulada, evento en pending" "$ANTES|0|1" \
+    "$(sha)|$(reg "$S")|$(ls "$M/.journal/pending" | wc -l | tr -d ' ')"
+  OUT=$(compact)
+  has "el reintento aplica" "$OUT" "applied=1"
+  chk "corregida y anotada una vez" "1|1" "$(n "| 2026-09-12 | [[sessions/$S")|$(reg "$S")"
 else
-  echo "  SKIP doble falla: sin chflags (solo macOS/BSD)"
+  echo "  SKIP append sin rename: sin chflags (solo macOS/BSD)"
 fi
 
 echo "== 31. una fila con la Fecha VACIA tambien se corrige =="
@@ -361,36 +366,44 @@ $FILA
 am --slug "$S" --date 2026-09-13 || true
 has "dice 3 filas" "$(cat "$M/../emit.err")" "tiene 3 filas"
 
-echo "== 32. si la escritura del registro falla a medias, el registro original queda intacto =="
-# Inyeccion de fallo: writelines lanza OSError DESPUES de abrir el fichero. Con temporal + rename
-# el registro no se toca; con una reescritura en sitio, `open(..., "w")` ya lo habria truncado y
-# se perderian las anotaciones de TODAS las claves (pendientes, planes, research).
+echo "== 32. si la anulacion no se puede escribir: cuarentena no-registro con la linea viva, indice intacto =="
+# Inyeccion de fallo: el indice no se puede escribir y el SEGUNDO append al registro (la
+# anulacion) falla; el primero (la anotacion) funciona. Sin la cuarentena, el evento se quedaba
+# en pending/ con la anotacion viva y el reintento lo archivaba como replay sin aplicarse.
 fixture "$FILA"
-mkdir -p "$M/.journal"
-printf 'p-0123456789\t1\t2026-09-01\nplan-otro\t2\t2026-09-01\nsession-fecha-%s\t3\t2026-09-01\n' "$S" > "$M/.journal/reabiertos.log"
-ANTES=$(shasum "$M/.journal/reabiertos.log" | cut -d' ' -f1)
-R=$(python3 - "$BIN/journal-compact.py" "$M" "$S" <<'PY'
+am --slug "$S" --date 2026-09-14
+ANTES=$(sha)
+python3 - "$BIN/journal-compact.py" "$M" <<'PY' >/dev/null 2>&1
 import builtins, importlib.util, sys
 sys.dont_write_bytecode = True
 spec = importlib.util.spec_from_file_location("jc", sys.argv[1]); jc = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(jc)
-real = builtins.open
-class Roto:
-    def __init__(self, fh): self.fh = fh
-    def __enter__(self): return self
-    def __exit__(self, *a): self.fh.close()
-    def writelines(self, _): raise OSError("disco lleno (inyectado)")
-    def write(self, _): raise OSError("disco lleno (inyectado)")
+def indice_roto(path, lines): raise OSError("disco lleno (inyectado)")
+jc.atomic_write = indice_roto
+real, appends = builtins.open, []
 def falso(f, mode="r", *a, **k):
-    fh = real(f, mode, *a, **k)
-    return Roto(fh) if "w" in mode and ".journal" in str(f) else fh
+    if "a" in mode and str(f).endswith("reabiertos.log"):
+        appends.append(f)
+        if len(appends) >= 2:
+            raise OSError("disco lleno (inyectado)")
+    return real(f, mode, *a, **k)
 builtins.open = falso
-print(jc.desanotar(sys.argv[2], [(f"session-fecha-{sys.argv[3]}", 3)]))
+jc.compact(sys.argv[2], 10, True)
 PY
-)
-chk "desanotar informa el fallo" "False" "$R"
-chk "registro intacto" "$ANTES" "$(shasum "$M/.journal/reabiertos.log" | cut -d' ' -f1)"
-chk "sin temporal huerfano" "0" "$(ls "$M/.journal" | grep -c '\.tmp$')"
+has "motivo no-registro" "$(razon)" "^no-registro:"
+has "nombra la anotacion viva" "$(razon)" "session-fecha-$S"
+chk "indice intacto, una anotacion viva" "$ANTES|1" "$(sha)|$(reg "$S")"
+
+echo "== 33. fallo + reintento + edicion a mano + replay: noop, sin cuarentena =="
+# El registro es un multiconjunto: anotar ts, anular -ts y volver a anotar ts en el reintento deja
+# ts vivo. Con una diferencia de conjuntos desapareceria, y el replay caeria en celda-cambiada.
+fixture "$FILA"
+am --slug "$S" --date 2026-09-15; E1=$EV
+chmod 555 "$M"; compact --quiet >/dev/null 2>&1; chmod 755 "$M"
+compact --quiet >/dev/null 2>&1
+sed -i.bak "s/| 2026-09-15 | \[\[sessions\/$S/| 2026-09-16 | [[sessions\/$S/" "$IDX"
+replay "$E1"
+chk "sigue la edicion a mano, sin cuarentena" "1|0" "$(n "| 2026-09-16 | [[sessions/$S")|$(cuar)"
 
 echo
 echo "RESULTADO: $pass ok, $fail fallas"

@@ -34,6 +34,9 @@ compact() { python3 "$BIN/journal-compact.py" --memory-dir "$M" --log "$LOG" "$@
 replay() { cp "$1" "$M/.journal/pending/$(basename "$1" .bak)"; compact --quiet >/dev/null; }
 status() { grep -F "$1" "$M/_plans-index.md" | awk -F' \\| ' '{print $2}'; }
 cuar() { ls "$M/.journal/quarantine/"*.json 2>/dev/null | wc -l | tr -d ' '; }
+vivas() {  # anotaciones VIVAS (anotadas menos anuladas) de las claves que casan $1 (regex ERE)
+  awk -F'\t' -v k="$1" '$1 ~ k { if ($2 ~ /^-/) c[substr($2,2)]--; else c[$2]++ }
+    END { n=0; for (t in c) if (c[t]>0) n+=c[t]; print n }' "$M/.journal/reabiertos.log" 2>/dev/null || echo 0; }
 reab() { grep -c "^plan-$1	" "$M/.journal/reabiertos.log" 2>/dev/null || echo 0; }
 up() { emit --type plan.upsert --slug demo --title Demo --date 2026-09-01 "$@"; }
 
@@ -175,7 +178,7 @@ emit --type plan.reopen --slug demo
 chmod 555 "$M"
 compact --quiet >/dev/null 2>&1
 chmod 755 "$M"
-chk "sin anotacion tras el fallo" "0" "$(cat "$M/.journal/reabiertos.log" 2>/dev/null | grep -c '^plan-demo	')"
+chk "sin anotacion viva tras el fallo" "0" "$(vivas '^plan-demo$')"
 OUT=$(compact)
 has "el reintento aplica" "$OUT" "applied=1"
 chk "reabierto" "active" "$(status plan-demo)"

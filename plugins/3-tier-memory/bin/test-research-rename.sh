@@ -34,6 +34,9 @@ emit() {
 compact() { python3 "$BIN/journal-compact.py" --memory-dir "$M" --log "$LOG" "$@"; }
 replay() { cp "$1" "$M/.journal/pending/$(basename "$1" .bak)"; compact --quiet >/dev/null; }
 cuar() { ls "$M/.journal/quarantine/"*.json 2>/dev/null | wc -l | tr -d ' '; }
+vivas() {  # anotaciones VIVAS (anotadas menos anuladas) de las claves que casan $1 (regex ERE)
+  awk -F'\t' -v k="$1" '$1 ~ k { if ($2 ~ /^-/) c[substr($2,2)]--; else c[$2]++ }
+    END { n=0; for (t in c) if (c[t]>0) n+=c[t]; print n }' "$M/.journal/reabiertos.log" 2>/dev/null || echo 0; }
 razon() { cat "$M"/.journal/quarantine/*.reason 2>/dev/null; }
 n() { grep -cF -- "$1" "$IDX"; }
 sha() { shasum -a 256 "$IDX" | cut -d' ' -f1; }
@@ -193,7 +196,7 @@ rn --slug demo --tema "Tras el fallo"
 chmod 555 "$M"
 compact --quiet >/dev/null 2>&1
 chmod 755 "$M"
-chk "sin anotacion tras el fallo" "0" "$(cat "$M/.journal/reabiertos.log" 2>/dev/null | grep -c '^research-demo	')"
+chk "sin anotacion viva tras el fallo" "0" "$(vivas '^research-demo$')"
 OUT=$(compact)
 has "el reintento aplica" "$OUT" "applied=1"
 chk "renombrada" "1" "$(n '| Tras el fallo |')"

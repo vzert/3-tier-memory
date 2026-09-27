@@ -81,20 +81,24 @@ MUTACIONES = [
      "        if p[\"_ts\"] <= 0:\n            raise Quarantine(\"malformed: session.amend sin",
      "        if False:\n            raise Quarantine(\"malformed: session.amend sin", [SA]),
     # escribir_anotado: compartido por session.amend, research.rename y plan.reopen
-    ("sin retirar la anotacion", C,
-     "        if hechas and not desanotar(mem, hechas):", "        if False:", [SA, RR, PR]),
+    ("sin anular la anotacion", C,
+     "        vivas = desanotar(mem, hechas) if hechas else []",
+     "        vivas = []", [SA, RR, PR]),
     ("escribir antes de anotar", C,
      "        for clave, ts, que in anotaciones:\n            anotar_reabierto(mem, clave, ts, que=que)\n"
      "            hechas.append((clave, ts))\n        atomic_write(path, lines)",
      "        atomic_write(path, lines)\n        for clave, ts, que in anotaciones:\n"
      "            anotar_reabierto(mem, clave, ts, que=que)\n            hechas.append((clave, ts))",
      [SA, RR, PR]),
-    ("retirar sin temporal (en sitio)", C,
-     "        with open(tmp, \"w\", encoding=\"utf-8\", newline=\"\\n\") as fh:\n"
-     "            fh.writelines(lineas)\n            fh.flush()",
-     "        with open(path, \"w\", encoding=\"utf-8\", newline=\"\\n\") as fh:\n"
-     "            fh.writelines(lineas)\n            fh.flush()\n        return True\n"
-     "        with open(tmp, \"w\") as fh:\n            fh.flush()", [SA]),
+    ("anulacion sin signo (+ts)", C,
+     "                fh.write(f\"{campo_log(clave)}\\t-{campo_log(str(ts))}",
+     "                fh.write(f\"{campo_log(clave)}\\t{campo_log(str(ts))}", [SA]),
+    ("registro como conjunto, no multiconjunto", C,
+     "                        cuenta[n] = max(0, cuenta.get(n, 0) - 1)",
+     "                        cuenta[n] = -10 ** 9   # un ts anulado queda muerto: diferencia de conjuntos",
+     [SA]),
+    ("cuarentena no-registro sin disparar", C,
+     "        if vivas:\n            raise Quarantine(", "        if False:\n            raise Quarantine(", [SA]),
     ("fecha vieja vacia rechazada (compactador)", C,
      "            if not isinstance(p.get(\"fecha_vieja\"), str):",
      "            if not p.get(\"fecha_vieja\"):", [SA]),
@@ -123,9 +127,12 @@ MUTACIONES = [
 
 
 def correr(suite, d):
+    """(cae, ultima linea). Cae solo si sale != 0 Y hay algun aserto FALLA: una suite que revienta
+    (traceback, error de sintaxis del mutado) sale != 0 sin haber medido nada, y contarla como
+    "cae" aprobaria una mutacion que ningun aserto detecta (adversario externo, ronda 4)."""
     r = subprocess.run(["bash", os.path.join(d, suite)], capture_output=True, text=True)
     ultima = (r.stdout.strip().splitlines() or [""])[-1]
-    return r.returncode, ultima
+    return r.returncode != 0 and "  FALLA " in r.stdout, ultima
 
 
 def main():
@@ -146,12 +153,12 @@ def main():
                         shutil.copy(os.path.join(BIN, f), d)
                 with open(os.path.join(d, fichero), "w", encoding="utf-8") as fh:
                     fh.write(src.replace(viejo, nuevo))
-                rc, ultima = correr(suite, d)
+                cae, ultima = correr(suite, d)
             finally:
                 subprocess.run(["chmod", "-R", "u+w", d])
                 shutil.rmtree(d, ignore_errors=True)
-            if rc == 0:
-                print(f"  NO {etiqueta:36} {suite} NO cae ({ultima})")
+            if not cae:
+                print(f"  NO {etiqueta:36} {suite} NO cae por un aserto ({ultima})")
                 malas += 1
             else:
                 print(f"  ok {etiqueta:36} {suite}: {ultima}")
