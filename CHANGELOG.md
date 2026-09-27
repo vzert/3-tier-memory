@@ -1,6 +1,55 @@
 # Changelog
 
 
+## [2.40.0] - 2026-09-27
+Origen: pendiente `p-fd3d3bdcab`, ultima pieza de la Fase 2 de la familia de correccion y reversa
+del journal. `session.add` rellena Status/Resumen/Commit de una fila existente y nunca toca la
+Fecha (celda 0) ni el alias (celda 1, `[[sessions/<slug>\|alias]]`), asi que una sesion con fecha
+o alias equivocados no tenia correccion por evento, y con `journal_strict` tampoco a mano. Diseno:
+CHANGELOG 2.31.0, "2. session.amend".
+
+### Added
+- **Evento `session.amend --slug S [--date D] [--alias A]`** (14.º tipo). Reescribe SOLO la Fecha
+  y/o la celda Sesion de las filas cuya celda Sesion ES el enlace de esa sesion.
+  - *Ancla*: la celda 1 entera (`SESSION_CELL_RE`), no la fila: una fila cuyo Resumen cita la
+    sesion no se toca. Todas las filas de la sesion, no la primera (una instalacion vieja puede
+    tenerla dos veces), en tablas de 5 columnas y en la vieja de 4.
+  - *El slug no cambia*: es el nombre del fichero. El alias nuevo queda como
+    `[[sessions/<slug>\|<alias>]]`. El amend corrige el indice, no el fichero de la sesion ni su
+    `date:`.
+  - *No poda*. Si podara, una fecha corregida hacia atras en una tabla con una fila de mas
+    expulsaria la propia fila recien corregida. La poda por fecha sigue en `session.add`, que ya la
+    ordena por la fecha nueva. Tampoco llama a `need_table` ni a `heal_session_table`: fuera de las
+    celdas 0 y 1 de esas filas no cambia nada del fichero, salvo `updated:`.
+  - *Replay*: `session-<slug>` + ts del evento en `.journal/reabiertos.log`, anotado ANTES de
+    escribir, comparado por orden (`<=`) como `research.rename`. El replay de un amend anterior al
+    ultimo aplicado es noop con WARN, y el del ultimo tambien, aunque la celda se haya editado a
+    mano despues. Sin ts: cuarentena `malformed`.
+  - *Actualizacion perdida, por campo*: el emisor copia de la fila viva `fecha_vieja` y
+    `sesion_vieja` (o se pasan con `--fecha-vieja`/`--sesion-vieja`), y el compactador exige que
+    la celda siga diciendo eso. Dos amends de la misma celda emitidos antes de compactar: el
+    segundo va a cuarentena `celda-cambiada`. De celdas distintas: aplican los dos.
+  - *Un amend solo de alias no lleva fecha*. `session.add` toma `slug[:10]` si falta `--date`; el
+    amend no, porque esa fecha por defecto desharia un amend de fecha anterior.
+  - *Validacion en las dos puntas*: fecha con forma `YYYY-MM-DD` y real; alias no vacio y sin
+    `|`, `[`, `]` ni `\`, rechazado, no escapado.
+  - Sin fila: el emisor sale con error sin emitir; un evento escrito a mano va a cuarentena
+    `no-fila`, que recuerda que la poda de `session.add` pudo haberla quitado.
+- `test-session-amend.sh`: el criterio del diseno (la fila corregida sigue ahi, y es el siguiente
+  `session.add` el que la poda si le toca) y los bordes del replay, las guardas y el emisor. Rojo
+  contra 2.38.0 y contra 2.39.2 (solo pasan los asertos de "fichero intacto" y de rechazo, que un
+  tipo desconocido tambien cumple). Cada una de las mutaciones medidas sobre el codigo nuevo hace
+  fallar al menos un aserto, incluida la poda copiada tal cual de `session.add`: el caso de la
+  tabla llena usa una fila de mas porque con la tabla justa esa poda no borra nada.
+
+### Changed
+- Portadores de la lista de tipos: cabecera del compactador y del emisor, docstrings de
+  `anotar_reabierto`/`ts_registrados` (cuarta clase de clave), README ("Fourteen event types"),
+  `journal-guard.sh`, `bash-journal-nudge.sh` y `/checkpoint-3t` Step 2.
+
+Con esto la Fase 2 del plan queda completa: `plan.reopen` (2.37.0), `research.rename` (2.38.0) y
+`session.amend`.
+
 ## [2.39.3] - 2026-09-27
 Origen: pendiente `p-9d5e07e233`. 2.39.1 limpio a mano, con un recorrido de un solo uso, los
 bloques bash que usaban la ruta del proyecto sin respaldo. Nada impedia que volvieran.

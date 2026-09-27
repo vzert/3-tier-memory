@@ -40,6 +40,13 @@ Tipos de evento:
   session.add       --slug DATE-SLUG --date D --status ST --summary R [--commit C]      (Fase 2)
                     Fila en _session-index.md (arriba de la tabla). Si la fila del slug ya
                     existe, rellena status/summary/commit con lo que se pase. Imprime s-<slug>.
+  session.amend     --slug DATE-SLUG [--date D] [--alias A]
+                    [--fecha-vieja V] [--sesion-vieja V]                              (2.40.0)
+                    Corrige la Fecha y/o el alias de la fila cuya celda Sesion es
+                    [[sessions/DATE-SLUG|...]]. El slug (nombre del fichero) no cambia, y el
+                    fichero de la sesion no se toca. --fecha-vieja/--sesion-vieja son el
+                    guardian contra la actualizacion perdida; si no se pasan, se toman de la fila
+                    viva. No poda: una fecha corregida hacia atras no expulsa la fila.
   learning.add      --topic T [--text "**Regla** — detalle"] [--section H] [--quickref Q]
                     [--title TT] [--when W] [--importance N]                            (Fase 2)
                     Regla numerada (max+1, bajo lock) en learnings/<topic>.md; crea el topic
@@ -285,6 +292,32 @@ def find_research_tema(memory_dir, slug):
     return None
 
 
+SESSION_CELL_RE = re.compile(r"^\[\[sessions/([^\]|\\]+)(?:\\\|[^\]]*)?\]\]$")
+
+
+def find_session_cells(memory_dir, slug):
+    """(Fecha, celda Sesion) de la primera fila de _session-index.md cuya celda 1 ES el enlace de
+    esa sesion, o None. Misma regla que `session_owned_rows` del compactador: una fila cuyo
+    Resumen solo CITA la sesion no es suya."""
+    path = os.path.join(memory_dir, "_session-index.md")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                s = line.strip()
+                if not s.startswith("|"):
+                    continue
+                s = s[1:]
+                if s.endswith("|") and not s.endswith("\\|"):
+                    s = s[:-1]
+                cells = [c.strip() for c in CELL_SPLIT.split(s)]
+                m = SESSION_CELL_RE.match(cells[1]) if len(cells) > 1 else None
+                if m and m.group(1) == slug:
+                    return cells[0], cells[1]
+    except OSError:
+        return None
+    return None
+
+
 def fecha_real(v):
     """True solo si `v` es una fecha del calendario. `re` valida la FORMA: `2026-99-99` la pasa,
     y los consumidores (`triage-scan.py`, `expire-pendientes.py`) revientan al parsearla.
@@ -354,7 +387,7 @@ def main():
                     choices=["pendiente.add", "pendiente.resolve", "pendiente.update",
                              "pendiente.expire", "pendiente.reopen", "pendiente.window",
                              "pendiente.block",
-                             "session.add",
+                             "session.add", "session.amend",
                              "learning.add", "learning.update",
                              "plan.upsert", "plan.reopen", "research.upsert",
                              "research.rename"])
@@ -390,6 +423,9 @@ def main():
     ap.add_argument("--parent")
     ap.add_argument("--tema")
     ap.add_argument("--tema-viejo", dest="tema_viejo")   # research.rename
+    ap.add_argument("--alias")                             # session.amend
+    ap.add_argument("--fecha-vieja", dest="fecha_vieja")
+    ap.add_argument("--sesion-vieja", dest="sesion_vieja")
     ap.add_argument("--next-step", default="")
     ap.add_argument("--resultado", default="")
     # learning.add
@@ -459,6 +495,34 @@ def main():
         if not base["payload"]["status"] and not base["payload"]["summary"] \
                 and not base["payload"]["commit"]:
             sys.exit("journal-emit: session.add necesita --status, --summary o --commit")
+        write_event(memory_dir, base)
+        print(f"s-{slug}")
+        return
+
+    if a.type == "session.amend":
+        slug = check_slug(a.slug, "--slug")
+        # Sin --date no hay campo date: NO se toma slug[:10] por defecto como en session.add. Un
+        # amend solo de alias que trajera la fecha del slug desharia un amend de fecha anterior.
+        fecha = (a.date or "").strip()
+        alias = normalize_text(a.alias or "")
+        if not fecha and not alias:
+            sys.exit("journal-emit: session.amend necesita --date o --alias")
+        if fecha and not (DATE_RE.match(fecha) and fecha_real(fecha)):
+            sys.exit("journal-emit: --date debe ser una fecha real YYYY-MM-DD")
+        if alias and re.search(r"[|\[\]\\]", alias):
+            sys.exit("journal-emit: --alias no puede llevar '|', '[', ']' ni '\\'")
+        vivas = find_session_cells(memory_dir, slug)
+        fvieja = a.fecha_vieja if a.fecha_vieja is not None else (vivas[0] if vivas else None)
+        svieja = a.sesion_vieja if a.sesion_vieja is not None else (vivas[1] if vivas else None)
+        if (fecha and not fvieja) or (alias and not svieja):
+            sys.exit(f"journal-emit: no encuentro en _session-index.md una fila cuya celda Sesion "
+                     f"sea [[sessions/{slug}...]], asi que no se de que valores se parte. Pasa "
+                     f"--fecha-vieja/--sesion-vieja con lo que dice hoy la fila")
+        base["payload"] = {"slug": slug}
+        if fecha:
+            base["payload"].update({"date": fecha, "fecha_vieja": fvieja.strip()})
+        if alias:
+            base["payload"].update({"alias": alias, "sesion_vieja": svieja.strip()})
         write_event(memory_dir, base)
         print(f"s-{slug}")
         return

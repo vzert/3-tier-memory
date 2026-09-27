@@ -235,6 +235,14 @@ top of the `## Sessions` table of `memory/_session-index.md` and prunes that tab
 most recent rows by date. The Commit cell is filled in Step 6c with a second `session.add`
 (same slug, `--commit`). Do NOT edit the index by hand.
 
+**Correcting a session's Fecha or alias** is NOT a `session.add` (an add never rewrites those two
+cells). Emit `python3 "$JBIN/journal-emit.py" --type session.amend --slug "DATE-SLUG" [--date D]
+[--alias A]`: it rewrites only the Fecha and/or the `[[sessions/DATE-SLUG\|A]]` cell of the rows
+whose Sesion cell is that session. It fixes the INDEX only: the slug, the session file's name and
+its frontmatter `date:` stay as they are (fix the file yourself if it is also wrong). It never
+prunes. The emitter reads the current values; if another event changed them in between, the amend
+goes to quarantine (`celda-cambiada`) instead of overwriting them.
+
 **Fallback (no JBIN)**: add the row by hand, commit hash "filled in Step 6".
 
 **Do NOT write pendiente ids in this file yet.** A pendiente's id is

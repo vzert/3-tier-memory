@@ -61,6 +61,12 @@ Fase 2 (sesiones, reglas, planes, research) — mismo principio, anclas de tabla
                    .journal/reabiertos.log ANTES de escribir; un rename con ts anterior al ultimo
                    anotado es noop (su replay no deshace uno posterior). Una fila (inline) no se
                    renombra: cuarentena sin-identidad.
+  session.amend    (2.40.0) corrige la Fecha (celda 0) y/o el alias (celda 1,
+                   [[sessions/<slug>|alias]]) de las filas cuya celda 1 ES el enlace de esa
+                   sesion. No poda: la poda por fecha se queda en session.add. Guardian por
+                   campo (--fecha-vieja / --sesion-vieja, que el emisor lee de la fila viva) y
+                   `session-<slug>` + ts en .journal/reabiertos.log ANTES de escribir; un amend
+                   con ts anterior o igual al ultimo anotado es noop.
   Todo indice que se escribe recibe `updated: <hoy>` en su frontmatter.
 
 Lock: memory/.journal/.lock (dir) con acquired_at + owner. TTL 60 s. Un lock vencido lo
@@ -975,7 +981,10 @@ def anotar_reabierto(mem, pid, ev, que="la reapertura"):
       reversa sino una correccion, pero tiene el mismo problema de replay: el replay de un rename
       A->B despues de uno B->C devolveria la fila a B. `apply_research_rename` compara por ORDEN
       contra el mayor ts anotado. Mismo fichero porque es la misma contabilidad (id + ts de un
-      evento que un replay no debe deshacer); las tres clases de clave no pueden chocar entre si.
+      evento que un replay no debe deshacer).
+    - `session-<slug>` (sesiones, 2.40.0): el ts del propio evento `session.amend`, comparado por
+      ORDEN igual que `research-<slug>`. Las cuatro clases de clave no pueden chocar entre si
+      (prefijos distintos; `p-` exige 10 hex).
 
     `que` solo cambia el motivo de la cuarentena, para que diga que evento no se aplico.
     """
@@ -1031,7 +1040,7 @@ def reaperturas_plan(mem, slug):
 
 def ts_registrados(mem, clave_id):
     """Los ts anotados en `.journal/reabiertos.log` para una clave (`plan-<slug>`,
-    `research-<slug>`). Solo los numericos: una linea de pendiente (`p-...`) nunca casa."""
+    `research-<slug>`, `session-<slug>`). Solo los numericos: una linea de pendiente (`p-...`) nunca casa."""
     path = os.path.join(mem, ".journal", REABIERTOS_LOG)
     if not os.path.isfile(path):
         return []
@@ -1901,6 +1910,94 @@ def apply_session_add(mem, p):
             delete_rows(lines, [i for i, _ in dated[MAX_SESSIONS:]])
     if lines == orig:
         return False   # la fila entro y la poda la saco en el acto (mas vieja que las 10): noop
+    bump_updated(lines)
+    atomic_write(path, lines)
+    return True
+
+
+def session_owned_rows(lines, slug):
+    """TODAS las filas cuya celda Sesion ES el enlace de esa sesion (`SESSION_CELL_RE`, celda
+    entera), en tablas de 5 columnas o en la vieja de 4 (sin Commit). Una fila cuyo Resumen solo
+    CITA la sesion no es suya. No para en la primera: una instalacion vieja puede tener la misma
+    sesion dos veces (ver `heal_session_table`), y corregir solo una la dejaria con dos fechas."""
+    out = []
+    for _sec_header, hdr, _sep, rows in find_tables(lines):
+        if len(split_cells(lines[hdr])) not in (4, 5):
+            continue
+        for i in rows:
+            cells = split_cells(lines[i])
+            m = SESSION_CELL_RE.match(cells[1]) if len(cells) > 1 else None
+            if m and m.group(1) == slug:
+                out.append(i)
+    return out
+
+
+def apply_session_amend(mem, p):
+    """Corrige la Fecha y/o el alias de una sesion en `_session-index.md` (2.40.0, pendiente
+    p-fd3d3bdcab). Diseno: CHANGELOG 2.31.0, "2. session.amend".
+
+    Identidad = el slug, que NO cambia (es el nombre del fichero). Ancla = la celda 1 entera
+    (`session_owned_rows`). Solo se escriben las celdas 0 y 1 de esas filas: ni `need_table` (que
+    crearia una tabla) ni `heal_session_table` (que fusionaria filas) ni poda. La poda por fecha
+    se queda en `session.add`: si el amend podara, una fecha nueva antigua expulsaria la propia
+    fila que se acaba de corregir.
+
+    Guardas, en este orden (las de `apply_research_rename`):
+    1. Replay: `session-<slug>` + ts en `.journal/reabiertos.log`; ts anterior o igual al mayor
+       anotado -> noop. Sin esto, el replay de un amend viejo deshacia uno posterior.
+    2. Actualizacion perdida, POR CAMPO: la celda 0 tiene que seguir siendo `fecha_vieja` y la
+       celda 1 `sesion_vieja` (celdas enteras, las lee el emisor de la fila viva). Un campo ya
+       igual al valor nuevo se salta. Asi dos amends de campos distintos aplican los dos, y dos
+       del mismo campo mandan el segundo a cuarentena `celda-cambiada`.
+    Nada se escribe hasta pasar todas las guardas de todas las filas.
+    """
+    slug = check_slug(p["slug"], "slug")
+    ts = p["_ts"]   # validate garantiza > 0
+    clave = f"session-{slug}"
+    previos = ts_registrados(mem, clave)
+    if previos and ts <= max(previos):
+        if ts < max(previos):
+            log(f"WARN session.amend de sessions/{slug} (ts {ts}) es anterior al ultimo amend "
+                f"aplicado a esa sesion: no se aplica, desharia el posterior. Si de verdad quieres "
+                f"esos valores, emite un session.amend nuevo.")
+        return False
+    path = os.path.join(mem, "_session-index.md")
+    if not os.path.isfile(path):
+        raise Quarantine("no-index: _session-index.md no existe")
+    lines = read_lines(path)
+    hits = session_owned_rows(lines, slug)
+    if not hits:
+        raise Quarantine(
+            f"no-fila: ninguna fila de _session-index.md tiene [[sessions/{slug}]] como celda "
+            f"Sesion. O el slug esta mal, o la poda la quito (session.add guarda las "
+            f"{MAX_SESSIONS} mas recientes por Fecha).")
+    campos = []
+    if p.get("date"):
+        campos.append((0, "Fecha", p["date"], p["fecha_vieja"]))
+    if p.get("alias"):
+        campos.append((1, "Sesion", f"[[sessions/{slug}\\|{p['alias']}]]", p["sesion_vieja"]))
+    cambios = []
+    for i in hits:
+        cells = split_cells(lines[i])
+        nuevas = list(cells)
+        for c, nombre, nuevo, viejo in campos:
+            if cells[c] == nuevo:
+                continue
+            if cells[c] != viejo:
+                raise Quarantine(
+                    f"celda-cambiada: la celda {nombre} de la fila {i + 1} de sessions/{slug} ya "
+                    f"no dice '{viejo}' sino '{cells[c]}' — otro evento la cambio despues de que "
+                    f"este se emitiera. No se pisa en silencio: si '{nuevo}' sigue siendo lo "
+                    f"bueno, emite otro session.amend (el emisor toma el valor de hoy).")
+            nuevas[c] = nuevo
+        if nuevas != cells:
+            cambios.append((i, join_cells(nuevas)))
+    if not cambios:
+        return False   # idempotente: ya tiene esos valores
+    # PRIMERO el registro, DESPUES el indice: mismo orden que apply_research_rename.
+    anotar_reabierto(mem, clave, ts, que="el session.amend")
+    for i, linea in cambios:
+        lines[i] = linea
     bump_updated(lines)
     atomic_write(path, lines)
     return True
@@ -3149,6 +3246,43 @@ def validate(ev):
             raise Quarantine(f"malformed: date '{p['date']}' invalida")
         check_slug(p["slug"], "slug")
         return t, p
+    elif t == "session.amend":
+        if not p.get("slug"):
+            raise Quarantine("malformed: session.amend sin 'slug'")
+        check_slug(p["slug"], "slug")
+        if not (p.get("date") or p.get("alias")):
+            raise Quarantine("malformed: session.amend sin 'date' ni 'alias' — nada que corregir")
+        # La fecha tiene que ser REAL, no solo tener la forma (learning 106): `2026-99-99` pasa
+        # DATE_RE y la poda de session.add la ordenaria como fecha.
+        if p.get("date"):
+            if not DATE_RE.match(str(p["date"])):
+                raise Quarantine(f"malformed: session.amend con date '{p['date']}' invalida")
+            try:
+                date.fromisoformat(str(p["date"]))
+            except ValueError:
+                raise Quarantine(f"malformed: session.amend con date irreal: {p['date']!r}")
+            if not p.get("fecha_vieja"):
+                raise Quarantine("malformed: session.amend con 'date' sin 'fecha_vieja' — sin el "
+                                 "valor de partida no se detecta una actualizacion perdida")
+        # El alias va dentro de `[[sessions/<slug>\|alias]]`: un `|`, `[`, `]` o salto de linea
+        # partiria la fila o el wikilink. Se rechaza, no se escapa.
+        if p.get("alias"):
+            if not isinstance(p["alias"], str) or re.search(r"[|\[\]\n\\]", p["alias"]) \
+                    or not p["alias"].strip():
+                raise Quarantine("malformed: session.amend con 'alias' vacio o con '|', '[', ']', "
+                                 "'\\' o salto de linea")
+            if not p.get("sesion_vieja"):
+                raise Quarantine("malformed: session.amend con 'alias' sin 'sesion_vieja' — sin "
+                                 "el valor de partida no se detecta una actualizacion perdida")
+        # Sin ts no se distingue su replay de un amend nuevo: cuarentena, igual que research.rename.
+        try:
+            p["_ts"] = int(ev.get("ts") or 0)
+        except (TypeError, ValueError):
+            p["_ts"] = 0
+        if p["_ts"] <= 0:
+            raise Quarantine("malformed: session.amend sin 'ts' — sin el no se distingue su "
+                             "replay de un amend nuevo; emitelo con journal-emit.py")
+        return t, p
     elif t == "learning.add":
         if not p.get("topic"):
             raise Quarantine("malformed: learning.add sin 'topic'")
@@ -3259,6 +3393,8 @@ def apply_event(mem, ev):
         return apply_block(mem, p)
     if t == "session.add":
         return apply_session_add(mem, p)
+    if t == "session.amend":
+        return apply_session_amend(mem, p)
     if t == "learning.add":
         return apply_learning_add(mem, p)
     if t == "learning.update":
