@@ -15,7 +15,7 @@
 # evento sin ts, tabla vieja de 4 columnas y el emisor.
 set -u
 BIN="$(cd "$(dirname "$0")" && pwd)"
-T=$(mktemp -d); trap 'chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"' EXIT
+T=$(mktemp -d); trap 'chflags -R nouappnd "$T" 2>/dev/null; chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"' EXIT
 pass=0; fail=0
 chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: esperaba '$2', salio '$3'"; fi; }
 has() { if printf '%s' "$2" | grep -q -- "$3"; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: no encontre '$3' en '$2'"; fi; }
@@ -327,17 +327,32 @@ chmod 644 "$M/.journal/reabiertos.log"
 has "motivo no-registro" "$(razon)" "^no-registro:"
 chk "indice intacto" "$ANTES" "$(sha)"
 
-echo "== 29. falla el indice y no se puede crear el temporal del registro: se retira en sitio =="
-fixture "$FILA"
-am --slug "$S" --date 2026-09-12
-mkdir -p "$M/.journal/reabiertos.log.tmp"   # obstruye el rename: open(tmp) falla
-chmod 555 "$M"
+echo "== 29. falla el indice Y no se puede retirar la anotacion: cuarentena no-registro, no un replay mudo =="
+# Doble falla real: el registro admite append (la anotacion entra) pero no rename encima (no se
+# puede retirar), y memory/ no deja escribir el indice. Sin la cuarentena, el evento quedaba en
+# pending/ con su anotacion y el reintento lo archivaba como replay sin aplicarlo.
+if command -v chflags >/dev/null 2>&1; then
+  fixture "$FILA"
+  am --slug "$S" --date 2026-09-12
+  ANTES=$(sha)
+  : > "$M/.journal/reabiertos.log"; chflags uappnd "$M/.journal/reabiertos.log"
+  chmod 555 "$M"
+  compact --quiet >/dev/null 2>&1
+  chmod 755 "$M"; chflags nouappnd "$M/.journal/reabiertos.log"
+  has "motivo no-registro" "$(razon)" "^no-registro:"
+  has "nombra la linea a borrar" "$(razon)" "session-fecha-$S"
+  chk "indice intacto, el evento fuera de pending" "$ANTES|0" "$(sha)|$(ls "$M/.journal/pending" | wc -l | tr -d ' ')"
+  chk "sin temporal huerfano" "0" "$(ls "$M/.journal" | grep -c '\.tmp$')"
+else
+  echo "  SKIP doble falla: sin chflags (solo macOS/BSD)"
+fi
+
+echo "== 31. una fila con la Fecha VACIA tambien se corrige =="
+fixture "|  | [[sessions/$S\|demo]] | ok | sin fecha | |"
+am --slug "$S" --date 2026-09-20
+chk "fecha_vieja vacia en el payload" "" "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["payload"]["fecha_vieja"])' "$EV")"
 compact --quiet >/dev/null 2>&1
-chmod 755 "$M"
-chk "sin anotacion tras el fallo" "0" "$(reg "$S")"
-chk "sin cuarentena, el evento sigue en pending" "0|1" "$(cuar)|$(ls "$M/.journal/pending" | wc -l | tr -d ' ')"
-OUT=$(compact)
-has "el reintento aplica" "$OUT" "applied=1"
+chk "fecha puesta, sin cuarentena" "1|0" "$(n "| 2026-09-20 | [[sessions/$S\|demo]] | ok | sin fecha |")|$(cuar)"
 
 echo "== 30. emisor: el aviso de filas duplicadas cuenta filas, no pares distintos =="
 fixture "$FILA
@@ -345,6 +360,37 @@ $FILA
 | 2026-09-21 | [[sessions/$S\|demo]] | ok | otra | |"
 am --slug "$S" --date 2026-09-13 || true
 has "dice 3 filas" "$(cat "$M/../emit.err")" "tiene 3 filas"
+
+echo "== 32. si la escritura del registro falla a medias, el registro original queda intacto =="
+# Inyeccion de fallo: writelines lanza OSError DESPUES de abrir el fichero. Con temporal + rename
+# el registro no se toca; con una reescritura en sitio, `open(..., "w")` ya lo habria truncado y
+# se perderian las anotaciones de TODAS las claves (pendientes, planes, research).
+fixture "$FILA"
+mkdir -p "$M/.journal"
+printf 'p-0123456789\t1\t2026-09-01\nplan-otro\t2\t2026-09-01\nsession-fecha-%s\t3\t2026-09-01\n' "$S" > "$M/.journal/reabiertos.log"
+ANTES=$(shasum "$M/.journal/reabiertos.log" | cut -d' ' -f1)
+R=$(python3 - "$BIN/journal-compact.py" "$M" "$S" <<'PY'
+import builtins, importlib.util, sys
+sys.dont_write_bytecode = True
+spec = importlib.util.spec_from_file_location("jc", sys.argv[1]); jc = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(jc)
+real = builtins.open
+class Roto:
+    def __init__(self, fh): self.fh = fh
+    def __enter__(self): return self
+    def __exit__(self, *a): self.fh.close()
+    def writelines(self, _): raise OSError("disco lleno (inyectado)")
+    def write(self, _): raise OSError("disco lleno (inyectado)")
+def falso(f, mode="r", *a, **k):
+    fh = real(f, mode, *a, **k)
+    return Roto(fh) if "w" in mode and ".journal" in str(f) else fh
+builtins.open = falso
+print(jc.desanotar(sys.argv[2], [(f"session-fecha-{sys.argv[3]}", 3)]))
+PY
+)
+chk "desanotar informa el fallo" "False" "$R"
+chk "registro intacto" "$ANTES" "$(shasum "$M/.journal/reabiertos.log" | cut -d' ' -f1)"
+chk "sin temporal huerfano" "0" "$(ls "$M/.journal" | grep -c '\.tmp$')"
 
 echo
 echo "RESULTADO: $pass ok, $fail fallas"

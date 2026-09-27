@@ -89,10 +89,15 @@ MUTACIONES = [
      "        atomic_write(path, lines)\n        for clave, ts, que in anotaciones:\n"
      "            anotar_reabierto(mem, clave, ts, que=que)\n            hechas.append((clave, ts))",
      [SA, RR, PR]),
-    ("sin respaldo en sitio", C,
-     "    try:\n        with open(path, \"w\", encoding=\"utf-8\", newline=\"\\n\") as fh:\n"
-     "            fh.writelines(lineas)\n        return True",
-     "    try:\n        raise OSError(\"mutado\")\n        return True", [SA]),
+    ("retirar sin temporal (en sitio)", C,
+     "        with open(tmp, \"w\", encoding=\"utf-8\", newline=\"\\n\") as fh:\n"
+     "            fh.writelines(lineas)\n            fh.flush()",
+     "        with open(path, \"w\", encoding=\"utf-8\", newline=\"\\n\") as fh:\n"
+     "            fh.writelines(lineas)\n            fh.flush()\n        return True\n"
+     "        with open(tmp, \"w\") as fh:\n            fh.flush()", [SA]),
+    ("fecha vieja vacia rechazada (compactador)", C,
+     "            if not isinstance(p.get(\"fecha_vieja\"), str):",
+     "            if not p.get(\"fecha_vieja\"):", [SA]),
     # emisor
     ("emisor: fecha del slug por defecto", E,
      "        fecha = (a.date or \"\").strip()", "        fecha = (a.date or slug[:10]).strip()", [SA]),
@@ -107,6 +112,9 @@ MUTACIONES = [
      "    for i in jc.session_owned_rows(lines, slug):",
      "    for i in [k for k, l in enumerate(lines) if l.startswith(\"|\") and f\"[[sessions/{slug}\" in l]:",
      [SA]),
+    ("emisor: fecha vieja vacia rechazada", E,
+     "        if (fecha and fvieja is None) or (alias and not svieja):",
+     "        if (fecha and not fvieja) or (alias and not svieja):", [SA]),
     ("emisor: cuenta pares distintos", E,
      "        out.append((cells[0], cells[1]))\n    return out",
      "        if (cells[0], cells[1]) not in out:\n            out.append((cells[0], cells[1]))\n"

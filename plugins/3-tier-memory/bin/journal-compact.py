@@ -1022,35 +1022,35 @@ def desanotar(mem, entradas):
     siguiente compactador ve su propio ts ya anotado y lo archiva como noop (adversario de 2.40.0,
     `chmod 555` sobre memory/).
 
-    Primero por fichero temporal + rename; si eso falla (p. ej. `.journal/` no deja crear
-    ficheros), reescribe en sitio: la anotacion acaba de entrar por append, asi que el fichero si
-    se puede escribir. Si tampoco, devuelve False y el llamante cuarentena el evento.
+    Solo por fichero temporal propio + fsync + rename: el registro protege TODAS las reversas
+    (pendientes, planes, research, sesiones), y una reescritura en sitio lo trunca antes de
+    escribirlo — una muerte del proceso en medio lo vaciaria entero (learnings 86 y 183). Una
+    version de 2.40.0 lo hacia como respaldo; ademas era inalcanzable: si `.journal/` no deja
+    crear ficheros, el compactador no consigue su lock y no llega aqui. Si esto falla, False, y el
+    llamante cuarentena el evento con la linea que hay que borrar.
     """
     path = os.path.join(mem, ".journal", REABIERTOS_LOG)
+    tmp = f"{path}.{os.getpid()}.tmp"
     try:
         with open(path, encoding="utf-8") as fh:
             lineas = fh.readlines()
-    except OSError:
-        return False
-    for clave, ts in entradas:
-        pref = f"{campo_log(clave)}\t{campo_log(str(ts))}\t"
-        for k in range(len(lineas) - 1, -1, -1):
-            if lineas[k].startswith(pref):
-                del lineas[k]
-                break
-    tmp = path + ".tmp"
-    try:
+        for clave, ts in entradas:
+            pref = f"{campo_log(clave)}\t{campo_log(str(ts))}\t"
+            for k in range(len(lineas) - 1, -1, -1):
+                if lineas[k].startswith(pref):
+                    del lineas[k]
+                    break
         with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
             fh.writelines(lineas)
+            fh.flush()
+            os.fsync(fh.fileno())
         replace_with_retry(tmp, path)
         return True
     except OSError:
-        pass
-    try:
-        with open(path, "w", encoding="utf-8", newline="\n") as fh:
-            fh.writelines(lineas)
-        return True
-    except OSError:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
         return False
 
 
@@ -1072,8 +1072,8 @@ def escribir_anotado(mem, anotaciones, path, lines):
     except BaseException as e:
         if hechas and not desanotar(mem, hechas):
             raise Quarantine(
-                f"no-registro: fallo la escritura de {os.path.basename(path)} ({e}) y tampoco se "
-                f"pudo retirar de .journal/{REABIERTOS_LOG} la anotacion de "
+                f"no-registro: fallo la anotacion o la escritura de {os.path.basename(path)} "
+                f"({e}) y tampoco se pudo retirar de .journal/{REABIERTOS_LOG} la anotacion de "
                 f"{', '.join(f'{c} {t}' for c, t in hechas)}. El indice NO cambio. Borra esa(s) "
                 f"linea(s) del registro y devuelve este evento a pending/: con la anotacion "
                 f"dentro, se archivaria como replay sin aplicarse.") from e
@@ -3344,7 +3344,8 @@ def validate(ev):
                 date.fromisoformat(str(p["date"]))
             except ValueError:
                 raise Quarantine(f"malformed: session.amend con date irreal: {p['date']!r}")
-            if not p.get("fecha_vieja"):
+            # Presente, aunque sea "": una fila con la Fecha vacia tambien se corrige.
+            if not isinstance(p.get("fecha_vieja"), str):
                 raise Quarantine("malformed: session.amend con 'date' sin 'fecha_vieja' — sin el "
                                  "valor de partida no se detecta una actualizacion perdida")
         # El alias va dentro de `[[sessions/<slug>\|alias]]`: un `|`, `[`, `]` o salto de linea

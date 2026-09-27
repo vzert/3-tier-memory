@@ -527,7 +527,8 @@ def main():
                      f"--status con el que ya tiene): fusiona las filas duplicadas.")
         fvieja = a.fecha_vieja if a.fecha_vieja is not None else (vivas[0][0] if vivas else None)
         svieja = a.sesion_vieja if a.sesion_vieja is not None else (vivas[0][1] if vivas else None)
-        if (fecha and not fvieja) or (alias and not svieja):
+        # fvieja puede ser "" (fila con la Fecha vacia): se exige que exista, no que tenga texto.
+        if (fecha and fvieja is None) or (alias and not svieja):
             sys.exit(f"journal-emit: no encuentro en _session-index.md una fila cuya celda Sesion "
                      f"sea [[sessions/{slug}...]], asi que no se de que valores se parte. Pasa "
                      f"--fecha-vieja/--sesion-vieja con lo que dice hoy la fila")

@@ -41,6 +41,8 @@ CHANGELOG 2.31.0, "2. session.amend".
     no dicen lo mismo en esa celda, no hay valor de partida: el emisor se niega y un evento escrito
     a mano va a cuarentena `filas-distintas`. Los dos dicen como salir: un `session.add` de la
     sesion fusiona las filas (`heal_session_table`), y el amend aplica despues.
+  - *Una fila con la Fecha vacia tambien se corrige*: `fecha_vieja` puede ser `""`; se exige que
+    el campo este, no que tenga texto.
   - *Un amend solo de alias no lleva fecha*. `session.add` toma `slug[:10]` si falta `--date`; el
     amend no, porque esa fecha por defecto desharia un amend de fecha anterior.
   - *Validacion en las dos puntas*: fecha con forma `YYYY-MM-DD` y real; alias no vacio y sin
@@ -65,15 +67,18 @@ CHANGELOG 2.31.0, "2. session.amend".
   con razon (sin registro no hay proteccion frente al replay). Pero si despues `atomic_write`
   fallaba (disco, permisos), la anotacion quedaba: el evento seguia en `pending/`, y el siguiente
   compactador veia su propio ts ya anotado y lo archivaba como replay, sin aplicarlo. Ahora los
-  tres eventos escriben con `escribir_anotado`: si la escritura falla, retira sus anotaciones
-  (por fichero temporal, y si `.journal/` no deja crearlo, reescribiendo el registro en sitio) y
-  re-lanza; el evento sigue en `pending/` y el reintento aplica. Si tampoco se pueden retirar, el
-  evento va a cuarentena `no-registro` con la linea que hay que borrar, en vez de quedarse en
-  `pending/` para archivarse despues como replay sin aplicarse. Lo encontraron los adversarios
+  tres eventos escriben con `escribir_anotado`: si la escritura falla, retira sus anotaciones y
+  re-lanza; el evento sigue en `pending/` y el reintento aplica. Las retira reescribiendo el
+  registro por fichero temporal propio + fsync + rename, nunca en sitio: el registro protege todas
+  las reversas, y truncarlo para reescribirlo lo dejaria vacio si el proceso muere en medio. Si no
+  se pueden retirar, el evento va a cuarentena `no-registro` con la linea que hay que borrar, en
+  vez de quedarse en `pending/` para archivarse despues como replay sin aplicarse. Lo encontraron los adversarios
   sobre `session.amend`; el caso `chmod 555` sobre `memory/` de `test-research-rename.sh` y de
   `test-plan-reopen.sh` es rojo contra 2.39.2. Otro caso en las tres suites (registro de solo
   lectura: cuarentena `no-registro` y el indice intacto) fija el orden anotar-antes-de-escribir,
-  que el de `chmod 555` no distinguia. `pendiente.reopen` no tenia el fallo: anota el ts del cierre, no el suyo,
+  que el de `chmod 555` no distinguia. En `test-session-amend.sh`, la doble falla real (registro
+  `chflags uappnd` + `memory/` sin escritura; se salta donde no hay `chflags`) y un fallo inyectado
+  a mitad de la reescritura del registro (el original queda intacto). `pendiente.reopen` no tenia el fallo: anota el ts del cierre, no el suyo,
   y el reintento vuelve a pasar.
 
 - **El README contaba un tipo de evento de menos**: nunca nombro `pendiente.block`, asi que decia
