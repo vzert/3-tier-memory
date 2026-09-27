@@ -51,10 +51,13 @@ CHANGELOG 2.31.0, "2. session.amend".
 - `test-session-amend.sh`: el criterio del diseno (la fila corregida sigue ahi, y es el siguiente
   `session.add` el que la poda si le toca) y los bordes del replay, las guardas, las filas
   duplicadas y el emisor. Rojo contra 2.38.0 y contra 2.39.2 (solo pasan los asertos de "fichero
-  intacto" y de rechazo, que un tipo desconocido tambien cumple). Cada una de las mutaciones
-  medidas sobre el codigo nuevo hace fallar al menos un aserto, incluida la poda copiada tal cual
-  de `session.add`: el caso de la tabla llena usa una fila de mas porque con la tabla justa esa
-  poda no borra nada.
+  intacto" y de rechazo, que un tipo desconocido tambien cumple).
+- `tools/mutation-session-amend.py`: la lista de mutaciones de este codigo, con el texto exacto
+  que cambia cada una y la suite que debe caer. Sale 1 si alguna no se aplica exactamente una vez
+  (SIN PROBAR) o si su suite no cae; al publicar 2.40.0 caen todas. Incluye la poda copiada tal cual de
+  `session.add` (por eso el caso de la tabla llena usa una fila de mas: con la tabla justa esa
+  poda no borra nada) y la inversion del orden anotar/escribir. Se corre a mano, fuera de
+  `run-tests.sh`, para no atar el runner a textos que cambian.
 
 ### Fixed
 - **`research.rename` (2.38.0) y `plan.reopen` (2.37.0) perdian la correccion si fallaba la
@@ -62,10 +65,15 @@ CHANGELOG 2.31.0, "2. session.amend".
   con razon (sin registro no hay proteccion frente al replay). Pero si despues `atomic_write`
   fallaba (disco, permisos), la anotacion quedaba: el evento seguia en `pending/`, y el siguiente
   compactador veia su propio ts ya anotado y lo archivaba como replay, sin aplicarlo. Ahora los
-  tres eventos escriben con `escribir_anotado`: si la escritura falla, retira sus anotaciones y
-  re-lanza, y el reintento aplica. Lo encontro el adversario sobre `session.amend`; un caso nuevo
-  en `test-research-rename.sh` y otro en `test-plan-reopen.sh` (`chmod 555` sobre `memory/`) son
-  rojos contra 2.39.2. `pendiente.reopen` no tenia el fallo: anota el ts del cierre, no el suyo,
+  tres eventos escriben con `escribir_anotado`: si la escritura falla, retira sus anotaciones
+  (por fichero temporal, y si `.journal/` no deja crearlo, reescribiendo el registro en sitio) y
+  re-lanza; el evento sigue en `pending/` y el reintento aplica. Si tampoco se pueden retirar, el
+  evento va a cuarentena `no-registro` con la linea que hay que borrar, en vez de quedarse en
+  `pending/` para archivarse despues como replay sin aplicarse. Lo encontraron los adversarios
+  sobre `session.amend`; el caso `chmod 555` sobre `memory/` de `test-research-rename.sh` y de
+  `test-plan-reopen.sh` es rojo contra 2.39.2. Otro caso en las tres suites (registro de solo
+  lectura: cuarentena `no-registro` y el indice intacto) fija el orden anotar-antes-de-escribir,
+  que el de `chmod 555` no distinguia. `pendiente.reopen` no tenia el fallo: anota el ts del cierre, no el suyo,
   y el reintento vuelve a pasar.
 
 - **El README contaba un tipo de evento de menos**: nunca nombro `pendiente.block`, asi que decia

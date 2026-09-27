@@ -1015,48 +1015,68 @@ def anotar_reabierto(mem, pid, ev, que="la reapertura"):
 
 def desanotar(mem, entradas):
     """Quita de `.journal/reabiertos.log` la ULTIMA linea de cada (clave, ts) de `entradas`.
+    Devuelve True si lo consiguio.
 
     Deshace un `anotar_reabierto` cuya escritura del indice fallo despues. Sin esto, la correccion
     se perdia para siempre y quedaba contada como aplicada: el evento sigue en pending/, pero el
     siguiente compactador ve su propio ts ya anotado y lo archiva como noop (adversario de 2.40.0,
-    `chmod 555` sobre memory/). Si tampoco se puede quitar, se avisa: el evento sigue en pending/ y
-    quien lea el WARN sabe que linea borrar.
+    `chmod 555` sobre memory/).
+
+    Primero por fichero temporal + rename; si eso falla (p. ej. `.journal/` no deja crear
+    ficheros), reescribe en sitio: la anotacion acaba de entrar por append, asi que el fichero si
+    se puede escribir. Si tampoco, devuelve False y el llamante cuarentena el evento.
     """
     path = os.path.join(mem, ".journal", REABIERTOS_LOG)
     try:
         with open(path, encoding="utf-8") as fh:
             lineas = fh.readlines()
-        for clave, ts in entradas:
-            pref = f"{campo_log(clave)}\t{campo_log(str(ts))}\t"
-            for k in range(len(lineas) - 1, -1, -1):
-                if lineas[k].startswith(pref):
-                    del lineas[k]
-                    break
-        tmp = path + ".tmp"
+    except OSError:
+        return False
+    for clave, ts in entradas:
+        pref = f"{campo_log(clave)}\t{campo_log(str(ts))}\t"
+        for k in range(len(lineas) - 1, -1, -1):
+            if lineas[k].startswith(pref):
+                del lineas[k]
+                break
+    tmp = path + ".tmp"
+    try:
         with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
             fh.writelines(lineas)
         replace_with_retry(tmp, path)
-    except OSError as e:
-        log(f"WARN no se pudo retirar de .journal/{REABIERTOS_LOG} la anotacion de "
-            f"{', '.join(f'{c} {t}' for c, t in entradas)} tras fallar la escritura del indice "
-            f"({e}). Borra esa linea a mano o el evento, que sigue en pending/, se archivara como "
-            f"replay sin aplicarse.")
+        return True
+    except OSError:
+        pass
+    try:
+        with open(path, "w", encoding="utf-8", newline="\n") as fh:
+            fh.writelines(lineas)
+        return True
+    except OSError:
+        return False
 
 
 def escribir_anotado(mem, anotaciones, path, lines):
     """Anota cada (clave, ts, que) en reabiertos.log y DESPUES escribe el indice; si la escritura
-    falla, retira las anotaciones y re-lanza. El orden anotar-antes-de-escribir se mantiene (sin
-    registro no hay proteccion frente al replay), pero ya no deja una anotacion sin escritura: esa
-    combinacion hacia que el reintento viera su propio ts y se descartara como replay."""
+    falla, retira las anotaciones y re-lanza (el evento sigue en pending/ y el reintento aplica).
+    El orden anotar-antes-de-escribir se mantiene: sin registro no hay proteccion frente al replay.
+
+    Si ademas retirarlas falla, el evento va a cuarentena `no-registro` en vez de quedarse en
+    pending/: con la anotacion dentro, el reintento lo archivaria como replay sin aplicarlo, en
+    silencio (adversario externo de 2.40.0, ronda 2). La cuarentena es ruidosa y dice que borrar.
+    """
     hechas = []
     try:
         for clave, ts, que in anotaciones:
             anotar_reabierto(mem, clave, ts, que=que)
             hechas.append((clave, ts))
         atomic_write(path, lines)
-    except BaseException:
-        if hechas:
-            desanotar(mem, hechas)
+    except BaseException as e:
+        if hechas and not desanotar(mem, hechas):
+            raise Quarantine(
+                f"no-registro: fallo la escritura de {os.path.basename(path)} ({e}) y tampoco se "
+                f"pudo retirar de .journal/{REABIERTOS_LOG} la anotacion de "
+                f"{', '.join(f'{c} {t}' for c, t in hechas)}. El indice NO cambio. Borra esa(s) "
+                f"linea(s) del registro y devuelve este evento a pending/: con la anotacion "
+                f"dentro, se archivaria como replay sin aplicarse.") from e
         raise
 
 

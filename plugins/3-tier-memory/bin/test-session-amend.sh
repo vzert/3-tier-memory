@@ -314,6 +314,38 @@ OUT=$(compact)
 has "el reintento aplica" "$OUT" "applied=1"
 chk "fecha corregida y anotada" "1|1" "$(n "| 2026-09-09 | [[sessions/$S")|$(reg "$S")"
 
+# ---------------------------------------------------------------- ronda 2 (Sonnet y Codex)
+echo "== 28. el registro no se puede escribir: cuarentena no-registro y el indice NO cambia =="
+# Separa anotar-antes-de-escribir de escribir-antes-de-anotar: con el orden invertido el indice
+# quedaria corregido sin registro, y un replay viejo lo pisaria despues.
+fixture "$FILA"
+am --slug "$S" --date 2026-09-11
+ANTES=$(sha)
+: > "$M/.journal/reabiertos.log"; chmod 444 "$M/.journal/reabiertos.log"
+compact --quiet >/dev/null 2>&1
+chmod 644 "$M/.journal/reabiertos.log"
+has "motivo no-registro" "$(razon)" "^no-registro:"
+chk "indice intacto" "$ANTES" "$(sha)"
+
+echo "== 29. falla el indice y no se puede crear el temporal del registro: se retira en sitio =="
+fixture "$FILA"
+am --slug "$S" --date 2026-09-12
+mkdir -p "$M/.journal/reabiertos.log.tmp"   # obstruye el rename: open(tmp) falla
+chmod 555 "$M"
+compact --quiet >/dev/null 2>&1
+chmod 755 "$M"
+chk "sin anotacion tras el fallo" "0" "$(reg "$S")"
+chk "sin cuarentena, el evento sigue en pending" "0|1" "$(cuar)|$(ls "$M/.journal/pending" | wc -l | tr -d ' ')"
+OUT=$(compact)
+has "el reintento aplica" "$OUT" "applied=1"
+
+echo "== 30. emisor: el aviso de filas duplicadas cuenta filas, no pares distintos =="
+fixture "$FILA
+$FILA
+| 2026-09-21 | [[sessions/$S\|demo]] | ok | otra | |"
+am --slug "$S" --date 2026-09-13 || true
+has "dice 3 filas" "$(cat "$M/../emit.err")" "tiene 3 filas"
+
 echo
 echo "RESULTADO: $pass ok, $fail fallas"
 [ "$fail" = 0 ]

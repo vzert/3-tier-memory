@@ -198,6 +198,16 @@ OUT=$(compact)
 has "el reintento aplica" "$OUT" "applied=1"
 chk "renombrada" "1" "$(n '| Tras el fallo |')"
 
+echo "== 20. el registro no se puede escribir: cuarentena no-registro y el indice NO cambia (2.40.0) =="
+fixture "$FILA" ""
+rn --slug demo --tema "Sin registro"
+ANTES=$(shasum "$IDX" | cut -d' ' -f1)
+: > "$M/.journal/reabiertos.log"; chmod 444 "$M/.journal/reabiertos.log"
+compact --quiet >/dev/null 2>&1
+chmod 644 "$M/.journal/reabiertos.log"
+has "motivo no-registro" "$(cat "$M"/.journal/quarantine/*.reason 2>/dev/null)" "^no-registro:"
+chk "indice intacto" "$ANTES" "$(shasum "$IDX" | cut -d' ' -f1)"
+
 echo
 echo "RESULTADO: $pass ok, $fail fallas"
 [ "$fail" = 0 ]

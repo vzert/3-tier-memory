@@ -180,6 +180,17 @@ OUT=$(compact)
 has "el reintento aplica" "$OUT" "applied=1"
 chk "reabierto" "active" "$(status plan-demo)"
 
+echo "== 16. el registro no se puede escribir: cuarentena no-registro y el indice NO cambia (2.40.0) =="
+fixture
+up --status completed; compact --quiet >/dev/null
+emit --type plan.reopen --slug demo
+ANTES=$(shasum "$M/_plans-index.md" | cut -d' ' -f1)
+: > "$M/.journal/reabiertos.log"; chmod 444 "$M/.journal/reabiertos.log"
+compact --quiet >/dev/null 2>&1
+chmod 644 "$M/.journal/reabiertos.log"
+has "motivo no-registro" "$(cat "$M"/.journal/quarantine/*.reason 2>/dev/null)" "^no-registro:"
+chk "indice intacto" "$ANTES" "$(shasum "$M/_plans-index.md" | cut -d' ' -f1)"
+
 echo
 echo "RESULTADO: $pass ok, $fail fallas"
 [ "$fail" -eq 0 ]

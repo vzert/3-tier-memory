@@ -309,9 +309,9 @@ def _compactador():
 
 
 def find_session_cells(memory_dir, slug):
-    """(Fecha, celda Sesion) de las filas de la sesion segun `session_owned_rows` del compactador,
-    como lista de pares distintos ([] si no hay fila). Mas de un par = filas duplicadas que no
-    coinciden: el llamante se niega a emitir."""
+    """(Fecha, celda Sesion) de CADA fila de la sesion segun `session_owned_rows` del compactador
+    ([] si no hay fila). Mas de un par distinto = filas duplicadas que no coinciden: el llamante se
+    niega a emitir."""
     path = os.path.join(memory_dir, "_session-index.md")
     if not os.path.isfile(path):
         return []
@@ -320,8 +320,7 @@ def find_session_cells(memory_dir, slug):
     out = []
     for i in jc.session_owned_rows(lines, slug):
         cells = jc.split_cells(lines[i])
-        if (cells[0], cells[1]) not in out:
-            out.append((cells[0], cells[1]))
+        out.append((cells[0], cells[1]))
     return out
 
 
