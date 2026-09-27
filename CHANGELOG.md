@@ -11,40 +11,66 @@ CHANGELOG 2.31.0, "2. session.amend".
 ### Added
 - **Evento `session.amend --slug S [--date D] [--alias A]`** (14.º tipo). Reescribe SOLO la Fecha
   y/o la celda Sesion de las filas cuya celda Sesion ES el enlace de esa sesion.
-  - *Ancla*: la celda 1 entera (`SESSION_CELL_RE`), no la fila: una fila cuyo Resumen cita la
-    sesion no se toca. Todas las filas de la sesion, no la primera (una instalacion vieja puede
-    tenerla dos veces), en tablas de 5 columnas y en la vieja de 4.
+  - *Ancla*: la celda 1 entera (`SESSION_CELL_RE`) de una fila de tabla (cabecera + separador,
+    4 o 5 columnas), no la fila: una fila cuyo Resumen cita la sesion no se toca, ni una fila `|`
+    suelta fuera de toda tabla. Todas las filas de la sesion, no la primera. El emisor lee la fila
+    con la MISMA funcion del compactador (`session_owned_rows`, cargada del fichero de al lado), no
+    con una copia.
   - *El slug no cambia*: es el nombre del fichero. El alias nuevo queda como
     `[[sessions/<slug>\|<alias>]]`. El amend corrige el indice, no el fichero de la sesion ni su
     `date:`.
   - *No poda*. Si podara, una fecha corregida hacia atras en una tabla con una fila de mas
     expulsaria la propia fila recien corregida. La poda por fecha sigue en `session.add`, que ya la
-    ordena por la fecha nueva. Tampoco llama a `need_table` ni a `heal_session_table`: fuera de las
-    celdas 0 y 1 de esas filas no cambia nada del fichero, salvo `updated:`.
-  - *Replay*: `session-<slug>` + ts del evento en `.journal/reabiertos.log`, anotado ANTES de
-    escribir, comparado por orden (`<=`) como `research.rename`. El replay de un amend anterior al
-    ultimo aplicado es noop con WARN, y el del ultimo tambien, aunque la celda se haya editado a
-    mano despues. Sin ts: cuarentena `malformed`.
-  - *Actualizacion perdida, por campo*: el emisor copia de la fila viva `fecha_vieja` y
+    ordena por la fecha nueva. Tampoco llama a `need_table` ni a `heal_session_table`. Solo cambian
+    las celdas 0 y 1 de las filas de la sesion; las demas celdas de esas filas conservan su
+    contenido (la fila se reescribe con el espaciado de `join_cells`, como en `session.add`), y el
+    resto del fichero solo cambia en `updated:`.
+  - *Replay, por celda*: `session-fecha-<slug>` / `session-alias-<slug>` + ts del evento en
+    `.journal/reabiertos.log`, comparado por orden (`<=`) como `research.rename`. Una celda cuyo ts
+    es anterior o igual al ultimo anotado para ESA celda no se toca (WARN si es anterior). El
+    replay del ultimo amend es noop aunque la celda se haya editado a mano despues. Una clave por
+    celda y no por sesion: con una sola, un amend de la Fecha que llegaba con ts anterior a un
+    amend del alias ya aplicado se descartaba como replay sin serlo. Sin ts: cuarentena
+    `malformed`.
+  - *Actualizacion perdida, por celda*: el emisor copia de la fila viva `fecha_vieja` y
     `sesion_vieja` (o se pasan con `--fecha-vieja`/`--sesion-vieja`), y el compactador exige que
-    la celda siga diciendo eso. Dos amends de la misma celda emitidos antes de compactar: el
-    segundo va a cuarentena `celda-cambiada`. De celdas distintas: aplican los dos.
+    la celda siga diciendo eso. Dos amends de la misma celda a valores distintos emitidos antes de
+    compactar: el segundo va a cuarentena `celda-cambiada`. Al mismo valor: el segundo es noop. De
+    celdas distintas: aplican los dos, en cualquier orden de ts.
+  - *Filas duplicadas que no coinciden*: si las filas de la sesion que aun no tienen el valor nuevo
+    no dicen lo mismo en esa celda, no hay valor de partida: el emisor se niega y un evento escrito
+    a mano va a cuarentena `filas-distintas`. Los dos dicen como salir: un `session.add` de la
+    sesion fusiona las filas (`heal_session_table`), y el amend aplica despues.
   - *Un amend solo de alias no lleva fecha*. `session.add` toma `slug[:10]` si falta `--date`; el
     amend no, porque esa fecha por defecto desharia un amend de fecha anterior.
   - *Validacion en las dos puntas*: fecha con forma `YYYY-MM-DD` y real; alias no vacio y sin
     `|`, `[`, `]` ni `\`, rechazado, no escapado.
-  - Sin fila: el emisor sale con error sin emitir; un evento escrito a mano va a cuarentena
+  - Sin fila de tabla y sin `--fecha-vieja`/`--sesion-vieja`, el emisor sale con error sin emitir;
+    un evento sin fila (escrito a mano, o con los valores viejos pasados) va a cuarentena
     `no-fila`, que recuerda que la poda de `session.add` pudo haberla quitado.
 - `test-session-amend.sh`: el criterio del diseno (la fila corregida sigue ahi, y es el siguiente
-  `session.add` el que la poda si le toca) y los bordes del replay, las guardas y el emisor. Rojo
-  contra 2.38.0 y contra 2.39.2 (solo pasan los asertos de "fichero intacto" y de rechazo, que un
-  tipo desconocido tambien cumple). Cada una de las mutaciones medidas sobre el codigo nuevo hace
-  fallar al menos un aserto, incluida la poda copiada tal cual de `session.add`: el caso de la
-  tabla llena usa una fila de mas porque con la tabla justa esa poda no borra nada.
+  `session.add` el que la poda si le toca) y los bordes del replay, las guardas, las filas
+  duplicadas y el emisor. Rojo contra 2.38.0 y contra 2.39.2 (solo pasan los asertos de "fichero
+  intacto" y de rechazo, que un tipo desconocido tambien cumple). Cada una de las mutaciones
+  medidas sobre el codigo nuevo hace fallar al menos un aserto, incluida la poda copiada tal cual
+  de `session.add`: el caso de la tabla llena usa una fila de mas porque con la tabla justa esa
+  poda no borra nada.
+
+### Fixed
+- **`research.rename` (2.38.0) y `plan.reopen` (2.37.0) perdian la correccion si fallaba la
+  escritura del indice.** Anotan el ts del propio evento en `reabiertos.log` ANTES de escribir, y
+  con razon (sin registro no hay proteccion frente al replay). Pero si despues `atomic_write`
+  fallaba (disco, permisos), la anotacion quedaba: el evento seguia en `pending/`, y el siguiente
+  compactador veia su propio ts ya anotado y lo archivaba como replay, sin aplicarlo. Ahora los
+  tres eventos escriben con `escribir_anotado`: si la escritura falla, retira sus anotaciones y
+  re-lanza, y el reintento aplica. Lo encontro el adversario sobre `session.amend`; un caso nuevo
+  en `test-research-rename.sh` y otro en `test-plan-reopen.sh` (`chmod 555` sobre `memory/`) son
+  rojos contra 2.39.2. `pendiente.reopen` no tenia el fallo: anota el ts del cierre, no el suyo,
+  y el reintento vuelve a pasar.
 
 ### Changed
 - Portadores de la lista de tipos: cabecera del compactador y del emisor, docstrings de
-  `anotar_reabierto`/`ts_registrados` (cuarta clase de clave), README ("Fourteen event types"),
+  `anotar_reabierto`/`ts_registrados` (nuevas claves), README ("Fourteen event types"),
   `journal-guard.sh`, `bash-journal-nudge.sh` y `/checkpoint-3t` Step 2.
 
 Con esto la Fase 2 del plan queda completa: `plan.reopen` (2.37.0), `research.rename` (2.38.0) y

@@ -64,9 +64,10 @@ Fase 2 (sesiones, reglas, planes, research) — mismo principio, anclas de tabla
   session.amend    (2.40.0) corrige la Fecha (celda 0) y/o el alias (celda 1,
                    [[sessions/<slug>|alias]]) de las filas cuya celda 1 ES el enlace de esa
                    sesion. No poda: la poda por fecha se queda en session.add. Guardian por
-                   campo (--fecha-vieja / --sesion-vieja, que el emisor lee de la fila viva) y
-                   `session-<slug>` + ts en .journal/reabiertos.log ANTES de escribir; un amend
-                   con ts anterior o igual al ultimo anotado es noop.
+                   celda (--fecha-vieja / --sesion-vieja, que el emisor lee de la fila viva) y
+                   `session-fecha-<slug>` / `session-alias-<slug>` + ts en
+                   .journal/reabiertos.log ANTES de escribir; una celda cuyo ts es anterior o
+                   igual al ultimo anotado para ESA celda no se toca.
   Todo indice que se escribe recibe `updated: <hoy>` en su frontmatter.
 
 Lock: memory/.journal/.lock (dir) con acquired_at + owner. TTL 60 s. Un lock vencido lo
@@ -982,9 +983,11 @@ def anotar_reabierto(mem, pid, ev, que="la reapertura"):
       A->B despues de uno B->C devolveria la fila a B. `apply_research_rename` compara por ORDEN
       contra el mayor ts anotado. Mismo fichero porque es la misma contabilidad (id + ts de un
       evento que un replay no debe deshacer).
-    - `session-<slug>` (sesiones, 2.40.0): el ts del propio evento `session.amend`, comparado por
-      ORDEN igual que `research-<slug>`. Las cuatro clases de clave no pueden chocar entre si
-      (prefijos distintos; `p-` exige 10 hex).
+    - `session-fecha-<slug>` y `session-alias-<slug>` (sesiones, 2.40.0): el ts del propio evento
+      `session.amend`, UNA clave por celda corregida, comparado por ORDEN igual que
+      `research-<slug>`. Por celda y no por sesion: con una sola clave, un amend de la Fecha con ts
+      anterior a un amend del alias ya aplicado se descartaba como replay sin serlo. Las clases de
+      clave no pueden chocar entre si (prefijos distintos; `p-` exige 10 hex).
 
     `que` solo cambia el motivo de la cuarentena, para que diga que evento no se aplico.
     """
@@ -1008,6 +1011,53 @@ def anotar_reabierto(mem, pid, ev, que="la reapertura"):
             f"no-registro: no se pudo anotar {que} de {pid} en .journal/{REABIERTOS_LOG} "
             f"({e}). El evento NO se aplica: sin ese registro, un replay de un evento anterior "
             f"lo desharia en silencio.")
+
+
+def desanotar(mem, entradas):
+    """Quita de `.journal/reabiertos.log` la ULTIMA linea de cada (clave, ts) de `entradas`.
+
+    Deshace un `anotar_reabierto` cuya escritura del indice fallo despues. Sin esto, la correccion
+    se perdia para siempre y quedaba contada como aplicada: el evento sigue en pending/, pero el
+    siguiente compactador ve su propio ts ya anotado y lo archiva como noop (adversario de 2.40.0,
+    `chmod 555` sobre memory/). Si tampoco se puede quitar, se avisa: el evento sigue en pending/ y
+    quien lea el WARN sabe que linea borrar.
+    """
+    path = os.path.join(mem, ".journal", REABIERTOS_LOG)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            lineas = fh.readlines()
+        for clave, ts in entradas:
+            pref = f"{campo_log(clave)}\t{campo_log(str(ts))}\t"
+            for k in range(len(lineas) - 1, -1, -1):
+                if lineas[k].startswith(pref):
+                    del lineas[k]
+                    break
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+            fh.writelines(lineas)
+        replace_with_retry(tmp, path)
+    except OSError as e:
+        log(f"WARN no se pudo retirar de .journal/{REABIERTOS_LOG} la anotacion de "
+            f"{', '.join(f'{c} {t}' for c, t in entradas)} tras fallar la escritura del indice "
+            f"({e}). Borra esa linea a mano o el evento, que sigue en pending/, se archivara como "
+            f"replay sin aplicarse.")
+
+
+def escribir_anotado(mem, anotaciones, path, lines):
+    """Anota cada (clave, ts, que) en reabiertos.log y DESPUES escribe el indice; si la escritura
+    falla, retira las anotaciones y re-lanza. El orden anotar-antes-de-escribir se mantiene (sin
+    registro no hay proteccion frente al replay), pero ya no deja una anotacion sin escritura: esa
+    combinacion hacia que el reintento viera su propio ts y se descartara como replay."""
+    hechas = []
+    try:
+        for clave, ts, que in anotaciones:
+            anotar_reabierto(mem, clave, ts, que=que)
+            hechas.append((clave, ts))
+        atomic_write(path, lines)
+    except BaseException:
+        if hechas:
+            desanotar(mem, hechas)
+        raise
 
 
 def fue_revertido(mem, pid, ev):
@@ -1040,7 +1090,7 @@ def reaperturas_plan(mem, slug):
 
 def ts_registrados(mem, clave_id):
     """Los ts anotados en `.journal/reabiertos.log` para una clave (`plan-<slug>`,
-    `research-<slug>`, `session-<slug>`). Solo los numericos: una linea de pendiente (`p-...`) nunca casa."""
+    `research-<slug>`, `session-fecha-<slug>`, `session-alias-<slug>`). Solo los numericos: una linea de pendiente (`p-...`) nunca casa."""
     path = os.path.join(mem, ".journal", REABIERTOS_LOG)
     if not os.path.isfile(path):
         return []
@@ -1937,29 +1987,43 @@ def apply_session_amend(mem, p):
     p-fd3d3bdcab). Diseno: CHANGELOG 2.31.0, "2. session.amend".
 
     Identidad = el slug, que NO cambia (es el nombre del fichero). Ancla = la celda 1 entera
-    (`session_owned_rows`). Solo se escriben las celdas 0 y 1 de esas filas: ni `need_table` (que
-    crearia una tabla) ni `heal_session_table` (que fusionaria filas) ni poda. La poda por fecha
-    se queda en `session.add`: si el amend podara, una fecha nueva antigua expulsaria la propia
-    fila que se acaba de corregir.
+    (`session_owned_rows`). Solo cambian las celdas 0 y 1 de esas filas; las demas conservan su
+    contenido (la fila se reescribe con el espaciado de `join_cells`, igual que en session.add). Ni
+    `need_table` (que crearia una tabla) ni `heal_session_table` (que fusionaria filas) ni poda: si
+    el amend podara, una fecha corregida hacia atras expulsaria la propia fila recien corregida.
 
-    Guardas, en este orden (las de `apply_research_rename`):
-    1. Replay: `session-<slug>` + ts en `.journal/reabiertos.log`; ts anterior o igual al mayor
-       anotado -> noop. Sin esto, el replay de un amend viejo deshacia uno posterior.
-    2. Actualizacion perdida, POR CAMPO: la celda 0 tiene que seguir siendo `fecha_vieja` y la
-       celda 1 `sesion_vieja` (celdas enteras, las lee el emisor de la fila viva). Un campo ya
-       igual al valor nuevo se salta. Asi dos amends de campos distintos aplican los dos, y dos
-       del mismo campo mandan el segundo a cuarentena `celda-cambiada`.
-    Nada se escribe hasta pasar todas las guardas de todas las filas.
+    Cada celda (Fecha, Sesion) se guarda por separado, en este orden:
+    1. Replay: `session-fecha-<slug>` / `session-alias-<slug>` + ts en `.journal/reabiertos.log`;
+       ts anterior o igual al mayor anotado para ESA celda -> la celda no se toca. Por celda y no
+       por sesion: dos amends de celdas distintas no se descartan entre si por orden de ts.
+    2. Filas duplicadas que no coinciden: las filas de la sesion cuya celda aun no es la nueva
+       tienen que decir lo mismo; si no, cuarentena `filas-distintas` (no hay un "valor viejo"
+       que comparar). Un session.add de la sesion las fusiona.
+    3. Actualizacion perdida: esa celda tiene que seguir siendo `fecha_vieja` / `sesion_vieja`
+       (celdas enteras, las lee el emisor de la fila viva); si no, cuarentena `celda-cambiada`.
+    Nada se escribe hasta pasar todas las guardas; se anota una linea por celda que cambia y, si la
+    escritura falla, las anotaciones se retiran (`escribir_anotado`).
     """
     slug = check_slug(p["slug"], "slug")
     ts = p["_ts"]   # validate garantiza > 0
-    clave = f"session-{slug}"
-    previos = ts_registrados(mem, clave)
-    if previos and ts <= max(previos):
-        if ts < max(previos):
-            log(f"WARN session.amend de sessions/{slug} (ts {ts}) es anterior al ultimo amend "
-                f"aplicado a esa sesion: no se aplica, desharia el posterior. Si de verdad quieres "
-                f"esos valores, emite un session.amend nuevo.")
+    campos = []
+    if p.get("date"):
+        campos.append((0, "Fecha", "fecha", p["date"], p["fecha_vieja"]))
+    if p.get("alias"):
+        campos.append((1, "Sesion", "alias", f"[[sessions/{slug}\\|{p['alias']}]]",
+                       p["sesion_vieja"]))
+    vivos = []
+    for campo in campos:
+        clave = f"session-{campo[2]}-{slug}"
+        previos = ts_registrados(mem, clave)
+        if previos and ts <= max(previos):
+            if ts < max(previos):
+                log(f"WARN session.amend de sessions/{slug} (ts {ts}): la celda {campo[1]} ya la "
+                    f"corrigio un amend posterior; no se toca, desharia ese. Si de verdad quieres "
+                    f"este valor, emite un session.amend nuevo.")
+            continue
+        vivos.append(campo)
+    if not vivos:
         return False
     path = os.path.join(mem, "_session-index.md")
     if not os.path.isfile(path):
@@ -1971,35 +2035,36 @@ def apply_session_amend(mem, p):
             f"no-fila: ninguna fila de _session-index.md tiene [[sessions/{slug}]] como celda "
             f"Sesion. O el slug esta mal, o la poda la quito (session.add guarda las "
             f"{MAX_SESSIONS} mas recientes por Fecha).")
-    campos = []
-    if p.get("date"):
-        campos.append((0, "Fecha", p["date"], p["fecha_vieja"]))
-    if p.get("alias"):
-        campos.append((1, "Sesion", f"[[sessions/{slug}\\|{p['alias']}]]", p["sesion_vieja"]))
-    cambios = []
-    for i in hits:
-        cells = split_cells(lines[i])
-        nuevas = list(cells)
-        for c, nombre, nuevo, viejo in campos:
-            if cells[c] == nuevo:
-                continue
-            if cells[c] != viejo:
-                raise Quarantine(
-                    f"celda-cambiada: la celda {nombre} de la fila {i + 1} de sessions/{slug} ya "
-                    f"no dice '{viejo}' sino '{cells[c]}' — otro evento la cambio despues de que "
-                    f"este se emitiera. No se pisa en silencio: si '{nuevo}' sigue siendo lo "
-                    f"bueno, emite otro session.amend (el emisor toma el valor de hoy).")
-            nuevas[c] = nuevo
-        if nuevas != cells:
-            cambios.append((i, join_cells(nuevas)))
-    if not cambios:
+    nuevas = {i: split_cells(lines[i]) for i in hits}
+    anotaciones = []
+    for c, nombre, que, nuevo, viejo in vivos:
+        pendientes = [i for i in hits if nuevas[i][c] != nuevo]
+        if not pendientes:
+            continue   # esta celda ya tiene el valor nuevo en todas las filas
+        actuales = {nuevas[i][c] for i in pendientes}
+        if len(actuales) > 1:
+            raise Quarantine(
+                f"filas-distintas: sessions/{slug} tiene {len(hits)} filas y su celda {nombre} no "
+                f"dice lo mismo en todas ({', '.join(sorted(actuales))}); no hay un valor de "
+                f"partida unico. Emite un session.add de esa sesion (p. ej. --status con el que ya "
+                f"tiene): fusiona las filas duplicadas. Despues, emite el session.amend otra vez.")
+        actual = actuales.pop()
+        if actual != viejo:
+            raise Quarantine(
+                f"celda-cambiada: la celda {nombre} de sessions/{slug} ya no dice '{viejo}' sino "
+                f"'{actual}' — otro evento la cambio despues de que este se emitiera. No se pisa en "
+                f"silencio: si '{nuevo}' sigue siendo lo bueno, emite otro session.amend (el "
+                f"emisor toma el valor de hoy).")
+        for i in pendientes:
+            nuevas[i][c] = nuevo
+        anotaciones.append((f"session-{que}-{slug}", ts, "el session.amend"))
+    if not anotaciones:
         return False   # idempotente: ya tiene esos valores
-    # PRIMERO el registro, DESPUES el indice: mismo orden que apply_research_rename.
-    anotar_reabierto(mem, clave, ts, que="el session.amend")
-    for i, linea in cambios:
-        lines[i] = linea
+    for i in hits:
+        if nuevas[i] != split_cells(lines[i]):
+            lines[i] = join_cells(nuevas[i])
     bump_updated(lines)
-    atomic_write(path, lines)
+    escribir_anotado(mem, anotaciones, path, lines)
     return True
 
 
@@ -2759,12 +2824,11 @@ def apply_plan_reopen(mem, p):
     # PRIMERO el registro, ANTES de tocar el indice: si no se puede anotar, anotar_reabierto
     # cuarentena y no se reabre nada. Un reopen sin registro lo deshace el siguiente replay del
     # cierre viejo, en silencio. Mismo orden que apply_reopen de pendientes.
-    anotar_reabierto(mem, f"plan-{slug}", ts)
     fase = PARENT_ANNOTATION_RE.search(cells[1])
     cells[1] = f"active {fase.group(0)}" if fase else "active"
     lines[hit] = join_cells(cells)
     bump_updated(lines)
-    atomic_write(path, lines)
+    escribir_anotado(mem, [(f"plan-{slug}", ts, "la reapertura")], path, lines)
     return True
 
 
@@ -3153,11 +3217,10 @@ def apply_research_rename(mem, p):
     if not cambios:
         return False   # idempotente: ya tiene ese tema
     # PRIMERO el registro, DESPUES el indice: mismo orden que apply_plan_reopen.
-    anotar_reabierto(mem, clave, ts, que="el research.rename")
     for i, linea in cambios:
         lines[i] = linea
     bump_updated(lines)
-    atomic_write(path, lines)
+    escribir_anotado(mem, [(clave, ts, "el research.rename")], path, lines)
     return True
 
 

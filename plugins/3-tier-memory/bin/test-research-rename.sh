@@ -12,7 +12,7 @@
 # sin ts, la fila en Completed, la fila en las dos tablas, alias, tabla vieja y el emisor.
 set -u
 BIN="$(cd "$(dirname "$0")" && pwd)"
-T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+T=$(mktemp -d); trap 'chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"' EXIT
 pass=0; fail=0
 chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: esperaba '$2', salio '$3'"; fi; }
 has() { if printf '%s' "$2" | grep -q -- "$3"; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: no encontre '$3' en '$2'"; fi; }
@@ -186,6 +186,17 @@ sed -i.bak 's/| Tema B |/| Tema a mano |/' "$IDX"
 replay "$AB"
 chk "sigue la edicion a mano" "1" "$(n '| Tema a mano |')"
 chk "sin cuarentena" "0" "$(cuar)"
+
+echo "== 19. la escritura del indice falla: la anotacion se retira y el reintento renombra (2.40.0) =="
+fixture "$FILA" ""
+rn --slug demo --tema "Tras el fallo"
+chmod 555 "$M"
+compact --quiet >/dev/null 2>&1
+chmod 755 "$M"
+chk "sin anotacion tras el fallo" "0" "$(cat "$M/.journal/reabiertos.log" 2>/dev/null | grep -c '^research-demo	')"
+OUT=$(compact)
+has "el reintento aplica" "$OUT" "applied=1"
+chk "renombrada" "1" "$(n '| Tras el fallo |')"
 
 echo
 echo "RESULTADO: $pass ok, $fail fallas"

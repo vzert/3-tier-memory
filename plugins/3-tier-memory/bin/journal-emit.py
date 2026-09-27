@@ -42,11 +42,13 @@ Tipos de evento:
                     existe, rellena status/summary/commit con lo que se pase. Imprime s-<slug>.
   session.amend     --slug DATE-SLUG [--date D] [--alias A]
                     [--fecha-vieja V] [--sesion-vieja V]                              (2.40.0)
-                    Corrige la Fecha y/o el alias de la fila cuya celda Sesion es
+                    Corrige la Fecha y/o el alias de las filas de tabla cuya celda Sesion es
                     [[sessions/DATE-SLUG|...]]. El slug (nombre del fichero) no cambia, y el
                     fichero de la sesion no se toca. --fecha-vieja/--sesion-vieja son el
                     guardian contra la actualizacion perdida; si no se pasan, se toman de la fila
-                    viva. No poda: una fecha corregida hacia atras no expulsa la fila.
+                    viva (con la misma funcion que usa el compactador). Filas duplicadas que no
+                    coinciden: se niega; un session.add de la sesion las fusiona. No poda: una
+                    fecha corregida hacia atras no expulsa la fila.
   learning.add      --topic T [--text "**Regla** — detalle"] [--section H] [--quickref Q]
                     [--title TT] [--when W] [--importance N]                            (Fase 2)
                     Regla numerada (max+1, bajo lock) en learnings/<topic>.md; crea el topic
@@ -292,30 +294,35 @@ def find_research_tema(memory_dir, slug):
     return None
 
 
-SESSION_CELL_RE = re.compile(r"^\[\[sessions/([^\]|\\]+)(?:\\\|[^\]]*)?\]\]$")
+def _compactador():
+    """El modulo journal-compact.py de este mismo directorio. session.amend lee la fila con SU
+    `session_owned_rows`, no con una copia: una copia divergia (leia filas `|` sueltas fuera de
+    toda tabla, que el compactador no ve), y el valor viejo que emitia no era el de la fila que el
+    compactador iba a corregir (adversario de 2.40.0)."""
+    import importlib.util
+    sys.dont_write_bytecode = True   # sin __pycache__ dentro del plugin instalado
+    ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "journal-compact.py")
+    spec = importlib.util.spec_from_file_location("journal_compact", ruta)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def find_session_cells(memory_dir, slug):
-    """(Fecha, celda Sesion) de la primera fila de _session-index.md cuya celda 1 ES el enlace de
-    esa sesion, o None. Misma regla que `session_owned_rows` del compactador: una fila cuyo
-    Resumen solo CITA la sesion no es suya."""
+    """(Fecha, celda Sesion) de las filas de la sesion segun `session_owned_rows` del compactador,
+    como lista de pares distintos ([] si no hay fila). Mas de un par = filas duplicadas que no
+    coinciden: el llamante se niega a emitir."""
     path = os.path.join(memory_dir, "_session-index.md")
-    try:
-        with open(path, encoding="utf-8") as fh:
-            for line in fh:
-                s = line.strip()
-                if not s.startswith("|"):
-                    continue
-                s = s[1:]
-                if s.endswith("|") and not s.endswith("\\|"):
-                    s = s[:-1]
-                cells = [c.strip() for c in CELL_SPLIT.split(s)]
-                m = SESSION_CELL_RE.match(cells[1]) if len(cells) > 1 else None
-                if m and m.group(1) == slug:
-                    return cells[0], cells[1]
-    except OSError:
-        return None
-    return None
+    if not os.path.isfile(path):
+        return []
+    jc = _compactador()
+    lines = jc.read_lines(path)
+    out = []
+    for i in jc.session_owned_rows(lines, slug):
+        cells = jc.split_cells(lines[i])
+        if (cells[0], cells[1]) not in out:
+            out.append((cells[0], cells[1]))
+    return out
 
 
 def fecha_real(v):
@@ -512,8 +519,15 @@ def main():
         if alias and re.search(r"[|\[\]\\]", alias):
             sys.exit("journal-emit: --alias no puede llevar '|', '[', ']' ni '\\'")
         vivas = find_session_cells(memory_dir, slug)
-        fvieja = a.fecha_vieja if a.fecha_vieja is not None else (vivas[0] if vivas else None)
-        svieja = a.sesion_vieja if a.sesion_vieja is not None else (vivas[1] if vivas else None)
+        fechas = {f for f, _ in vivas}
+        sesiones = {c for _, c in vivas}
+        if (fecha and a.fecha_vieja is None and len(fechas) > 1) or \
+                (alias and a.sesion_vieja is None and len(sesiones) > 1):
+            sys.exit(f"journal-emit: sessions/{slug} tiene {len(vivas)} filas que no dicen lo mismo "
+                     f"en _session-index.md. Emite antes un session.add de esa sesion (p. ej. "
+                     f"--status con el que ya tiene): fusiona las filas duplicadas.")
+        fvieja = a.fecha_vieja if a.fecha_vieja is not None else (vivas[0][0] if vivas else None)
+        svieja = a.sesion_vieja if a.sesion_vieja is not None else (vivas[0][1] if vivas else None)
         if (fecha and not fvieja) or (alias and not svieja):
             sys.exit(f"journal-emit: no encuentro en _session-index.md una fila cuya celda Sesion "
                      f"sea [[sessions/{slug}...]], asi que no se de que valores se parte. Pasa "

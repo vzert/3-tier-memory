@@ -241,7 +241,8 @@ cells). Emit `python3 "$JBIN/journal-emit.py" --type session.amend --slug "DATE-
 whose Sesion cell is that session. It fixes the INDEX only: the slug, the session file's name and
 its frontmatter `date:` stay as they are (fix the file yourself if it is also wrong). It never
 prunes. The emitter reads the current values; if another event changed them in between, the amend
-goes to quarantine (`celda-cambiada`) instead of overwriting them.
+goes to quarantine (`celda-cambiada`) instead of overwriting them. If the session has duplicate
+rows that disagree, the emitter refuses: emit a `session.add` for it first (it merges them).
 
 **Fallback (no JBIN)**: add the row by hand, commit hash "filled in Step 6".
 

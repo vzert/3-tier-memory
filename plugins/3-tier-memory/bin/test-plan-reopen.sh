@@ -12,7 +12,7 @@
 # posterior, la anotacion de fase sobrevive, inline, fila podada y evento sin ts.
 set -u
 BIN="$(cd "$(dirname "$0")" && pwd)"
-T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+T=$(mktemp -d); trap 'chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"' EXIT
 pass=0; fail=0
 chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: esperaba '$2', salio '$3'"; fi; }
 has() { if printf '%s' "$2" | grep -q -- "$3"; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: no encontre '$3' en '$2'"; fi; }
@@ -165,6 +165,20 @@ chk "no dejo registro" "0" "$(reab demo)"
 echo "== 14. emisor: plan.reopen exige --slug =="
 fixture
 chk "sale con error" "1" "$(python3 "$BIN/journal-emit.py" --memory-dir "$M" --type plan.reopen >/dev/null 2>&1 && echo 0 || echo 1)"
+
+echo "== 15. la escritura del indice falla: la anotacion se retira y el reintento reabre (2.40.0) =="
+# Antes: anotar y despues fallar dejaba el ts del reopen en reabiertos.log; el reintento lo veia
+# como su propio replay (noop) y el reopen se perdia contado como aplicado.
+fixture
+up --status completed; compact --quiet >/dev/null
+emit --type plan.reopen --slug demo
+chmod 555 "$M"
+compact --quiet >/dev/null 2>&1
+chmod 755 "$M"
+chk "sin anotacion tras el fallo" "0" "$(cat "$M/.journal/reabiertos.log" 2>/dev/null | grep -c '^plan-demo	')"
+OUT=$(compact)
+has "el reintento aplica" "$OUT" "applied=1"
+chk "reabierto" "active" "$(status plan-demo)"
 
 echo
 echo "RESULTADO: $pass ok, $fail fallas"

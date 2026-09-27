@@ -15,7 +15,7 @@
 # evento sin ts, tabla vieja de 4 columnas y el emisor.
 set -u
 BIN="$(cd "$(dirname "$0")" && pwd)"
-T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+T=$(mktemp -d); trap 'chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"' EXIT
 pass=0; fail=0
 chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: esperaba '$2', salio '$3'"; fi; }
 has() { if printf '%s' "$2" | grep -q -- "$3"; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: no encontre '$3' en '$2'"; fi; }
@@ -43,19 +43,19 @@ razon() { cat "$M"/.journal/quarantine/*.reason 2>/dev/null; }
 n() { grep -cF -- "$1" "$IDX"; }
 filas() { grep -c '^| [0-9]' "$IDX"; }
 sha() { shasum -a 256 "$IDX" | cut -d' ' -f1; }
-reg() { grep -c "^session-$1	" "$M/.journal/reabiertos.log" 2>/dev/null || echo 0; }
+reg() { cat "$M/.journal/reabiertos.log" 2>/dev/null | grep -c "^session-[a-z]*-$1	"; }
 am() { emit --type session.amend "$@"; }
 # Escribe a mano un evento session.amend (otro emisor, o un evento editado): $1 = payload JSON,
-# $2 = ts ("" para omitirlo).
+# $2 = ts ("" para omitirlo), $3 = nombre del fichero (el compactador aplica por orden de nombre).
 evento() {
   mkdir -p "$M/.journal/pending"
-  python3 - "$M/.journal/pending" "$1" "$2" <<'PY'
+  python3 - "$M/.journal/pending" "$1" "$2" "${3:-0000-manual.json}" <<'PY'
 import json, os, sys
-d, payload, ts = sys.argv[1], json.loads(sys.argv[2]), sys.argv[3]
+d, payload, ts, nombre = sys.argv[1], json.loads(sys.argv[2]), sys.argv[3], sys.argv[4]
 ev = {"v": 1, "type": "session.amend", "session_id": "t", "agent_id": "t", "payload": payload}
 if ts:
     ev["ts"] = int(ts)
-json.dump(ev, open(os.path.join(d, "0000-manual.json"), "w"))
+json.dump(ev, open(os.path.join(d, nombre), "w"))
 PY
 }
 
@@ -228,6 +228,91 @@ $FILA"
 am --slug "$S" --date 2026-09-19 --alias nuevo
 chk "fecha_vieja y sesion_vieja de la fila propia" "2026-09-20|[[sessions/$S\|demo]]" \
   "$(python3 -c 'import json,sys; p=json.load(open(sys.argv[1]))["payload"]; print(p["fecha_vieja"]+"|"+p["sesion_vieja"])' "$EV")"
+
+# ---------------------------------------------------------------- ronda 1 del adversario (Fable)
+VF='"fecha_vieja": "2026-09-20"'
+VS='"sesion_vieja": "[[sessions/2026-09-20-demo\\|demo]]"'
+
+echo "== 20. celdas distintas con el orden de ts al reves del orden de aplicacion: aplican las dos =="
+# Con una sola clave por sesion, la Fecha (ts 100) se descartaba como replay del alias (ts 200).
+fixture "$FILA"
+evento "{\"slug\": \"$S\", \"alias\": \"Alias 200\", $VS}" 200 0000-a.json
+evento "{\"slug\": \"$S\", \"date\": \"2026-09-02\", $VF}" 100 0001-b.json
+OUT=$(compact)
+has "las dos aplicadas" "$OUT" "applied=2"
+chk "fecha y alias corregidos" "1" "$(n "| 2026-09-02 | [[sessions/$S\|Alias 200]] |")"
+
+echo "== 21. celdas distintas con el MISMO ts: aplican las dos =="
+fixture "$FILA"
+evento "{\"slug\": \"$S\", \"alias\": \"Alias igual\", $VS}" 100 0000-a.json
+evento "{\"slug\": \"$S\", \"date\": \"2026-09-03\", $VF}" 100 0001-b.json
+compact --quiet >/dev/null 2>&1
+chk "fecha y alias corregidos" "1" "$(n "| 2026-09-03 | [[sessions/$S\|Alias igual]] |")"
+
+echo "== 22. la MISMA celda con el orden de ts al reves: gana el ts mayor, el otro noop con WARN =="
+fixture "$FILA"
+evento "{\"slug\": \"$S\", \"alias\": \"Nuevo\", $VS}" 200 0000-a.json
+evento "{\"slug\": \"$S\", \"alias\": \"Viejo\", $VS}" 100 0001-b.json
+OUT=$(compact)
+has "uno aplicado, uno noop" "$OUT" "applied=1 quarantined=0.*noop=1"
+chk "gana el ts mayor" "1|0" "$(n "[[sessions/$S\|Nuevo]]")|$(n 'Viejo]]')"
+has "aviso en el log" "$(cat "$LOG")" "WARN session.amend"
+
+echo "== 23. dos amends al MISMO valor nuevo emitidos antes de compactar: el segundo noop, no cuarentena =="
+fixture "$FILA"
+am --slug "$S" --date 2026-09-04
+am --slug "$S" --date 2026-09-04
+OUT=$(compact)
+has "aplicado + noop, sin cuarentena" "$OUT" "applied=1 quarantined=0.*noop=1"
+chk "sin cuarentena" "0" "$(cuar)"
+
+echo "== 24. filas duplicadas con valores DISTINTOS: el emisor se niega; a mano, cuarentena filas-distintas =="
+DUP="| 2026-09-21 | [[sessions/$S\|demo]] | ok | copia editada | |
+$FILA"
+fixture "$DUP"
+if am --slug "$S" --date 2026-09-05; then r=emitio; else r=rechazo; fi
+chk "el emisor se niega" "rechazo" "$r"
+has "dice como fusionarlas" "$(cat "$M/../emit.err")" "session.add"
+ANTES=$(sha)
+evento "{\"slug\": \"$S\", \"date\": \"2026-09-05\", $VF}" 5
+compact --quiet >/dev/null 2>&1
+has "motivo filas-distintas" "$(razon)" "^filas-distintas:"
+has "dice como fusionarlas" "$(razon)" "session.add"
+chk "fichero intacto" "$ANTES" "$(sha)"
+emit --type session.add --slug "$S" --date 2026-09-20 --status ok; compact --quiet >/dev/null 2>&1
+chk "el session.add las fusiona" "1" "$(n "$S")"
+am --slug "$S" --date 2026-09-05; compact --quiet >/dev/null 2>&1
+chk "y el amend ya aplica" "1" "$(n "| 2026-09-05 | [[sessions/$S")"
+
+echo "== 25. una fila duplicada ya corregida y otra no: se corrige la que falta, sin cuarentena =="
+fixture "| 2026-09-06 | [[sessions/$S\|demo]] | ok | ya corregida | |
+$FILA"
+evento "{\"slug\": \"$S\", \"date\": \"2026-09-06\", $VF}" 5
+compact --quiet >/dev/null 2>&1
+chk "las dos con la fecha nueva, sin cuarentena" "2|0" "$(n "| 2026-09-06 | [[sessions/$S")|$(cuar)"
+
+echo "== 26. una fila '|' suelta fuera de toda tabla no es la fila de la sesion, tampoco para el emisor =="
+M="$T/huerfana/memory"; mkdir -p "$M"; IDX="$M/_session-index.md"; LOG="$M/../compact.log"
+printf -- '---\ntype: index\n---\n# Sessions\n\n| 2026-09-19 | [[sessions/%s\\|demo]] | ok | huerfana | |\n\n## Sessions\n\n| Fecha | Sesion | Status | Resumen | Commit |\n|---|---|---|---|---|\n%s\n' "$S" "$FILA" > "$IDX"
+am --slug "$S" --date 2026-09-07
+chk "fecha_vieja de la fila de la tabla" "2026-09-20" "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["payload"]["fecha_vieja"])' "$EV")"
+compact --quiet >/dev/null 2>&1
+chk "corregida la de la tabla, la suelta intacta, sin cuarentena" "1|1|0" "$(n "| 2026-09-07 | [[sessions/$S")|$(n '| 2026-09-19 |')|$(cuar)"
+printf -- '---\ntype: index\n---\n# Sessions\n\n| 2026-09-19 | [[sessions/2026-09-19-suelta\\|s]] | ok | huerfana | |\n' > "$IDX"
+if am --slug 2026-09-19-suelta --date 2026-09-08; then r=emitio; else r=rechazo; fi
+chk "slug solo en una fila suelta: el emisor se niega" "rechazo" "$r"
+
+echo "== 27. la escritura del indice falla: la anotacion se retira y el reintento aplica =="
+fixture "$FILA"
+am --slug "$S" --date 2026-09-09
+chmod 555 "$M"
+compact --quiet >/dev/null 2>&1
+chmod 755 "$M"
+chk "sin anotacion tras el fallo" "0" "$(reg "$S")"
+chk "el evento sigue en pending" "1" "$(ls "$M/.journal/pending" | wc -l | tr -d ' ')"
+OUT=$(compact)
+has "el reintento aplica" "$OUT" "applied=1"
+chk "fecha corregida y anotada" "1|1" "$(n "| 2026-09-09 | [[sessions/$S")|$(reg "$S")"
 
 echo
 echo "RESULTADO: $pass ok, $fail fallas"
