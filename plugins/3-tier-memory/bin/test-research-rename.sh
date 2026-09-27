@@ -35,7 +35,9 @@ compact() { python3 "$BIN/journal-compact.py" --memory-dir "$M" --log "$LOG" "$@
 replay() { cp "$1" "$M/.journal/pending/$(basename "$1" .bak)"; compact --quiet >/dev/null; }
 cuar() { ls "$M/.journal/quarantine/"*.json 2>/dev/null | wc -l | tr -d ' '; }
 vivas() {  # anotaciones VIVAS (anotadas menos anuladas) de las claves que casan $1 (regex ERE)
-  awk -F'\t' -v k="$1" '$1 ~ k { if ($2 ~ /^-/) c[substr($2,2)]--; else c[$2]++ }
+  # Con piso en 0 por ts, en orden de lineas, como ts_registrados: una anulacion anterior a su
+  # anotacion no la anula.
+  awk -F'\t' -v k="$1" '$1 ~ k { if ($2 ~ /^-/) { t=substr($2,2); if (c[t]>0) c[t]-- } else c[$2]++ }
     END { n=0; for (t in c) if (c[t]>0) n+=c[t]; print n }' "$M/.journal/reabiertos.log" 2>/dev/null || echo 0; }
 razon() { cat "$M"/.journal/quarantine/*.reason 2>/dev/null; }
 n() { grep -cF -- "$1" "$IDX"; }

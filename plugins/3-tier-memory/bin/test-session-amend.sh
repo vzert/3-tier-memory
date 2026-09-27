@@ -16,7 +16,7 @@
 set -u
 BIN="$(cd "$(dirname "$0")" && pwd)"
 T=$(mktemp -d); trap 'chflags -R nouappnd "$T" 2>/dev/null; chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"' EXIT
-pass=0; fail=0
+pass=0; fail=0; saltos=0
 chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: esperaba '$2', salio '$3'"; fi; }
 has() { if printf '%s' "$2" | grep -q -- "$3"; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: no encontre '$3' en '$2'"; fi; }
 
@@ -44,7 +44,9 @@ n() { grep -cF -- "$1" "$IDX"; }
 filas() { grep -c '^| [0-9]' "$IDX"; }
 sha() { shasum -a 256 "$IDX" | cut -d' ' -f1; }
 vivas() {  # anotaciones VIVAS (anotadas menos anuladas) de las claves que casan $1 (regex ERE)
-  awk -F'\t' -v k="$1" '$1 ~ k { if ($2 ~ /^-/) c[substr($2,2)]--; else c[$2]++ }
+  # Con piso en 0 por ts, en orden de lineas, como ts_registrados: una anulacion anterior a su
+  # anotacion no la anula.
+  awk -F'\t' -v k="$1" '$1 ~ k { if ($2 ~ /^-/) { t=substr($2,2); if (c[t]>0) c[t]-- } else c[$2]++ }
     END { n=0; for (t in c) if (c[t]>0) n+=c[t]; print n }' "$M/.journal/reabiertos.log" 2>/dev/null || echo 0; }
 reg() { vivas "^session-(fecha|alias)-$1\$"; }
 am() { emit --type session.amend "$@"; }
@@ -349,12 +351,13 @@ if command -v chflags >/dev/null 2>&1; then
   has "el reintento aplica" "$OUT" "applied=1"
   chk "corregida y anotada una vez" "1|1" "$(n "| 2026-09-12 | [[sessions/$S")|$(reg "$S")"
 else
-  echo "  SKIP append sin rename: sin chflags (solo macOS/BSD)"
+  saltos=$((saltos+1)); echo "  SKIP caso 29: sin chflags (solo macOS/BSD)"
 fi
 
 echo "== 31. una fila con la Fecha VACIA tambien se corrige =="
 fixture "|  | [[sessions/$S\|demo]] | ok | sin fecha | |"
-am --slug "$S" --date 2026-09-20
+EV=""; am --slug "$S" --date 2026-09-20
+chk "el emisor acepta la fila" "si" "$([ -n "$EV" ] && echo si || echo no)"
 chk "fecha_vieja vacia en el payload" "" "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["payload"]["fecha_vieja"])' "$EV")"
 compact --quiet >/dev/null 2>&1
 chk "fecha puesta, sin cuarentena" "1|0" "$(n "| 2026-09-20 | [[sessions/$S\|demo]] | ok | sin fecha |")|$(cuar)"
@@ -406,5 +409,7 @@ replay "$E1"
 chk "sigue la edicion a mano, sin cuarentena" "1|0" "$(n "| 2026-09-16 | [[sessions/$S")|$(cuar)"
 
 echo
-echo "RESULTADO: $pass ok, $fail fallas"
+# Un caso saltado va en la ultima linea: tools/run-tests.sh la lee y no da TODO VERDE si hay saltos.
+if [ "$saltos" -gt 0 ]; then echo "RESULTADO: $pass ok, $fail fallas, $saltos saltados"
+else echo "RESULTADO: $pass ok, $fail fallas"; fi
 [ "$fail" = 0 ]

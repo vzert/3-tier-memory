@@ -128,8 +128,10 @@ MUTACIONES = [
 
 def correr(suite, d):
     """(cae, ultima linea). Cae solo si sale != 0 Y hay algun aserto FALLA: una suite que revienta
-    (traceback, error de sintaxis del mutado) sale != 0 sin haber medido nada, y contarla como
-    "cae" aprobaria una mutacion que ningun aserto detecta (adversario externo, ronda 4)."""
+    antes de sus asertos sale != 0 sin haber medido nada, y contarla como "cae" aprobaria una
+    mutacion que ningun aserto detecta (adversario externo, ronda 4). Limite: estas suites callan
+    el stderr del compactador, asi que un mutado que ni compila tambien produce FALLA y cuenta
+    como caido; por eso cada mutacion de la lista es codigo valido."""
     r = subprocess.run(["bash", os.path.join(d, suite)], capture_output=True, text=True)
     ultima = (r.stdout.strip().splitlines() or [""])[-1]
     return r.returncode != 0 and "  FALLA " in r.stdout, ultima

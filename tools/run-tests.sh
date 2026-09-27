@@ -36,6 +36,11 @@ correr() {   # $1 = etiqueta, $2... = comando
     # que acepta no-evidencia (regla 12). Se lista aparte y el resumen deja de decir TODO VERDE.
     SALTADAS="$SALTADAS $nom"
     printf '  skip %-32s %3ss  %s\n' "$nom" "$dur" "$(printf '%s' "$out" | tail -1 | cut -c1-46)"
+  elif [ "$rc" -eq 0 ] && printf '%s' "$out" | tail -1 | grep -qE '[1-9][0-9]* saltad'; then
+    # Salto PARCIAL: la suite corrio pero dejo casos sin correr (p. ej. el caso 29 de
+    # test-session-amend.sh sin chflags). Tampoco es TODO VERDE.
+    SALTADAS="$SALTADAS $nom(parcial)"
+    printf '  skip %-32s %3ss  %s\n' "$nom" "$dur" "$(printf '%s' "$out" | tail -1 | cut -c1-46)"
   elif [ "$rc" -eq 0 ]; then
     printf '  ok   %-32s %3ss  %s\n' "$nom" "$dur" "$(printf '%s' "$out" | tail -1 | cut -c1-46)"
     [ "$VERBOSE" -eq 1 ] && printf '%s\n' "$out" | sed 's/^/       /'
