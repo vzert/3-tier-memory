@@ -22,6 +22,7 @@ FALLOS=0
 TOTAL=0
 LENTAS=""
 SALTADAS=""
+PARCIALES=""
 
 correr() {   # $1 = etiqueta, $2... = comando
   local nom="$1"; shift
@@ -39,7 +40,7 @@ correr() {   # $1 = etiqueta, $2... = comando
   elif [ "$rc" -eq 0 ] && printf '%s' "$out" | tail -1 | grep -qE '[1-9][0-9]* saltad'; then
     # Salto PARCIAL: la suite corrio pero dejo casos sin correr (p. ej. el caso 29 de
     # test-session-amend.sh sin chflags). Tampoco es TODO VERDE.
-    SALTADAS="$SALTADAS $nom(parcial)"
+    PARCIALES="$PARCIALES $nom"
     printf '  skip %-32s %3ss  %s\n' "$nom" "$dur" "$(printf '%s' "$out" | tail -1 | cut -c1-46)"
   elif [ "$rc" -eq 0 ]; then
     printf '  ok   %-32s %3ss  %s\n' "$nom" "$dur" "$(printf '%s' "$out" | tail -1 | cut -c1-46)"
@@ -69,8 +70,8 @@ done
 
 echo
 echo "------------------------------------------------------------"
-if [ "$FALLOS" -eq 0 ] && [ -n "$SALTADAS" ]; then
-  echo "VERDE CON SALTOS — $TOTAL sin fallos, sin correr:$SALTADAS"
+if [ "$FALLOS" -eq 0 ] && { [ -n "$SALTADAS" ] || [ -n "$PARCIALES" ]; }; then
+  echo "VERDE CON SALTOS — $TOTAL sin fallos${SALTADAS:+, sin correr:$SALTADAS}${PARCIALES:+, con casos saltados:$PARCIALES}"
 elif [ "$FALLOS" -eq 0 ]; then
   echo "TODO VERDE — $TOTAL/$TOTAL"
 else

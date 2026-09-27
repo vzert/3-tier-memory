@@ -53,8 +53,8 @@ CHANGELOG 2.31.0, "2. session.amend".
 - `test-session-amend.sh`: el criterio del diseno (la fila corregida sigue ahi, y es el siguiente
   `session.add` el que la poda si le toca) y los bordes del replay, las guardas, las filas
   duplicadas y el emisor. Rojo contra 2.38.0 y contra 2.39.2: los asertos que pasan alli son los
-  que un tipo desconocido tambien cumple (fichero intacto, rechazo, nada anotado) o los que prueban
-  comportamiento que ya existia (la poda y la fusion de `session.add`). Si falta `chflags`, el caso
+  que un tipo desconocido tambien cumple (fichero intacto, rechazo, nada anotado) y el que prueba
+  la fusion de filas de `session.add`, que ya existia. Si falta `chflags`, el caso
   29 se salta, la ultima linea lo cuenta (`N saltados`) y `tools/run-tests.sh` ya no da TODO VERDE
   sino VERDE CON SALTOS.
 - `tools/mutation-session-amend.py`: la lista de mutaciones de este codigo, con el texto exacto
