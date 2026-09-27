@@ -9,7 +9,7 @@ o alias equivocados no tenia correccion por evento, y con `journal_strict` tampo
 CHANGELOG 2.31.0, "2. session.amend".
 
 ### Added
-- **Evento `session.amend --slug S [--date D] [--alias A]`** (14.º tipo). Reescribe SOLO la Fecha
+- **Evento `session.amend --slug S [--date D] [--alias A]`** (15.º tipo). Reescribe SOLO la Fecha
   y/o la celda Sesion de las filas cuya celda Sesion ES el enlace de esa sesion.
   - *Ancla*: la celda 1 entera (`SESSION_CELL_RE`) de una fila de tabla (cabecera + separador,
     4 o 5 columnas), no la fila: una fila cuyo Resumen cita la sesion no se toca, ni una fila `|`
@@ -68,9 +68,13 @@ CHANGELOG 2.31.0, "2. session.amend".
   rojos contra 2.39.2. `pendiente.reopen` no tenia el fallo: anota el ts del cierre, no el suyo,
   y el reintento vuelve a pasar.
 
+- **El README contaba un tipo de evento de menos**: nunca nombro `pendiente.block`, asi que decia
+  "Thirteen" con catorce. Ahora lo nombra y cuenta los quince del `--type` de `journal-emit.py`
+  (lo encontro el adversario externo).
+
 ### Changed
 - Portadores de la lista de tipos: cabecera del compactador y del emisor, docstrings de
-  `anotar_reabierto`/`ts_registrados` (nuevas claves), README ("Fourteen event types"),
+  `anotar_reabierto`/`ts_registrados` (nuevas claves), README ("Fifteen event types"),
   `journal-guard.sh`, `bash-journal-nudge.sh` y `/checkpoint-3t` Step 2.
 
 Con esto la Fase 2 del plan queda completa: `plan.reopen` (2.37.0), `research.rename` (2.38.0) y
