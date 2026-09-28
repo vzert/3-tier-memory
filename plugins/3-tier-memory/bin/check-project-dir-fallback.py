@@ -12,13 +12,17 @@ script recorre CADA bloque de shell por construccion, no por grafia.
 Reglas, por bloque de shell:
   R1 Cualquier mencion de CLAUDE_PROJECT_DIR fuera de un comentario que no sea
      `${CLAUDE_PROJECT_DIR:-X}` con X no vacio. Falla la forma desnuda, `${CLAUDE_PROJECT_DIR}`,
-     `${CLAUDE_PROJECT_DIR-X}`, `${#CLAUDE_PROJECT_DIR}`, el nombre en aritmetica, y los
-     respaldos vacios `:-}`, `:-""}` y `:-''}` (callan a `set -u` pero siguen dando vacio).
+     `${CLAUDE_PROJECT_DIR-X}`, `${#CLAUDE_PROJECT_DIR}`, el nombre en aritmetica, los
+     respaldos vacios `:-}`, `:-""}` y `:-''}` (callan a `set -u` pero siguen dando vacio) y un
+     respaldo que es otra variable (`:-${EMPTY}`): X tiene que ser $PWD, $(pwd), otro
+     ${CLAUDE_PROJECT_DIR:-...} o un literal. No ve un acceso indirecto armado en tiempo de
+     ejecucion (`v=CLAUDE_PROJECT_""DIR; echo "${!v}"`): eso ya no es texto que se pueda leer.
   R2 `$PROJECT_DIR` (tambien `${PROJECT_DIR}`, `${#PROJECT_DIR}`, pegada a otra variable) usada
      sin definirla ANTES en el mismo bloque. `${PROJECT_DIR:-X}` con X no vacio siempre vale.
      Solo cuenta como definicion una asignacion de nivel superior: al inicio de la linea, fuera
      de if/for/while/until/case, de un cuerpo de funcion, de un subshell y de un heredoc, y que no
-     sea el prefijo de un comando (`PROJECT_DIR=x cmd` no la deja definida). Tambien valen
+     sea el prefijo de un comando (`PROJECT_DIR=x cmd` no la deja definida) ni corra en un subshell
+     (`PROJECT_DIR=x | cmd`, `PROJECT_DIR=x &`). Tambien valen
      export/declare/readonly/local delante y `read ... PROJECT_DIR`. Los usos del lado derecho de
      la propia asignacion se miran ANTES de darla por definida: `PROJECT_DIR="$PROJECT_DIR/x"`
      falla. Definirla en otro bloque no cuenta: es otra llamada Bash.
@@ -53,15 +57,18 @@ SHELL = {"", "bash", "sh", "shell", "zsh", "console"}
 FENCE = re.compile(r"^(\s*(?:>\s?)*)\s*(`{3,}|~{3,})(.*)$")
 CITA = re.compile(r"^\s*>\s?")
 
-# Respaldo no vacio: `:-` seguido de algo que no sea `}`, `""}` ni `''}`.
-CON_RESPALDO = r":-(?!\}|\"\"\}|''\})"
+# Respaldo que no puede quedar vacio: `:-` seguido de $PWD, $(pwd), otro
+# ${CLAUDE_PROJECT_DIR:-...} (que R1 revisa por su cuenta) o un literal. Un respaldo que es otra
+# variable (`:-${EMPTY}`, `:-$HOME`) no vale: puede llegar vacia igual.
+CON_RESPALDO = (r":-(?=\$PWD\b|\$\{PWD\}|\$\(pwd\)|\$\{CLAUDE_PROJECT_DIR:-|[^$}\"']"
+                r"|\"\$PWD\b|\"\$\{PWD\}|\"[^$\"]|'[^'])")
 R1_NOMBRE = re.compile(r"(?<![A-Za-z0-9_])CLAUDE_PROJECT_DIR(?![A-Za-z0-9_])")
 R1_BUENO = re.compile(r"\$\{CLAUDE_PROJECT_DIR" + CON_RESPALDO)
 R2_USO = re.compile(r"\$(?:\{[#!]?)?PROJECT_DIR(?![A-Za-z0-9_])")
 R2_BUENO = re.compile(r"\$\{PROJECT_DIR" + CON_RESPALDO)
 R2_DEF = re.compile(r"^\s*(?:(?:export|readonly|local|declare(?:\s+-\w+)*)\s+)?PROJECT_DIR=")
 R2_READ = re.compile(r"^\s*read(?:\s+-\w+(?:\s+\S+)?)*\s+(?:\w+\s+)*PROJECT_DIR(?:\s|;|$)")
-HEREDOC = re.compile(r"<<(-?)\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\2")
+HEREDOC = re.compile(r"<<(-?)\s*\\?(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\2")
 ABRE = re.compile(r"(?:^|[;&|]\s*|\b(?:then|do|else)\s+)(if|for|while|until|case|select)\b")
 CIERRA = re.compile(r"(?:^\s*|[;&|]\s*)(fi|done|esac)\b")
 ELSE = re.compile(r"(?:^\s*|[;&|]\s*)(else|elif)\b")
@@ -127,8 +134,9 @@ def es_definicion(codigo):
     if not m:
         return False
     resto = codigo[fin_de_palabra(codigo, m.end()):].lstrip()
-    # `PROJECT_DIR=x cmd` solo la pone en el entorno de cmd.
-    return resto == "" or resto[0] in ";&|"
+    # `PROJECT_DIR=x cmd` solo la pone en el entorno de cmd; `| cmd` y `&` la asignan en un
+    # subshell, que no la deja en el shell que sigue.
+    return resto == "" or resto.startswith((";", "&&", "||"))
 
 
 def usos_malos(texto, nombre_re, bueno_re):
@@ -211,7 +219,8 @@ def revisar_bloque(cuerpo, ini):
                                          (prof == def_prof and ELSE.search(s) and prof > 0)):
                 def_prof = None
             # Aperturas: funcion `f() {`, grupo `{`, subshell `(`, if/for/while/until/case.
-            m = re.match(r"^(?:function\s+)?[\w.-]+\s*\(\)\s*\{|^\{(?=\s|$)|^\((?!\()", s)
+            m = re.match(r"^function\s+[\w.-]+\s*(?:\(\))?\s*\{|^[\w.-]+\s*\(\)\s*\{"
+                         r"|^\{(?=\s|$)|^\((?!\()", s)
             if m:
                 prof += 1
                 s = s[m.end():].strip()

@@ -29,7 +29,8 @@ set -u
 BIN="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_ROOT="$(cd "$BIN/.." && pwd)"
 CHK="$BIN/check-project-dir-fallback.py"
-TMP="$(mktemp -d)"
+TMP="$(mktemp -d)" && [ -d "$TMP" ] && [ -w "$TMP" ] || {
+  echo "FAIL no se pudo crear el directorio temporal: sin el, ningun caso corre"; exit 1; }
 trap 'rm -rf "$TMP"' EXIT
 FAIL=0
 N=0
@@ -108,6 +109,12 @@ A="${CLAUDE_PROJECT_DIR:-""}"
 B="${CLAUDE_PROJECT_DIR:-''}"
 n=${#CLAUDE_PROJECT_DIR}
 echo $(( CLAUDE_PROJECT_DIR + 1 ))
+```
+EOF
+rojo respaldo-variable "2:R1 3:R1" <<'EOF'
+```bash
+A="${CLAUDE_PROJECT_DIR:-${EMPTY}}"
+B="${CLAUDE_PROJECT_DIR:-$HOME}"
 ```
 EOF
 rojo usos-raros "3:R2 4:R2 5:R2" <<'EOF'
@@ -200,6 +207,30 @@ SH
 ls "$PROJECT_DIR"
 ```
 EOF
+rojo def-subshell "4:R2" <<'EOF'
+```bash
+PROJECT_DIR=/x | cat
+PROJECT_DIR=/y &
+ls "$PROJECT_DIR"
+```
+EOF
+rojo def-en-function "5:R2" <<'EOF'
+```bash
+function f {
+  PROJECT_DIR=/x
+}
+ls "$PROJECT_DIR"
+```
+EOF
+rojo def-heredoc-escapado "6:R2" <<'EOF'
+```bash
+cat > /tmp/s.sh <<\SH
+echo "script escrito para despues"
+PROJECT_DIR=/x
+SH
+ls "$PROJECT_DIR"
+```
+EOF
 rojo def-prefijo "3:R2" <<'EOF'
 ```bash
 PROJECT_DIR=/x make build
@@ -231,6 +262,14 @@ verde prosa <<'EOF'
 Prosa fuera de bloque: `$CLAUDE_PROJECT_DIR` y $PROJECT_DIR.
 EOF
 
+verde respaldos-validos <<'EOF'
+```bash
+A="${CLAUDE_PROJECT_DIR:-$(pwd)}"
+B="${CLAUDE_PROJECT_DIR:-/srv/proyecto}"
+C="${CLAUDE_PROJECT_DIR:-"$PWD"}"
+PROJECT_DIR=/x && ls "$PROJECT_DIR"
+```
+EOF
 verde definiciones <<'EOF'
 ```bash
 cat > /tmp/cfg <<'CFG'
@@ -308,5 +347,8 @@ done
 check "cuenta independiente de fences de shell = la del recorrido" "$indep" "${nb:-0}"
 
 echo
+# Si un cambio salta casos en silencio, el total baja: se fija aqui.
+ESPERADOS=57
+check "corrieron los $ESPERADOS asertos" "$N" "$ESPERADOS"
 [ "$FAIL" -eq 0 ] && echo "PASS $N/$N" || echo "FAIL (ver arriba)"
 exit $FAIL

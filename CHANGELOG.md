@@ -120,27 +120,33 @@ bloques bash que usaban la ruta del proyecto sin respaldo. Nada impedia que volv
   de otro lenguaje (```text, ```json).
   - R1: falla cualquier mencion de `CLAUDE_PROJECT_DIR` fuera de un comentario que no sea
     `${CLAUDE_PROJECT_DIR:-X}` con X no vacio. Cubre la forma desnuda, `${...}`, `${...-X}`,
-    `${#...}`, la aritmetica y los respaldos vacios `:-}`, `:-""}`, `:-''}` (callan a `set -u` pero
-    siguen dando vacio).
+    `${#...}`, la aritmetica, los respaldos vacios `:-}`, `:-""}`, `:-''}` (callan a `set -u` pero
+    siguen dando vacio) y un respaldo que es otra variable (`:-${EMPTY}`, `:-$HOME`): X tiene que
+    ser $PWD, $(pwd), otro `${CLAUDE_PROJECT_DIR:-...}` o un literal. Limite: no ve un acceso
+    indirecto armado en ejecucion (`v=CLAUDE_PROJECT_""DIR; echo "${!v}"`).
   - R2: falla `$PROJECT_DIR` (tambien `${#...}` y pegada a otra variable, `$FOO$PROJECT_DIR`)
     usada sin definirla antes en el MISMO bloque. `${PROJECT_DIR:-X}` siempre vale. La definicion
     vale solo en su nivel: dentro de un if, una funcion o un subshell se olvida al salir, y en otra
-    rama (`else`) no cuenta. No definen: `[ ] && PROJECT_DIR=x`, `PROJECT_DIR=x cmd` (prefijo de
-    un comando), una linea de heredoc, `PROJECT_DIR="$PROJECT_DIR/x"`. Si definen: `export`,
+    rama (`else`) no cuenta; tambien con `function f {`. No definen: `[ ] && PROJECT_DIR=x`,
+    `PROJECT_DIR=x cmd` (prefijo de un comando), `PROJECT_DIR=x | cmd` y `PROJECT_DIR=x &`
+    (subshell), una linea de heredoc (tambien `<<\SH`), `PROJECT_DIR="$PROJECT_DIR/x"`. Si definen: `export`,
     `declare`, `readonly`, `local` y `read ... PROJECT_DIR`.
-  - Contra el arbol de 2.39.0 (025ebb2) marca las 10 lineas que 2.39.1 arreglo (las formas
-    `ENCODED=$(echo "$CLAUDE_PROJECT_DIR"`, mkdir, cat > e if -f).
-  - Suite: 48 asertos. Plantillas sinteticas rojas por forma que comprueban `linea:regla`, verdes
-    sin falso positivo, y el arbol real en verde. El arbol real da 107 bloques de shell, igual que una
-    cuenta independiente en awk con pila de anidamiento: ningun bloque se trago a otro. Doce
+  - Contra el arbol de 2.39.0 (025ebb2) marca 18 lineas: las 10 que 2.39.1 arreglo (las formas
+    `ENCODED=$(echo "$CLAUDE_PROJECT_DIR"`, mkdir, cat > e if -f) y 8 de los tres bloques de prosa
+    sin etiqueta que ahora son ```text.
+  - Suite: 58 asertos, y el total esta fijado: si un cambio salta casos, cae. Si `mktemp` falla
+    sale con FAIL, no con un verde sin casos. Plantillas sinteticas rojas por forma que comprueban
+    `linea:regla`, verdes sin falso positivo, y el arbol real en verde. El arbol real da 107 bloques de shell, igual que una
+    cuenta independiente en awk con pila de anidamiento: ningun bloque se trago a otro. Quince
     mutaciones del checker, una por mecanismo, la hacen caer.
 - **Tres bloques de prosa o salida de ejemplo pasan a ```text** (`audit-3t.md` Step de settings,
   `migrate.md` salida `[MISSING]`, `setup-memory.md` variables): antes no tenian etiqueta.
 
 Historia: la primera version solo miraba ```bash y dejaba fuera los bloques sin etiqueta "porque
 solo traen prosa". El adversario externo (Codex) lo rompio: `checkpoint-3t.md` Step 6c tiene un
-`git commit` ejecutable sin etiqueta. Tambien hallo 5 huecos de R1/R2, todos cubiertos arriba con
-un caso rojo cada uno.
+`git commit` ejecutable sin etiqueta. Tambien hallo 5 huecos de R1/R2. La ronda 2 confirmo esos 6
+cerrados y hallo 5 mas: la suite salia verde si `mktemp` fallaba, `function f {`, `| cmd` y `&`,
+`<<\SH` y el respaldo `:-${EMPTY}`. Todos tienen caso rojo arriba.
 
 ### Fixed
 - **`test-checkpoint-close-guard.sh` rojo desde el 2026-09-27**: su `_pendientes.md` de prueba
