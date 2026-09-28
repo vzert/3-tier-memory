@@ -1,6 +1,33 @@
 # Changelog
 
 
+## [2.41.2] - 2026-09-28
+Origen: pendiente `p-8472f7f4b7`. 2.39.0 no habia pasado por el adversario externo (Codex); el
+2026-09-24 su cuenta estaba en el limite de uso. Codex la reviso hoy en HEAD y dio `break` con dos
+hallazgos de severidad alta en `compaction-recover.py`. Los dos perdian el tramo compactado en
+silencio (`recover=0`).
+
+### Fixed
+- **Un checkpoint interrumpido contaba como "checkpoint anterior".** Caso: compactacion, luego un
+  `/checkpoint-3t` que se corta antes de escribir, luego el reintento. El script tomaba la
+  invocacion cortada como checkpoint anterior. El tramo compactado quedaba antes de ella y daba
+  `recover=0`, aunque nadie lo habia guardado. Ahora un checkpoint anterior solo cuenta si en su
+  propio turno corrio uno de los scripts que la plantilla llama despues de Step 5:
+  `ensure-frontmatter.py`, `stamp-session-id.py`, `scan-secrets.py` o `checkpoint-audit.py`.
+  `journal-compact.py` no vale porque tambien corre en Step 3c. Costo aceptado: un checkpoint
+  completo que se salto esos cuatro scripts cuenta como no terminado, y el siguiente recupera de
+  mas. Eso cuesta un dedupe en Steps 3a/4. El error contrario pierde el tramo.
+  - Medido en los 60 JSONL mas recientes de este repo: 14 de 15 checkpoints anteriores cuentan como
+    terminados. El que no cuenta es un checkpoint abreviado de 2.24.7 que no corrio ningun script
+    de cierre.
+- **Una compactacion posterior a la marca del checkpoint actual quedaba fuera.** Solo contaban las
+  compactaciones entre el checkpoint anterior y la marca del actual. Si la sesion se compacta
+  entre que la skill se carga y corre Step 0b, el tramo previo ya no esta en contexto. Ahora
+  cuenta toda compactacion posterior al checkpoint anterior.
+- `test-compaction-recover.sh`: casos L (interrumpido, su control terminado y un script de cierre
+  en otro turno) y M (compactacion tras la marca). L1, L3 y M son rojos contra 2.41.1. Los casos
+  A, B, H y J marcan ahora su checkpoint anterior como terminado (`fin`).
+
 ## [2.41.1] - 2026-09-28
 Origen: el CI de windows-latest falla desde 2.39.3/2.40.0 (corridas 36460288399, 36461145344,
 36466849883) en `test-plan-reopen`, `test-research-rename` y `test-session-amend`. macOS y Linux,

@@ -30,6 +30,8 @@ edit() { printf '{"type":"assistant","promptId":"%s","message":{"role":"assistan
 tres() { printf '{"type":"user","promptId":"%s","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"x","content":"%s"}]}}\n' "$1" "$2"; }
 ckcmd(){ u "$1" "<command-message>checkpoint-3t</command-message>\\n<command-name>/checkpoint-3t</command-name>"; }
 ckskl(){ tres "$1" "Launching skill: checkpoint-3t"; }
+# Un checkpoint que TERMINO corre en su turno los scripts posteriores a Step 5 (aqui, el de 5c).
+fin()  { printf '{"type":"assistant","promptId":"%s","message":{"role":"assistant","content":[{"type":"tool_use","id":"f%s","name":"Bash","input":{"command":"[ -n \\"$SEAL\\" ] && python3 \\"$SEAL\\" \\"$MEMORY_DIR\\" --apply  # ensure-frontmatter.py"}}]}}\n' "$1" "$RANDOM"; }
 bound(){ printf '{"type":"system","subtype":"compact_boundary","timestamp":"2026-09-20T11:00:00Z","compactMetadata":{"trigger":"auto","preTokens":%s}}\n' "$1"; }
 summ() { printf '{"type":"user","isCompactSummary":true,"message":{"role":"user","content":"RESUMEN-LOSSY de la compactacion"}}\n'; }
 side() { printf '{"type":"assistant","isSidechain":true,"message":{"role":"assistant","content":[{"type":"text","text":"TEXTO-DE-SUBAGENTE"}]}}\n'; }
@@ -38,7 +40,7 @@ run() { python3 "$BIN/compaction-recover.py" --jsonl "$1" --out-dir "$2" "${@:3}
 
 echo "A. checkpoint A -> trabajo X -> compactacion -> trabajo Y -> checkpoint B (actual): recupera X, ni A ni Y"
 F="$TMP/a.jsonl"
-{ ckcmd p1; ckskl p1; a p1 "EJECUCION-DEL-CHECKPOINT-A"
+{ ckcmd p1; ckskl p1; a p1 "EJECUCION-DEL-CHECKPOINT-A"; fin p1
   u p2 "PETICION-X arregla el parser"; a p2 "RESPUESTA-X"; edit p2 "src/parser.py" "NUEVO-X"
   side; bound 900000; summ
   u p3 "PETICION-Y posterior"; a p3 "RESPUESTA-Y"
@@ -54,12 +56,12 @@ hasnt "no incluye la ejecucion del checkpoint anterior" "EJECUCION-DEL-CHECKPOIN
 hasnt "no incluye lo posterior a la compactacion"       "PETICION-Y" "$C"
 hasnt "no incluye el resumen lossy"         "RESUMEN-LOSSY" "$C"
 hasnt "no incluye texto de subagentes"      "TEXTO-DE-SUBAGENTE" "$C"
-python3 -c "import json,sys; m=json.load(open(sys.argv[1])); assert (m['previous_checkpoint_line'], m['from_line'], m['to_line'])==(2, 4, 8), m" "$TMP/oa/manifest.json" \
-  && ok "manifest: marcas del checkpoint anterior hasta la linea 2, tramo 4-8 (primer prompt real hasta la compactacion)" || bad "manifest de lineas"
+python3 -c "import json,sys; m=json.load(open(sys.argv[1])); assert (m['previous_checkpoint_line'], m['from_line'], m['to_line'])==(2, 5, 9), m" "$TMP/oa/manifest.json" \
+  && ok "manifest: marcas del checkpoint anterior hasta la linea 2, tramo 5-9 (primer prompt real hasta la compactacion)" || bad "manifest de lineas"
 
 echo "B. checkpoint DESPUES de la compactacion: nada que recuperar"
 F="$TMP/b.jsonl"
-{ u p1 "trabajo"; bound 500000; summ; ckcmd p2; ckskl p2; u p3 "mas trabajo"; ckcmd p4; ckskl p4; } > "$F"
+{ u p1 "trabajo"; bound 500000; summ; ckcmd p2; ckskl p2; fin p2; u p3 "mas trabajo"; ckcmd p4; ckskl p4; } > "$F"
 OUT=$(run "$F" "$TMP/ob")
 [ "$OUT" = "recover=0 reason=checkpoint-posterior-a-la-compactacion" ] && ok "recover=0 checkpoint-posterior" || bad "B: $OUT"
 [ ! -e "$TMP/ob" ] && ok "no crea el directorio de salida" || bad "B creo salida"
@@ -123,7 +125,7 @@ has "la respuesta del usuario aparece" "RESPUESTA-ELEGIDA=Si" "$TMP/og.all"
 
 echo "H. --until-line evalua el archivo como si terminara ahi (checkpoint A como el actual)"
 F="$TMP/h.jsonl"
-{ u p1 "TRABAJO-H"; bound 100000; summ; ckcmd p2; ckskl p2; u p3 "mas"; ckcmd p4; } > "$F"
+{ u p1 "TRABAJO-H"; bound 100000; summ; ckcmd p2; ckskl p2; fin p2; u p3 "mas"; ckcmd p4; } > "$F"
 OUT=$(run "$F" "$TMP/oh1"); [ "$OUT" = "recover=0 reason=checkpoint-posterior-a-la-compactacion" ] && ok "archivo entero: recover=0" || bad "H1: $OUT"
 OUT=$(run "$F" "$TMP/oh2" --until-line 5); case "$OUT" in "recover=1 "*) ok "hasta la linea 5: recover=1";; *) bad "H2: $OUT";; esac
 
@@ -139,7 +141,7 @@ has "recupera el trabajo previo a esas menciones" "TRABAJO-I antes de todo" "$TM
 
 echo "J. sin prompt escrito: una notificacion de tarea abre el tramo; sin nada, empieza tras el checkpoint"
 F="$TMP/j.jsonl"
-{ ckcmd p1; ckskl p1; a p1 "EJECUCION-CHECKPOINT-J"
+{ ckcmd p1; ckskl p1; a p1 "EJECUCION-CHECKPOINT-J"; fin p1
   u p2 "<task-notification>\\n<task-id>b1</task-id>\\n<summary>TAREA-TERMINO</summary>\\n</task-notification>"
   edit p2 "src/loop.py" "CAMBIO-AUTONOMO-VIA-NOTIFICACION"
   bound 100000; summ; ckcmd p3; ckskl p3; } > "$F"
@@ -148,7 +150,7 @@ case "$OUT" in "recover=1 "*) ok "recover=1 con el turno abierto por una notific
 has   "recupera la edicion autonoma"          "CAMBIO-AUTONOMO-VIA-NOTIFICACION" "$TMP/oj/chunk-01.md"
 hasnt "no mete la ejecucion del checkpoint"   "EJECUCION-CHECKPOINT-J" "$TMP/oj/chunk-01.md"
 F="$TMP/j2.jsonl"
-{ ckcmd p1; ckskl p1; edit p1 "src/x.py" "EDICION-SIN-TURNO-NUEVO"; bound 100000; ckcmd p3; } > "$F"
+{ ckcmd p1; ckskl p1; fin p1; edit p1 "src/x.py" "EDICION-SIN-TURNO-NUEVO"; bound 100000; ckcmd p3; } > "$F"
 OUT=$(run "$F" "$TMP/oj2")
 case "$OUT" in "recover=1 "*) ok "sin ningun inicio de turno: recover=1 igual, nunca recover=0 con compactacion";; *) bad "J2: $OUT";; esac
 has "recupera lo que hubo tras el checkpoint" "EDICION-SIN-TURNO-NUEVO" "$TMP/oj2/chunk-01.md"
@@ -160,6 +162,35 @@ OUT=$(python3 "$BIN/compaction-recover.py" --session-id sesion-uuid-k --jsonl-di
       --projects-root "$TMP/projects" --out-dir "$TMP/ok")
 case "$OUT" in "recover=1 "*) ok "recover=1 buscando el id bajo todos los proyectos";; *) bad "K: $OUT";; esac
 has "recupera el trabajo" "TRABAJO-K" "$TMP/ok/chunk-01.md"
+
+echo "L. un checkpoint interrumpido antes de escribir no cuenta como checkpoint anterior (adversario externo, 2026-09-28)"
+F="$TMP/l.jsonl"
+{ u p1 "PENDIENTE-DEL-TRAMO verificar la migracion"; bound 300000; summ
+  ckcmd p2; ckskl p2; a p2 "Step 0: localizo memory/"
+  u p3 "se interrumpio el checkpoint, reintenta"; ckcmd p4; ckskl p4; } > "$F"
+OUT=$(run "$F" "$TMP/ol")
+case "$OUT" in "recover=1 "*) ok "recover=1: la invocacion p2 no corrio ningun script posterior a Step 5";; *) bad "L1: $OUT";; esac
+has "recupera lo que p2 nunca guardo" "PENDIENTE-DEL-TRAMO" "$TMP/ol/chunk-01.md"
+# Control: el mismo archivo con p2 TERMINADO (fin) vuelve a recover=0.
+F="$TMP/l2.jsonl"
+{ u p1 "PENDIENTE-DEL-TRAMO"; bound 300000; summ
+  ckcmd p2; ckskl p2; fin p2; u p3 "otra cosa"; ckcmd p4; ckskl p4; } > "$F"
+OUT=$(run "$F" "$TMP/ol2")
+[ "$OUT" = "recover=0 reason=checkpoint-posterior-a-la-compactacion" ] && ok "control: con el checkpoint terminado, recover=0" || bad "L2: $OUT"
+# Un script de CKPT_DONE que corre en OTRO turno (tras un prompt nuevo) no convierte en terminado al checkpoint.
+F="$TMP/l3.jsonl"
+{ u p1 "PENDIENTE-DEL-TRAMO"; bound 300000; summ
+  ckcmd p2; ckskl p2; u p3 "corre el audit a mano"; fin p3; ckcmd p4; ckskl p4; } > "$F"
+OUT=$(run "$F" "$TMP/ol3")
+case "$OUT" in "recover=1 "*) ok "el script en un turno posterior no cuenta como cierre del checkpoint";; *) bad "L3: $OUT";; esac
+
+echo "M. compactacion entre la marca del checkpoint actual y Step 0b: se recupera (adversario externo, 2026-09-28)"
+F="$TMP/m.jsonl"
+{ u p1 "TRABAJO-M previo"; ckcmd p2; ckskl p2; bound 400000; summ; } > "$F"
+OUT=$(run "$F" "$TMP/om")
+case "$OUT" in "recover=1 compactions=1 pre_tokens=400000 "*) ok "recover=1 con la compactacion posterior a la marca";; *) bad "M: $OUT";; esac
+has   "recupera el trabajo previo"  "TRABAJO-M previo" "$TMP/om/chunk-01.md"
+hasnt "no incluye el resumen lossy" "RESUMEN-LOSSY" "$TMP/om/chunk-01.md"
 
 echo
 [ $FAIL -eq 0 ] && echo "TODO VERDE" || echo "HAY FALLOS"

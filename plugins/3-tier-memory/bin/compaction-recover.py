@@ -21,8 +21,16 @@ Que tramo recupera:
     marcas (`<command-name>/checkpoint-3t`, `Launching skill: checkpoint-3t`, el isMeta
     "Skill /checkpoint-3t is already loaded"), por eso se agrupan por `promptId`: el mismo prompt
     del usuario = la misma invocacion.
-  - Hay que recuperar si existe un `compact_boundary` DESPUES del checkpoint anterior y ANTES del
-    actual. El tramo va desde el primer INICIO DE TURNO tras el checkpoint anterior —un prompt, o lo que
+  - "checkpoint anterior" solo cuenta si TERMINO: si en su propio turno corrio alguno de los scripts
+    que la plantilla llama despues de Step 5 (`ensure-frontmatter.py`, `stamp-session-id.py`,
+    `scan-secrets.py`, `checkpoint-audit.py`). Un checkpoint interrumpido antes de escribir no guardo
+    nada; contarlo hacia que el reintento descartara el tramo (recover=0) sin que nadie lo hubiera
+    guardado (adversario externo, 2026-09-28). El costo va al otro lado: un checkpoint completo que
+    se salto esos cuatro scripts cuenta como no terminado y el siguiente recupera de mas — eso cuesta
+    un dedupe en Steps 3a/4; el error contrario pierde el tramo en silencio.
+  - Hay que recuperar si existe un `compact_boundary` DESPUES del checkpoint anterior, tambien una
+    posterior a la marca del actual (la compactacion puede caer entre que la skill se carga y corre
+    Step 0b; adversario externo, 2026-09-28). El tramo va desde el primer INICIO DE TURNO tras el checkpoint anterior —un prompt, o lo que
     despierta al agente sin prompt: notificacion de tarea, mensaje de otra sesion, tick de loop— (asi
     no entra la ejecucion de ese checkpoint, que ya guardo lo suyo; sin ninguno, justo despues de el) hasta la ULTIMA de esas
     compactaciones: lo que viene despues sigue en el contexto vivo del agente.
@@ -70,6 +78,9 @@ CKPT_MARKERS = (
     re.compile(r"Launching skill: (?:[\w-]+:)?checkpoint-3t\b"),
     re.compile(r"Skill /?(?:[\w-]+:)?checkpoint-3t is already loaded"),
 )
+# Scripts que la plantilla corre DESPUES de Step 5 (5c, 5c-bis, 5d, 7a): verlos en el turno de un
+# checkpoint prueba que llego a escribir. journal-compact.py no vale: tambien corre en Step 3c.
+CKPT_DONE = re.compile(r"\b(?:ensure-frontmatter|stamp-session-id|scan-secrets|checkpoint-audit)\.py\b")
 # isMeta NO basta para descartar: un `cross-session-message` (otra sesion de Claude que encarga
 # trabajo) llega como isMeta y puede ser la peticion que origino todo el tramo (medido en una
 # sesion real de este repo). Se descarta solo el ruido meta conocido: el cuerpo de una skill al
@@ -170,6 +181,24 @@ def load(path, until_line):
     return rows
 
 
+def ckpt_finished(rows, group, next_group_start):
+    """True si en el turno de esa invocacion (desde su primera marca hasta el siguiente inicio de
+    turno o la siguiente invocacion) el agente corrio un script de CKPT_DONE."""
+    first, _, last = group
+    for n, o in rows:
+        if n <= first:
+            continue
+        if n >= next_group_start or (n > last and is_turn_start(o)):
+            return False
+        if o.get("type") != "assistant" or o.get("isSidechain"):
+            continue
+        for it in (o.get("message") or {}).get("content") or []:
+            if (isinstance(it, dict) and it.get("type") == "tool_use" and it.get("name") == "Bash"
+                    and CKPT_DONE.search(str((it.get("input") or {}).get("command", "")))):
+                return True
+    return False
+
+
 def find_range(rows):
     """Devuelve (info, None) si hay que recuperar, o (None, motivo)."""
     boundaries = [(n, o) for n, o in rows
@@ -191,12 +220,13 @@ def find_range(rows):
     last_line = rows[-1][0] if rows else 0
     if groups:
         current_start = groups[-1][0]
-        prev_end = groups[-2][2] if len(groups) >= 2 else 0
+        done = [g for i, g in enumerate(groups[:-1]) if ckpt_finished(rows, g, groups[i + 1][0])]
+        prev_end = done[-1][2] if done else 0
     else:
         current_start = last_line + 1   # corrida manual, fuera de un checkpoint
         prev_end = 0
 
-    lost = [(n, o) for n, o in boundaries if prev_end < n < current_start]
+    lost = [(n, o) for n, o in boundaries if n > prev_end]
     if not lost:
         return None, "checkpoint-posterior-a-la-compactacion"
 
