@@ -30,9 +30,9 @@ Que tramo recupera:
     un dedupe en Steps 3a/4; el error contrario pierde el tramo en silencio.
   - Hay que recuperar si existe un `compact_boundary` DESPUES del checkpoint anterior, tambien una
     posterior a la marca del actual (la compactacion puede caer entre que la skill se carga y corre
-    Step 0b; adversario externo, 2026-09-28). El tramo va desde el primer INICIO DE TURNO tras el checkpoint anterior —un prompt, o lo que
-    despierta al agente sin prompt: notificacion de tarea, mensaje de otra sesion, tick de loop— (asi
-    no entra la ejecucion de ese checkpoint, que ya guardo lo suyo; sin ninguno, justo despues de el) hasta la ULTIMA de esas
+    Step 0b; adversario externo, 2026-09-28). El tramo va desde la
+    linea siguiente a la salida de cierre del checkpoint anterior (ronda 3: empezar en el siguiente
+    inicio de turno perdia un Edit autonomo hecho tras el cierre) hasta la ULTIMA de esas
     compactaciones: lo que viene despues sigue en el contexto vivo del agente.
   - Sin checkpoint anterior, el tramo empieza en la linea 1.
 
@@ -190,15 +190,24 @@ def load(path, until_line):
 
 def is_typed_prompt(o):
     """Un inicio de turno que escribio una persona: no una notificacion de tarea, ni un mensaje de
-    otra sesion (isMeta), ni un tick de loop."""
+    otra sesion, ni un tick de loop. El harness lo marca en `origin.kind`: "human" en lo escrito,
+    "task-notification" o "peer" en lo que inyecta (medido en 300 JSONL, 2026-09-28). Mirar el
+    contenido no basta: un prompt escrito puede empezar pegando una notificacion (adversario
+    externo, ronda 3). Sin `origin` (versiones anteriores del harness) se mira el contenido."""
     if not is_turn_start(o) or o.get("isMeta"):
         return False
+    origin = o.get("origin")
+    if isinstance(origin, dict) and origin.get("kind"):
+        return origin.get("kind") == "human"
     return not "\n".join(content_texts((o.get("message") or {}).get("content"))).lstrip().startswith(
         ("<task-notification>", "<cross-session-message", "<<autonomous-loop"))
 
 
 def ckpt_finished(rows, group, next_group_start):
-    """True si en el turno de esa invocacion un Bash devolvio la salida de un script de CKPT_DONE.
+    """Linea donde, en el turno de esa invocacion, un Bash que corre `python3` devolvio la salida de
+    un script de CKPT_DONE (no en DRY-RUN), o 0 si no la hay. El tramo a recuperar empieza tras esa
+    linea: lo que el agente hizo despues del cierre, aun sin prompt nuevo, no lo guardo nadie
+    (adversario externo, ronda 3).
     El turno va desde su primera marca hasta el siguiente prompt ESCRITO o la siguiente invocacion.
     Una notificacion de tarea en medio no lo cierra: el agente sigue con el checkpoint despues de
     ella (adversario externo, ronda 2: cerrar ahi daba por no terminado un checkpoint completo)."""
@@ -217,13 +226,17 @@ def ckpt_finished(rows, group, next_group_start):
         for it in content:
             if not isinstance(it, dict):
                 continue
-            if o.get("type") == "assistant" and it.get("type") == "tool_use" and it.get("name") == "Bash":
+            if (o.get("type") == "assistant" and it.get("type") == "tool_use" and it.get("name") == "Bash"
+                    and "python3" in str((it.get("input") or {}).get("command", ""))):
                 bash_ids.add(it.get("id"))
             elif (o.get("type") == "user" and it.get("type") == "tool_result"
-                  and it.get("tool_use_id") in bash_ids and not it.get("is_error")
-                  and CKPT_DONE.search("\n".join(content_texts([it])))):
-                return True
-    return False
+                  and it.get("tool_use_id") in bash_ids):
+                # Sin exigir is_error falso: el Bash de un checkpoint real salio con codigo 6 por otro
+                # comando y ensure-frontmatter.py si termino. La linea de resumen solo sale al final.
+                body = "\n".join(content_texts([it]))
+                if CKPT_DONE.search(body) and "DRY-RUN" not in body:
+                    return n
+    return 0
 
 
 def find_range(rows):
@@ -247,8 +260,9 @@ def find_range(rows):
     last_line = rows[-1][0] if rows else 0
     if groups:
         current_start = groups[-1][0]
-        done = [g for i, g in enumerate(groups[:-1]) if ckpt_finished(rows, g, groups[i + 1][0])]
-        prev_end = done[-1][2] if done else 0
+        done = [f for f in (ckpt_finished(rows, g, groups[i + 1][0])
+                             for i, g in enumerate(groups[:-1])) if f]
+        prev_end = done[-1] if done else 0
     else:
         current_start = last_line + 1   # corrida manual, fuera de un checkpoint
         prev_end = 0
@@ -258,11 +272,11 @@ def find_range(rows):
         return None, "checkpoint-posterior-a-la-compactacion"
 
     end = lost[-1][0]
-    start = 1
-    if prev_end:
-        # Sin ningun inicio de turno en medio, se empieza justo tras el checkpoint anterior: meter
-        # de mas la cola de ese checkpoint cuesta un dedupe; devolver recover=0 perdia el tramo.
-        start = next((n for n, o in rows if prev_end < n < end and is_turn_start(o)), prev_end + 1)
+    # prev_end es la linea donde el checkpoint anterior dio su salida de cierre. Se empieza justo
+    # despues, no en el siguiente inicio de turno: un Edit autonomo tras el cierre y antes de un
+    # prompt nuevo se perdia (adversario externo, ronda 3). La cola del checkpoint (reporte, snippet)
+    # entra de mas; eso cuesta un dedupe, no un tramo perdido.
+    start = prev_end + 1 if prev_end else 1
     info = {
         "from_line": start,
         "to_line": end,

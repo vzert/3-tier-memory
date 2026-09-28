@@ -63,8 +63,8 @@ hasnt "no incluye la ejecucion del checkpoint anterior" "EJECUCION-DEL-CHECKPOIN
 hasnt "no incluye lo posterior a la compactacion"       "PETICION-Y" "$C"
 hasnt "no incluye el resumen lossy"         "RESUMEN-LOSSY" "$C"
 hasnt "no incluye texto de subagentes"      "TEXTO-DE-SUBAGENTE" "$C"
-python3 -c "import json,sys; m=json.load(open(sys.argv[1])); assert (m['previous_checkpoint_line'], m['from_line'], m['to_line'])==(2, 6, 10), m" "$TMP/oa/manifest.json" \
-  && ok "manifest: marcas del checkpoint anterior hasta la linea 2, tramo 6-10 (primer prompt real hasta la compactacion)" || bad "manifest de lineas"
+python3 -c "import json,sys; m=json.load(open(sys.argv[1])); assert (m['previous_checkpoint_line'], m['from_line'], m['to_line'])==(5, 6, 10), m" "$TMP/oa/manifest.json" \
+  && ok "manifest: el checkpoint anterior cierra en la linea 5 (salida de 5c), tramo 6-10 (primer prompt real hasta la compactacion)" || bad "manifest de lineas"
 
 echo "B. checkpoint DESPUES de la compactacion: nada que recuperar"
 F="$TMP/b.jsonl"
@@ -203,6 +203,43 @@ F="$TMP/n2.jsonl"
   fin p2; u p3 "otra cosa"; ckcmd p4; ckskl p4; } > "$F"
 OUT=$(run "$F" "$TMP/on2")
 [ "$OUT" = "recover=0 reason=checkpoint-posterior-a-la-compactacion" ] && ok "notificacion en medio y luego 5c: terminado, recover=0" || bad "N2: $OUT"
+
+echo "O. ronda 3 del adversario: log viejo, DRY-RUN, prompt que pega una notificacion, Edit tras el cierre"
+# Un Bash sin python3 que imprime una salida de cierre (cat de un log viejo): no cierra.
+catlog(){ local id="c$RANDOM"
+  printf '{"type":"assistant","promptId":"%s","message":{"role":"assistant","content":[{"type":"tool_use","id":"%s","name":"Bash","input":{"command":"cat /tmp/checkpoint-viejo.log"}}]}}\n' "$1" "$id"
+  printf '{"type":"user","promptId":"%s","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","content":"SUMMARY frontmatter_sealed=0"}]}}\n' "$1" "$id"; }
+# ensure-frontmatter.py sin --apply: salida real, pero DRY-RUN.
+dry()  { local id="d$RANDOM"
+  printf '{"type":"assistant","promptId":"%s","message":{"role":"assistant","content":[{"type":"tool_use","id":"%s","name":"Bash","input":{"command":"python3 \\"$SEAL\\" \\"$MEMORY_DIR\\""}}]}}\n' "$1" "$id"
+  printf '{"type":"user","promptId":"%s","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","content":"== ensure-frontmatter: DRY-RUN ==\\nDRY-RUN only\\nSUMMARY frontmatter_sealed=0"}]}}\n' "$1" "$id"; }
+for c in catlog dry; do
+  F="$TMP/o-$c.jsonl"
+  { u p1 "PENDIENTE-O"; bound 300000; summ; ckcmd p2; ckskl p2; $c p2; u p3 "se corto, reintenta"; ckcmd p4; ckskl p4; } > "$F"
+  OUT=$(run "$F" "$TMP/oo-$c")
+  case "$OUT" in "recover=1 "*) ok "$c: no cuenta como cierre";; *) bad "O $c: $OUT";; esac
+done
+# Un prompt ESCRITO (origin.kind=human) que empieza pegando una notificacion cierra el turno.
+F="$TMP/o-pegado.jsonl"
+{ u p1 "PENDIENTE-O"; bound 300000; summ; ckcmd p2; ckskl p2
+  printf '{"type":"user","promptId":"p3","origin":{"kind":"human"},"message":{"role":"user","content":"<task-notification>pegada</task-notification> olvida el checkpoint, haz otra cosa"}}\n'
+  fin p3; ckcmd p4; ckskl p4; } > "$F"
+OUT=$(run "$F" "$TMP/oo-pegado")
+case "$OUT" in "recover=1 "*) ok "prompt escrito con notificacion pegada: cierra el turno del checkpoint";; *) bad "O pegado: $OUT";; esac
+# Y una notificacion real (origin.kind=task-notification) no lo cierra.
+F="$TMP/o-real.jsonl"
+{ u p1 "PENDIENTE-O"; bound 300000; summ; ckcmd p2; ckskl p2
+  printf '{"type":"user","promptId":"p2b","origin":{"kind":"task-notification"},"message":{"role":"user","content":"<task-notification>real</task-notification>"}}\n'
+  fin p2; u p3 "otra"; ckcmd p4; ckskl p4; } > "$F"
+OUT=$(run "$F" "$TMP/oo-real")
+[ "$OUT" = "recover=0 reason=checkpoint-posterior-a-la-compactacion" ] && ok "notificacion real (origin): no corta el turno" || bad "O real: $OUT"
+# Checkpoint terminado -> Edit autonomo -> prompt -> compactacion: el Edit se recupera.
+F="$TMP/o-edit.jsonl"
+{ ckcmd p1; ckskl p1; fin p1; edit p1 "src/auto.py" "CAMBIO-AUTONOMO-TRAS-CIERRE"
+  u p2 "PETICION-POSTERIOR"; bound 200000; summ; ckcmd p3; ckskl p3; } > "$F"
+OUT=$(run "$F" "$TMP/oo-edit")
+case "$OUT" in "recover=1 "*) ok "recover=1";; *) bad "O edit: $OUT";; esac
+has "recupera el Edit hecho tras el cierre y antes del prompt" "CAMBIO-AUTONOMO-TRAS-CIERRE" "$TMP/oo-edit/chunk-01.md"
 
 echo "M. compactacion entre la marca del checkpoint actual y Step 0b: se recupera (adversario externo, 2026-09-28)"
 F="$TMP/m.jsonl"

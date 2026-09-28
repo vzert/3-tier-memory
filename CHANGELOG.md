@@ -39,6 +39,15 @@ cambia con cada `cd`.
     `$PWD`, como antes de 2.41.3. Una ruta que acaba en salto de línea pierde ese salto al pasar
     por `$(...)`.
   - Sección 6 de la suite: 5 asertos, rojos contra b59cb8d.
+- **Ronda 3 de Codex (break).** No se cambió código; los tres hallazgos quedan como límites:
+  - Con `CLAUDE_PROJECT_DIR` puesta e IGUAL a `$PWD`, `RAIZ` puede salir distinta, porque el bloque
+    no distingue ese caso de la variable vacía. Hace falta que `CLAUDE_PROJECT_DIR` difiera de la
+    carpeta de lanzamiento, y eso no se ha visto en una sesión real.
+  - Con el mismo id de sesión en dos proyectos ANIDADOS que contienen al shell, gana el JSONL más
+    reciente. Un mismo id en varios proyectos es terreno sin medir de `p-9edd03e815` (sesiones
+    reanudadas).
+  - Una ruta con un salto de línea en medio sobrevive a `RAIZ` pero no a la codificación con `sed`
+    de `JSONL_DIR`.
 
 ## [2.41.2] - 2026-09-28
 Origen: pendiente `p-8472f7f4b7`. 2.39.0 no habia pasado por el adversario externo (Codex); el
@@ -76,8 +85,32 @@ silencio (`recover=0`).
     si termino, contaba como no terminado. Ahora el turno solo lo cierra un prompt escrito o la
     siguiente invocacion.
   - Caso N (lectura del fuente; notificacion en medio). Rojo contra c07ae18.
-  - La medicion de "14 de 15" era del criterio por nombre y no se repitio con el criterio por
-    salida.
+- **Ronda 3 de Codex (break, 3 hallazgos altos), arreglada en el mismo 2.41.2:**
+  - Una salida de cierre en cualquier Bash contaba: `cat` de un log viejo, o `ensure-frontmatter.py`
+    en DRY-RUN. Ahora el Bash tiene que correr `python3`, y una salida con `DRY-RUN` no cuenta.
+  - Un prompt escrito que empezaba pegando `<task-notification>` se tomaba por una notificacion.
+    Ahora se usa la marca del harness, `origin.kind`: `human` en lo escrito, `task-notification` o
+    `peer` en lo inyectado. Se midio en 300 JSONL: 393 `human`, 93 `task-notification`, 45 `peer`.
+    Sin `origin` (versiones anteriores del harness) se sigue mirando el contenido.
+  - Un Edit autonomo hecho tras cerrar el checkpoint anterior, y antes de un prompt nuevo, quedaba
+    fuera del tramo. Este hueco ya existia en 2.39.0. Ahora el tramo empieza en la linea siguiente
+    a la salida de cierre, no en el siguiente inicio de turno.
+  - Ya no se exige que el Bash salga sin error. En un checkpoint real, el Bash salio con codigo 6
+    por otro comando y `ensure-frontmatter.py` si termino.
+  - Caso O. Rojo contra 924766f.
+- **Medido con el criterio final** sobre los 2561 JSONL de esta maquina: 60 de 65 checkpoints
+  anteriores cuentan como terminados. De los 5 que no cuentan, 4 nunca corrieron los scripts de
+  cierre. El quinto siguio durante varios prompts escritos: hizo preguntas y el usuario contesto.
+  En los 5 casos, el siguiente checkpoint recupera de mas. Eso cuesta un dedupe, no un tramo
+  perdido. El "14 de 15" anterior media el criterio por nombre.
+
+### Limites declarados (no arreglados)
+- Un Bash que corre `python3` y ademas imprime un log viejo con una salida de cierre falsifica el
+  cierre.
+- La salida de cierre depende del formato de 4 scripts. Si uno cambia su linea de resumen, sus
+  checkpoints cuentan como no terminados: el siguiente recupera de mas.
+- Siguen abiertos dos hallazgos medios de la ronda 1: bloques desbalanceados con entradas de
+  tamano muy distinto, y un fallo de escritura que rompe "siempre sale 0".
 
 ## [2.41.1] - 2026-09-28
 Origen: el CI de windows-latest falla desde 2.39.3/2.40.0 (corridas 36460288399, 36461145344,
