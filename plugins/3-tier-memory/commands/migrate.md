@@ -60,7 +60,7 @@ For each file that exists — `.claude/settings.json` and `.claude/settings.loca
 
 Present findings to the user in a compact block, e.g.:
 
-```
+```text
 ORPHANED HOOK ENTRIES DETECTED
 File: .claude/settings.local.json
   [MISSING] SessionStart → bash $CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh

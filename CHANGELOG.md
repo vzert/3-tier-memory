@@ -115,18 +115,32 @@ bloques bash que usaban la ruta del proyecto sin respaldo. Nada impedia que volv
 
 ### Added
 - **`bin/check-project-dir-fallback.py` + `bin/test-project-dir-fallback.sh`**: recorre cada
-  bloque bash (```bash/sh/shell/zsh, con sangria o anidado en un ````markdown) de `templates/` y
-  `commands/`. Falla si un bloque usa `$CLAUDE_PROJECT_DIR` sin `:-` o con respaldo vacio
-  (`${CLAUDE_PROJECT_DIR:-}`, que calla a `set -u` pero sigue dando vacio) (R1), o `$PROJECT_DIR` sin
-  definirla antes en el MISMO bloque (R2). Los bloques sin etiqueta no se revisan: hoy solo traen
-  prosa o salida de ejemplo; un comando para ejecutar va en ```bash.
-  - Contra el arbol de 2.39.0 (025ebb2) marca las 10 lineas que 2.39.1 arreglo, en templates/ y
-    commands/, con las formas `ENCODED=$(echo "$CLAUDE_PROJECT_DIR"`, mkdir, cat > e if -f.
-  - La suite tiene 9 plantillas sinteticas rojas (cada forma, llaves sin `:-`, definicion tardia o
-    en otro bloque, bloque anidado, bloque con sangria) que comprueban `linea:regla`, 2 verdes, y el
-    arbol real en verde con al menos 50 bloques recorridos (hoy 76: la misma suma que dan los
-    fences ```bash contados con grep, asi que ningun bloque queda tragado por un fence mal cerrado). Cinco mutaciones del checker (sin
-    recursion, sin sangria, `:-` relajado, `:-` vacio aceptado, sin definicion) la hacen caer.
+  bloque de shell de `templates/` y `commands/`: sin etiqueta o ```bash/sh/shell/zsh/console, con
+  sangria, dentro de una cita `>` o anidado en un ````markdown. Solo exime una etiqueta explicita
+  de otro lenguaje (```text, ```json).
+  - R1: falla cualquier mencion de `CLAUDE_PROJECT_DIR` fuera de un comentario que no sea
+    `${CLAUDE_PROJECT_DIR:-X}` con X no vacio. Cubre la forma desnuda, `${...}`, `${...-X}`,
+    `${#...}`, la aritmetica y los respaldos vacios `:-}`, `:-""}`, `:-''}` (callan a `set -u` pero
+    siguen dando vacio).
+  - R2: falla `$PROJECT_DIR` (tambien `${#...}` y pegada a otra variable, `$FOO$PROJECT_DIR`)
+    usada sin definirla antes en el MISMO bloque. `${PROJECT_DIR:-X}` siempre vale. La definicion
+    vale solo en su nivel: dentro de un if, una funcion o un subshell se olvida al salir, y en otra
+    rama (`else`) no cuenta. No definen: `[ ] && PROJECT_DIR=x`, `PROJECT_DIR=x cmd` (prefijo de
+    un comando), una linea de heredoc, `PROJECT_DIR="$PROJECT_DIR/x"`. Si definen: `export`,
+    `declare`, `readonly`, `local` y `read ... PROJECT_DIR`.
+  - Contra el arbol de 2.39.0 (025ebb2) marca las 10 lineas que 2.39.1 arreglo (las formas
+    `ENCODED=$(echo "$CLAUDE_PROJECT_DIR"`, mkdir, cat > e if -f).
+  - Suite: 48 asertos. Plantillas sinteticas rojas por forma que comprueban `linea:regla`, verdes
+    sin falso positivo, y el arbol real en verde. El arbol real da 107 bloques de shell, igual que una
+    cuenta independiente en awk con pila de anidamiento: ningun bloque se trago a otro. Doce
+    mutaciones del checker, una por mecanismo, la hacen caer.
+- **Tres bloques de prosa o salida de ejemplo pasan a ```text** (`audit-3t.md` Step de settings,
+  `migrate.md` salida `[MISSING]`, `setup-memory.md` variables): antes no tenian etiqueta.
+
+Historia: la primera version solo miraba ```bash y dejaba fuera los bloques sin etiqueta "porque
+solo traen prosa". El adversario externo (Codex) lo rompio: `checkpoint-3t.md` Step 6c tiene un
+`git commit` ejecutable sin etiqueta. Tambien hallo 5 huecos de R1/R2, todos cubiertos arriba con
+un caso rojo cada uno.
 
 ### Fixed
 - **`test-checkpoint-close-guard.sh` rojo desde el 2026-09-27**: su `_pendientes.md` de prueba

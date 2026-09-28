@@ -126,7 +126,7 @@ Agent(subagent_type: "Explore", model: "haiku", description: "Audit bridge + CLA
 ```
 
 Prompt:
-```
+```text
 Verify the auto-memory bridge and CLAUDE.md configuration.
 
 BRIDGE CHECKS:

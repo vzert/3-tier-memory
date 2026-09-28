@@ -9,7 +9,7 @@ Initialize a complete 3-tier memory system for this project. Follow ALL steps in
 ## Step 1: Detect environment
 
 Determine paths:
-```
+```text
 PROJECT_DIR = ${CLAUDE_PROJECT_DIR:-$PWD} (current project root; CLAUDE_PROJECT_DIR arrives EMPTY in the agent's Bash calls)
 MEMORY_DIR = PROJECT_DIR/memory/
 ```
