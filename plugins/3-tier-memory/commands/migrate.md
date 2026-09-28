@@ -359,10 +359,39 @@ If the marketplace entry exists, report: "Auto-update: enabled". If the file doe
 Check for existing JSONL conversation files:
 
 ```bash
-# raiz-del-proyecto: RAIZ es la carpeta donde se lanzo la sesion, el primer "cwd" de su JSONL.
-# CLAUDE_PROJECT_DIR llega vacia al Bash del agente y PWD cambia si el agente hizo cd.
+# raiz-del-proyecto: RAIZ es la carpeta donde se lanzo la sesion, el primer "cwd" no de subagente
+# de su JSONL, si el shell esta dentro de ella. CLAUDE_PROJECT_DIR llega vacia al Bash del agente
+# y PWD cambia si el agente hizo cd. Sin id, sin JSONL, sin python3 o fuera de esa carpeta: PWD.
 PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
-RAIZ=$(python3 -c 'import glob,json,os,sys; d,s=sys.argv[1:3]; h=sorted(glob.glob(os.path.join(glob.escape(os.path.expanduser("~/.claude/projects")),"*",glob.escape(s)+".jsonl")),key=os.path.getmtime)[-1:] if s else []; print(next((o["cwd"] for f in h for l in open(f,encoding="utf-8",errors="replace") if "\"cwd\"" in l for o in [json.loads(l)] if isinstance(o,dict) and o.get("cwd")),d))' "$PROJECT_DIR" "${CLAUDE_CODE_SESSION_ID:-}" 2>/dev/null || echo "$PROJECT_DIR")
+RAIZ=$(python3 -c 'import glob, json, os, sys
+d, s, w = sys.argv[1:4]
+def dentro(c):
+    try:
+        c, x = os.path.realpath(c), os.path.realpath(w)
+        return os.path.commonpath([c, x]) == c
+    except ValueError:
+        return False
+def primer_cwd(f):
+    try:
+        with open(f, encoding="utf-8", errors="replace") as fh:
+            for l in fh:
+                try:
+                    o = json.loads(l)
+                except ValueError:
+                    continue
+                if isinstance(o, dict) and o.get("cwd") and not o.get("isSidechain"):
+                    return o["cwd"]
+    except OSError:
+        pass
+    return None
+if d == w and s:
+    base = glob.escape(os.path.expanduser("~/.claude/projects"))
+    hits = [(os.path.getmtime(f), primer_cwd(f)) for f in glob.glob(os.path.join(base, "*", glob.escape(s) + ".jsonl"))]
+    hits = sorted(h for h in hits if h[1] and dentro(h[1]))
+    if hits:
+        d = hits[-1][1]
+print(d)' "$PROJECT_DIR" "${CLAUDE_CODE_SESSION_ID:-}" "$PWD" 2>/dev/null) || RAIZ="$PROJECT_DIR"
+[ -n "$RAIZ" ] || RAIZ="$PROJECT_DIR"
 ENCODED=$(echo "$RAIZ" | sed 's/[^A-Za-z0-9]/-/g')
 JSONL_DIR="$HOME/.claude/projects/$ENCODED"
 JSONL_COUNT=$(ls "$JSONL_DIR"/*.jsonl 2>/dev/null | wc -l | tr -d ' ')
@@ -373,10 +402,39 @@ Store `JSONL_COUNT` for inclusion in the report.
 ## Encender `journal_strict` si el proyecto no tiene config
 
 ```bash
-# raiz-del-proyecto: RAIZ es la carpeta donde se lanzo la sesion, el primer "cwd" de su JSONL.
-# CLAUDE_PROJECT_DIR llega vacia al Bash del agente y PWD cambia si el agente hizo cd.
+# raiz-del-proyecto: RAIZ es la carpeta donde se lanzo la sesion, el primer "cwd" no de subagente
+# de su JSONL, si el shell esta dentro de ella. CLAUDE_PROJECT_DIR llega vacia al Bash del agente
+# y PWD cambia si el agente hizo cd. Sin id, sin JSONL, sin python3 o fuera de esa carpeta: PWD.
 PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
-RAIZ=$(python3 -c 'import glob,json,os,sys; d,s=sys.argv[1:3]; h=sorted(glob.glob(os.path.join(glob.escape(os.path.expanduser("~/.claude/projects")),"*",glob.escape(s)+".jsonl")),key=os.path.getmtime)[-1:] if s else []; print(next((o["cwd"] for f in h for l in open(f,encoding="utf-8",errors="replace") if "\"cwd\"" in l for o in [json.loads(l)] if isinstance(o,dict) and o.get("cwd")),d))' "$PROJECT_DIR" "${CLAUDE_CODE_SESSION_ID:-}" 2>/dev/null || echo "$PROJECT_DIR")
+RAIZ=$(python3 -c 'import glob, json, os, sys
+d, s, w = sys.argv[1:4]
+def dentro(c):
+    try:
+        c, x = os.path.realpath(c), os.path.realpath(w)
+        return os.path.commonpath([c, x]) == c
+    except ValueError:
+        return False
+def primer_cwd(f):
+    try:
+        with open(f, encoding="utf-8", errors="replace") as fh:
+            for l in fh:
+                try:
+                    o = json.loads(l)
+                except ValueError:
+                    continue
+                if isinstance(o, dict) and o.get("cwd") and not o.get("isSidechain"):
+                    return o["cwd"]
+    except OSError:
+        pass
+    return None
+if d == w and s:
+    base = glob.escape(os.path.expanduser("~/.claude/projects"))
+    hits = [(os.path.getmtime(f), primer_cwd(f)) for f in glob.glob(os.path.join(base, "*", glob.escape(s) + ".jsonl"))]
+    hits = sorted(h for h in hits if h[1] and dentro(h[1]))
+    if hits:
+        d = hits[-1][1]
+print(d)' "$PROJECT_DIR" "${CLAUDE_CODE_SESSION_ID:-}" "$PWD" 2>/dev/null) || RAIZ="$PROJECT_DIR"
+[ -n "$RAIZ" ] || RAIZ="$PROJECT_DIR"
 if [ ! -f "$RAIZ/memory/.memory-config" ]; then
   printf '%s\n' '# Config de memoria del proyecto (ver /3-tier-memory:setup-memory Step 3b).' \
                  '# journal_strict=1: los indices los escribe SOLO el compactador del journal.' \

@@ -8,7 +8,7 @@ Run ALL verification checklists using parallel Haiku subagents, then compile res
 
 ## Step 0: Determine paths
 
-- `PROJECT_DIR`: la carpeta donde se lanzo la sesion — el primer `cwd` de su JSONL; en bash, el bloque `raiz-del-proyecto` de `/backfill-3t` Step 0b. `CLAUDE_PROJECT_DIR` llega VACIA a las llamadas Bash del agente (medido 2026-09-24) y `$PWD` cambia si el agente hizo cd; usa `PROJECT_DIR` donde abajo dice `$CLAUDE_PROJECT_DIR`
+- `PROJECT_DIR`: la carpeta donde se lanzo la sesion — en bash, la variable `RAIZ` que calcula el bloque `raiz-del-proyecto` de `/backfill-3t` Step 0b (no la linea `PROJECT_DIR=` de ese bloque, que es solo el respaldo). `CLAUDE_PROJECT_DIR` llega VACIA a las llamadas Bash del agente (medido 2026-09-24) y `$PWD` cambia si el agente hizo cd; usa `PROJECT_DIR` donde abajo dice `$CLAUDE_PROJECT_DIR`
 - `MEMORY_DIR`: `$PROJECT_DIR/memory` (Model B) or auto-memory path (Model A)
 - `ENCODED_PATH`: `echo "$PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g'`
 - `AUTO_MEMORY`: `$HOME/.claude/projects/$ENCODED_PATH/memory/MEMORY.md`

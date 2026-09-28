@@ -30,8 +30,15 @@ edit() { printf '{"type":"assistant","promptId":"%s","message":{"role":"assistan
 tres() { printf '{"type":"user","promptId":"%s","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"x","content":"%s"}]}}\n' "$1" "$2"; }
 ckcmd(){ u "$1" "<command-message>checkpoint-3t</command-message>\\n<command-name>/checkpoint-3t</command-name>"; }
 ckskl(){ tres "$1" "Launching skill: checkpoint-3t"; }
-# Un checkpoint que TERMINO corre en su turno los scripts posteriores a Step 5 (aqui, el de 5c).
-fin()  { printf '{"type":"assistant","promptId":"%s","message":{"role":"assistant","content":[{"type":"tool_use","id":"f%s","name":"Bash","input":{"command":"[ -n \\"$SEAL\\" ] && python3 \\"$SEAL\\" \\"$MEMORY_DIR\\" --apply  # ensure-frontmatter.py"}}]}}\n' "$1" "$RANDOM"; }
+# Un checkpoint que TERMINO corre en su turno los scripts posteriores a Step 5: su Bash devuelve la
+# salida del de 5c. Cuenta la salida, no el nombre en el comando.
+fin()  { local id="f$RANDOM"
+  printf '{"type":"assistant","promptId":"%s","message":{"role":"assistant","content":[{"type":"tool_use","id":"%s","name":"Bash","input":{"command":"python3 \\"$SEAL\\" \\"$MEMORY_DIR\\" --apply"}}]}}\n' "$1" "$id"
+  printf '{"type":"user","promptId":"%s","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","content":"== ensure-frontmatter: APPLY ==\\nSUMMARY frontmatter_sealed=0"}]}}\n' "$1" "$id"; }
+# Un Bash que LEE el fuente del script: nombra el script y trae sus print, sin haberlo corrido.
+lee()  { local id="l$RANDOM"
+  printf '{"type":"assistant","promptId":"%s","message":{"role":"assistant","content":[{"type":"tool_use","id":"%s","name":"Bash","input":{"command":"cat plugins/3-tier-memory/bin/ensure-frontmatter.py"}}]}}\n' "$1" "$id"
+  printf '{"type":"user","promptId":"%s","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","content":"    print(f\\"SUMMARY frontmatter_sealed={sealed}\\")\\n    print(\\"stamped=%%d reason=%%s\\" %% (sellado, razon))"}]}}\n' "$1" "$id"; }
 bound(){ printf '{"type":"system","subtype":"compact_boundary","timestamp":"2026-09-20T11:00:00Z","compactMetadata":{"trigger":"auto","preTokens":%s}}\n' "$1"; }
 summ() { printf '{"type":"user","isCompactSummary":true,"message":{"role":"user","content":"RESUMEN-LOSSY de la compactacion"}}\n'; }
 side() { printf '{"type":"assistant","isSidechain":true,"message":{"role":"assistant","content":[{"type":"text","text":"TEXTO-DE-SUBAGENTE"}]}}\n'; }
@@ -56,8 +63,8 @@ hasnt "no incluye la ejecucion del checkpoint anterior" "EJECUCION-DEL-CHECKPOIN
 hasnt "no incluye lo posterior a la compactacion"       "PETICION-Y" "$C"
 hasnt "no incluye el resumen lossy"         "RESUMEN-LOSSY" "$C"
 hasnt "no incluye texto de subagentes"      "TEXTO-DE-SUBAGENTE" "$C"
-python3 -c "import json,sys; m=json.load(open(sys.argv[1])); assert (m['previous_checkpoint_line'], m['from_line'], m['to_line'])==(2, 5, 9), m" "$TMP/oa/manifest.json" \
-  && ok "manifest: marcas del checkpoint anterior hasta la linea 2, tramo 5-9 (primer prompt real hasta la compactacion)" || bad "manifest de lineas"
+python3 -c "import json,sys; m=json.load(open(sys.argv[1])); assert (m['previous_checkpoint_line'], m['from_line'], m['to_line'])==(2, 6, 10), m" "$TMP/oa/manifest.json" \
+  && ok "manifest: marcas del checkpoint anterior hasta la linea 2, tramo 6-10 (primer prompt real hasta la compactacion)" || bad "manifest de lineas"
 
 echo "B. checkpoint DESPUES de la compactacion: nada que recuperar"
 F="$TMP/b.jsonl"
@@ -183,6 +190,19 @@ F="$TMP/l3.jsonl"
   ckcmd p2; ckskl p2; u p3 "corre el audit a mano"; fin p3; ckcmd p4; ckskl p4; } > "$F"
 OUT=$(run "$F" "$TMP/ol3")
 case "$OUT" in "recover=1 "*) ok "el script en un turno posterior no cuenta como cierre del checkpoint";; *) bad "L3: $OUT";; esac
+
+echo "N. ronda 2 del adversario: leer el fuente no cierra; una notificacion en medio no corta el turno"
+F="$TMP/n1.jsonl"
+{ u p1 "PENDIENTE-N1"; bound 300000; summ; ckcmd p2; ckskl p2; lee p2
+  u p3 "se corto, reintenta"; ckcmd p4; ckskl p4; } > "$F"
+OUT=$(run "$F" "$TMP/on1")
+case "$OUT" in "recover=1 "*) ok "cat del fuente: el checkpoint no cuenta como terminado";; *) bad "N1: $OUT";; esac
+F="$TMP/n2.jsonl"
+{ u p1 "PENDIENTE-N2"; bound 300000; summ; ckcmd p2; ckskl p2
+  u p2b "<task-notification>\\n<task-id>b9</task-id>\\n<summary>TERMINO</summary>\\n</task-notification>"
+  fin p2; u p3 "otra cosa"; ckcmd p4; ckskl p4; } > "$F"
+OUT=$(run "$F" "$TMP/on2")
+[ "$OUT" = "recover=0 reason=checkpoint-posterior-a-la-compactacion" ] && ok "notificacion en medio y luego 5c: terminado, recover=0" || bad "N2: $OUT"
 
 echo "M. compactacion entre la marca del checkpoint actual y Step 0b: se recupera (adversario externo, 2026-09-28)"
 F="$TMP/m.jsonl"

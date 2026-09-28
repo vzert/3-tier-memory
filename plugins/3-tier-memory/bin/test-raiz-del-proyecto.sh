@@ -48,10 +48,17 @@ corre() {
         CLAUDE_CODE_SESSION_ID="${3-$SID}" bash -c "$1" 2>&1); RC=$?
 }
 
-echo "1. todas las copias del bloque son la misma linea"
-N=$(grep -rh '^RAIZ=\$(python3 -c ' "$PLUGIN/commands" "$PLUGIN/templates" | sort -u | wc -l | tr -d ' ')
-C=$(grep -rh '^RAIZ=\$(python3 -c ' "$PLUGIN/commands" "$PLUGIN/templates" | wc -l | tr -d ' ')
-[ "$N" = 1 ] && ok "una sola variante" || bad "hay $N variantes de la linea RAIZ"
+echo "1. todas las copias del bloque son el mismo texto"
+python3 - "$PLUGIN" > "$TMP/copias" <<'PY'
+import glob, sys
+for f in sorted(glob.glob(sys.argv[1] + "/commands/*.md") + glob.glob(sys.argv[1] + "/templates/*.md")):
+    s = open(f, encoding="utf-8").read()
+    while "\n# raiz-del-proyecto:" in s:
+        s = s.split("\n# raiz-del-proyecto:", 1)[1]
+        print(repr(s.split('[ -n "$RAIZ" ] || RAIZ="$PROJECT_DIR"', 1)[0]))
+PY
+N=$(sort -u "$TMP/copias" | wc -l | tr -d ' '); C=$(wc -l < "$TMP/copias" | tr -d ' ')
+[ "$N" = 1 ] && ok "una sola variante" || bad "hay $N variantes del bloque RAIZ"
 [ "$C" = 8 ] && ok "8 copias (setup-memory 3, migrate 2, backfill, consolidate, enrich)" || bad "esperaba 8 copias, hay $C"
 
 echo "2. setup-memory desde un subdirectorio escribe en la raiz"
@@ -101,6 +108,30 @@ echo "$JSONL_DIR"' "$SUB" ""
 corre "$(bloque templates/backfill-3t.md '2. Determine the JSONL directory:')"'
 echo "$JSONL_DIR"' "$SUB" "22222222-2222-4222-8222-222222222222"
 [ "$OUT" = "$TMP/home/.claude/projects/$ENC_SUB" ] && ok "id sin JSONL: PWD" || bad "id sin JSONL: $OUT"
+
+echo "6. ronda 2 del adversario (Codex, 2026-09-28): que JSONL y que cwd valen"
+BK="$(bloque templates/backfill-3t.md '2. Determine the JSONL directory:')"'
+echo "$RAIZ"'
+B="$TMP/b"; mkdir -p "$B"; B=$(cd "$B" && pwd -P); ENC_B=$(echo "$B" | sed 's/[^A-Za-z0-9]/-/g')
+J="$TMP/home/.claude/projects/$ENC_A/$SID.jsonl"; cp "$J" "$TMP/orig.jsonl"
+# a) la primera linea con cwd es de un subagente en otra carpeta
+{ printf '{"type":"assistant","isSidechain":true,"cwd":"%s"}\n' "$B"; cat "$TMP/orig.jsonl"; } > "$J"
+corre "$BK" "$SUB"; [ "$OUT" = "$A" ] && ok "salta el cwd de un subagente" || bad "sidechain: $OUT"
+# b) una linea rota antes del primer cwd
+{ printf '{"type":"user","cwd":\n'; cat "$TMP/orig.jsonl"; } > "$J"
+corre "$BK" "$SUB"; [ "$OUT" = "$A" ] && ok "salta una linea rota" || bad "linea rota: $OUT"
+cp "$TMP/orig.jsonl" "$J"
+# c) el mismo id en otro proyecto, mas reciente, que no contiene al shell
+mkdir -p "$TMP/home/.claude/projects/$ENC_B"
+printf '{"type":"user","cwd":"%s"}\n' "$B" > "$TMP/home/.claude/projects/$ENC_B/$SID.jsonl"
+touch -t 203001010000 "$TMP/home/.claude/projects/$ENC_B/$SID.jsonl"
+corre "$BK" "$SUB"; [ "$OUT" = "$A" ] && ok "id duplicado: gana el proyecto que contiene al shell, no el mas reciente" || bad "duplicado: $OUT"
+rm -rf "$TMP/home/.claude/projects/$ENC_B"
+# d) el shell fuera de la carpeta de lanzamiento: PWD, como antes
+corre "$BK" "$B"; [ "$OUT" = "$B" ] && ok "shell fuera de la raiz: PWD" || bad "fuera: $OUT"
+# e) CLAUDE_PROJECT_DIR puesta gana al JSONL
+OUT=$(cd "$SUB" && env -u PROJECT_DIR HOME="$TMP/home" CLAUDE_PROJECT_DIR="$B" CLAUDE_CODE_SESSION_ID="$SID" bash -c "$BK" 2>&1)
+[ "$OUT" = "$B" ] && ok "CLAUDE_PROJECT_DIR puesta manda" || bad "CLAUDE_PROJECT_DIR: $OUT"
 
 echo
 [ $FAIL -eq 0 ] && echo "TODO VERDE" || echo "HAY FALLOS"

@@ -21,9 +21,9 @@ Que tramo recupera:
     marcas (`<command-name>/checkpoint-3t`, `Launching skill: checkpoint-3t`, el isMeta
     "Skill /checkpoint-3t is already loaded"), por eso se agrupan por `promptId`: el mismo prompt
     del usuario = la misma invocacion.
-  - "checkpoint anterior" solo cuenta si TERMINO: si en su propio turno corrio alguno de los scripts
-    que la plantilla llama despues de Step 5 (`ensure-frontmatter.py`, `stamp-session-id.py`,
-    `scan-secrets.py`, `checkpoint-audit.py`). Un checkpoint interrumpido antes de escribir no guardo
+  - "checkpoint anterior" solo cuenta si TERMINO: si en su propio turno un Bash devolvio la salida de
+    alguno de los scripts que la plantilla corre despues de Step 5 (`ensure-frontmatter.py`,
+    `stamp-session-id.py`, `scan-secrets.py`, `checkpoint-audit.py`; ver CKPT_DONE). Un checkpoint interrumpido antes de escribir no guardo
     nada; contarlo hacia que el reintento descartara el tramo (recover=0) sin que nadie lo hubiera
     guardado (adversario externo, 2026-09-28). El costo va al otro lado: un checkpoint completo que
     se salto esos cuatro scripts cuenta como no terminado y el siguiente recupera de mas — eso cuesta
@@ -78,9 +78,16 @@ CKPT_MARKERS = (
     re.compile(r"Launching skill: (?:[\w-]+:)?checkpoint-3t\b"),
     re.compile(r"Skill /?(?:[\w-]+:)?checkpoint-3t is already loaded"),
 )
-# Scripts que la plantilla corre DESPUES de Step 5 (5c, 5c-bis, 5d, 7a): verlos en el turno de un
-# checkpoint prueba que llego a escribir. journal-compact.py no vale: tambien corre en Step 3c.
-CKPT_DONE = re.compile(r"\b(?:ensure-frontmatter|stamp-session-id|scan-secrets|checkpoint-audit)\.py\b")
+# La SALIDA de los scripts que la plantilla corre despues de Step 5 (5c, 5c-bis, 5d, 7a), en el
+# resultado de un Bash del turno del checkpoint: prueba que llego a escribir. Se mira la salida y no
+# el comando porque un `cat ensure-frontmatter.py` nombra el script sin correrlo (adversario externo,
+# ronda 2); las formas exigen numeros donde el fuente tiene `{sealed}` o `%d`, asi que leer el fuente
+# tampoco calza. journal-compact.py no vale: tambien corre en Step 3c.
+CKPT_DONE = re.compile(
+    r"^(?:SUMMARY frontmatter_sealed=\d+"
+    r"|stamped=[01] reason=\S"
+    r"|SUMMARY secrets_(?:redacted|found)=\d+ files=\d+"
+    r"|\s*resumen: hecho=\d+ parcial=\d+ saltado=\d+)", re.MULTILINE)
 # isMeta NO basta para descartar: un `cross-session-message` (otra sesion de Claude que encarga
 # trabajo) llega como isMeta y puede ser la peticion que origino todo el tramo (medido en una
 # sesion real de este repo). Se descarta solo el ruido meta conocido: el cuerpo de una skill al
@@ -181,20 +188,40 @@ def load(path, until_line):
     return rows
 
 
+def is_typed_prompt(o):
+    """Un inicio de turno que escribio una persona: no una notificacion de tarea, ni un mensaje de
+    otra sesion (isMeta), ni un tick de loop."""
+    if not is_turn_start(o) or o.get("isMeta"):
+        return False
+    return not "\n".join(content_texts((o.get("message") or {}).get("content"))).lstrip().startswith(
+        ("<task-notification>", "<cross-session-message", "<<autonomous-loop"))
+
+
 def ckpt_finished(rows, group, next_group_start):
-    """True si en el turno de esa invocacion (desde su primera marca hasta el siguiente inicio de
-    turno o la siguiente invocacion) el agente corrio un script de CKPT_DONE."""
+    """True si en el turno de esa invocacion un Bash devolvio la salida de un script de CKPT_DONE.
+    El turno va desde su primera marca hasta el siguiente prompt ESCRITO o la siguiente invocacion.
+    Una notificacion de tarea en medio no lo cierra: el agente sigue con el checkpoint despues de
+    ella (adversario externo, ronda 2: cerrar ahi daba por no terminado un checkpoint completo)."""
     first, _, last = group
+    bash_ids = set()
     for n, o in rows:
         if n <= first:
             continue
-        if n >= next_group_start or (n > last and is_turn_start(o)):
+        if n >= next_group_start or (n > last and is_typed_prompt(o)):
             return False
-        if o.get("type") != "assistant" or o.get("isSidechain"):
+        if o.get("isSidechain"):
             continue
-        for it in (o.get("message") or {}).get("content") or []:
-            if (isinstance(it, dict) and it.get("type") == "tool_use" and it.get("name") == "Bash"
-                    and CKPT_DONE.search(str((it.get("input") or {}).get("command", "")))):
+        content = (o.get("message") or {}).get("content")
+        if not isinstance(content, list):
+            continue
+        for it in content:
+            if not isinstance(it, dict):
+                continue
+            if o.get("type") == "assistant" and it.get("type") == "tool_use" and it.get("name") == "Bash":
+                bash_ids.add(it.get("id"))
+            elif (o.get("type") == "user" and it.get("type") == "tool_result"
+                  and it.get("tool_use_id") in bash_ids and not it.get("is_error")
+                  and CKPT_DONE.search("\n".join(content_texts([it])))):
                 return True
     return False
 

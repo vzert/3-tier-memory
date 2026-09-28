@@ -19,13 +19,26 @@ cambia con cada `cd`.
   `/setup-memory` Steps 2, 3b y 8b; `/migrate` Step 8b y la activación de `journal_strict`; backfill
   Step 0b; consolidate; y enrich Step 3.
   - La primera línea de código de cada bloque sigue siendo la canónica de
-    `check-project-dir-fallback.py`. Ese contrato prohíbe reasignar `PROJECT_DIR`, por eso la raíz
-    resuelta va en otra variable.
+    `check-project-dir-fallback.py`. El contrato de formas exactas que prohíbe reasignar
+    `PROJECT_DIR` llega en 2.41.4, de una sesión paralela. Por eso la raíz resuelta va en otra
+    variable. El checker de 2.41.3 también pasa estos bloques, con 0 fallos.
   - No se tocó: `MEMORY_DIR="memory"`, relativo a la carpeta del shell, en consolidate y enrich.
 - **`/migrate` anunciaba `journal_strict=1 activado` aunque no pudiera escribir la config.** Ahora,
   si la escritura falla, imprime `ERROR` y sale con código 1.
 - `test-raiz-del-proyecto.sh` (nueva): corre cada bloque real desde `a/src` con un HOME falso. Da 11
-  fallos contra 2.41.2 y 0 ahora. También comprueba que las 8 copias son la misma línea.
+  fallos contra 2.41.2 y 0 ahora. También comprueba que las 8 copias son el mismo texto.
+- **Ronda 2 de Codex (break), arreglada en el mismo 2.41.3.** Ahora `RAIZ` es el primer `cwd` que
+  no es de un subagente (`isSidechain`), y solo si el shell está DENTRO de esa carpeta.
+  - Con el mismo id de sesión en varios proyectos gana el que contiene al shell. Antes ganaba el
+    más reciente.
+  - Una línea rota del JSONL se salta; antes tumbaba todo y el bloque volvía a `$PWD`.
+  - Con `CLAUDE_PROJECT_DIR` puesta, esa variable manda.
+  - La prosa de backfill Step 0b y de audit-3t Step 0 dice ahora que la raíz es `RAIZ`, no
+    `PROJECT_DIR`.
+  - Límites declarados: sin `python3`, o con el shell fuera de la carpeta de lanzamiento, `RAIZ` es
+    `$PWD`, como antes de 2.41.3. Una ruta que acaba en salto de línea pierde ese salto al pasar
+    por `$(...)`.
+  - Sección 6 de la suite: 5 asertos, rojos contra b59cb8d.
 
 ## [2.41.2] - 2026-09-28
 Origen: pendiente `p-8472f7f4b7`. 2.39.0 no habia pasado por el adversario externo (Codex); el
@@ -53,6 +66,18 @@ silencio (`recover=0`).
 - `test-compaction-recover.sh`: casos L (interrumpido, su control terminado y un script de cierre
   en otro turno) y M (compactacion tras la marca). L1, L3 y M son rojos contra 2.41.1. Los casos
   A, B, H y J marcan ahora su checkpoint anterior como terminado (`fin`).
+- **Ronda 2 de Codex (break, 2 hallazgos), arreglada en el mismo 2.41.2:**
+  - Alta: bastaba con NOMBRAR un script de cierre en un Bash (`cat ensure-frontmatter.py`) para dar
+    el checkpoint por terminado. Ahora cuenta la SALIDA del script en el resultado de ese Bash, con
+    numeros donde el fuente tiene `{sealed}` o `%d`: `SUMMARY frontmatter_sealed=N`,
+    `stamped=0|1 reason=`, `SUMMARY secrets_*=N files=N` o `resumen: hecho=N parcial=N saltado=N`.
+    Un Bash que lee el fuente no calza.
+  - Media: una notificacion de tarea en medio del checkpoint cerraba su turno. El checkpoint, que
+    si termino, contaba como no terminado. Ahora el turno solo lo cierra un prompt escrito o la
+    siguiente invocacion.
+  - Caso N (lectura del fuente; notificacion en medio). Rojo contra c07ae18.
+  - La medicion de "14 de 15" era del criterio por nombre y no se repitio con el criterio por
+    salida.
 
 ## [2.41.1] - 2026-09-28
 Origen: el CI de windows-latest falla desde 2.39.3/2.40.0 (corridas 36460288399, 36461145344,
