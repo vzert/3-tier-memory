@@ -40,9 +40,18 @@ compact() { python3 "$BIN/journal-compact.py" --memory-dir "$M" --log "$LOG" "$@
 replay() { cp "$1" "$M/.journal/pending/$(basename "$1" .bak)"; compact --quiet >/dev/null; }
 cuar() { ls "$M/.journal/quarantine/"*.json 2>/dev/null | wc -l | tr -d ' '; }
 razon() { cat "$M"/.journal/quarantine/*.reason 2>/dev/null; }
+# Hacer fallar la escritura del indice en TODAS las plataformas. `chmod 555` sobre memory/ basta
+# en POSIX (no se puede crear el temporal), pero Git Bash lo ignora en un directorio: en Windows el
+# indice se escribia y el caso media un fallo que no habia ocurrido (CI windows-latest,
+# 2026-09-28). El indice en solo lectura si lo respeta Windows: os.replace sobre el niega el acceso.
+romper_indice()   { chmod 444 "$1"; chmod 555 "$M"; }
+arreglar_indice() { chmod 755 "$M"; chmod 644 "$1"; }
+# sha256 por Python: `shasum` no existe en Git Bash, y ahi las dos llamadas daban "" y un
+# "indice intacto" pasaba comparando vacio con vacio.
+hash_() { python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'; }
 n() { grep -cF -- "$1" "$IDX"; }
 filas() { grep -c '^| [0-9]' "$IDX"; }
-sha() { shasum -a 256 "$IDX" | cut -d' ' -f1; }
+sha() { hash_ < "$IDX"; }
 vivas() {  # anotaciones VIVAS (anotadas menos anuladas) de las claves que casan $1 (regex ERE)
   # Con piso en 0 por ts, en orden de lineas, como ts_registrados: una anulacion anterior a su
   # anotacion no la anula.
@@ -69,12 +78,12 @@ FILA="| 2026-09-20 | [[sessions/$S\|demo]] | ok | hizo algo | \`abc1234\` |"
 
 echo "== 1. corregir la Fecha: celda 0 nueva, el resto de la fila y del fichero intactos =="
 fixture "$FILA"
-ANTES=$(grep -v '2026-09-20-demo\|^updated:' "$IDX" | shasum | cut -d' ' -f1)
+ANTES=$(grep -v '2026-09-20-demo\|^updated:' "$IDX" | hash_)
 am --slug "$S" --date 2026-09-18
 OUT=$(compact)
 has "aplicado" "$OUT" "applied=1"
 chk "fila corregida" "1" "$(n "| 2026-09-18 | [[sessions/$S\|demo]] | ok | hizo algo | \`abc1234\` |")"
-chk "el resto del fichero identico" "$ANTES" "$(grep -v '2026-09-20-demo\|^updated:' "$IDX" | shasum | cut -d' ' -f1)"
+chk "el resto del fichero identico" "$ANTES" "$(grep -v '2026-09-20-demo\|^updated:' "$IDX" | hash_)"
 chk "sin cuarentena" "0" "$(cuar)"
 chk "registrado con su ts" "1" "$(reg "$S")"
 chk "bump de updated" "1" "$(grep -c "^updated: $(date +%Y-%m-%d)" "$IDX")"
@@ -310,9 +319,11 @@ chk "slug solo en una fila suelta: el emisor se niega" "rechazo" "$r"
 echo "== 27. la escritura del indice falla: la anotacion se retira y el reintento aplica =="
 fixture "$FILA"
 am --slug "$S" --date 2026-09-09
-chmod 555 "$M"
+ANTES=$(sha)
+romper_indice "$IDX"
 compact --quiet >/dev/null 2>&1
-chmod 755 "$M"
+arreglar_indice "$IDX"
+chk "el fallo ocurrio: indice intacto" "$ANTES" "$(sha)"
 chk "sin anotacion tras el fallo" "0" "$(reg "$S")"
 chk "el evento sigue en pending" "1" "$(ls "$M/.journal/pending" | wc -l | tr -d ' ')"
 OUT=$(compact)
@@ -402,7 +413,8 @@ echo "== 33. fallo + reintento + edicion a mano + replay: noop, sin cuarentena =
 # ts vivo. Con una diferencia de conjuntos desapareceria, y el replay caeria en celda-cambiada.
 fixture "$FILA"
 am --slug "$S" --date 2026-09-15; E1=$EV
-chmod 555 "$M"; compact --quiet >/dev/null 2>&1; chmod 755 "$M"
+ANTES=$(sha); romper_indice "$IDX"; compact --quiet >/dev/null 2>&1; arreglar_indice "$IDX"
+chk "el fallo ocurrio: indice intacto" "$ANTES" "$(sha)"
 compact --quiet >/dev/null 2>&1
 sed -i.bak "s/| 2026-09-15 | \[\[sessions\/$S/| 2026-09-16 | [[sessions\/$S/" "$IDX"
 replay "$E1"

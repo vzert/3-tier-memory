@@ -1,6 +1,25 @@
 # Changelog
 
 
+## [2.41.1] - 2026-09-28
+Origen: el CI de windows-latest falla desde 2.39.3/2.40.0 (corridas 36460288399, 36461145344,
+36466849883) en `test-plan-reopen`, `test-research-rename` y `test-session-amend`. macOS y Linux,
+en verde. Solo cambian las suites: el compactador no se toca.
+
+### Fixed
+- **El caso "la escritura del indice falla" no hacia fallar nada en Windows.** Las tres suites lo
+  provocaban con `chmod 555` sobre `memory/`. Git Bash ignora ese modo en un directorio, asi que en
+  Windows el indice se escribia a la primera, la anotacion quedaba viva (con razon) y el reintento
+  no tenia nada que aplicar. Los asertos median un fallo que no habia ocurrido. Ahora
+  `romper_indice` pone ademas el indice en solo lectura: Windows niega el `os.replace` sobre el.
+  Un aserto nuevo, "el fallo ocurrio: indice intacto", comprueba que la escritura fallo de verdad
+  antes de mirar la recuperacion.
+  - Reproducido en macOS: sin el `chmod 555` salen exactamente los 7 fallos del CI. Con el fichero
+    bloqueado (`chflags uchg`, que niega el rename sobre el como Windows) y sin tocar el
+    directorio, las tres suites pasan.
+- **`shasum` no existe en Git Bash**: en Windows los "indice intacto" comparaban "" con "" y
+  pasaban sin medir nada. Ahora el hash sale de Python (`hash_`).
+
 ## [2.41.0] - 2026-09-28
 Origen: pendiente `p-532174ff63`, verificar el aviso del Step 7a en instalaciones reales. Medido
 sobre los transcripts de los otros proyectos que usan el plugin, commits `checkpoint:` entre

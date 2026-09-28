@@ -40,8 +40,17 @@ vivas() {  # anotaciones VIVAS (anotadas menos anuladas) de las claves que casan
   awk -F'\t' -v k="$1" '$1 ~ k { if ($2 ~ /^-/) { t=substr($2,2); if (c[t]>0) c[t]-- } else c[$2]++ }
     END { n=0; for (t in c) if (c[t]>0) n+=c[t]; print n }' "$M/.journal/reabiertos.log" 2>/dev/null || echo 0; }
 razon() { cat "$M"/.journal/quarantine/*.reason 2>/dev/null; }
+# Hacer fallar la escritura del indice en TODAS las plataformas. `chmod 555` sobre memory/ basta
+# en POSIX (no se puede crear el temporal), pero Git Bash lo ignora en un directorio: en Windows el
+# indice se escribia y el caso media un fallo que no habia ocurrido (CI windows-latest,
+# 2026-09-28). El indice en solo lectura si lo respeta Windows: os.replace sobre el niega el acceso.
+romper_indice()   { chmod 444 "$1"; chmod 555 "$M"; }
+arreglar_indice() { chmod 755 "$M"; chmod 644 "$1"; }
+# sha256 por Python: `shasum` no existe en Git Bash, y ahi las dos llamadas daban "" y un
+# "indice intacto" pasaba comparando vacio con vacio.
+hash_() { python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'; }
 n() { grep -cF -- "$1" "$IDX"; }
-sha() { shasum -a 256 "$IDX" | cut -d' ' -f1; }
+sha() { hash_ < "$IDX"; }
 reg() { grep -c "^research-$1	" "$M/.journal/reabiertos.log" 2>/dev/null || echo 0; }
 rn() { emit --type research.rename "$@"; }
 
@@ -195,9 +204,11 @@ chk "sin cuarentena" "0" "$(cuar)"
 echo "== 19. la escritura del indice falla: la anotacion se retira y el reintento renombra (2.40.0) =="
 fixture "$FILA" ""
 rn --slug demo --tema "Tras el fallo"
-chmod 555 "$M"
+ANTES=$(sha)
+romper_indice "$IDX"
 compact --quiet >/dev/null 2>&1
-chmod 755 "$M"
+arreglar_indice "$IDX"
+chk "el fallo ocurrio: indice intacto" "$ANTES" "$(sha)"
 chk "sin anotacion viva tras el fallo" "0" "$(vivas '^research-demo$')"
 OUT=$(compact)
 has "el reintento aplica" "$OUT" "applied=1"
@@ -206,12 +217,12 @@ chk "renombrada" "1" "$(n '| Tras el fallo |')"
 echo "== 20. el registro no se puede escribir: cuarentena no-registro y el indice NO cambia (2.40.0) =="
 fixture "$FILA" ""
 rn --slug demo --tema "Sin registro"
-ANTES=$(shasum "$IDX" | cut -d' ' -f1)
+ANTES=$(hash_ < "$IDX")
 : > "$M/.journal/reabiertos.log"; chmod 444 "$M/.journal/reabiertos.log"
 compact --quiet >/dev/null 2>&1
 chmod 644 "$M/.journal/reabiertos.log"
 has "motivo no-registro" "$(cat "$M"/.journal/quarantine/*.reason 2>/dev/null)" "^no-registro:"
-chk "indice intacto" "$ANTES" "$(shasum "$IDX" | cut -d' ' -f1)"
+chk "indice intacto" "$ANTES" "$(hash_ < "$IDX")"
 
 echo
 echo "RESULTADO: $pass ok, $fail fallas"

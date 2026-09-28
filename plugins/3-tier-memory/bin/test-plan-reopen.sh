@@ -33,6 +33,15 @@ emit() {
 compact() { python3 "$BIN/journal-compact.py" --memory-dir "$M" --log "$LOG" "$@"; }
 replay() { cp "$1" "$M/.journal/pending/$(basename "$1" .bak)"; compact --quiet >/dev/null; }
 status() { grep -F "$1" "$M/_plans-index.md" | awk -F' \\| ' '{print $2}'; }
+# Hacer fallar la escritura del indice en TODAS las plataformas. `chmod 555` sobre memory/ basta
+# en POSIX (no se puede crear el temporal), pero Git Bash lo ignora en un directorio: en Windows el
+# indice se escribia y el caso media un fallo que no habia ocurrido (CI windows-latest,
+# 2026-09-28). El indice en solo lectura si lo respeta Windows: os.replace sobre el niega el acceso.
+romper_indice()   { chmod 444 "$1"; chmod 555 "$M"; }
+arreglar_indice() { chmod 755 "$M"; chmod 644 "$1"; }
+# sha256 por Python: `shasum` no existe en Git Bash, y ahi las dos llamadas daban "" y un
+# "indice intacto" pasaba comparando vacio con vacio.
+hash_() { python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'; }
 cuar() { ls "$M/.journal/quarantine/"*.json 2>/dev/null | wc -l | tr -d ' '; }
 vivas() {  # anotaciones VIVAS (anotadas menos anuladas) de las claves que casan $1 (regex ERE)
   # Con piso en 0 por ts, en orden de lineas, como ts_registrados: una anulacion anterior a su
@@ -177,9 +186,11 @@ echo "== 15. la escritura del indice falla: la anotacion se retira y el reintent
 fixture
 up --status completed; compact --quiet >/dev/null
 emit --type plan.reopen --slug demo
-chmod 555 "$M"
+ANTES=$(hash_ < "$M/_plans-index.md")
+romper_indice "$M/_plans-index.md"
 compact --quiet >/dev/null 2>&1
-chmod 755 "$M"
+arreglar_indice "$M/_plans-index.md"
+chk "el fallo ocurrio: indice intacto" "$ANTES" "$(hash_ < "$M/_plans-index.md")"
 chk "sin anotacion viva tras el fallo" "0" "$(vivas '^plan-demo$')"
 OUT=$(compact)
 has "el reintento aplica" "$OUT" "applied=1"
@@ -189,12 +200,12 @@ echo "== 16. el registro no se puede escribir: cuarentena no-registro y el indic
 fixture
 up --status completed; compact --quiet >/dev/null
 emit --type plan.reopen --slug demo
-ANTES=$(shasum "$M/_plans-index.md" | cut -d' ' -f1)
+ANTES=$(hash_ < "$M/_plans-index.md")
 : > "$M/.journal/reabiertos.log"; chmod 444 "$M/.journal/reabiertos.log"
 compact --quiet >/dev/null 2>&1
 chmod 644 "$M/.journal/reabiertos.log"
 has "motivo no-registro" "$(cat "$M"/.journal/quarantine/*.reason 2>/dev/null)" "^no-registro:"
-chk "indice intacto" "$ANTES" "$(shasum "$M/_plans-index.md" | cut -d' ' -f1)"
+chk "indice intacto" "$ANTES" "$(hash_ < "$M/_plans-index.md")"
 
 echo
 echo "RESULTADO: $pass ok, $fail fallas"
