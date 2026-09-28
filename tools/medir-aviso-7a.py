@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Medicion de 2.41.0: el aviso de Step 7a en el commit del checkpoint, sobre transcripts reales.
 
-Recorre ~/.claude/projects/*/*.jsonl (salvo el proyecto desde el que se corre) y, para cada commit
+Recorre ~/.claude/projects/*/*.jsonl (salvo el repo del plugin y todos sus worktrees) y, para cada commit
 `checkpoint:` entre DESDE y HASTA, dice si antes hubo una corrida EMPAREJADA de checkpoint-audit.py
 (tool_use + su tool_result con `resumen: hecho=N`) y si el PreToolUse viejo aviso (registro
 `hook_success` con su texto). Por sesion, si el primer commit fue antes o despues del audit.
@@ -13,7 +13,7 @@ DESDE, HASTA = (sys.argv[1:3] + ["2026-09-19T20", "9999"])[:2]
 # Se excluyen las sesiones del repo del plugin y de TODOS sus worktrees, por la lista exacta de
 # `git worktree list` (adversario de 2.41.0: excluir por el cwd fallaba desde un worktree, y por
 # prefijo se comia proyectos ajenos con el mismo comienzo y no veia worktrees en otra ruta).
-# Fuera de un repo git no hay forma de saber que excluir: se para, en vez de medir a ciegas.
+# Si git no encuentra el repo (ni por el cwd ni por GIT_DIR), se para en vez de medir sin excluir nada.
 import subprocess
 _wt = subprocess.run(["git", "worktree", "list", "--porcelain"], capture_output=True, text=True)
 if _wt.returncode != 0:
