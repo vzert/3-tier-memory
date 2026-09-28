@@ -10,17 +10,20 @@ El aviso quedaba en el transcript pero NO llegaba al modelo: ver bin/verify-hook
 """
 import json, glob, os, re, sys, collections
 DESDE, HASTA = (sys.argv[1:3] + ["2026-09-19T20", "9999"])[:2]
-# Se excluye el repo del plugin por su raiz PRINCIPAL, no por el cwd: desde un worktree el cwd es
-# otro directorio y las sesiones del repo quedaban dentro (adversario de 2.41.0).
+# Se excluyen las sesiones del repo del plugin y de TODOS sus worktrees, por la lista exacta de
+# `git worktree list` (adversario de 2.41.0: excluir por el cwd fallaba desde un worktree, y por
+# prefijo se comia proyectos ajenos con el mismo comienzo y no veia worktrees en otra ruta).
+# Fuera de un repo git no hay forma de saber que excluir: se para, en vez de medir a ciegas.
 import subprocess
-_comun = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
-                        capture_output=True, text=True).stdout.strip()
-_raiz = os.path.dirname(_comun) if _comun else os.getcwd()
-PROPIO = re.sub(r"[^A-Za-z0-9]", "-", _raiz)
+_wt = subprocess.run(["git", "worktree", "list", "--porcelain"], capture_output=True, text=True)
+if _wt.returncode != 0:
+    sys.exit("medir-aviso-7a.py: correlo dentro del repo del plugin (git worktree list fallo)")
+EXCLUIR = {re.sub(r"[^A-Za-z0-9]", "-", l[len("worktree "):]) for l in _wt.stdout.splitlines()
+           if l.startswith("worktree ")}
 root = os.path.expanduser("~/.claude/projects/")
 aviso_tab = collections.Counter(); proys_aviso = set(); orden = collections.Counter()
 for f in glob.glob(root + "*/*.jsonl"):
-    if os.path.basename(os.path.dirname(f)).startswith(PROPIO): continue   # el repo y sus worktrees
+    if os.path.basename(os.path.dirname(f)) in EXCLUIR: continue   # el repo y sus worktrees
     usos = {}; salidas = set(); avisos = set(); commits = []; n = 0
     for line in open(f, encoding="utf-8", errors="replace"):
         n += 1
@@ -38,7 +41,8 @@ for f in glob.glob(root + "*/*.jsonl"):
                 cmd = (b.get("input") or {}).get("command", "") or ""
                 if re.search(r"-m\s*['\"]?\s*checkpoint", cmd, re.I) and re.search(r"\bgit\b[^\n;&|]{0,200}\bcommit\b", cmd) and DESDE <= ts < HASTA:
                     commits.append((n, b.get("id")))
-                if re.search(r"python3?\s+\S*checkpoint-audit\.py", cmd): usos[b.get("id")] = n
+                if re.search(r"python3?\s+\S*checkpoint-audit\.py", cmd) and ts < HASTA:
+                    usos[b.get("id")] = n   # acotado por HASTA: si no, la cifra crece con cada dia
             elif b.get("type") == "tool_result":
                 t = b.get("content"); t = t if isinstance(t, str) else json.dumps(t)
                 if re.search(r"resumen:\s*hecho=\d+", t): salidas.add(b.get("tool_use_id"))
