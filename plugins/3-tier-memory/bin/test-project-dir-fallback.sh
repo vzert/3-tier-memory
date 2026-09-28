@@ -23,6 +23,7 @@
 #      toda forma posterior que no sea $PROJECT_DIR o ${PROJECT_DIR} (reasignar, unset, read,
 #      local, ${PROJECT_DIR:=x}, ${#PROJECT_DIR});
 #      Y ejecuta en bash la linea canonica y la forma de R1, sin entorno: no dan vacio;
+#      R4: IFS en un bloque que nombra la variable falla; un bloque aceptado se ejecuta de verdad;
 #   F. R3: un comentario que nombra la variable con `$` o backtick falla, y una linea `#` tras una
 #      continuacion `\` cuenta como codigo;
 #   G. sin falso positivo: la forma canonica con sus usos, ${CLAUDE_PROJECT_DIR:-$PWD}, notas en
@@ -51,7 +52,7 @@ rojo() {
   cat > "$f"
   out=$(python3 "$CHK" "$f" 2>&1); rc=$?
   check "$et: exit 1" "$rc" "1"
-  check "$et: fallos" "$(printf '%s\n' "$out" | grep -v '^RESUMEN' | sed -E 's#^.*\.md:([0-9]+): (R[12]) .*#\1:\2#' | tr '\n' ' ' | sed 's/ $//')" "$esperado"
+  check "$et: fallos" "$(printf '%s\n' "$out" | grep -v '^RESUMEN' | sed -E 's#^.*\.md:([0-9]+): (R[0-9]) .*#\1:\2#' | tr '\n' ' ' | sed 's/ $//')" "$esperado"
 }
 
 # verde <etiqueta>  (plantilla en stdin)
@@ -334,6 +335,51 @@ for envset in "" "CLAUDE_PROJECT_DIR="; do
   check "forma R1 en bash (${envset:-sin entorno}): = cwd" "$v" "$(cd "$TMP" && pwd -P)"
 done
 
+# R4: con IFS=/ un uso sin comillas se parte y su primer trozo es vacio: `cd ''` (Codex, ronda 2).
+rojo ifs "3:R4 4:R4 6:R4" <<'EOF'
+```bash
+PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+IFS=/
+local IFS=:
+# IFS en un comentario no cuenta
+read -r x <<< "$IFS"
+cd $PROJECT_DIR
+```
+EOF
+rojo ifs-r1 "3:R4" <<'EOF'
+```bash
+ENCODED=$(echo "${CLAUDE_PROJECT_DIR:-$PWD}" | sed 's/[^A-Za-z0-9]/-/g')
+IFS=/ read -r a b <<< "$ENCODED"
+```
+EOF
+verde ifs-sin-variable <<'EOF'
+```bash
+IFS=, read -r a b <<< "x,y"
+```
+EOF
+# Lo que el contrato acepta despues de la canonica, ejecutado: el bloque de abajo pasa el checker,
+# corre en bash sin entorno desde un directorio temporal y escribe en SU memory/, no en /memory.
+mkdir -p "$TMP/run/memory"
+cat > "$TMP/run.md" <<'EOF'
+```bash
+PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+ENCODED=$(echo "$PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
+if [ -d "${PROJECT_DIR}/memory" ]; then
+  for f in "$PROJECT_DIR"/memory/*.md; do [ -e "$f" ] && wc -l "$f"; done
+fi
+cat > "$PROJECT_DIR/memory/.memory-config" <<'CFG'
+journal_strict=1
+CFG
+printf '%s\n' "$ENCODED" > "$PROJECT_DIR/memory/encoded"
+```
+EOF
+python3 "$CHK" "$TMP/run.md" >/dev/null 2>&1; rc=$?
+check "bloque ejecutable: el checker lo acepta" "$rc" "0"
+sed '1d;$d' "$TMP/run.md" > "$TMP/run.sh"
+(cd "$TMP/run" && env -i PATH="$PATH" CLAUDE_PROJECT_DIR= bash "$TMP/run.sh") >/dev/null 2>&1
+check "bloque ejecutable: escribio la config en el memory/ del cwd" "$(cat "$TMP/run/memory/.memory-config" 2>/dev/null)" "journal_strict=1"
+check "bloque ejecutable: ENCODED sale de la ruta del cwd" "$(cat "$TMP/run/memory/encoded" 2>/dev/null)" "$(cd "$TMP/run" && pwd -P | sed 's/[^A-Za-z0-9]/-/g')"
+
 echo "F. R3: comentarios"
 rojo comentario-con-dolar "2:R1 3:R2 4:R1 5:R1" <<'EOF'
 ```bash
@@ -429,7 +475,7 @@ check "cuenta independiente de fences de shell = la del recorrido" "$indep" "${n
 
 echo
 # Si un cambio salta casos en silencio, el total baja: se fija aqui.
-ESPERADOS=84
+ESPERADOS=92
 check "corrieron los $ESPERADOS asertos anteriores (este es el siguiente)" "$N" "$ESPERADOS"
 [ "$FAIL" -eq 0 ] && echo "PASS $N/$N" || echo "FAIL (ver arriba)"
 exit $FAIL

@@ -28,6 +28,9 @@ un heredoc o de una cadena de varias lineas.
   R3 Una linea de comentario que nombra cualquiera de las dos no lleva `$` ni backtick: sin ellos
      no hay expansion posible, asi que la linea es texto aunque caiga dentro de un heredoc o de una
      cadena. Se reporta como R1 o R2 segun la variable que nombre.
+  R4 Un bloque cuyo codigo nombra cualquiera de las dos no nombra IFS en ninguna linea de codigo.
+     Con un IFS que no es blanco (`IFS=/`), un uso sin comillas se parte y su primer trozo es
+     vacio (`cd $PROJECT_DIR` -> `cd ''`); con el IFS por defecto una ruta nunca da un trozo vacio.
 
 Por que basta: la linea canonica corre la primera, fuera de todo if/heredoc (no hay nada antes),
 y nunca da vacio. Despues, ninguna forma permitida puede cambiar la variable.
@@ -39,13 +42,16 @@ Limites aceptados, por clase (perseguirlos es volver a analizar bash):
     `eval`, `source`/`.` de otro fichero, una funcion o alias definidos fuera;
   - lo que un comando CALCULA a partir del valor: `${PWD//${PROJECT_DIR}/}`, `sed`, `dirname`
     pueden dar vacio con un valor no vacio;
+  - un nombre de variable sacado de un VALOR (`printf -v "$PROJECT_DIR"`, `declare -n r="$X"`):
+    escribe en la variable que nombre ese valor, y solo es PROJECT_DIR si alguien la hereda asi;
   - vaciar PWD antes del respaldo (`PWD=`, `unset PWD`);
   - comandos fuera de un bloque (prosa con `codigo en linea` que el agente copie);
   - la forma permitida escapada o entre comillas simples da un literal, no la ruta (nunca vacio).
 
 Alternativas descartadas: `bash -n` solo valida sintaxis, no dice que corre antes de que; un
-parser de verdad (shfmt --to-json, bashlex) es una dependencia, y el plugin no tiene ninguna (si
-algun dia hace falta, esa es la salida, no otra heuristica); ejecutar los bloques tiene efectos
+parser de verdad (shfmt --to-json, bashlex) es una dependencia: ninguno de los dos esta instalado
+en la maquina de desarrollo (medido 2026-09-28: `which shfmt` y `import bashlex` fallan) y el
+plugin no declara ninguna (si algun dia hace falta, esa es la salida, no otra heuristica); ejecutar los bloques tiene efectos
 (mkdir, cat >, git commit). La version por analisis de 2.39.3 cayo tres rondas seguidas de Codex,
 cada una por otra forma (if, heredoc, subshell, `$(...)` multilinea, `<<"1"`).
 
@@ -59,7 +65,7 @@ Usage:
     check-project-dir-fallback.py [RUTA ...]    (ficheros .md o directorios; por defecto
                                                   templates/ y commands/ del plugin)
 
-Output: una linea `<fichero>:<linea>: R1|R2 <texto>` por fallo y una linea RESUMEN.
+Output: una linea `<fichero>:<linea>: R1|R2|R4 <texto>` por fallo y una linea RESUMEN.
 Exit 0 sin fallos, 1 con fallos, 2 si una ruta no existe.
 """
 # sella-huellas: no (solo lee y reporta)
@@ -81,6 +87,7 @@ FORMA_R1 = "${CLAUDE_PROJECT_DIR:-$PWD}"
 CANONICA = 'PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"'
 NOMBRE_R1 = re.compile(r"(?<![A-Za-z0-9_])CLAUDE_PROJECT_DIR(?![A-Za-z0-9_])")
 NOMBRE_R2 = re.compile(r"(?<![A-Za-z0-9_])PROJECT_DIR(?![A-Za-z0-9_])")
+NOMBRE_IFS = re.compile(r"(?<![A-Za-z0-9_])IFS(?![A-Za-z0-9_])")
 USO_R2 = re.compile(r"\$PROJECT_DIR(?![A-Za-z0-9_])|\$\{PROJECT_DIR\}")
 
 
@@ -105,6 +112,8 @@ def revisar_bloque(cuerpo, ini):
         codigo.append((num, linea))
         if NOMBRE_R1.search(linea.replace(FORMA_R1, "")):
             fallos.append((num, "R1", linea.strip()))
+    if any(NOMBRE_R1.search(l) or NOMBRE_R2.search(l) for _, l in codigo):
+        fallos += [(num, "R4", l.strip()) for num, l in codigo if NOMBRE_IFS.search(l)]
     if not any(NOMBRE_R2.search(l) for _, l in codigo):
         return sorted(fallos)
     canonica = codigo[0][1].strip(BLANCO) == CANONICA
