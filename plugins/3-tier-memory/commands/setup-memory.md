@@ -10,7 +10,7 @@ Initialize a complete 3-tier memory system for this project. Follow ALL steps in
 
 Determine paths:
 ```text
-PROJECT_DIR = ${CLAUDE_PROJECT_DIR:-$PWD} (current project root; CLAUDE_PROJECT_DIR arrives EMPTY in the agent's Bash calls)
+PROJECT_DIR = the folder where this Claude session was launched (the first "cwd" of the session JSONL; every bash block below derives it with the `raiz-del-proyecto` snippet, because CLAUDE_PROJECT_DIR arrives EMPTY in the agent's Bash calls and $PWD moves if the agent ran cd)
 MEMORY_DIR = PROJECT_DIR/memory/
 ```
 
@@ -21,8 +21,11 @@ Check if `MEMORY_DIR/MEMORY.md` already exists. If yes, tell the user: "Memory s
 Create ALL directories (none are optional):
 
 ```bash
-PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"   # el shell no conserva variables entre llamadas; CLAUDE_PROJECT_DIR llega vacia
-mkdir -p "$PROJECT_DIR/memory/"{learnings,sessions,pendientes,plans,research}
+# raiz-del-proyecto: RAIZ es la carpeta donde se lanzo la sesion, el primer "cwd" de su JSONL.
+# CLAUDE_PROJECT_DIR llega vacia al Bash del agente y PWD cambia si el agente hizo cd.
+PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+RAIZ=$(python3 -c 'import glob,json,os,sys; d,s=sys.argv[1:3]; h=sorted(glob.glob(os.path.join(glob.escape(os.path.expanduser("~/.claude/projects")),"*",glob.escape(s)+".jsonl")),key=os.path.getmtime)[-1:] if s else []; print(next((o["cwd"] for f in h for l in open(f,encoding="utf-8",errors="replace") if "\"cwd\"" in l for o in [json.loads(l)] if isinstance(o,dict) and o.get("cwd")),d))' "$PROJECT_DIR" "${CLAUDE_CODE_SESSION_ID:-}" 2>/dev/null || echo "$PROJECT_DIR")
+mkdir -p "$RAIZ/memory/"{learnings,sessions,pendientes,plans,research}
 ```
 
 ## Step 3: Create Tier 2 indexes
@@ -83,8 +86,11 @@ All index files must have:
 ## Step 3b: Write `memory/.memory-config` — `journal_strict=1` by default
 
 ```bash
-PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"   # el shell no conserva variables entre llamadas; CLAUDE_PROJECT_DIR llega vacia
-cat > "$PROJECT_DIR/memory/.memory-config" <<'CFGEOF'
+# raiz-del-proyecto: RAIZ es la carpeta donde se lanzo la sesion, el primer "cwd" de su JSONL.
+# CLAUDE_PROJECT_DIR llega vacia al Bash del agente y PWD cambia si el agente hizo cd.
+PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+RAIZ=$(python3 -c 'import glob,json,os,sys; d,s=sys.argv[1:3]; h=sorted(glob.glob(os.path.join(glob.escape(os.path.expanduser("~/.claude/projects")),"*",glob.escape(s)+".jsonl")),key=os.path.getmtime)[-1:] if s else []; print(next((o["cwd"] for f in h for l in open(f,encoding="utf-8",errors="replace") if "\"cwd\"" in l for o in [json.loads(l)] if isinstance(o,dict) and o.get("cwd")),d))' "$PROJECT_DIR" "${CLAUDE_CODE_SESSION_ID:-}" 2>/dev/null || echo "$PROJECT_DIR")
+cat > "$RAIZ/memory/.memory-config" <<'CFGEOF'
 # Config de memoria del proyecto.
 #
 # journal_strict=1: el hook PreToolUse del plugin DENIEGA Edit/Write/MultiEdit directo sobre los
@@ -277,8 +283,11 @@ If the marketplace entry exists, report: "Auto-update: enabled". If the file doe
 Check for existing JSONL conversation files:
 
 ```bash
-PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"   # el shell no conserva variables entre llamadas
-ENCODED=$(echo "$PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
+# raiz-del-proyecto: RAIZ es la carpeta donde se lanzo la sesion, el primer "cwd" de su JSONL.
+# CLAUDE_PROJECT_DIR llega vacia al Bash del agente y PWD cambia si el agente hizo cd.
+PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+RAIZ=$(python3 -c 'import glob,json,os,sys; d,s=sys.argv[1:3]; h=sorted(glob.glob(os.path.join(glob.escape(os.path.expanduser("~/.claude/projects")),"*",glob.escape(s)+".jsonl")),key=os.path.getmtime)[-1:] if s else []; print(next((o["cwd"] for f in h for l in open(f,encoding="utf-8",errors="replace") if "\"cwd\"" in l for o in [json.loads(l)] if isinstance(o,dict) and o.get("cwd")),d))' "$PROJECT_DIR" "${CLAUDE_CODE_SESSION_ID:-}" 2>/dev/null || echo "$PROJECT_DIR")
+ENCODED=$(echo "$RAIZ" | sed 's/[^A-Za-z0-9]/-/g')
 JSONL_DIR="$HOME/.claude/projects/$ENCODED"
 JSONL_COUNT=$(ls "$JSONL_DIR"/*.jsonl 2>/dev/null | wc -l | tr -d ' ')
 ```

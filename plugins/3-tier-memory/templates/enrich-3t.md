@@ -75,7 +75,11 @@ Optionally scope a single enrich job with `--only creado` or `--only importance`
 
 The enriched fields only take effect once the derived index is rebuilt:
 ```bash
-ENCODED=$(echo "${CLAUDE_PROJECT_DIR:-$PWD}" | sed 's/[^A-Za-z0-9]/-/g')   # CLAUDE_PROJECT_DIR llega vacia al Bash del agente
+# raiz-del-proyecto: RAIZ es la carpeta donde se lanzo la sesion, el primer "cwd" de su JSONL.
+# CLAUDE_PROJECT_DIR llega vacia al Bash del agente y PWD cambia si el agente hizo cd.
+PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+RAIZ=$(python3 -c 'import glob,json,os,sys; d,s=sys.argv[1:3]; h=sorted(glob.glob(os.path.join(glob.escape(os.path.expanduser("~/.claude/projects")),"*",glob.escape(s)+".jsonl")),key=os.path.getmtime)[-1:] if s else []; print(next((o["cwd"] for f in h for l in open(f,encoding="utf-8",errors="replace") if "\"cwd\"" in l for o in [json.loads(l)] if isinstance(o,dict) and o.get("cwd")),d))' "$PROJECT_DIR" "${CLAUDE_CODE_SESSION_ID:-}" 2>/dev/null || echo "$PROJECT_DIR")
+ENCODED=$(echo "$RAIZ" | sed 's/[^A-Za-z0-9]/-/g')
 INDEX="$HOME/.claude/projects/$ENCODED/.recall-index.jsonl"
 python3 "$(dirname "$ENRICH")/build-recall-index.py" "$MEMORY_DIR" "$INDEX" >/dev/null 2>&1
 ```

@@ -71,8 +71,12 @@ Instead, let the derived recall index surface the few high-overlap PAIRS worth j
 
 1. Resolve paths (same scheme as recall.sh). `MEMORY_DIR` is the directory located in Step 0 (`memory/` for Model B):
 ```bash
+# raiz-del-proyecto: RAIZ es la carpeta donde se lanzo la sesion, el primer "cwd" de su JSONL.
+# CLAUDE_PROJECT_DIR llega vacia al Bash del agente y PWD cambia si el agente hizo cd.
+PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+RAIZ=$(python3 -c 'import glob,json,os,sys; d,s=sys.argv[1:3]; h=sorted(glob.glob(os.path.join(glob.escape(os.path.expanduser("~/.claude/projects")),"*",glob.escape(s)+".jsonl")),key=os.path.getmtime)[-1:] if s else []; print(next((o["cwd"] for f in h for l in open(f,encoding="utf-8",errors="replace") if "\"cwd\"" in l for o in [json.loads(l)] if isinstance(o,dict) and o.get("cwd")),d))' "$PROJECT_DIR" "${CLAUDE_CODE_SESSION_ID:-}" 2>/dev/null || echo "$PROJECT_DIR")
 MEMORY_DIR="memory"   # Model B; use the auto-memory path if Step 0 found Model A
-ENCODED=$(echo "${CLAUDE_PROJECT_DIR:-$PWD}" | sed 's/[^A-Za-z0-9]/-/g')   # CLAUDE_PROJECT_DIR llega vacia al Bash del agente
+ENCODED=$(echo "$RAIZ" | sed 's/[^A-Za-z0-9]/-/g')
 INDEX="$HOME/.claude/projects/$ENCODED/.recall-index.jsonl"
 ```
 2. Locate the plugin scripts (mirror /backfill-3t Step 5):

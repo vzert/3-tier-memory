@@ -1,6 +1,32 @@
 # Changelog
 
 
+## [2.41.3] - 2026-09-28
+Origen: pendiente `p-8472f7f4b7`. Codex revisó 2.39.1 y dio `break`. El hallazgo de severidad alta:
+`/setup-memory`, si el agente lo corre desde un subdirectorio, crea `memory/` y su config en ese
+subdirectorio. Dos hallazgos medios tienen la misma causa: `/migrate` y los Steps 8b cuentan 0 JSONL,
+y backfill, consolidate y enrich apuntan al JSONL y al índice de recall del subdirectorio. El
+respaldo `${CLAUDE_PROJECT_DIR:-$PWD}` de 2.39.1 da la carpeta del shell del agente, y esa carpeta
+cambia con cada `cd`.
+
+### Fixed
+- **Los bloques bash que necesitan la raíz del proyecto calculan `RAIZ`.** `RAIZ` es la carpeta donde
+  se lanzó la sesión: el primer `"cwd"` del JSONL de la sesión, que se busca por
+  `CLAUDE_CODE_SESSION_ID` bajo `~/.claude/projects/*/`. Medido en el JSONL de esta sesión: el campo
+  `cwd` de las líneas posteriores cambia con cada `cd` del agente (174 líneas en la raíz, 10 en
+  `plugins/3-tier-memory`). Por eso vale solo el primero. Sin id de sesión o sin su JSONL, `RAIZ`
+  vuelve al respaldo `${CLAUDE_PROJECT_DIR:-$PWD}` y nunca queda vacía. El bloque está en 8 sitios:
+  `/setup-memory` Steps 2, 3b y 8b; `/migrate` Step 8b y la activación de `journal_strict`; backfill
+  Step 0b; consolidate; y enrich Step 3.
+  - La primera línea de código de cada bloque sigue siendo la canónica de
+    `check-project-dir-fallback.py`. Ese contrato prohíbe reasignar `PROJECT_DIR`, por eso la raíz
+    resuelta va en otra variable.
+  - No se tocó: `MEMORY_DIR="memory"`, relativo a la carpeta del shell, en consolidate y enrich.
+- **`/migrate` anunciaba `journal_strict=1 activado` aunque no pudiera escribir la config.** Ahora,
+  si la escritura falla, imprime `ERROR` y sale con código 1.
+- `test-raiz-del-proyecto.sh` (nueva): corre cada bloque real desde `a/src` con un HOME falso. Da 11
+  fallos contra 2.41.2 y 0 ahora. También comprueba que las 8 copias son la misma línea.
+
 ## [2.41.2] - 2026-09-28
 Origen: pendiente `p-8472f7f4b7`. 2.39.0 no habia pasado por el adversario externo (Codex); el
 2026-09-24 su cuenta estaba en el limite de uso. Codex la reviso hoy en HEAD y dio `break` con dos

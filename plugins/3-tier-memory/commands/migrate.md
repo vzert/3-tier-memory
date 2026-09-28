@@ -359,7 +359,11 @@ If the marketplace entry exists, report: "Auto-update: enabled". If the file doe
 Check for existing JSONL conversation files:
 
 ```bash
-ENCODED=$(echo "${CLAUDE_PROJECT_DIR:-$PWD}" | sed 's/[^A-Za-z0-9]/-/g')   # CLAUDE_PROJECT_DIR llega vacia al Bash del agente
+# raiz-del-proyecto: RAIZ es la carpeta donde se lanzo la sesion, el primer "cwd" de su JSONL.
+# CLAUDE_PROJECT_DIR llega vacia al Bash del agente y PWD cambia si el agente hizo cd.
+PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+RAIZ=$(python3 -c 'import glob,json,os,sys; d,s=sys.argv[1:3]; h=sorted(glob.glob(os.path.join(glob.escape(os.path.expanduser("~/.claude/projects")),"*",glob.escape(s)+".jsonl")),key=os.path.getmtime)[-1:] if s else []; print(next((o["cwd"] for f in h for l in open(f,encoding="utf-8",errors="replace") if "\"cwd\"" in l for o in [json.loads(l)] if isinstance(o,dict) and o.get("cwd")),d))' "$PROJECT_DIR" "${CLAUDE_CODE_SESSION_ID:-}" 2>/dev/null || echo "$PROJECT_DIR")
+ENCODED=$(echo "$RAIZ" | sed 's/[^A-Za-z0-9]/-/g')
 JSONL_DIR="$HOME/.claude/projects/$ENCODED"
 JSONL_COUNT=$(ls "$JSONL_DIR"/*.jsonl 2>/dev/null | wc -l | tr -d ' ')
 ```
@@ -369,15 +373,19 @@ Store `JSONL_COUNT` for inclusion in the report.
 ## Encender `journal_strict` si el proyecto no tiene config
 
 ```bash
-PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"   # el shell no conserva variables entre llamadas; CLAUDE_PROJECT_DIR llega vacia
-if [ ! -f "$PROJECT_DIR/memory/.memory-config" ]; then
+# raiz-del-proyecto: RAIZ es la carpeta donde se lanzo la sesion, el primer "cwd" de su JSONL.
+# CLAUDE_PROJECT_DIR llega vacia al Bash del agente y PWD cambia si el agente hizo cd.
+PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+RAIZ=$(python3 -c 'import glob,json,os,sys; d,s=sys.argv[1:3]; h=sorted(glob.glob(os.path.join(glob.escape(os.path.expanduser("~/.claude/projects")),"*",glob.escape(s)+".jsonl")),key=os.path.getmtime)[-1:] if s else []; print(next((o["cwd"] for f in h for l in open(f,encoding="utf-8",errors="replace") if "\"cwd\"" in l for o in [json.loads(l)] if isinstance(o,dict) and o.get("cwd")),d))' "$PROJECT_DIR" "${CLAUDE_CODE_SESSION_ID:-}" 2>/dev/null || echo "$PROJECT_DIR")
+if [ ! -f "$RAIZ/memory/.memory-config" ]; then
   printf '%s\n' '# Config de memoria del proyecto (ver /3-tier-memory:setup-memory Step 3b).' \
                  '# journal_strict=1: los indices los escribe SOLO el compactador del journal.' \
                  '# OJO: el hook es PreToolUse sobre Edit|Write|MultiEdit; Bash NO esta en el' \
                  '# matcher, asi que un `>>` o un `sed -i` escriben igual. La deteccion por' \
                  '# huella del compactador es lo que caza esos casos.' \
-                 'journal_strict=1' > "$PROJECT_DIR/memory/.memory-config"
-  echo "journal_strict=1 activado (no habia config)"
+                 'journal_strict=1' > "$RAIZ/memory/.memory-config" \
+    && echo "journal_strict=1 activado (no habia config)" \
+    || { echo "ERROR: no se pudo escribir $RAIZ/memory/.memory-config; journal_strict NO activado" >&2; exit 1; }
 else
   echo "ya hay .memory-config; no se toca"
 fi
