@@ -68,7 +68,10 @@ R2_USO = re.compile(r"\$(?:\{[#!]?)?PROJECT_DIR(?![A-Za-z0-9_])")
 R2_BUENO = re.compile(r"\$\{PROJECT_DIR" + CON_RESPALDO)
 R2_DEF = re.compile(r"^\s*(?:(?:export|readonly|local|declare(?:\s+-\w+)*)\s+)?PROJECT_DIR=")
 R2_READ = re.compile(r"^\s*read(?:\s+-\w+(?:\s+\S+)?)*\s+(?:\w+\s+)*PROJECT_DIR(?:\s|;|$)")
-HEREDOC = re.compile(r"<<(-?)\s*\\?(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\2")
+# Delimitador: cualquier palabra (tambien `1`, `EOF.x`), con comillas o `\` delante. `<<<` es un
+# here-string, no un heredoc.
+HEREDOC = re.compile(r"(?<!<)<<(?!<)(-?)\s*\\?(['\"]?)([^\s'\"<>;|&()]+)\2")
+SUBST = re.compile(r"[$<>]\(")
 ABRE = re.compile(r"(?:^|[;&|]\s*|\b(?:then|do|else)\s+)(if|for|while|until|case|select)\b")
 CIERRA = re.compile(r"(?:^\s*|[;&|]\s*)(fi|done|esac)\b")
 ELSE = re.compile(r"(?:^\s*|[;&|]\s*)(else|elif)\b")
@@ -189,6 +192,7 @@ def revisar_bloque(cuerpo, ini):
     fallos = []
     def_prof = None      # profundidad de la definicion vigente, o None
     prof = 0
+    subst = 0            # parentesis abiertos de un $( / <( / >( que sigue en otra linea
     heredocs = []        # terminadores pendientes, en orden
     for num, linea in logicas(cuerpo, ini):
         if heredocs:
@@ -207,6 +211,8 @@ def revisar_bloque(cuerpo, ini):
         if usos_malos(codigo, R1_NOMBRE, R1_BUENO):
             fallos.append((num, "R1", linea.strip()))
         r2_mal = False
+        # Dentro de un $(...) / <(...) de varias lineas todo corre en un subshell: nada define.
+        en_subst = subst > 0
         for seg in segmentos(codigo):
             s = seg.strip()
             # Cierres antes que el resto: `}`, `)`, fi/done/esac y else/elif (otra rama).
@@ -226,7 +232,7 @@ def revisar_bloque(cuerpo, ini):
                 s = s[m.end():].strip()
             prof += len(ABRE.findall(s))
             malos = usos_r2(s)
-            if es_definicion(s):
+            if es_definicion(s) and not en_subst:
                 fin = R2_DEF.match(s)
                 rhs = s[:fin_de_palabra(s, fin.end())] if fin else s
                 if def_prof is None and usos_r2(rhs):
@@ -238,6 +244,8 @@ def revisar_bloque(cuerpo, ini):
                 r2_mal = True
         if r2_mal:
             fallos.append((num, "R2", linea.strip()))
+        if subst or SUBST.search(codigo):
+            subst = max(subst + codigo.count("(") - codigo.count(")"), 0)
         for h in HEREDOC.finditer(codigo):
             heredocs.append((h.group(3), h.group(1) == "-"))
     return fallos

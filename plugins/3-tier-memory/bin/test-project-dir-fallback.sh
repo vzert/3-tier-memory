@@ -231,6 +231,26 @@ SH
 ls "$PROJECT_DIR"
 ```
 EOF
+rojo def-en-subst "8:R2" <<'EOF'
+```bash
+x=$(
+  PROJECT_DIR=/x
+  echo hola
+)
+diff <(
+  PROJECT_DIR=/y; echo) /dev/null
+ls "$PROJECT_DIR"
+```
+EOF
+rojo def-heredoc-numero "6:R2" <<'EOF'
+```bash
+cat > /tmp/s.sh <<"1"
+echo "script escrito para despues"
+PROJECT_DIR=/x
+1
+ls "$PROJECT_DIR"
+```
+EOF
 rojo def-prefijo "3:R2" <<'EOF'
 ```bash
 PROJECT_DIR=/x make build
@@ -262,6 +282,14 @@ verde prosa <<'EOF'
 Prosa fuera de bloque: `$CLAUDE_PROJECT_DIR` y $PROJECT_DIR.
 EOF
 
+verde here-string <<'EOF'
+```bash
+grep -c x <<<"hola"
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
+n=$(ls "$PROJECT_DIR" | wc -l)
+ls "$PROJECT_DIR"
+```
+EOF
 verde respaldos-validos <<'EOF'
 ```bash
 A="${CLAUDE_PROJECT_DIR:-$(pwd)}"
@@ -348,7 +376,7 @@ check "cuenta independiente de fences de shell = la del recorrido" "$indep" "${n
 
 echo
 # Si un cambio salta casos en silencio, el total baja: se fija aqui.
-ESPERADOS=57
+ESPERADOS=62
 check "corrieron los $ESPERADOS asertos" "$N" "$ESPERADOS"
 [ "$FAIL" -eq 0 ] && echo "PASS $N/$N" || echo "FAIL (ver arriba)"
 exit $FAIL

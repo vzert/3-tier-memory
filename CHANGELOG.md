@@ -129,16 +129,20 @@ bloques bash que usaban la ruta del proyecto sin respaldo. Nada impedia que volv
     vale solo en su nivel: dentro de un if, una funcion o un subshell se olvida al salir, y en otra
     rama (`else`) no cuenta; tambien con `function f {`. No definen: `[ ] && PROJECT_DIR=x`,
     `PROJECT_DIR=x cmd` (prefijo de un comando), `PROJECT_DIR=x | cmd` y `PROJECT_DIR=x &`
-    (subshell), una linea de heredoc (tambien `<<\SH`), `PROJECT_DIR="$PROJECT_DIR/x"`. Si definen: `export`,
+    (subshell), una asignacion dentro de un `$(...)` o `<(...)` de varias lineas, una linea de
+    heredoc (con cualquier delimitador: `<<\SH`, `<<"1"`; `<<<` es un here-string y no abre
+    nada), `PROJECT_DIR="$PROJECT_DIR/x"`. Si definen: `export`,
     `declare`, `readonly`, `local` y `read ... PROJECT_DIR`.
   - Contra el arbol de 2.39.0 (025ebb2) marca 18 lineas: las 10 que 2.39.1 arreglo (las formas
     `ENCODED=$(echo "$CLAUDE_PROJECT_DIR"`, mkdir, cat > e if -f) y 8 de los tres bloques de prosa
     sin etiqueta que ahora son ```text.
-  - Suite: 58 asertos, y el total esta fijado: si un cambio salta casos, cae. Si `mktemp` falla
+  - Suite: 63 asertos, y el total esta fijado: si un cambio salta casos, cae. Si `mktemp` falla
     sale con FAIL, no con un verde sin casos. Plantillas sinteticas rojas por forma que comprueban
     `linea:regla`, verdes sin falso positivo, y el arbol real en verde. El arbol real da 107 bloques de shell, igual que una
-    cuenta independiente en awk con pila de anidamiento: ningun bloque se trago a otro. Quince
-    mutaciones del checker, una por mecanismo, la hacen caer.
+    cuenta independiente en awk con pila de anidamiento: ningun bloque se trago a otro.
+  - Mutaciones: 17, una por mecanismo del checker, corridas A MANO en la sesion del 2026-09-28
+    sobre copias en un temporal; las 17 tumban la suite. No quedan en un arnes:
+    `tools/mutation-check.sh` no tiene caso para este checker.
 - **Tres bloques de prosa o salida de ejemplo pasan a ```text** (`audit-3t.md` Step de settings,
   `migrate.md` salida `[MISSING]`, `setup-memory.md` variables): antes no tenian etiqueta.
 
@@ -146,7 +150,9 @@ Historia: la primera version solo miraba ```bash y dejaba fuera los bloques sin 
 solo traen prosa". El adversario externo (Codex) lo rompio: `checkpoint-3t.md` Step 6c tiene un
 `git commit` ejecutable sin etiqueta. Tambien hallo 5 huecos de R1/R2. La ronda 2 confirmo esos 6
 cerrados y hallo 5 mas: la suite salia verde si `mktemp` fallaba, `function f {`, `| cmd` y `&`,
-`<<\SH` y el respaldo `:-${EMPTY}`. Todos tienen caso rojo arriba.
+`<<\SH` y el respaldo `:-${EMPTY}`. La ronda 3 confirmo esos 5 y hallo 3 mas: asignaciones en
+`$(...)` de varias lineas, el delimitador `<<"1"` y que "15 mutaciones" no tenia evidencia
+guardada (ahora dice como corrieron). Todos los hallazgos de codigo tienen caso rojo arriba.
 
 ### Fixed
 - **`test-checkpoint-close-guard.sh` rojo desde el 2026-09-27**: su `_pendientes.md` de prueba
