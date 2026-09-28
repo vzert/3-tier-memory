@@ -3,12 +3,15 @@
 
 ## [2.41.0] - 2026-09-28
 Origen: pendiente `p-532174ff63`, verificar el aviso del Step 7a en instalaciones reales. Medido
-sobre los transcripts de los otros proyectos que usan el plugin:
-- Avisa cuando el audit no corrio: si. Lo hizo en 45 commits reales de seis proyectos, y el aviso
-  llega al agente (registro `hook_success` del PreToolUse).
-- Pero esta enganchado al momento equivocado. El commit del checkpoint es Step 6 y el audit es
-  Step 7a, que no puede ir antes porque mide ese commit. En 50 de 67 sesiones reales el primer
-  commit de checkpoint precedia al audit: el aviso saltaba en casi todo checkpoint bien hecho.
+sobre los transcripts de los otros proyectos que usan el plugin, commits `checkpoint:` entre
+2026-09-19T20 y 2026-09-28T15:50 (`python3 tools/medir-aviso-7a.py 2026-09-19T20 2026-09-28T15:50`):
+- El hook corria y escribia su aviso: 56 commits sin audit previo, en 5 proyectos. Pero el aviso no
+  llegaba al agente. La salida en texto plano de un PreToolUse no se entrega al modelo:
+  `bin/verify-hook-delivery.sh` lo midio el 2026-09-14 y otra vez el 2026-09-28 con Claude Code
+  2.1.283 (PRE: NO, POST: NO, PROMPT: SI). Quedaba en el transcript y nadie lo leia.
+- Ademas estaba enganchado al momento equivocado. El commit del checkpoint es Step 6 y el audit es
+  Step 7a, que no puede ir antes porque mide ese commit. En 50 de 67 sesiones el primer commit de
+  checkpoint precedia al audit: el aviso saltaba en casi todo checkpoint bien hecho.
 - Y avisaba en falso en 41 de 81 commits que si tenian una corrida real antes: el agente arma la
   ruta con `JBIN=$(cat ...)`, y el hook descarta toda sustitucion de comandos desde 2.30.0.
 
@@ -32,6 +35,10 @@ sobre los transcripts de los otros proyectos que usan el plugin:
   `saltado=0` ya no basta. Pero vigila la omision, no la falsificacion: una salida real presentada
   como "ejemplo" dentro de un bloque de codigo, o copiada linea a linea a mano, pasa. El bloque de
   codigo no se descarta porque es la forma normal de pegar la salida.
+- No compara el `hecho=N` pegado con el del audit: Step 8 corre despues de Step 7a y cambia
+  legitimamente los checks del snippet. Si el audit falla dentro del guard, el chequeo de los
+  SALTADO se salta sin bloquear (la politica del guard ante sus propios errores); la linea
+  `resumen:` se sigue exigiendo.
 
 ## [2.40.0] - 2026-09-27
 Origen: pendiente `p-fd3d3bdcab`, ultima pieza de la Fase 2 de la familia de correccion y reversa

@@ -1071,6 +1071,11 @@ libre produce un muro de falsos positivos y el usuario se queda tan ciego como c
 `resumen:`. No la parafrasees ni la resumas: la salida entera cabe en pantalla y su valor esta en
 que el usuario vea los `SALTADO` sin tener que preguntar.
 
+**Lo vigila el hook de cierre desde 2.41.0** (`checkpoint-close-guard.sh`, ver Step 8b): al terminar
+el turno corre el mismo audit sobre la ficha final y exige en tu TEXTO la linea `resumen:` y cada
+`SALTADO` en su forma de salida (`SALTADO  <clave>`), con un `saltado=` no menor que el que ve el.
+Pegala dentro de un bloque de codigo si quieres: cuenta igual.
+
 ## Step 7b: Los tres huecos que ningun script puede ver
 
 El audit mide artefactos. Estas tres preguntas son sobre lo que **dijiste**, y no hay fichero que
@@ -1471,6 +1476,8 @@ result:
   futura` si hay mas);
 - que `checkpoint-audit.py --solo-snippet` no marque `SALTADO` sobre la ficha final. Step 7a corre
   antes que Step 8 y no ve el snippet.
+- en un turno que corrio `/checkpoint-3t` (desde 2.41.0), la salida de Step 7a: la linea
+  `resumen:` y cada `SALTADO` que el audit da sobre la ficha final, en su forma de salida.
 
 Si falta algo, bloquea el cierre una vez y te dice que pegar o corregir. Limite: en el segundo
 intento seguido ya no bloquea, para no entrar en bucle. Solo avisa al usuario.
