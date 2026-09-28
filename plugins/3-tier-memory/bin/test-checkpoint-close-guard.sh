@@ -622,6 +622,13 @@ recs[-1]["message"]["content"] = [{"type": "text", "text": open(sys.argv[1].repl
 open(t, "w").write("\n".join(json.dumps(r) for r in recs) + "\n")
 PY
 chk "la salida solo en un tool_result no cuenta" "1" "$(falta7a "$(corre "$T/t.jsonl" false -)")"
+# Adversario de 2.41.0: un resumen inventado con saltado=0 y las claves citadas en prosa callaba.
+{ cat "$T/snip.txt"; echo "resumen: hecho=999 parcial=0 saltado=0 por-diseno=0"; echo "Nota: revise $(grep -E '^  SALTADO' "$T/audit.txt" | grep -v ' snippet\.' | awk '{print $2}' | tr '\n' ' ')"; } > "$T/r-falso.txt"
+tx "$T/t.jsonl" skill "$F" "$T/r-falso.txt" -
+chk "resumen inventado con saltado=0 y claves en prosa: lo reclama" "1" "$(falta7a "$(corre "$T/t.jsonl" false -)")"
+{ cat "$T/snip.txt"; echo '```'; cat "$T/audit.txt"; echo '```'; } > "$T/r-fence.txt"
+tx "$T/t.jsonl" skill "$F" "$T/r-fence.txt" -
+chk "la salida real dentro de un fence (la forma normal de pegarla): calla" "0" "$(falta7a "$(corre "$T/t.jsonl" false -)")"
 tx "$T/t.jsonl" print "$F" "$T/r-sin.txt" -
 chk "un turno que solo reimprime el snippet no lo exige" "0" "$(falta7a "$(corre "$T/t.jsonl" false -)")"
 sed -i.bak 's/^date: 2026-09-28$/date: 2026-09-22/' "$F" && rm -f "$F.bak"

@@ -431,8 +431,14 @@ def revisar(ficha):
     # turno que corrio /checkpoint-3t, y solo para fichas desde el corte: una anterior se cerro con
     # el aviso viejo.
     if por_checkpoint and m_fecha and m_fecha.group(1) >= "2026-09-28":
+        # Se exige la FORMA de la salida, no subcadenas sueltas: la clave de un SALTADO en una linea
+        # `SALTADO  <clave>` y un `saltado=` pegado que no sea menor que los que el audit ve hoy.
+        # Con subcadenas bastaba un `resumen: ... saltado=0` escrito a mano y las claves citadas en
+        # prosa (adversario de 2.41.0). Limite declarado: no distingue una salida real presentada
+        # como "ejemplo" ni una falsificacion linea a linea; esto vigila la omision, como el snippet.
         faltas = []
-        if not re.search(r"resumen:\s*hecho=\d+", visto):
+        m_res = [int(x) for x in re.findall(r"resumen:\s*hecho=\d+\s+parcial=\d+\s+saltado=(\d+)", visto)]
+        if not m_res:
             faltas.append("la linea `resumen:`")
         try:
             r = subprocess.run([sys.executable, os.path.join(BIN, "checkpoint-audit.py"), memory_dir,
@@ -442,7 +448,10 @@ def revisar(ficha):
                         if x.get("estado") == "SALTADO" and not x["clave"].startswith("snippet.")]
         except Exception:
             saltados = []
-        faltas += [f"`{c}` (SALTADO)" for c in saltados if c not in visto]
+        faltas += [f"`{c}` (SALTADO)" for c in saltados
+                   if not re.search(r"SALTADO\s+" + re.escape(c) + r"(?!\S)", visto)]
+        if m_res and max(m_res) < len(saltados):
+            faltas.append(f"un `resumen:` con saltado>={len(saltados)} (el pegado dice {max(m_res)})")
         if faltas:
             problemas.append(pref +
                 "La salida de Step 7a no esta en tu respuesta: falta " + ", ".join(faltas) + ". Corre "

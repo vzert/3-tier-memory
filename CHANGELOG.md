@@ -27,6 +27,11 @@ sobre los transcripts de los otros proyectos que usan el plugin:
 - Si el turno no escribio ni imprimio ninguna ficha, el guard no tiene que revisar y calla (checkpoint
   cortado o repartido en varios turnos). Tampoco encuentra la ficha si se imprimio con una variable
   (`print-como-retomar.py "$SF"`): no expande variables. Este limite ya afectaba al resto del guard.
+- El guard exige la FORMA de la salida (cada SALTADO en una linea `SALTADO  <clave>`, y un
+  `saltado=` pegado no menor que los que ve hoy), no solo subcadenas: un `resumen:` inventado con
+  `saltado=0` ya no basta. Pero vigila la omision, no la falsificacion: una salida real presentada
+  como "ejemplo" dentro de un bloque de codigo, o copiada linea a linea a mano, pasa. El bloque de
+  codigo no se descarta porque es la forma normal de pegar la salida.
 
 ## [2.40.0] - 2026-09-27
 Origen: pendiente `p-fd3d3bdcab`, ultima pieza de la Fase 2 de la familia de correccion y reversa
