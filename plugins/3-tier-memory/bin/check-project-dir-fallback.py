@@ -4,37 +4,56 @@
 
 Por que existe: CLAUDE_PROJECT_DIR llega VACIA a las llamadas Bash del agente (medido
 2026-09-24), y el shell no conserva variables de una llamada a la siguiente. 2.39.1 arreglo a
-mano los bloques que lo ignoraban, con un recorrido de un solo uso. El primer barrido buscaba una
-sola grafia (`ENCODED=$(echo "$CLAUDE_PROJECT_DIR"`) y solo en templates/; un adversario encontro
-cinco bloques mas en commands/ con otras formas ($PROJECT_DIR en mkdir, cat >, if -f). Este
-script recorre CADA bloque de shell por construccion, no por grafia.
+mano los bloques que lo ignoraban; este script impide que el siguiente bloque vuelva a caer.
 
-Reglas, por bloque de shell:
-  R1 Cualquier mencion de CLAUDE_PROJECT_DIR fuera de un comentario que no sea
-     `${CLAUDE_PROJECT_DIR:-X}` con X no vacio. Falla la forma desnuda, `${CLAUDE_PROJECT_DIR}`,
-     `${CLAUDE_PROJECT_DIR-X}`, `${#CLAUDE_PROJECT_DIR}`, el nombre en aritmetica, los
-     respaldos vacios `:-}`, `:-""}` y `:-''}` (callan a `set -u` pero siguen dando vacio) y un
-     respaldo que es otra variable (`:-${EMPTY}`): X tiene que ser $PWD, $(pwd), otro
-     ${CLAUDE_PROJECT_DIR:-...} o un literal. No ve un acceso indirecto armado en tiempo de
-     ejecucion (`v=CLAUDE_PROJECT_""DIR; echo "${!v}"`): eso ya no es texto que se pueda leer.
-  R2 `$PROJECT_DIR` (tambien `${PROJECT_DIR}`, `${#PROJECT_DIR}`, pegada a otra variable) usada
-     sin definirla ANTES en el mismo bloque. `${PROJECT_DIR:-X}` con X no vacio siempre vale.
-     Solo cuenta como definicion una asignacion de nivel superior: al inicio de la linea, fuera
-     de if/for/while/until/case, de un cuerpo de funcion, de un subshell y de un heredoc, y que no
-     sea el prefijo de un comando (`PROJECT_DIR=x cmd` no la deja definida) ni corra en un subshell
-     (`PROJECT_DIR=x | cmd`, `PROJECT_DIR=x &`). Tambien valen
-     export/declare/readonly/local delante y `read ... PROJECT_DIR`. Los usos del lado derecho de
-     la propia asignacion se miran ANTES de darla por definida: `PROJECT_DIR="$PROJECT_DIR/x"`
-     falla. Definirla en otro bloque no cuenta: es otra llamada Bash.
+Es un CONTRATO de formas permitidas, no un analizador de bash. 2.39.3 intentaba decidir "esta
+$PROJECT_DIR definida antes de usarse" siguiendo if, heredocs, subshells y funciones, y cada
+ronda del adversario rompio otra forma: esa pregunta no tiene fondo sin un parser de bash
+completo. Ahora el checker solo compara texto exacto, y las plantillas se escriben para cumplirlo.
+Lo que sea seguro pero no calce con el contrato FALLA: se reescribe a la forma permitida.
+
+Contrato, por bloque de shell. Blanco = solo espacio o tabulador (lo que bash separa; un
+tabulador vertical o un NBSP delante hacen que la linea no sea una asignacion). "Linea de
+comentario" = su primer caracter no blanco es `#` y la linea anterior no acaba en `\\` (una
+continuacion convierte esa linea en codigo). Toda otra linea es "de codigo", tambien dentro de
+un heredoc o de una cadena de varias lineas.
+  R1 En una linea de codigo, CLAUDE_PROJECT_DIR solo aparece como `${CLAUDE_PROJECT_DIR:-$PWD}`,
+     texto exacto. Cualquier otra mencion falla, aunque fuera segura.
+  R2 Si alguna linea de codigo nombra PROJECT_DIR, la primera linea de codigo del bloque es
+     exactamente la linea canonica (sin comentario al final; la nota va en la linea de arriba):
+         PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+     y en el resto de lineas de codigo PROJECT_DIR solo aparece como `$PROJECT_DIR` o
+     `${PROJECT_DIR}`. Asi quedan fuera, sin analizarlos, reasignar, `unset`, `read`, `local`,
+     `${PROJECT_DIR:=...}` y definirla dentro de un if o en otro bloque.
+  R3 Una linea de comentario que nombra cualquiera de las dos no lleva `$` ni backtick: sin ellos
+     no hay expansion posible, asi que la linea es texto aunque caiga dentro de un heredoc o de una
+     cadena. Se reporta como R1 o R2 segun la variable que nombre.
+
+Por que basta: la linea canonica corre la primera, fuera de todo if/heredoc (no hay nada antes),
+y nunca da vacio. Despues, ninguna forma permitida puede cambiar la variable.
+
+Que garantiza: donde el texto del bloque nombra la variable, su valor no esta vacio. Nada mas.
+Limites aceptados, por clase (perseguirlos es volver a analizar bash):
+  - todo lo que llega a la variable SIN escribir su nombre en el bloque: un nombre armado en
+    tiempo de ejecucion (`v=CLAUDE_PROJECT_""DIR; echo "${!v}"`), `${!prefijo@}`, `compgen`,
+    `eval`, `source`/`.` de otro fichero, una funcion o alias definidos fuera;
+  - lo que un comando CALCULA a partir del valor: `${PWD//${PROJECT_DIR}/}`, `sed`, `dirname`
+    pueden dar vacio con un valor no vacio;
+  - vaciar PWD antes del respaldo (`PWD=`, `unset PWD`);
+  - comandos fuera de un bloque (prosa con `codigo en linea` que el agente copie);
+  - la forma permitida escapada o entre comillas simples da un literal, no la ruta (nunca vacio).
+
+Alternativas descartadas: `bash -n` solo valida sintaxis, no dice que corre antes de que; un
+parser de verdad (shfmt --to-json, bashlex) es una dependencia, y el plugin no tiene ninguna (si
+algun dia hace falta, esa es la salida, no otra heuristica); ejecutar los bloques tiene efectos
+(mkdir, cat >, git commit). La version por analisis de 2.39.3 cayo tres rondas seguidas de Codex,
+cada una por otra forma (if, heredoc, subshell, `$(...)` multilinea, `<<"1"`).
 
 Bloque de shell = fence (``` o ~~~, con sangria, dentro de una cita `>` o sin ella) SIN etiqueta
 o cuya primera palabra de info es bash, sh, shell, zsh o console. Un comando sin etiqueta se
 ejecuta igual (checkpoint-3t Step 6c lo tenia), asi que no queda fuera. Solo exime una etiqueta
 explicita de otro lenguaje (text, json, ...). Los ````markdown se recorren por dentro: un ```bash
-anidado en una plantilla de ficha tambien cuenta.
-
-Quita comentarios (`#` fuera de comillas, al inicio o tras un blanco), salvo en el cuerpo de un
-heredoc, que es texto y se revisa entero. Ante la duda, marca de mas antes que de menos.
+anidado en una plantilla de ficha tambien cuenta. La suite cruza esta cuenta con una en awk.
 
 Usage:
     check-project-dir-fallback.py [RUTA ...]    (ficheros .md o directorios; por defecto
@@ -57,198 +76,46 @@ SHELL = {"", "bash", "sh", "shell", "zsh", "console"}
 FENCE = re.compile(r"^(\s*(?:>\s?)*)\s*(`{3,}|~{3,})(.*)$")
 CITA = re.compile(r"^\s*>\s?")
 
-# Respaldo que no puede quedar vacio: `:-` seguido de $PWD, $(pwd), otro
-# ${CLAUDE_PROJECT_DIR:-...} (que R1 revisa por su cuenta) o un literal. Un respaldo que es otra
-# variable (`:-${EMPTY}`, `:-$HOME`) no vale: puede llegar vacia igual.
-CON_RESPALDO = (r":-(?=\$PWD\b|\$\{PWD\}|\$\(pwd\)|\$\{CLAUDE_PROJECT_DIR:-|[^$}\"']"
-                r"|\"\$PWD\b|\"\$\{PWD\}|\"[^$\"]|'[^'])")
-R1_NOMBRE = re.compile(r"(?<![A-Za-z0-9_])CLAUDE_PROJECT_DIR(?![A-Za-z0-9_])")
-R1_BUENO = re.compile(r"\$\{CLAUDE_PROJECT_DIR" + CON_RESPALDO)
-R2_USO = re.compile(r"\$(?:\{[#!]?)?PROJECT_DIR(?![A-Za-z0-9_])")
-R2_BUENO = re.compile(r"\$\{PROJECT_DIR" + CON_RESPALDO)
-R2_DEF = re.compile(r"^\s*(?:(?:export|readonly|local|declare(?:\s+-\w+)*)\s+)?PROJECT_DIR=")
-R2_READ = re.compile(r"^\s*read(?:\s+-\w+(?:\s+\S+)?)*\s+(?:\w+\s+)*PROJECT_DIR(?:\s|;|$)")
-# Delimitador: cualquier palabra (tambien `1`, `EOF.x`), con comillas o `\` delante. `<<<` es un
-# here-string, no un heredoc.
-HEREDOC = re.compile(r"(?<!<)<<(?!<)(-?)\s*\\?(['\"]?)([^\s'\"<>;|&()]+)\2")
-SUBST = re.compile(r"[$<>]\(")
-ABRE = re.compile(r"(?:^|[;&|]\s*|\b(?:then|do|else)\s+)(if|for|while|until|case|select)\b")
-CIERRA = re.compile(r"(?:^\s*|[;&|]\s*)(fi|done|esac)\b")
-ELSE = re.compile(r"(?:^\s*|[;&|]\s*)(else|elif)\b")
-
-
-def sin_comentario(linea):
-    """La linea sin su comentario: `#` fuera de comillas, al inicio o tras un blanco."""
-    q = None
-    i = 0
-    while i < len(linea):
-        c = linea[i]
-        if q:
-            if c == "\\" and q == '"':
-                i += 2
-                continue
-            if c == q:
-                q = None
-        elif c == "\\":
-            i += 2
-            continue
-        elif c in "'\"":
-            q = c
-        elif c == "#" and (i == 0 or linea[i - 1] in " \t;"):
-            return linea[:i]
-        i += 1
-    return linea
-
-
-def fin_de_palabra(s, i):
-    """Indice donde termina la palabra de shell que empieza en s[i] (respeta comillas y $())."""
-    q = None
-    prof = 0
-    while i < len(s):
-        c = s[i]
-        if q:
-            if c == "\\" and q == '"':
-                i += 2
-                continue
-            if c == q:
-                q = None
-        elif c == "\\":
-            i += 2
-            continue
-        elif c in "'\"":
-            q = c
-        elif s.startswith("$(", i) or s.startswith("${", i):
-            prof += 1
-            i += 2
-            continue
-        elif c in ")}" and prof:
-            prof -= 1
-        elif c in " \t;&|" and not prof:
-            return i
-        i += 1
-    return i
-
-
-def es_definicion(codigo):
-    """True si la linea (sin comentario) deja PROJECT_DIR definida para las lineas siguientes."""
-    if R2_READ.match(codigo):
-        return True
-    m = R2_DEF.match(codigo)
-    if not m:
-        return False
-    resto = codigo[fin_de_palabra(codigo, m.end()):].lstrip()
-    # `PROJECT_DIR=x cmd` solo la pone en el entorno de cmd; `| cmd` y `&` la asignan en un
-    # subshell, que no la deja en el shell que sigue.
-    return resto == "" or resto.startswith((";", "&&", "||"))
-
-
-def usos_malos(texto, nombre_re, bueno_re):
-    """Posiciones de menciones que no son la forma con respaldo."""
-    buenas = {m.start() + 2 for m in bueno_re.finditer(texto)}   # 2 = len('${')
-    return [m for m in nombre_re.finditer(texto) if m.start() not in buenas]
-
-
-def logicas(cuerpo, ini):
-    """Une las lineas que acaban en `\\`. Devuelve (numero de la primera, texto)."""
-    out = []
-    buf, num = None, None
-    for k, l in enumerate(cuerpo):
-        if buf is None:
-            buf, num = l, ini + k + 1
-        else:
-            buf = buf[:-1] + l
-        if not buf.endswith("\\"):
-            out.append((num, buf))
-            buf = None
-    if buf is not None:
-        out.append((num, buf))
-    return out
-
-
-def segmentos(codigo):
-    """Parte la linea en comandos por `;` de nivel superior (fuera de comillas y de $() / ${})."""
-    out = []
-    i = ini = 0
-    while i < len(codigo):
-        j = fin_de_palabra(codigo, i)
-        if j < len(codigo) and codigo[j] == ";" and not codigo.startswith(";;", j):
-            out.append(codigo[ini:j])
-            ini = j + 1
-        i = j + 1
-    out.append(codigo[ini:])
-    return out
-
-
-def usos_r2(texto):
-    return [m for m in R2_USO.finditer(texto) if not R2_BUENO.match(texto, m.start())]
+BLANCO = " \t"
+FORMA_R1 = "${CLAUDE_PROJECT_DIR:-$PWD}"
+CANONICA = 'PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"'
+NOMBRE_R1 = re.compile(r"(?<![A-Za-z0-9_])CLAUDE_PROJECT_DIR(?![A-Za-z0-9_])")
+NOMBRE_R2 = re.compile(r"(?<![A-Za-z0-9_])PROJECT_DIR(?![A-Za-z0-9_])")
+USO_R2 = re.compile(r"\$PROJECT_DIR(?![A-Za-z0-9_])|\$\{PROJECT_DIR\}")
 
 
 def revisar_bloque(cuerpo, ini):
-    """Fallos (linea, regla, texto) de un bloque.
-
-    La definicion se recuerda con la profundidad a la que se hizo: vale mientras no se salga de
-    ese nivel. Dentro de un if o de una funcion vale hasta su fi / } / else, no despues.
-    """
+    """Fallos (linea, regla, texto) de un bloque, segun el contrato del docstring."""
     fallos = []
-    def_prof = None      # profundidad de la definicion vigente, o None
-    prof = 0
-    subst = 0            # parentesis abiertos de un $( / <( / >( que sigue en otra linea
-    heredocs = []        # terminadores pendientes, en orden
-    for num, linea in logicas(cuerpo, ini):
-        if heredocs:
-            term, quitar_tabs = heredocs[0]
-            if (linea.lstrip("\t") if quitar_tabs else linea) == term:
-                heredocs.pop(0)
-                continue
-            # Cuerpo de heredoc: texto que se escribe o se ejecuta despues. Se revisa entero y
-            # nada aqui define la variable.
-            if usos_malos(linea, R1_NOMBRE, R1_BUENO):
-                fallos.append((num, "R1", linea.strip()))
-            if def_prof is None and usos_r2(linea):
-                fallos.append((num, "R2", linea.strip()))
+    codigo = []          # (numero, linea) de las lineas de codigo
+    anterior = ""
+    for k, linea in enumerate(cuerpo):
+        num = ini + k + 1
+        comentario = linea.lstrip(BLANCO).startswith("#") and not anterior.endswith("\\")
+        anterior = linea
+        if comentario:
+            if "$" in linea or "`" in linea:
+                if NOMBRE_R1.search(linea):
+                    fallos.append((num, "R1", linea.strip()))
+                elif NOMBRE_R2.search(linea):
+                    fallos.append((num, "R2", linea.strip()))
             continue
-        codigo = sin_comentario(linea)
-        if usos_malos(codigo, R1_NOMBRE, R1_BUENO):
+        if not linea.strip(BLANCO):
+            continue
+        codigo.append((num, linea))
+        if NOMBRE_R1.search(linea.replace(FORMA_R1, "")):
             fallos.append((num, "R1", linea.strip()))
-        r2_mal = False
-        # Dentro de un $(...) / <(...) de varias lineas todo corre en un subshell: nada define.
-        en_subst = subst > 0
-        for seg in segmentos(codigo):
-            s = seg.strip()
-            # Cierres antes que el resto: `}`, `)`, fi/done/esac y else/elif (otra rama).
-            if re.match(r"^[})](?:\s|$)", s):
-                prof -= 1
-                s = s[1:].strip()
-            prof -= len(CIERRA.findall(s))
-            prof = max(prof, 0)
-            if def_prof is not None and (prof < def_prof or
-                                         (prof == def_prof and ELSE.search(s) and prof > 0)):
-                def_prof = None
-            # Aperturas: funcion `f() {`, grupo `{`, subshell `(`, if/for/while/until/case.
-            m = re.match(r"^function\s+[\w.-]+\s*(?:\(\))?\s*\{|^[\w.-]+\s*\(\)\s*\{"
-                         r"|^\{(?=\s|$)|^\((?!\()", s)
-            if m:
-                prof += 1
-                s = s[m.end():].strip()
-            prof += len(ABRE.findall(s))
-            malos = usos_r2(s)
-            if es_definicion(s) and not en_subst:
-                fin = R2_DEF.match(s)
-                rhs = s[:fin_de_palabra(s, fin.end())] if fin else s
-                if def_prof is None and usos_r2(rhs):
-                    r2_mal = True
-                elif def_prof is None or prof < def_prof:
-                    def_prof = prof
-                continue
-            if malos and def_prof is None:
-                r2_mal = True
-        if r2_mal:
+    if not any(NOMBRE_R2.search(l) for _, l in codigo):
+        return sorted(fallos)
+    canonica = codigo[0][1].strip(BLANCO) == CANONICA
+    for pos, (num, linea) in enumerate(codigo):
+        if pos == 0 and canonica:
+            continue
+        if not canonica and NOMBRE_R2.search(linea):
             fallos.append((num, "R2", linea.strip()))
-        if subst or SUBST.search(codigo):
-            subst = max(subst + codigo.count("(") - codigo.count(")"), 0)
-        for h in HEREDOC.finditer(codigo):
-            heredocs.append((h.group(3), h.group(1) == "-"))
-    return fallos
+        elif NOMBRE_R2.search(USO_R2.sub("", linea)):
+            fallos.append((num, "R2", linea.strip()))
+    return sorted(fallos)
 
 
 def bloques(lineas, base):

@@ -1,6 +1,31 @@
 # Changelog
 
 
+## [2.41.4] - 2026-09-28
+Origen: pendiente `p-eff86a1d3a`. El checker de ruta del proyecto de 2.39.3 cerro con la tercera ronda
+de Codex en `break`. Cada ronda habia roto otra forma del analisis de bash (if, heredoc, subshell,
+`$(...)` de varias lineas, `<<"1"`).
+
+### Changed
+- **`check-project-dir-fallback.py` ya no analiza bash: exige formas exactas.** La pregunta "esta
+  `$PROJECT_DIR` definida antes de usarse" no se puede responder sin un parser de bash completo, y el
+  plugin no tiene dependencias. Ahora las plantillas se escriben para cumplir un contrato que se
+  comprueba comparando texto:
+  - R1: en codigo, `CLAUDE_PROJECT_DIR` solo aparece como `${CLAUDE_PROJECT_DIR:-$PWD}`.
+  - R2: si un bloque nombra `PROJECT_DIR`, su primera linea de codigo es exactamente
+    `PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"`, y despues solo aparece como
+    `$PROJECT_DIR` o `${PROJECT_DIR}`.
+  - R3: un comentario que nombra cualquiera de las dos no lleva `$` ni backtick.
+  - Lo seguro que no calce con el contrato falla. El docstring nombra que garantiza y los limites
+    aceptados, por clase.
+- Los comentarios al final de la linea canonica y de las lineas `ENCODED=` pasan a su propia linea
+  (commands/migrate.md, setup-memory.md, templates/backfill-3t.md, checkpoint-3t.md, consolidate-3t.md,
+  enrich-3t.md). Los cinco compartidos entraron con 2.41.3. El comportamiento del shell no cambia.
+- `test-project-dir-fallback.sh`: los casos rojos de las tres rondas de 2.39.3 siguen en rojo. Hay
+  casos nuevos para cada regla del contrato, para un tabulador vertical o un NBSP delante de la linea
+  canonica, y una ejecucion real en bash, sin entorno, de la linea canonica y de la forma de R1. Cada
+  una de 16 mutaciones del checker, corridas a mano, tumba la suite.
+
 ## [2.41.3] - 2026-09-28
 Origen: pendiente `p-8472f7f4b7`. Codex revisó 2.39.1 y dio `break`. El hallazgo de severidad alta:
 `/setup-memory`, si el agente lo corre desde un subdirectorio, crea `memory/` y su config en ese

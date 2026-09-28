@@ -9,19 +9,25 @@
 # uso, y el primer barrido, por una sola grafia y solo en templates/, dejo cinco bloques en
 # commands/. Sin esta suite, el siguiente bloque que se escriba puede volver a caer.
 #
+# 2.41.2: el checker es un CONTRATO de formas exactas, no un analizador de bash (ver su docstring).
 # Lo que esta prueba defiende:
-#   A. cada forma que el adversario encontro en 2.39.1 da rojo en la linea exacta:
-#      ENCODED=$(echo "$CLAUDE_PROJECT_DIR"), mkdir, cat >, if [ -f ] con $PROJECT_DIR sin definir;
-#   B. tambien ${CLAUDE_PROJECT_DIR} con llaves y sin ':-', los respaldos vacios (:-}, :-""}, :-''}),
-#      ${#...}, el nombre en aritmetica y una definicion DESPUES del uso;
+#   A. cada forma que el adversario encontro en 2.39.1 da rojo en la linea exacta;
+#   B. R1: toda forma de CLAUDE_PROJECT_DIR distinta de ${CLAUDE_PROJECT_DIR:-$PWD} falla, tambien
+#      las seguras ($(pwd), un literal, "$PWD" entre comillas): el contrato marca de mas;
 #   C. un bloque anidado en un ````markdown, uno con sangria, uno dentro de una cita `>` y uno SIN
 #      etiqueta cuentan (el adversario de 2.39.3 hallo un `git commit` ejecutable sin etiqueta);
-#   D. no cuentan como definicion: la asignacion dentro de un if, con && delante, dentro de una
-#      funcion, en un heredoc, como prefijo de un comando, ni la que se usa a si misma sin respaldo;
-#      tampoco se escapa $FOO$PROJECT_DIR;
-#   E. sin falso positivo: ${CLAUDE_PROJECT_DIR:-$PWD}, definicion arriba (tambien con export,
-#      local, declare, read), comentarios, prosa en un bloque ```text y $CLAUDE_PLUGIN_ROOT;
-#   F. el arbol real (templates/ + commands/) esta en verde, y el recorrido ve TODOS los bloques
+#   D. el corpus de las tres rondas de Codex de 2.39.3 (if, funcion, heredoc, subshell, prefijo,
+#      autorreferencia...) sigue en rojo: sin la linea canonica, toda linea que nombra PROJECT_DIR
+#      falla;
+#   E. R2 con la linea canonica: falla si no es la primera, si lleva comentario, si se repite, y
+#      toda forma posterior que no sea $PROJECT_DIR o ${PROJECT_DIR} (reasignar, unset, read,
+#      local, ${PROJECT_DIR:=x}, ${#PROJECT_DIR});
+#      Y ejecuta en bash la linea canonica y la forma de R1, sin entorno: no dan vacio;
+#   F. R3: un comentario que nombra la variable con `$` o backtick falla, y una linea `#` tras una
+#      continuacion `\` cuenta como codigo;
+#   G. sin falso positivo: la forma canonica con sus usos, ${CLAUDE_PROJECT_DIR:-$PWD}, notas en
+#      comentario sin `$`, prosa en ```text, $CLAUDE_PLUGIN_ROOT y $MY_PROJECT_DIR;
+#   H. el arbol real (templates/ + commands/) esta en verde, y el recorrido ve TODOS los bloques
 #      de shell: su cuenta coincide con una cuenta independiente de las fences de apertura.
 #
 # Uso: test-project-dir-fallback.sh   (exit 0 = todo verde)
@@ -85,7 +91,7 @@ if [ ! -f "${PROJECT_DIR}/memory/.memory-config" ]; then echo no; fi
 ```
 EOF
 # Definida en OTRO bloque: es otra llamada Bash, la variable ya no existe.
-rojo otro-bloque "6:R2" <<'EOF'
+rojo otro-bloque "2:R2 6:R2" <<'EOF'
 ```bash
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
 ```
@@ -95,7 +101,7 @@ ls "$PROJECT_DIR/memory"
 ```
 EOF
 
-echo "B. llaves sin ':-' y definicion tardia"
+echo "B. R1: solo \${CLAUDE_PROJECT_DIR:-\$PWD}"
 rojo llaves "2:R1 3:R1 4:R1" <<'EOF'
 ```bash
 D="${CLAUDE_PROJECT_DIR}/memory"
@@ -125,7 +131,7 @@ n=${#PROJECT_DIR}
 D="${PROJECT_DIR:-""}/m"
 ```
 EOF
-rojo def-tardia "2:R2" <<'EOF'
+rojo def-tardia "2:R2 3:R2" <<'EOF'
 ```sh
 ls "$PROJECT_DIR"
 PROJECT_DIR="$PWD"
@@ -159,15 +165,15 @@ rojo sin-etiqueta "2:R2" <<'EOF'
 git -C "$PROJECT_DIR" commit -m x
 ```
 EOF
-rojo continuacion "2:R1" <<'EOF'
+rojo continuacion "3:R1" <<'EOF'
 ```bash
 python3 x.py \
   --dir "$CLAUDE_PROJECT_DIR"
 ```
 EOF
 
-echo "D. lo que NO define la variable"
-rojo def-en-if "5:R2" <<'EOF'
+echo "D. corpus de 2.39.3: sin linea canonica todo falla"
+rojo def-en-if "3:R2 5:R2" <<'EOF'
 ```bash
 if [ -d /x ]; then
   PROJECT_DIR=/x
@@ -175,7 +181,7 @@ fi
 ls "$PROJECT_DIR"
 ```
 EOF
-rojo def-otra-rama "5:R2" <<'EOF'
+rojo def-otra-rama "3:R2 5:R2" <<'EOF'
 ```bash
 if [ -d /x ]; then
   PROJECT_DIR=/x
@@ -184,13 +190,13 @@ else
 fi
 ```
 EOF
-rojo def-con-y "3:R2" <<'EOF'
+rojo def-con-y "2:R2 3:R2" <<'EOF'
 ```bash
 [ -d /x ] && PROJECT_DIR=/x
 ls "$PROJECT_DIR"
 ```
 EOF
-rojo def-en-funcion "5:R2" <<'EOF'
+rojo def-en-funcion "3:R2 5:R2" <<'EOF'
 ```bash
 f() {
   PROJECT_DIR=/x
@@ -198,7 +204,7 @@ f() {
 ls "$PROJECT_DIR"
 ```
 EOF
-rojo def-en-heredoc "6:R2" <<'EOF'
+rojo def-en-heredoc "4:R2 6:R2" <<'EOF'
 ```bash
 cat > /tmp/s.sh <<'SH'
 echo "script escrito para despues"
@@ -207,14 +213,14 @@ SH
 ls "$PROJECT_DIR"
 ```
 EOF
-rojo def-subshell "4:R2" <<'EOF'
+rojo def-subshell "2:R2 3:R2 4:R2" <<'EOF'
 ```bash
 PROJECT_DIR=/x | cat
 PROJECT_DIR=/y &
 ls "$PROJECT_DIR"
 ```
 EOF
-rojo def-en-function "5:R2" <<'EOF'
+rojo def-en-function "3:R2 5:R2" <<'EOF'
 ```bash
 function f {
   PROJECT_DIR=/x
@@ -222,7 +228,7 @@ function f {
 ls "$PROJECT_DIR"
 ```
 EOF
-rojo def-heredoc-escapado "6:R2" <<'EOF'
+rojo def-heredoc-escapado "4:R2 6:R2" <<'EOF'
 ```bash
 cat > /tmp/s.sh <<\SH
 echo "script escrito para despues"
@@ -231,7 +237,7 @@ SH
 ls "$PROJECT_DIR"
 ```
 EOF
-rojo def-en-subst "8:R2" <<'EOF'
+rojo def-en-subst "3:R2 7:R2 8:R2" <<'EOF'
 ```bash
 x=$(
   PROJECT_DIR=/x
@@ -242,7 +248,7 @@ diff <(
 ls "$PROJECT_DIR"
 ```
 EOF
-rojo def-heredoc-numero "6:R2" <<'EOF'
+rojo def-heredoc-numero "4:R2 6:R2" <<'EOF'
 ```bash
 cat > /tmp/s.sh <<"1"
 echo "script escrito para despues"
@@ -251,7 +257,7 @@ PROJECT_DIR=/x
 ls "$PROJECT_DIR"
 ```
 EOF
-rojo def-prefijo "3:R2" <<'EOF'
+rojo def-prefijo "2:R2 3:R2" <<'EOF'
 ```bash
 PROJECT_DIR=/x make build
 ls "$PROJECT_DIR"
@@ -264,14 +270,122 @@ ls "$PROJECT_DIR"
 ```
 EOF
 
-echo "E. sin falso positivo"
+rojo seguros-no-permitidos "2:R1 3:R1 4:R1 5:R1" <<'EOF'
+```bash
+A="${CLAUDE_PROJECT_DIR:-$(pwd)}"
+B="${CLAUDE_PROJECT_DIR:-/srv/proyecto}"
+C="${CLAUDE_PROJECT_DIR:-"$PWD"}"
+D="${!CLAUDE_PROJECT_DIR:-$PWD}"
+```
+EOF
+
+echo "E. R2 con la linea canonica"
+rojo canonica-no-primera "3:R2 4:R2" <<'EOF'
+```bash
+cd /tmp
+PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+ls "$PROJECT_DIR"
+```
+EOF
+rojo canonica-con-comentario "2:R2 3:R2" <<'EOF'
+```bash
+PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"   # nota
+ls "$PROJECT_DIR"
+```
+EOF
+rojo canonica-casi "2:R2 3:R2" <<'EOF'
+```bash
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
+ls "$PROJECT_DIR"
+```
+EOF
+rojo despues-de-canonica "4:R2 5:R2 6:R2 7:R2 8:R2 9:R2 10:R2 11:R2 12:R2" <<'EOF'
+```bash
+PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+ls "$PROJECT_DIR" "${PROJECT_DIR}"
+PROJECT_DIR=""
+unset PROJECT_DIR
+read -r PROJECT_DIR < /tmp/ruta
+f() { local PROJECT_DIR=; }
+: "${PROJECT_DIR:=}"
+n=${#PROJECT_DIR}
+export PROJECT_DIR
+PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+echo "${PROJECT_DIR%/}"
+```
+EOF
+
+# Tabulador vertical o NBSP delante: Python los toma por sangria, bash no, y la linea deja de ser
+# una asignacion (Codex, ronda 1 de 2.41.4).
+# Por redireccion y no por tuberia: `printf | rojo` correria rojo en un subshell y perderia N y FAIL.
+rojo canonica-tab-vertical "2:R2 3:R2" < <(
+  printf '```bash\n\vPROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"\nls "$PROJECT_DIR"\n```\n')
+rojo canonica-nbsp "2:R2 3:R2" < <(
+  printf '```bash\n\302\240PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"\nls "$PROJECT_DIR"\n```\n')
+# Lo que el contrato da por bueno, ejecutado de verdad: sin entorno (CLAUDE_PROJECT_DIR vacia o sin
+# definir, PROJECT_DIR sin definir), la linea canonica deja PROJECT_DIR no vacia, y la forma de R1
+# tampoco da vacio. Se extraen del propio checker para medir el texto que exige.
+CANON=$(python3 -c 'import importlib.util,sys; s=importlib.util.spec_from_file_location("c",sys.argv[1]); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); print(m.CANONICA)' "$CHK")
+FORMA=$(python3 -c 'import importlib.util,sys; s=importlib.util.spec_from_file_location("c",sys.argv[1]); m=importlib.util.module_from_spec(s); s.loader.exec_module(m); print(m.FORMA_R1)' "$CHK")
+for envset in "" "CLAUDE_PROJECT_DIR="; do
+  v=$(cd "$TMP" && env -i PATH="$PATH" $envset bash -c "$CANON"'; printf %s "$PROJECT_DIR"')
+  check "canonica en bash (${envset:-sin entorno}): PROJECT_DIR = cwd" "$v" "$(cd "$TMP" && pwd -P)"
+  v=$(cd "$TMP" && env -i PATH="$PATH" $envset bash -c 'printf %s "'"$FORMA"'"')
+  check "forma R1 en bash (${envset:-sin entorno}): = cwd" "$v" "$(cd "$TMP" && pwd -P)"
+done
+
+echo "F. R3: comentarios"
+rojo comentario-con-dolar "2:R1 3:R2 4:R1 5:R1" <<'EOF'
+```bash
+# usa $CLAUDE_PROJECT_DIR
+# y ${PROJECT_DIR}
+# o $(( CLAUDE_PROJECT_DIR + 1 ))
+# o `printenv CLAUDE_PROJECT_DIR`
+```
+EOF
+rojo comentario-tras-continuacion "3:R1" <<'EOF'
+```bash
+echo a \
+# CLAUDE_PROJECT_DIR
+```
+EOF
+rojo comentario-en-heredoc "4:R2" <<'EOF'
+```bash
+PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+cat > "$PROJECT_DIR/x.sh" <<SH
+# ruta: ${PROJECT_DIR:-}
+SH
+```
+EOF
+
+echo "G. sin falso positivo"
+verde canonica <<'EOF'
+```bash
+# el shell no conserva variables; CLAUDE_PROJECT_DIR llega vacia y PROJECT_DIR no existe
+PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+ENCODED=$(echo "$PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
+if [ -d "${PROJECT_DIR}/memory" ]; then
+  for f in "$PROJECT_DIR"/memory/*.md; do wc -l "$f"; done
+fi
+cat > "$PROJECT_DIR/memory/.memory-config" <<'CFG'
+journal_strict=1
+CFG
+echo "$FOO$PROJECT_DIR"
+```
+
+1. Con sangria:
+   ```bash
+   PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+   ls "$PROJECT_DIR"
+   ```
+EOF
 verde respaldo <<'EOF'
 ```bash
+# CLAUDE_PROJECT_DIR llega vacia al Bash del agente
 ENCODED=$(echo "${CLAUDE_PROJECT_DIR:-$PWD}" | sed 's/[^A-Za-z0-9]/-/g')
-PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"   # definicion y uso en la misma linea
-mkdir -p "$PROJECT_DIR/memory"
-export PROJECT_DIR=/x; ls "$PROJECT_DIR"
-python3 "${CLAUDE_PLUGIN_ROOT}/bin/x.py" "$MY_PROJECT_DIR"
+X="${Y:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+python3 "${CLAUDE_PLUGIN_ROOT}/bin/x.py" "$MY_PROJECT_DIR" "$PROJECT_DIRS"
+ls x   # comentario final sin nombrar la variable
 ```
 EOF
 verde prosa <<'EOF'
@@ -282,68 +396,7 @@ verde prosa <<'EOF'
 Prosa fuera de bloque: `$CLAUDE_PROJECT_DIR` y $PROJECT_DIR.
 EOF
 
-verde here-string <<'EOF'
-```bash
-grep -c x <<<"hola"
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
-n=$(ls "$PROJECT_DIR" | wc -l)
-ls "$PROJECT_DIR"
-```
-EOF
-verde respaldos-validos <<'EOF'
-```bash
-A="${CLAUDE_PROJECT_DIR:-$(pwd)}"
-B="${CLAUDE_PROJECT_DIR:-/srv/proyecto}"
-C="${CLAUDE_PROJECT_DIR:-"$PWD"}"
-PROJECT_DIR=/x && ls "$PROJECT_DIR"
-```
-EOF
-verde definiciones <<'EOF'
-```bash
-cat > /tmp/cfg <<'CFG'
-journal_strict=1
-CFG
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-\
-$PWD}"
-ls "$PROJECT_DIR"
-```
-
-```bash
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
-if [ -d "$PROJECT_DIR/memory" ]; then
-  for f in "$PROJECT_DIR"/memory/*.md; do wc -l "$f"; done
-fi
-```
-
-```bash
-export PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"; ls "$PROJECT_DIR"
-```
-
-```bash
-declare -r PROJECT_DIR=/x
-ls "$PROJECT_DIR"
-```
-
-```bash
-read -r PROJECT_DIR < /tmp/ruta
-ls "$PROJECT_DIR"
-```
-
-```bash
-PROJECT_DIR=/x   # comentario con $CLAUDE_PROJECT_DIR y $PROJECT_DIR
-if [ -d "$PROJECT_DIR" ]; then echo "$PROJECT_DIR"; fi
-cat <<EOF2
-dentro de un heredoc tambien: $PROJECT_DIR
-EOF2
-```
-
-```bash
-# CLAUDE_PROJECT_DIR llega vacia: por eso el respaldo
-f() { local PROJECT_DIR="${PROJECT_DIR:-$PWD}"; ls "$PROJECT_DIR"; }
-```
-EOF
-
-echo "F. arbol real"
+echo "H. arbol real"
 out=$(python3 "$CHK" "$PLUGIN_ROOT/templates" "$PLUGIN_ROOT/commands" 2>&1); rc=$?
 check "templates/ + commands/: exit 0" "$rc" "0"
 [ "$rc" -eq 0 ] || printf '%s\n' "$out" | sed 's/^/       /'
@@ -376,7 +429,7 @@ check "cuenta independiente de fences de shell = la del recorrido" "$indep" "${n
 
 echo
 # Si un cambio salta casos en silencio, el total baja: se fija aqui.
-ESPERADOS=62
-check "corrieron los $ESPERADOS asertos" "$N" "$ESPERADOS"
+ESPERADOS=84
+check "corrieron los $ESPERADOS asertos anteriores (este es el siguiente)" "$N" "$ESPERADOS"
 [ "$FAIL" -eq 0 ] && echo "PASS $N/$N" || echo "FAIL (ver arriba)"
 exit $FAIL

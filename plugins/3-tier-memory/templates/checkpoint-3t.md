@@ -60,7 +60,7 @@ nada). Este paso lo detecta y recupera ese tramo — el que va del ultimo checkp
 hasta la ultima compactacion. Lo posterior a la compactacion ya lo tienes vivo.
 
 ```bash
-# CLAUDE_PROJECT_DIR llega VACIA a las llamadas Bash del agente (medido): de ahi el $PWD. Si aun asi
+# CLAUDE_PROJECT_DIR llega VACIA a las llamadas Bash del agente (medido): de ahi el respaldo a PWD. Si aun asi
 # el directorio no calza, el script busca el <session-id>.jsonl bajo ~/.claude/projects/*/.
 ENCODED=$(echo "${CLAUDE_PROJECT_DIR:-$PWD}" | sed 's/[^A-Za-z0-9]/-/g')
 JSONL_DIR="$HOME/.claude/projects/$ENCODED"
@@ -927,7 +927,8 @@ else
   [ -n "$_B" ] || _B=$(dirname "$(find "$HOME/.claude/plugins" -name "stamp-session-id.py" -path "*/3-tier-memory/*" 2>/dev/null | sort -V | tail -1)")
   STAMP=${_B:+$_B/stamp-session-id.py}
 fi
-ENCODED=$(echo "${CLAUDE_PROJECT_DIR:-$PWD}" | sed 's/[^A-Za-z0-9]/-/g')   # CLAUDE_PROJECT_DIR llega vacia al Bash del agente
+# CLAUDE_PROJECT_DIR llega vacia al Bash del agente
+ENCODED=$(echo "${CLAUDE_PROJECT_DIR:-$PWD}" | sed 's/[^A-Za-z0-9]/-/g')
 JSONL_DIR="$HOME/.claude/projects/$ENCODED"
 if [ -n "$STAMP" ] && [ -f "$STAMP" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
   python3 "$STAMP" "$SESSION_FILE" "$CLAUDE_CODE_SESSION_ID" --jsonl-dir "$JSONL_DIR"
