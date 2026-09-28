@@ -10,10 +10,17 @@ El aviso quedaba en el transcript pero NO llegaba al modelo: ver bin/verify-hook
 """
 import json, glob, os, re, sys, collections
 DESDE, HASTA = (sys.argv[1:3] + ["2026-09-19T20", "9999"])[:2]
+# Se excluye el repo del plugin por su raiz PRINCIPAL, no por el cwd: desde un worktree el cwd es
+# otro directorio y las sesiones del repo quedaban dentro (adversario de 2.41.0).
+import subprocess
+_comun = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                        capture_output=True, text=True).stdout.strip()
+_raiz = os.path.dirname(_comun) if _comun else os.getcwd()
+PROPIO = re.sub(r"[^A-Za-z0-9]", "-", _raiz)
 root = os.path.expanduser("~/.claude/projects/")
 aviso_tab = collections.Counter(); proys_aviso = set(); orden = collections.Counter()
 for f in glob.glob(root + "*/*.jsonl"):
-    if "/" + re.sub(r"[^A-Za-z0-9]", "-", os.getcwd()) + "/" in f: continue
+    if os.path.basename(os.path.dirname(f)).startswith(PROPIO): continue   # el repo y sus worktrees
     usos = {}; salidas = set(); avisos = set(); commits = []; n = 0
     for line in open(f, encoding="utf-8", errors="replace"):
         n += 1
