@@ -588,6 +588,46 @@ echo "== transcript ilegible o ausente: silencio (falla abierto) =="
 chk "sin transcript" "" "$(printf '{"stop_hook_active":false}' | bash "$HOOK" 2>/dev/null)"
 chk "stdin basura" "" "$(printf 'no-json' | bash "$HOOK" 2>/dev/null)"
 
+echo "== Step 7a (2.40.0): la salida del audit tiene que estar en la respuesta del turno del checkpoint =="
+# Antes lo vigilaba checkpoint-audit-nudge.sh en el commit, que va ANTES del audit: avisaba en
+# falso en casi todo checkpoint bien hecho (50 de 67 sesiones reales). Ahora lo mira este hook.
+falta7a() { printf '%s' "$1" | grep -c 'La salida de Step 7a' || true; }
+armar "$M" "$FX/snippet-1813.txt"
+sed -i.bak 's/^date: 2026-09-22$/date: 2026-09-28/' "$F" && rm -f "$F.bak"
+python3 "$BIN/print-como-retomar.py" "$F" > "$T/snip.txt"
+python3 "$BIN/checkpoint-audit.py" "$M" --session-file "$F" --no-git > "$T/audit.txt" || true
+SALT=$(grep -E '^  SALTADO' "$T/audit.txt" | grep -v ' snippet\.' | awk '{print $2}' | head -1)
+chk "el fixture tiene al menos un SALTADO fuera del snippet (si no, el caso 3 no prueba nada)" "1" "$([ -n "$SALT" ] && echo 1 || echo 0)"
+cat "$T/snip.txt" > "$T/r-sin.txt"
+tx "$T/t.jsonl" skill "$F" "$T/r-sin.txt" -
+chk "sin la salida del audit: lo reclama" "1" "$(falta7a "$(corre "$T/t.jsonl" false -)")"
+cat "$T/snip.txt" "$T/audit.txt" > "$T/r-con.txt"
+tx "$T/t.jsonl" skill "$F" "$T/r-con.txt" -
+chk "con la salida literal del audit: calla" "0" "$(falta7a "$(corre "$T/t.jsonl" false -)")"
+{ cat "$T/snip.txt"; grep 'resumen:' "$T/audit.txt"; } > "$T/r-solo-resumen.txt"
+tx "$T/t.jsonl" skill "$F" "$T/r-solo-resumen.txt" -
+O=$(corre "$T/t.jsonl" false -)
+chk "solo la linea resumen, callando un SALTADO: lo reclama" "1" "$(falta7a "$O")"
+chk "  y nombra la clave del SALTADO" "1" "$(printf '%s' "$O" | grep -c "$SALT")"
+# La salida solo en el tool_result (el usuario no la ve) no cuenta.
+python3 - "$T/t.jsonl" "$T/audit.txt" <<'PY'
+import json, sys
+t, audit = sys.argv[1], open(sys.argv[2]).read()
+recs = [json.loads(l) for l in open(t)]
+recs.insert(len(recs) - 1, {"type": "assistant", "message": {"role": "assistant", "content": [
+    {"type": "tool_use", "id": "t9", "name": "Bash", "input": {"command": "python3 checkpoint-audit.py memory"}}]}})
+recs.insert(len(recs) - 1, {"type": "user", "message": {"role": "user", "content": [
+    {"type": "tool_result", "tool_use_id": "t9", "content": audit}]}})
+recs[-1]["message"]["content"] = [{"type": "text", "text": open(sys.argv[1].replace("t.jsonl", "snip.txt")).read()}]
+open(t, "w").write("\n".join(json.dumps(r) for r in recs) + "\n")
+PY
+chk "la salida solo en un tool_result no cuenta" "1" "$(falta7a "$(corre "$T/t.jsonl" false -)")"
+tx "$T/t.jsonl" print "$F" "$T/r-sin.txt" -
+chk "un turno que solo reimprime el snippet no lo exige" "0" "$(falta7a "$(corre "$T/t.jsonl" false -)")"
+sed -i.bak 's/^date: 2026-09-28$/date: 2026-09-22/' "$F" && rm -f "$F.bak"
+tx "$T/t.jsonl" skill "$F" "$T/r-sin.txt" -
+chk "una ficha anterior al corte no lo exige" "0" "$(falta7a "$(corre "$T/t.jsonl" false -)")"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

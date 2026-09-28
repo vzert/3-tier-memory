@@ -12,6 +12,9 @@
 # requeriria un hook que audite la respuesta final". Este es ese hook. La instruccion "pega la
 # salida del script tal cual" se omitio dos veces en la misma sesion: la prosa no es garantia.
 #
+# Desde 2.40.0 tambien exige la salida de Step 7a (chequeo 4 de `revisar`): antes lo vigilaba un
+# PreToolUse en el commit del checkpoint, que es ANTERIOR al audit y avisaba en falso.
+#
 # Ademas corre `checkpoint-audit.py --solo-snippet` sobre la ficha: Step 7a corre ANTES de que
 # Step 8 escriba el snippet, asi que los checks `snippet.*` (defectos 1 y 2: Proximo paso
 # bloqueado por un tercero, caso 4 generico, paso sin `_id`) nunca veian el snippet final en el
@@ -164,6 +167,7 @@ expiraciones = []      # tool_use_id de cada `expire-pendientes.py --apply` del 
 resultados = {}        # tool_use_id -> texto del tool_result
 textos = []            # lo que el usuario vio: bloques text del assistant
 disparo = False
+por_checkpoint = False # el turno corrio /checkpoint-3t (no solo reimprimio un snippet)
 fichas = []            # fichas que el turno CERRO: argumento de print-como-retomar.py o Edit con marca
 escritas = []          # fichas escritas con Write (Step 2 del checkpoint, o /backfill-3t)
 SESION_RE = re.compile(r"(?:^|/)memory/sessions/[^/]+\.md$")
@@ -191,7 +195,7 @@ for r in turno:
         txt = c if isinstance(c, str) else " ".join(
             b.get("text", "") for b in (c or []) if isinstance(b, dict) and b.get("type") == "text")
         if "<command-name>/checkpoint-3t</command-name>" in txt:
-            disparo = True
+            disparo = por_checkpoint = True
         continue
     if r.get("type") != "assistant" or not isinstance(c, list):
         continue
@@ -206,7 +210,7 @@ for r in turno:
         nombre = b.get("name") or ""
         inp = b.get("input") or {}
         if nombre == "Skill" and str(inp.get("skill", "")).split(":")[-1] == "checkpoint-3t":
-            disparo = True
+            disparo = por_checkpoint = True
         elif nombre == "Bash":
             cmd = inp.get("command") or ""
             # Disparo por CAMBIO DE ESTADO (2.33.1, p-c72a33ae7a): un turno que cierra, caduca o
@@ -414,6 +418,36 @@ def revisar(ficha):
     except Exception:
         pass
 
+    # 4. La salida de Step 7a en la respuesta (2.40.0, p-532174ff63). Hasta 2.39 lo vigilaba
+    # `checkpoint-audit-nudge.sh`, un PreToolUse enganchado al commit del checkpoint — y el commit
+    # es Step 6, ANTES de Step 7a, que no puede ir antes porque mide ese commit. Medido sobre los
+    # transcripts reales de otros proyectos: en 50 de 67 sesiones el primer commit de checkpoint
+    # precedia al audit, asi que el aviso saltaba en casi todo checkpoint bien hecho, y ademas
+    # avisaba en falso en 41 de 81 commits con una corrida real (el agente armaba la ruta con
+    # `JBIN=$(cat ...)`). Aqui se mira al final del turno, cuando el audit ya tuvo que correr, y no
+    # se infiere nada del transcript: el hook corre el audit el mismo y exige en la respuesta su
+    # linea `resumen:` y la clave de cada paso que HOY sale SALTADO. No compara los numeros del
+    # resumen: Step 8 corre despues de 7a y cambia legitimamente los checks del snippet. Solo en un
+    # turno que corrio /checkpoint-3t, y solo para fichas desde el corte: una anterior se cerro con
+    # el aviso viejo.
+    if por_checkpoint and m_fecha and m_fecha.group(1) >= "2026-09-28":
+        faltas = []
+        if not re.search(r"resumen:\s*hecho=\d+", visto):
+            faltas.append("la linea `resumen:`")
+        try:
+            r = subprocess.run([sys.executable, os.path.join(BIN, "checkpoint-audit.py"), memory_dir,
+                                "--session-file", ficha, "--json", "--no-git"],
+                               capture_output=True, text=True, timeout=60)
+            saltados = [x["clave"] for x in json.loads(r.stdout or "[]")
+                        if x.get("estado") == "SALTADO" and not x["clave"].startswith("snippet.")]
+        except Exception:
+            saltados = []
+        faltas += [f"`{c}` (SALTADO)" for c in saltados if c not in visto]
+        if faltas:
+            problemas.append(pref +
+                "La salida de Step 7a no esta en tu respuesta: falta " + ", ".join(faltas) + ". Corre "
+                f"`python3 \"$JBIN/checkpoint-audit.py\" \"{memory_dir}\" --session-file \"{ficha}\" "
+                "--repo-root .` y pega su salida tal cual; un SALTADO se arregla o se declara, no se calla.")
 
 
 for _f in fichas:

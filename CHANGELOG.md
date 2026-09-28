@@ -1,6 +1,33 @@
 # Changelog
 
 
+## [2.41.0] - 2026-09-28
+Origen: pendiente `p-532174ff63`, verificar el aviso del Step 7a en instalaciones reales. Medido
+sobre los transcripts de los otros proyectos que usan el plugin:
+- Avisa cuando el audit no corrio: si. Lo hizo en 45 commits reales de seis proyectos, y el aviso
+  llega al agente (registro `hook_success` del PreToolUse).
+- Pero esta enganchado al momento equivocado. El commit del checkpoint es Step 6 y el audit es
+  Step 7a, que no puede ir antes porque mide ese commit. En 50 de 67 sesiones reales el primer
+  commit de checkpoint precedia al audit: el aviso saltaba en casi todo checkpoint bien hecho.
+- Y avisaba en falso en 41 de 81 commits que si tenian una corrida real antes: el agente arma la
+  ruta con `JBIN=$(cat ...)`, y el hook descarta toda sustitucion de comandos desde 2.30.0.
+
+### Changed
+- **La vigilancia del Step 7a pasa del commit al cierre del turno.** `checkpoint-close-guard.sh`
+  (Stop) corre el mismo `checkpoint-audit.py` sobre la ficha final y exige en la respuesta su linea
+  `resumen:` y la clave de cada paso que hoy sale `SALTADO` (sin contar los `snippet.*`, que ya
+  revisaba). No infiere nada del transcript ni compara los numeros del resumen: Step 8 corre despues
+  de 7a y cambia legitimamente los checks del snippet. Solo en un turno que corrio `/checkpoint-3t`,
+  y solo para fichas con fecha desde 2026-09-28.
+
+### Removed
+- **`checkpoint-audit-nudge.sh` y su test.** El PreToolUse del commit se retira de `hooks.json`.
+
+### Known limits
+- Si el turno no escribio ni imprimio ninguna ficha, el guard no tiene que revisar y calla (checkpoint
+  cortado o repartido en varios turnos). Tampoco encuentra la ficha si se imprimio con una variable
+  (`print-como-retomar.py "$SF"`): no expande variables. Este limite ya afectaba al resto del guard.
+
 ## [2.40.0] - 2026-09-27
 Origen: pendiente `p-fd3d3bdcab`, ultima pieza de la Fase 2 de la familia de correccion y reversa
 del journal. `session.add` rellena Status/Resumen/Commit de una fila existente y nunca toca la
