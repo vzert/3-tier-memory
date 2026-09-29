@@ -250,6 +250,20 @@ F="$TMP/p.jsonl"
 OUT=$(run "$F" "$TMP/op")
 case "$OUT" in "recover=1 "*) ok "stamped=0 no cuenta como cierre";; *) bad "P: $OUT";; esac
 
+echo "Q. ronda 5 del adversario: el audit como diagnostico y un DRY-RUN filtrado no cierran"
+salida(){ local id="q$RANDOM"   # $1 promptId  $2 comando  $3 salida
+  printf '{"type":"assistant","promptId":"%s","message":{"role":"assistant","content":[{"type":"tool_use","id":"%s","name":"Bash","input":{"command":"%s"}}]}}\n' "$1" "$id" "$2"
+  printf '{"type":"user","promptId":"%s","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","content":"%s"}]}}\n' "$1" "$id" "$3"; }
+for c in audit dry; do
+  F="$TMP/q-$c.jsonl"
+  { u p1 "PENDIENTE-Q"; bound 300000; summ; ckcmd p2; ckskl p2
+    if [ $c = audit ]; then salida p2 'python3 \"$JBIN/checkpoint-audit.py\" memory' '  resumen: hecho=7 parcial=0 saltado=3'
+    else salida p2 'python3 \"$SEAL\" memory | tail -n 1' 'SUMMARY frontmatter_sealed=1'; fi
+    u p3 "reintenta"; ckcmd p4; ckskl p4; } > "$F"
+  OUT=$(run "$F" "$TMP/oq-$c")
+  case "$OUT" in "recover=1 "*) ok "$c: no cuenta como cierre";; *) bad "Q $c: $OUT";; esac
+done
+
 echo "M. compactacion entre la marca del checkpoint actual y Step 0b: se recupera (adversario externo, 2026-09-28)"
 F="$TMP/m.jsonl"
 { u p1 "TRABAJO-M previo"; ckcmd p2; ckskl p2; bound 400000; summ; } > "$F"
@@ -257,6 +271,21 @@ OUT=$(run "$F" "$TMP/om")
 case "$OUT" in "recover=1 compactions=1 pre_tokens=400000 "*) ok "recover=1 con la compactacion posterior a la marca";; *) bad "M: $OUT";; esac
 has   "recupera el trabajo previo"  "TRABAJO-M previo" "$TMP/om/chunk-01.md"
 hasnt "no incluye el resumen lossy" "RESUMEN-LOSSY" "$TMP/om/chunk-01.md"
+
+echo "Z. todo JSONL de estas pruebas es JSON valido: load() salta en silencio una linea rota, y un caso"
+echo "   cuya linea clave no parsea pasa sin probar nada (paso con Q, ronda 5)"
+python3 - "$TMP" <<'PY' && ok "todas las lineas de los fixtures parsean" || bad "hay fixtures con lineas que no parsean"
+import glob, json, sys
+malas = []
+for f in glob.glob(sys.argv[1] + "/**/*.jsonl", recursive=True):
+    for n, l in enumerate(open(f, encoding="utf-8"), 1):
+        try:
+            json.loads(l)
+        except ValueError:
+            malas.append(f"{f}:{n}")
+print("\n".join("       " + m for m in malas))
+sys.exit(1 if malas else 0)
+PY
 
 echo
 [ $FAIL -eq 0 ] && echo "TODO VERDE" || echo "HAY FALLOS"

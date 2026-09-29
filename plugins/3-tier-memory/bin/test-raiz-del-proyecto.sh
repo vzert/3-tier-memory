@@ -144,6 +144,26 @@ printf '{"type":"user","cwd":"%s"}\n{"type":"user","cwd":"%s"}\n' "$A" "$SUB" > 
 corre "$BK" "$SUB"; [ "$OUT" = "$SUB" ] && ok "reanudada: RAIZ es la carpeta cuyo nombre codifica el JSONL" || bad "reanudada: $OUT"
 rm -rf "$ENC_SUB_DIR"; mv "$TMP/aparte.jsonl" "$J"
 
+echo "8. ronda 5 del adversario (Codex, 2026-09-29)"
+# a) reanudada entre hermanas que codifican igual (a-b y a_b): vale el cwd que contiene al shell
+H1="$TMP/h/a-b"; H2="$TMP/h/a_b"; mkdir -p "$H1" "$H2/src"; H1=$(cd "$H1" && pwd -P); H2=$(cd "$H2" && pwd -P)
+ENC_H=$(printf '%s\n' "$H2" | sed 's/[^A-Za-z0-9]/-/g'); mkdir -p "$TMP/home/.claude/projects/$ENC_H"
+mv "$J" "$TMP/aparte.jsonl"
+printf '{"type":"user","cwd":"%s"}\n{"type":"user","cwd":"%s"}\n' "$H1" "$H2" > "$TMP/home/.claude/projects/$ENC_H/$SID.jsonl"
+corre "$BK" "$H2/src"; [ "$OUT" = "$H2" ] && ok "hermanas a-b / a_b: gana la que contiene al shell" || bad "hermanas: $OUT"
+rm -rf "$TMP/home/.claude/projects/$ENC_H"; mv "$TMP/aparte.jsonl" "$J"
+# b) una barra invertida en el nombre, con el bloque corrido por zsh (el shell del agente en macOS)
+if command -v zsh >/dev/null 2>&1; then
+  BS="$TMP/pro\\test"; mkdir -p "$BS"
+  BJ="$(bloque templates/backfill-3t.md '2. Determine the JSONL directory:')"'
+printf "%s\n" "$JSONL_DIR"'
+  OUT=$(cd "$BS" && env -u CLAUDE_PROJECT_DIR HOME="$TMP/home" CLAUDE_CODE_SESSION_ID="" zsh -f -c "$BJ" 2>&1)
+  WANT="$TMP/home/.claude/projects/$(printf '%s\n' "$(cd "$BS" && pwd)" | sed 's/[^A-Za-z0-9]/-/g')"
+  [ "$OUT" = "$WANT" ] && ok "zsh: la barra invertida no se interpreta al codificar" || bad "zsh barra: $OUT (esperaba $WANT)"
+else
+  ok "(sin zsh: caso de barra invertida no medible aqui)"
+fi
+
 echo
 [ $FAIL -eq 0 ] && echo "TODO VERDE" || echo "HAY FALLOS"
 exit $FAIL

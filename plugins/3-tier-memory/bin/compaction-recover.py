@@ -23,7 +23,7 @@ Que tramo recupera:
     del usuario = la misma invocacion.
   - "checkpoint anterior" solo cuenta si TERMINO: si en su propio turno un Bash devolvio la salida de
     alguno de los scripts que la plantilla corre despues de Step 5 (`ensure-frontmatter.py`,
-    `stamp-session-id.py`, `scan-secrets.py`, `checkpoint-audit.py`; ver CKPT_DONE). Un checkpoint interrumpido antes de escribir no guardo
+    `stamp-session-id.py`, `scan-secrets.py`; ver CKPT_DONE). Un checkpoint interrumpido antes de escribir no guardo
     nada; contarlo hacia que el reintento descartara el tramo (recover=0) sin que nadie lo hubiera
     guardado (adversario externo, 2026-09-28). El costo va al otro lado: un checkpoint completo que
     se salto esos cuatro scripts cuenta como no terminado y el siguiente recupera de mas — eso cuesta
@@ -83,11 +83,14 @@ CKPT_MARKERS = (
 # el comando porque un `cat ensure-frontmatter.py` nombra el script sin correrlo (adversario externo,
 # ronda 2); las formas exigen numeros donde el fuente tiene `{sealed}` o `%d`, asi que leer el fuente
 # tampoco calza. journal-compact.py no vale: tambien corre en Step 3c.
+# Ronda 5: checkpoint-audit.py (7a) ya no cuenta, porque tambien se corre como diagnostico sobre una
+# ficha a medias. Las salidas de 5c y 5d solo cuentan si el comando lleva --apply: `| tail -n 1`
+# sobre una corrida en seco quita la linea DRY-RUN. Medido: 60 de 65 igual que antes.
 CKPT_DONE = re.compile(
     r"^(?:SUMMARY frontmatter_sealed=\d+"
     r"|stamped=1 reason=\S"   # stamped=0 tambien sale si la ficha no existe (ronda 4)
-    r"|SUMMARY secrets_(?:redacted|found)=\d+ files=\d+"
-    r"|\s*resumen: hecho=\d+ parcial=\d+ saltado=\d+)", re.MULTILINE)
+    r"|SUMMARY secrets_redacted=\d+ files=\d+)", re.MULTILINE)
+CKPT_DONE_APPLY = re.compile(r"^SUMMARY (?:frontmatter_sealed|secrets_redacted)=", re.MULTILINE)
 # isMeta NO basta para descartar: un `cross-session-message` (otra sesion de Claude que encarga
 # trabajo) llega como isMeta y puede ser la peticion que origino todo el tramo (medido en una
 # sesion real de este repo). Se descarta solo el ruido meta conocido: el cuerpo de una skill al
@@ -212,7 +215,7 @@ def ckpt_finished(rows, group, next_group_start):
     Una notificacion de tarea en medio no lo cierra: el agente sigue con el checkpoint despues de
     ella (adversario externo, ronda 2: cerrar ahi daba por no terminado un checkpoint completo)."""
     first, _, last = group
-    bash_ids = set()
+    bash_ids = {}   # id del tool_use Bash -> si su comando lleva --apply
     for n, o in rows:
         if n <= first:
             continue
@@ -228,13 +231,15 @@ def ckpt_finished(rows, group, next_group_start):
                 continue
             if (o.get("type") == "assistant" and it.get("type") == "tool_use" and it.get("name") == "Bash"
                     and "python3" in str((it.get("input") or {}).get("command", ""))):
-                bash_ids.add(it.get("id"))
+                bash_ids[it.get("id")] = "--apply" in str((it.get("input") or {}).get("command", ""))
             elif (o.get("type") == "user" and it.get("type") == "tool_result"
                   and it.get("tool_use_id") in bash_ids):
                 # Sin exigir is_error falso: el Bash de un checkpoint real salio con codigo 6 por otro
                 # comando y ensure-frontmatter.py si termino. La linea de resumen solo sale al final.
                 body = "\n".join(content_texts([it]))
-                if CKPT_DONE.search(body) and "DRY-RUN" not in body:
+                m = CKPT_DONE.search(body)
+                if (m and "DRY-RUN" not in body
+                        and (bash_ids[it.get("tool_use_id")] or not CKPT_DONE_APPLY.match(m.group(0)))):
                     return n
     return 0
 

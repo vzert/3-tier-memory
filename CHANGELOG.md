@@ -94,6 +94,13 @@ cambia con cada `cd`.
     es el `cwd` cuya codificación coincide con el nombre de la carpeta donde vive el JSONL, en vez
     del primer `cwd`.
   - Sección 7 de la suite: 2 asertos, rojos contra 84feb2d.
+- **Ronda 5 de Codex (break, 1 alto + 1 medio), arreglada en el mismo 2.41.3:**
+  - Dos carpetas hermanas que se codifican igual (`a-b` y `a_b`) en una sesión reanudada: el bloque
+    tomaba el primer `cwd` con esa codificación aunque no contuviera al shell, y luego descartaba el
+    JSONL. Ahora vale el primer `cwd` que codifica la carpeta Y contiene al shell.
+  - En zsh, el shell del agente en macOS, `echo "$RAIZ"` interpreta las barras invertidas:
+    `pro\test` se codificaba `pro-est`. Las 8 copias usan ahora `printf '%s\n'`.
+  - Sección 8 de la suite: 2 asertos (el de zsh, solo si hay zsh), rojos contra 62c8b84.
 
 ## [2.41.2] - 2026-09-28
 Origen: pendiente `p-8472f7f4b7`. 2.39.0 no habia pasado por el adversario externo (Codex); el
@@ -154,6 +161,17 @@ silencio (`recover=0`).
   - `stamped=0 reason=no-existe-la-ficha` contaba como cierre. Ahora solo cuenta `stamped=1`.
     Caso P, rojo contra 84feb2d. La medicion no cambia: 60 de 65 sobre 2600 JSONL.
   - El otro hallazgo queda declarado abajo (mensaje `peer`).
+- **Ronda 5 de Codex (break, 2 hallazgos altos):**
+  - `checkpoint-audit.py` tambien se corre como diagnostico sobre una ficha a medias, y su
+    `resumen:` contaba como cierre. Ya no cuenta: el audit (7a) sale de las senales.
+  - `python3 ensure-frontmatter.py memory | tail -n 1` quita la linea DRY-RUN y deja
+    `SUMMARY frontmatter_sealed=N`. Ahora las salidas de 5c y 5d solo cuentan si el comando lleva
+    `--apply`, y de 5d solo `secrets_redacted`.
+  - Senales finales: `SUMMARY frontmatter_sealed=N` o `SUMMARY secrets_redacted=N files=N` con
+    `--apply`, o `stamped=1`. Medido otra vez: 60 de 65.
+  - Caso Q, rojo contra 62c8b84. La primera version de Q tenia una linea con JSON invalido:
+    `load()` la saltaba y el caso pasaba contra el codigo viejo sin probar nada. El caso Z comprueba
+    ahora que toda linea de los fixtures parsea.
 
 ### Limites declarados (no arreglados)
 - Un mensaje de otra sesion (`origin.kind=peer`) no cierra el turno del checkpoint, porque llega a

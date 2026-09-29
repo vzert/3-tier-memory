@@ -44,7 +44,7 @@ def cwd_del_proyecto(f):
                 except ValueError:
                     continue
                 c = o.get("cwd") if isinstance(o, dict) and not o.get("isSidechain") else None
-                if isinstance(c, str) and re.sub("[^A-Za-z0-9]", "-", c) == enc:
+                if isinstance(c, str) and re.sub("[^A-Za-z0-9]", "-", c) == enc and dentro(c):
                     return c
     except OSError:
         pass
@@ -52,7 +52,7 @@ def cwd_del_proyecto(f):
 if d == w and s:
     base = glob.escape(os.path.expanduser("~/.claude/projects"))
     hits = [(os.path.getmtime(f), cwd_del_proyecto(f)) for f in glob.glob(os.path.join(base, "*", glob.escape(s) + ".jsonl"))]
-    hits = sorted(h for h in hits if h[1] and dentro(h[1]))
+    hits = sorted(h for h in hits if h[1])
     if hits:
         d = hits[-1][1]
 print(d)' "${CLAUDE_PROJECT_DIR:-$PWD}" "${CLAUDE_CODE_SESSION_ID:-}" "$PWD" 2>/dev/null) || RAIZ="${CLAUDE_PROJECT_DIR:-$PWD}"
@@ -141,7 +141,7 @@ def cwd_del_proyecto(f):
                 except ValueError:
                     continue
                 c = o.get("cwd") if isinstance(o, dict) and not o.get("isSidechain") else None
-                if isinstance(c, str) and re.sub("[^A-Za-z0-9]", "-", c) == enc:
+                if isinstance(c, str) and re.sub("[^A-Za-z0-9]", "-", c) == enc and dentro(c):
                     return c
     except OSError:
         pass
@@ -149,7 +149,7 @@ def cwd_del_proyecto(f):
 if d == w and s:
     base = glob.escape(os.path.expanduser("~/.claude/projects"))
     hits = [(os.path.getmtime(f), cwd_del_proyecto(f)) for f in glob.glob(os.path.join(base, "*", glob.escape(s) + ".jsonl"))]
-    hits = sorted(h for h in hits if h[1] and dentro(h[1]))
+    hits = sorted(h for h in hits if h[1])
     if hits:
         d = hits[-1][1]
 print(d)' "${CLAUDE_PROJECT_DIR:-$PWD}" "${CLAUDE_CODE_SESSION_ID:-}" "$PWD" 2>/dev/null) || RAIZ="${CLAUDE_PROJECT_DIR:-$PWD}"
@@ -370,7 +370,7 @@ def cwd_del_proyecto(f):
                 except ValueError:
                     continue
                 c = o.get("cwd") if isinstance(o, dict) and not o.get("isSidechain") else None
-                if isinstance(c, str) and re.sub("[^A-Za-z0-9]", "-", c) == enc:
+                if isinstance(c, str) and re.sub("[^A-Za-z0-9]", "-", c) == enc and dentro(c):
                     return c
     except OSError:
         pass
@@ -378,12 +378,12 @@ def cwd_del_proyecto(f):
 if d == w and s:
     base = glob.escape(os.path.expanduser("~/.claude/projects"))
     hits = [(os.path.getmtime(f), cwd_del_proyecto(f)) for f in glob.glob(os.path.join(base, "*", glob.escape(s) + ".jsonl"))]
-    hits = sorted(h for h in hits if h[1] and dentro(h[1]))
+    hits = sorted(h for h in hits if h[1])
     if hits:
         d = hits[-1][1]
 print(d)' "${CLAUDE_PROJECT_DIR:-$PWD}" "${CLAUDE_CODE_SESSION_ID:-}" "$PWD" 2>/dev/null) || RAIZ="${CLAUDE_PROJECT_DIR:-$PWD}"
 [ -n "$RAIZ" ] || RAIZ="${CLAUDE_PROJECT_DIR:-$PWD}"
-ENCODED=$(echo "$RAIZ" | sed 's/[^A-Za-z0-9]/-/g')
+ENCODED=$(printf '%s\n' "$RAIZ" | sed 's/[^A-Za-z0-9]/-/g')
 JSONL_DIR="$HOME/.claude/projects/$ENCODED"
 JSONL_COUNT=$(ls "$JSONL_DIR"/*.jsonl 2>/dev/null | wc -l | tr -d ' ')
 ```

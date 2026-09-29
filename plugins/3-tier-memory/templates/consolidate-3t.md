@@ -94,7 +94,7 @@ def cwd_del_proyecto(f):
                 except ValueError:
                     continue
                 c = o.get("cwd") if isinstance(o, dict) and not o.get("isSidechain") else None
-                if isinstance(c, str) and re.sub("[^A-Za-z0-9]", "-", c) == enc:
+                if isinstance(c, str) and re.sub("[^A-Za-z0-9]", "-", c) == enc and dentro(c):
                     return c
     except OSError:
         pass
@@ -102,13 +102,13 @@ def cwd_del_proyecto(f):
 if d == w and s:
     base = glob.escape(os.path.expanduser("~/.claude/projects"))
     hits = [(os.path.getmtime(f), cwd_del_proyecto(f)) for f in glob.glob(os.path.join(base, "*", glob.escape(s) + ".jsonl"))]
-    hits = sorted(h for h in hits if h[1] and dentro(h[1]))
+    hits = sorted(h for h in hits if h[1])
     if hits:
         d = hits[-1][1]
 print(d)' "${CLAUDE_PROJECT_DIR:-$PWD}" "${CLAUDE_CODE_SESSION_ID:-}" "$PWD" 2>/dev/null) || RAIZ="${CLAUDE_PROJECT_DIR:-$PWD}"
 [ -n "$RAIZ" ] || RAIZ="${CLAUDE_PROJECT_DIR:-$PWD}"
 MEMORY_DIR="memory"   # Model B; use the auto-memory path if Step 0 found Model A
-ENCODED=$(echo "$RAIZ" | sed 's/[^A-Za-z0-9]/-/g')
+ENCODED=$(printf '%s\n' "$RAIZ" | sed 's/[^A-Za-z0-9]/-/g')
 INDEX="$HOME/.claude/projects/$ENCODED/.recall-index.jsonl"
 ```
 2. Locate the plugin scripts (mirror /backfill-3t Step 5):
