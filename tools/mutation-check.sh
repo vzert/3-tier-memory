@@ -13,8 +13,8 @@
 # Cada mutador imprime cuantas sustituciones hizo; CERO significa SIN PROBAR, no aprobado.
 #
 # Uso:  tools/mutation-check.sh        (exit 0 = todas discriminan)
-# Entra en el runner: tarda 13 s, la mitad que las 13 comprobaciones juntas, y un arnes que nadie
-# corre se pudre. Si una mutacion deja de aplicarse porque el fuente cambio, esto se pone ROJO con
+# Entra en el runner, y un arnes que nadie corre se pudre. Tarda ~2 min (medido 2026-09-29: 94 s
+# con los 15 primeros casos, 125 s con los 24 del contrato de 2.41.4; el "13 s" de antes ya no valia). Si una mutacion deja de aplicarse porque el fuente cambio, esto se pone ROJO con
 # "SIN PROBAR" y hay que actualizar el mutador — no es ruido, es que el arnes dejo de verificar lo
 # que dice verificar, que es el fallo que este fichero existe para evitar.
 #
@@ -25,11 +25,15 @@ SRC="plugins/3-tier-memory/bin"
 MUT="tools/mutaciones"
 PEND=0; TOTAL=0
 
-caso() {  # etiqueta | fichero a mutar | mutador | suite | aserto que DEBE caer
-  local et="$1" f="$2" m="$3" suite="$4" espera="$5"
+caso() {  # etiqueta | fichero a mutar | mutador | suite | aserto que DEBE caer | [arg del mutador]
+  local et="$1" f="$2" m="$3" suite="$4" espera="$5" arg="${6:-}"
   local D; D=$(mktemp -d)/bin; mkdir -p "$D"; cp "$SRC"/* "$D/" 2>/dev/null
+  # templates/ y commands/ junto a bin/, como en el plugin: test-project-dir-fallback.sh recorre el
+  # arbol real (seccion H) y sin ellos caia en CADA copia, mutada o no. Con la suite en rojo de
+  # base, "NO ... vacuo" no podia salir nunca y solo el filtro de `espera` separaba los casos.
+  cp -R "$SRC/../templates" "$SRC/../commands" "$(dirname "$D")/" 2>/dev/null
   TOTAL=$(( TOTAL + 1 ))
-  local n; n=$(python3 "$MUT/$m" "$D/$f" 2>&1)
+  local n; n=$(python3 "$MUT/$m" "$D/$f" ${arg:+"$arg"} 2>&1)
   case "$n" in
     0\ *) printf '  ?? %-30s LA MUTACION NO SE APLICO (%s) -> SIN PROBAR\n' "$et" "$n"
           PEND=$(( PEND + 1 )); rm -rf "$(dirname "$D")"; return ;;
@@ -72,6 +76,33 @@ caso "re-migracion en bucle"    journal-compact.py      m_gitignore_remigra.py t
 caso "tupla de superados (2.21.3)" journal-compact.py   m_gitignore_2213.py  test-expire-reopen.sh       "migra el bloque de 2.21.3"
 caso "aviso bajo --quiet"       journal-compact.py      m_migracion_quiet.py test-expire-reopen.sh      "con --quiet el aviso"
 caso "aviso a la persona"       journal-compact.py      m_migracion_humano.py test-expire-reopen.sh     "canal a la persona"
+
+echo
+echo "Contrato de check-project-dir-fallback.py (2.41.4): cada pieza, rota, tumba su aserto"
+caso "verde respaldo" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " respaldo: exit 0" r1-sin-quitar-forma
+caso "R1 apagada" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " encoded: fallos" r1-apagada
+caso "forma R1 floja" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " llaves: fallos" forma-r1-floja
+caso "canonica ignorada" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " canonica: exit 0" canonica-ignorada
+caso "canonica en cualquier linea" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " canonica-no-primera: fallos" canonica-en-cualquier-linea
+caso "canonica con comentario" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " canonica-con-comentario: fallos" canonica-con-comentario
+caso "usos posteriores libres" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " despues-de-canonica: fallos" usos-posteriores-libres
+caso "\${PROJECT_DIR sin }" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " despues-de-canonica: fallos" llave-sin-cerrar
+caso "R3 apagada" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " comentario-con-dolar: fallos" r3-apagada
+caso "R3 sin backtick" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " comentario-con-dolar: fallos" r3-sin-backtick
+caso "R2 en comentario apagada" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " comentario-en-heredoc: fallos" r2-en-comentario-apagada
+caso "bloques sin etiqueta fuera" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " sin-etiqueta: fallos" sin-etiqueta-fuera
+caso "sin bloques" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " mkdir: fallos" sin-bloques
+caso "strip() en vez de BLANCO" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " canonica-tab-vertical: fallos" strip-en-vez-de-blanco
+caso "canonica insegura" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " canonica en bash" canonica-insegura
+caso "R4 apagada" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " ifs: fallos" r4-apagada
+caso "sin unir lineas" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " partido-r1: fallos" sin-unir-lineas
+caso "barra par tambien une" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " barra-doble: exit 0" barra-par-une
+caso "comentario continua" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " comentario-no-continua: fallos" comentario-continua
+caso "continuada como comentario" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " comentario-tras-continuacion: fallos" continuada-como-comentario
+caso "open() sin newline=''" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " crlf: fallos" sin-newline-vacio
+caso "R4 solo IFS" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " opciones: fallos" r4-solo-ifs
+caso "R4 sin set" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " opciones: fallos" r4-sin-set
+caso "R4 sin options" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " opciones: fallos" r4-sin-options
 
 echo
 if [ "$PEND" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $TOTAL)"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi
