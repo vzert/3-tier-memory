@@ -24,6 +24,7 @@
 #      local, ${PROJECT_DIR:=x}, ${#PROJECT_DIR});
 #      Y ejecuta en bash la linea canonica y la forma de R1, sin entorno: no dan vacio;
 #      R4: IFS en un bloque que nombra la variable falla; un bloque aceptado se ejecuta de verdad;
+#      Lineas logicas: un nombre partido con `\` se ve entero; R4 tambien cubre shopt/setopt/emulate;
 #   F. R3: un comentario que nombra la variable con `$` o backtick falla, y una linea `#` tras una
 #      continuacion `\` cuenta como codigo;
 #   G. sin falso positivo: la forma canonica con sus usos, ${CLAUDE_PROJECT_DIR:-$PWD}, notas en
@@ -166,7 +167,7 @@ rojo sin-etiqueta "2:R2" <<'EOF'
 git -C "$PROJECT_DIR" commit -m x
 ```
 EOF
-rojo continuacion "3:R1" <<'EOF'
+rojo continuacion "2:R1" <<'EOF'
 ```bash
 python3 x.py \
   --dir "$CLAUDE_PROJECT_DIR"
@@ -380,6 +381,67 @@ sed '1d;$d' "$TMP/run.md" > "$TMP/run.sh"
 check "bloque ejecutable: escribio la config en el memory/ del cwd" "$(cat "$TMP/run/memory/.memory-config" 2>/dev/null)" "journal_strict=1"
 check "bloque ejecutable: ENCODED sale de la ruta del cwd" "$(cat "$TMP/run/memory/encoded" 2>/dev/null)" "$(cd "$TMP/run" && pwd -P | sed 's/[^A-Za-z0-9]/-/g')"
 
+# Lineas logicas: un nombre partido con `\` al final de la linea se ve entero, como lo ve el shell
+# (subagente Sonnet, ronda 3: `IF\` + `S=/` pasaba R4; `$CLAUDE_PROJECT\` + `_DIR` pasaba R1 y el
+# bloque hacia `ls /memory`). Un numero par de `\` no continua; un comentario tampoco.
+rojo partido-r1 "2:R1" <<'EOF'
+```bash
+ls "$CLAUDE_PROJECT\
+_DIR/memory"
+```
+EOF
+rojo partido-r2-r4 "5:R2 7:R4" <<'EOF'
+```bash
+PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+X=$PROJECT\
+_DIR
+unset PROJECT\
+_DIR
+IF\
+S=/
+cd $PROJECT_DIR
+```
+EOF
+# Partida con `\`, la canonica sigue siendo la canonica: el shell la une igual.
+verde partido-canonica <<'EOF'
+```bash
+PROJECT_DIR="${PROJECT_DIR:-\
+${CLAUDE_PROJECT_DIR:-$PWD}}"
+ls "$PROJECT_DIR"
+```
+EOF
+rojo comentario-no-continua "3:R1" <<'EOF'
+```bash
+# una nota que acaba en barra \
+echo "$CLAUDE_PROJECT_DIR"
+```
+EOF
+verde barra-doble <<'EOF'
+```bash
+echo 'a\\'
+printf '%s\n' x \\\\
+# CLAUDE_PROJECT_DIR llega vacia
+ENCODED=$(echo "${CLAUDE_PROJECT_DIR:-$PWD}" | sed 's/[^A-Za-z0-9]/-/g')
+```
+EOF
+# R4 ampliada: nullglob (bash shopt, zsh setopt) y el partido de zsh tambien cambian la expansion.
+rojo opciones "3:R4 4:R4 5:R4 6:R4" <<'EOF'
+```bash
+PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
+shopt -s nullglob
+setopt nullglob
+unsetopt nomatch
+emulate sh
+cd $PROJECT_DIR
+```
+EOF
+verde opciones-sin-variable <<'EOF'
+```bash
+shopt -s nullglob
+for f in memory/*.md; do wc -l "$f"; done
+```
+EOF
+
 echo "F. R3: comentarios"
 rojo comentario-con-dolar "2:R1 3:R2 4:R1 5:R1" <<'EOF'
 ```bash
@@ -389,7 +451,7 @@ rojo comentario-con-dolar "2:R1 3:R2 4:R1 5:R1" <<'EOF'
 # o `printenv CLAUDE_PROJECT_DIR`
 ```
 EOF
-rojo comentario-tras-continuacion "3:R1" <<'EOF'
+rojo comentario-tras-continuacion "2:R1" <<'EOF'
 ```bash
 echo a \
 # CLAUDE_PROJECT_DIR
@@ -475,7 +537,7 @@ check "cuenta independiente de fences de shell = la del recorrido" "$indep" "${n
 
 echo
 # Si un cambio salta casos en silencio, el total baja: se fija aqui.
-ESPERADOS=92
+ESPERADOS=103
 check "corrieron los $ESPERADOS asertos anteriores (este es el siguiente)" "$N" "$ESPERADOS"
 [ "$FAIL" -eq 0 ] && echo "PASS $N/$N" || echo "FAIL (ver arriba)"
 exit $FAIL

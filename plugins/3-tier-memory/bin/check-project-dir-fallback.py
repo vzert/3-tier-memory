@@ -12,11 +12,16 @@ ronda del adversario rompio otra forma: esa pregunta no tiene fondo sin un parse
 completo. Ahora el checker solo compara texto exacto, y las plantillas se escriben para cumplirlo.
 Lo que sea seguro pero no calce con el contrato FALLA: se reescribe a la forma permitida.
 
-Contrato, por bloque de shell. Blanco = solo espacio o tabulador (lo que bash separa; un
-tabulador vertical o un NBSP delante hacen que la linea no sea una asignacion). "Linea de
-comentario" = su primer caracter no blanco es `#` y la linea anterior no acaba en `\\` (una
-continuacion convierte esa linea en codigo). Toda otra linea es "de codigo", tambien dentro de
-un heredoc o de una cadena de varias lineas.
+Contrato, por bloque de shell. Las reglas miran LINEAS LOGICAS, como el shell: una linea que acaba
+en un numero impar de `\\` se une con la siguiente (sin el `\\` ni el salto), asi que un nombre
+partido en dos lineas (`$CLAUDE_PROJECT\\` + `_DIR`) se ve entero. Unir nunca quita un nombre que ya
+se veia: solo puede marcar de mas (dentro de comillas simples o de un heredoc con delimitador entre
+comillas el shell no une). Blanco = solo espacio o tabulador (lo que el shell separa; un tabulador
+vertical o un NBSP delante hacen que la linea no sea una asignacion). "Linea de comentario" = linea
+logica cuyo primer caracter no blanco es `#`; un comentario no continua aunque acabe en `\\` (el
+shell tampoco lo continua). Toda otra linea es "de codigo", tambien dentro de un heredoc o de una
+cadena de varias lineas. Los bloques pueden correr en bash o en zsh (el Bash del agente usa la
+shell del usuario).
   R1 En una linea de codigo, CLAUDE_PROJECT_DIR solo aparece como `${CLAUDE_PROJECT_DIR:-$PWD}`,
      texto exacto. Cualquier otra mencion falla, aunque fuera segura.
   R2 Si alguna linea de codigo nombra PROJECT_DIR, la primera linea de codigo del bloque es
@@ -28,9 +33,12 @@ un heredoc o de una cadena de varias lineas.
   R3 Una linea de comentario que nombra cualquiera de las dos no lleva `$` ni backtick: sin ellos
      no hay expansion posible, asi que la linea es texto aunque caiga dentro de un heredoc o de una
      cadena. Se reporta como R1 o R2 segun la variable que nombre.
-  R4 Un bloque cuyo codigo nombra cualquiera de las dos no nombra IFS en ninguna linea de codigo.
-     Con un IFS que no es blanco (`IFS=/`), un uso sin comillas se parte y su primer trozo es
-     vacio (`cd $PROJECT_DIR` -> `cd ''`); con el IFS por defecto una ruta nunca da un trozo vacio.
+  R4 Un bloque cuyo codigo nombra cualquiera de las dos no nombra, en ninguna linea de codigo,
+     IFS, shopt, setopt, unsetopt ni emulate. Son lo que cambia como se expande un uso sin
+     comillas: con `IFS=/` se parte y su primer trozo es vacio (`cd $PROJECT_DIR` -> `cd ''`); con
+     nullglob (bash `shopt`, zsh `setopt`) una ruta con `*` o `?` que no calza desaparece; zsh
+     `setopt sh_word_split`/`emulate sh` reactivan el partido. Con las opciones por defecto una
+     ruta nunca da vacio.
 
 Por que basta: la linea canonica corre la primera, fuera de todo if/heredoc (no hay nada antes),
 y nunca da vacio. Despues, ninguna forma permitida puede cambiar la variable.
@@ -44,6 +52,8 @@ Limites aceptados, por clase (perseguirlos es volver a analizar bash):
     pueden dar vacio con un valor no vacio;
   - un nombre de variable sacado de un VALOR (`printf -v "$PROJECT_DIR"`, `declare -n r="$X"`):
     escribe en la variable que nombre ese valor, y solo es PROJECT_DIR si alguien la hereda asi;
+  - opciones heredadas del entorno (BASH_ENV, un ~/.zshenv con setopt nullglob) o cambiadas sin
+    las palabras de R4 (`set -o` no toca nullglob ni IFS; lo que si lo hace esta en R4);
   - vaciar PWD antes del respaldo (`PWD=`, `unset PWD`);
   - comandos fuera de un bloque (prosa con `codigo en linea` que el agente copie);
   - la forma permitida escapada o entre comillas simples da un literal, no la ruta (nunca vacio).
@@ -51,8 +61,8 @@ Limites aceptados, por clase (perseguirlos es volver a analizar bash):
 Alternativas descartadas: `bash -n` solo valida sintaxis, no dice que corre antes de que; un
 parser de verdad (shfmt --to-json, bashlex) es una dependencia: ninguno de los dos esta instalado
 en la maquina de desarrollo (medido 2026-09-28: `which shfmt` y `import bashlex` fallan) y el
-plugin no declara ninguna (si algun dia hace falta, esa es la salida, no otra heuristica); ejecutar los bloques tiene efectos
-(mkdir, cat >, git commit). La version por analisis de 2.39.3 cayo tres rondas seguidas de Codex,
+plugin no declara ninguna (si algun dia hace falta, esa es la salida, no otra heuristica);
+ejecutar los bloques tiene efectos (mkdir, cat >, git commit). La version por analisis de 2.39.3 cayo tres rondas seguidas de Codex,
 cada una por otra forma (if, heredoc, subshell, `$(...)` multilinea, `<<"1"`).
 
 Bloque de shell = fence (``` o ~~~, con sangria, dentro de una cita `>` o sin ella) SIN etiqueta
@@ -87,19 +97,39 @@ FORMA_R1 = "${CLAUDE_PROJECT_DIR:-$PWD}"
 CANONICA = 'PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"'
 NOMBRE_R1 = re.compile(r"(?<![A-Za-z0-9_])CLAUDE_PROJECT_DIR(?![A-Za-z0-9_])")
 NOMBRE_R2 = re.compile(r"(?<![A-Za-z0-9_])PROJECT_DIR(?![A-Za-z0-9_])")
-NOMBRE_IFS = re.compile(r"(?<![A-Za-z0-9_])IFS(?![A-Za-z0-9_])")
+NOMBRE_R4 = re.compile(r"(?<![A-Za-z0-9_])(?:IFS|shopt|setopt|unsetopt|emulate)(?![A-Za-z0-9_])")
 USO_R2 = re.compile(r"\$PROJECT_DIR(?![A-Za-z0-9_])|\$\{PROJECT_DIR\}")
+
+
+def continua(linea):
+    """True si la linea acaba en un numero impar de `\\`: el shell la une con la siguiente."""
+    return (len(linea) - len(linea.rstrip("\\"))) % 2 == 1
+
+
+def logicas(cuerpo, ini):
+    """(numero de la primera linea fisica, texto unido, es_comentario) de cada linea logica."""
+    out = []
+    buf = None
+    for k, linea in enumerate(cuerpo):
+        if buf is None:
+            num, buf = ini + k + 1, linea
+            comentario = linea.lstrip(BLANCO).startswith("#")
+        else:
+            buf = buf[:-1] + linea
+        if continua(buf) and not comentario:
+            continue
+        out.append((num, buf, comentario))
+        buf = None
+    if buf is not None:
+        out.append((num, buf, comentario))
+    return out
 
 
 def revisar_bloque(cuerpo, ini):
     """Fallos (linea, regla, texto) de un bloque, segun el contrato del docstring."""
     fallos = []
-    codigo = []          # (numero, linea) de las lineas de codigo
-    anterior = ""
-    for k, linea in enumerate(cuerpo):
-        num = ini + k + 1
-        comentario = linea.lstrip(BLANCO).startswith("#") and not anterior.endswith("\\")
-        anterior = linea
+    codigo = []          # (numero, linea logica) de las lineas de codigo
+    for num, linea, comentario in logicas(cuerpo, ini):
         if comentario:
             if "$" in linea or "`" in linea:
                 if NOMBRE_R1.search(linea):
@@ -113,7 +143,7 @@ def revisar_bloque(cuerpo, ini):
         if NOMBRE_R1.search(linea.replace(FORMA_R1, "")):
             fallos.append((num, "R1", linea.strip()))
     if any(NOMBRE_R1.search(l) or NOMBRE_R2.search(l) for _, l in codigo):
-        fallos += [(num, "R4", l.strip()) for num, l in codigo if NOMBRE_IFS.search(l)]
+        fallos += [(num, "R4", l.strip()) for num, l in codigo if NOMBRE_R4.search(l)]
     if not any(NOMBRE_R2.search(l) for _, l in codigo):
         return sorted(fallos)
     canonica = codigo[0][1].strip(BLANCO) == CANONICA
