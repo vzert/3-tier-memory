@@ -241,6 +241,15 @@ OUT=$(run "$F" "$TMP/oo-edit")
 case "$OUT" in "recover=1 "*) ok "recover=1";; *) bad "O edit: $OUT";; esac
 has "recupera el Edit hecho tras el cierre y antes del prompt" "CAMBIO-AUTONOMO-TRAS-CIERRE" "$TMP/oo-edit/chunk-01.md"
 
+echo "P. ronda 4 del adversario: stamped=0 (ficha inexistente) no cierra el checkpoint"
+stamp0(){ local id="s$RANDOM"
+  printf '{"type":"assistant","promptId":"%s","message":{"role":"assistant","content":[{"type":"tool_use","id":"%s","name":"Bash","input":{"command":"python3 \\"$STAMP\\" \\"$SESSION_FILE\\" x"}}]}}\n' "$1" "$id"
+  printf '{"type":"user","promptId":"%s","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"%s","is_error":true,"content":"stamped=0 reason=no-existe-la-ficha"}]}}\n' "$1" "$id"; }
+F="$TMP/p.jsonl"
+{ u p1 "PENDIENTE-P"; bound 300000; summ; ckcmd p2; ckskl p2; stamp0 p2; u p3 "reintenta"; ckcmd p4; ckskl p4; } > "$F"
+OUT=$(run "$F" "$TMP/op")
+case "$OUT" in "recover=1 "*) ok "stamped=0 no cuenta como cierre";; *) bad "P: $OUT";; esac
+
 echo "M. compactacion entre la marca del checkpoint actual y Step 0b: se recupera (adversario externo, 2026-09-28)"
 F="$TMP/m.jsonl"
 { u p1 "TRABAJO-M previo"; ckcmd p2; ckskl p2; bound 400000; summ; } > "$F"

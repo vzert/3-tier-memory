@@ -55,7 +55,7 @@ for f in sorted(glob.glob(sys.argv[1] + "/commands/*.md") + glob.glob(sys.argv[1
     s = open(f, encoding="utf-8").read()
     while "\n# raiz-del-proyecto:" in s:
         s = s.split("\n# raiz-del-proyecto:", 1)[1]
-        print(repr(s.split('[ -n "$RAIZ" ] || RAIZ="$PROJECT_DIR"', 1)[0]))
+        print(repr(s.split('[ -n "$RAIZ" ] || RAIZ=', 1)[0]))
 PY
 N=$(sort -u "$TMP/copias" | wc -l | tr -d ' '); C=$(wc -l < "$TMP/copias" | tr -d ' ')
 [ "$N" = 1 ] && ok "una sola variante" || bad "hay $N variantes del bloque RAIZ"
@@ -132,6 +132,17 @@ corre "$BK" "$B"; [ "$OUT" = "$B" ] && ok "shell fuera de la raiz: PWD" || bad "
 # e) CLAUDE_PROJECT_DIR puesta gana al JSONL
 OUT=$(cd "$SUB" && env -u PROJECT_DIR HOME="$TMP/home" CLAUDE_PROJECT_DIR="$B" CLAUDE_CODE_SESSION_ID="$SID" bash -c "$BK" 2>&1)
 [ "$OUT" = "$B" ] && ok "CLAUDE_PROJECT_DIR puesta manda" || bad "CLAUDE_PROJECT_DIR: $OUT"
+
+echo "7. ronda 4 del adversario (Codex, 2026-09-29)"
+# a) una PROJECT_DIR del perfil del usuario (o de un bloque anterior) no manda
+OUT=$(cd "$SUB" && env -u CLAUDE_PROJECT_DIR HOME="$TMP/home" PROJECT_DIR="$B" CLAUDE_CODE_SESSION_ID="$SID" bash -c "$BK" 2>&1)
+[ "$OUT" = "$A" ] && ok "PROJECT_DIR heredada se ignora" || bad "PROJECT_DIR heredada: $OUT"
+# b) sesion reanudada: el JSONL vive en el proyecto a/src pero su historial empieza con cwd=a
+ENC_SUB_DIR="$TMP/home/.claude/projects/$ENC_SUB"; mkdir -p "$ENC_SUB_DIR"
+mv "$J" "$TMP/aparte.jsonl"
+printf '{"type":"user","cwd":"%s"}\n{"type":"user","cwd":"%s"}\n' "$A" "$SUB" > "$ENC_SUB_DIR/$SID.jsonl"
+corre "$BK" "$SUB"; [ "$OUT" = "$SUB" ] && ok "reanudada: RAIZ es la carpeta cuyo nombre codifica el JSONL" || bad "reanudada: $OUT"
+rm -rf "$ENC_SUB_DIR"; mv "$TMP/aparte.jsonl" "$J"
 
 echo
 [ $FAIL -eq 0 ] && echo "TODO VERDE" || echo "HAY FALLOS"

@@ -85,7 +85,7 @@ CKPT_MARKERS = (
 # tampoco calza. journal-compact.py no vale: tambien corre en Step 3c.
 CKPT_DONE = re.compile(
     r"^(?:SUMMARY frontmatter_sealed=\d+"
-    r"|stamped=[01] reason=\S"
+    r"|stamped=1 reason=\S"   # stamped=0 tambien sale si la ficha no existe (ronda 4)
     r"|SUMMARY secrets_(?:redacted|found)=\d+ files=\d+"
     r"|\s*resumen: hecho=\d+ parcial=\d+ saltado=\d+)", re.MULTILINE)
 # isMeta NO basta para descartar: un `cross-session-message` (otra sesion de Claude que encarga

@@ -85,6 +85,15 @@ cambia con cada `cd`.
     reanudadas).
   - Una ruta con un salto de línea en medio sobrevive a `RAIZ` pero no a la codificación con `sed`
     de `JSONL_DIR`.
+- **Ronda 4 de Codex (break, 1 alto + 1 medio), arreglada en el mismo 2.41.3:**
+  - Una variable `PROJECT_DIR` que ya traía valor mandaba sobre `RAIZ`. El shell del agente carga
+    el perfil del usuario, y `PROJECT_DIR` es un nombre común. Ahora el bloque no usa
+    `PROJECT_DIR`: parte de `${CLAUDE_PROJECT_DIR:-$PWD}`.
+  - En una sesión reanudada, el JSONL vive en el proyecto `a/src` pero su historial empieza con
+    `cwd=a`. El bloque tomaba `a` y buscaba sus sesiones en una carpeta inexistente. Ahora `RAIZ`
+    es el `cwd` cuya codificación coincide con el nombre de la carpeta donde vive el JSONL, en vez
+    del primer `cwd`.
+  - Sección 7 de la suite: 2 asertos, rojos contra 84feb2d.
 
 ## [2.41.2] - 2026-09-28
 Origen: pendiente `p-8472f7f4b7`. 2.39.0 no habia pasado por el adversario externo (Codex); el
@@ -141,7 +150,16 @@ silencio (`recover=0`).
   En los 5 casos, el siguiente checkpoint recupera de mas. Eso cuesta un dedupe, no un tramo
   perdido. El "14 de 15" anterior media el criterio por nombre.
 
+- **Ronda 4 de Codex (break, 2 hallazgos altos):**
+  - `stamped=0 reason=no-existe-la-ficha` contaba como cierre. Ahora solo cuenta `stamped=1`.
+    Caso P, rojo contra 84feb2d. La medicion no cambia: 60 de 65 sobre 2600 JSONL.
+  - El otro hallazgo queda declarado abajo (mensaje `peer`).
+
 ### Limites declarados (no arreglados)
+- Un mensaje de otra sesion (`origin.kind=peer`) no cierra el turno del checkpoint, porque llega a
+  mitad de checkpoints que luego siguen (medido en esta sesion). Si ese mensaje encarga otro
+  trabajo y ese trabajo corre `ensure-frontmatter.py --apply`, el checkpoint abandonado cuenta
+  como terminado.
 - Un Bash que corre `python3` y ademas imprime un log viejo con una salida de cierre falsifica el
   cierre.
 - La salida de cierre depende del formato de 4 scripts. Si uno cambia su linea de resumen, sus
