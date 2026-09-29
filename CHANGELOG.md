@@ -5,6 +5,9 @@
 Origen: pendiente `p-eff86a1d3a`. El checker de ruta del proyecto de 2.39.3 cerro con la tercera ronda
 de Codex en `break`. Cada ronda habia roto otra forma del analisis de bash (if, heredoc, subshell,
 `$(...)` de varias lineas, `<<"1"`).
+La version nueva paso cuatro rondas de revision (Codex tres, un subagente Sonnet una), todas en
+`break`, cada una por huecos mas estrechos. Los arreglos de la cuarta (CRLF, `set`/`options` en R4,
+limite de entorno) no pasaron por otra ronda: Victor decidio cerrar con limites declarados.
 
 ### Changed
 - **`check-project-dir-fallback.py` ya no analiza bash: exige formas exactas.** La pregunta "esta
@@ -17,11 +20,14 @@ de Codex en `break`. Cada ronda habia roto otra forma del analisis de bash (if, 
     `PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"`, y despues solo aparece como
     `$PROJECT_DIR` o `${PROJECT_DIR}`.
   - R3: un comentario que nombra cualquiera de las dos no lleva `$` ni backtick.
-  - R4: un bloque que nombra cualquiera de las dos no nombra `IFS`, `shopt`, `setopt`, `unsetopt`
-    ni `emulate`: con `IFS=/` un uso sin comillas da un primer trozo vacio (`cd ''`), y con nullglob
-    una ruta con `*` que no calza desaparece. El Bash del agente puede ser zsh.
+  - R4: un bloque que nombra cualquiera de las dos no nombra `IFS`, `set`, `shopt`, `setopt`,
+    `unsetopt`, `emulate` ni `options`: con `IFS=/` un uso sin comillas da un primer trozo vacio
+    (`cd ''`), y con nullglob una ruta con `*` que no calza desaparece. El Bash del agente puede ser
+    zsh.
+  - El fichero se lee sin convertir CRLF: el shell no une `\` + `\r`, y el checker tampoco.
   - Lo seguro que no calce con el contrato falla. El docstring nombra que garantiza y los limites
-    aceptados, por clase.
+    aceptados, por clase. Entre ellos, el entorno heredado: opciones del shell y un valor de solo
+    espacios en `PROJECT_DIR` o `CLAUDE_PROJECT_DIR`.
 - Los comentarios al final de la linea canonica y de las lineas `ENCODED=` pasan a su propia linea
   (commands/migrate.md, setup-memory.md, templates/backfill-3t.md, checkpoint-3t.md, consolidate-3t.md,
   enrich-3t.md). Los cinco compartidos entraron con 2.41.3. El comportamiento del shell no cambia.
@@ -29,8 +35,8 @@ de Codex en `break`. Cada ronda habia roto otra forma del analisis de bash (if, 
   casos nuevos para cada regla del contrato, para un tabulador vertical o un NBSP delante de la linea
   canonica, y ejecuciones reales en bash, sin entorno: la linea canonica, la forma de R1 y un bloque
   que el checker acepta, que escribe en el `memory/` del directorio de trabajo. Casos de nombres
-  partidos con `\`, de `\\` par que no continua y de comentarios que no continuan. Cada una de 21
-  mutaciones del checker, corridas a mano, tumba la suite.
+  partidos con `\`, de `\\` par que no continua, de comentarios que no continuan y de CRLF. Cada
+  una de 24 mutaciones del checker, corridas a mano, tumba la suite.
 
 ## [2.41.3] - 2026-09-28
 Origen: pendiente `p-8472f7f4b7`. Codex revisó 2.39.1 y dio `break`. El hallazgo de severidad alta:

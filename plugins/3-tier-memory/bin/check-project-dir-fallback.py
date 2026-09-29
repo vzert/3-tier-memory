@@ -21,7 +21,9 @@ vertical o un NBSP delante hacen que la linea no sea una asignacion). "Linea de 
 logica cuyo primer caracter no blanco es `#`; un comentario no continua aunque acabe en `\\` (el
 shell tampoco lo continua). Toda otra linea es "de codigo", tambien dentro de un heredoc o de una
 cadena de varias lineas. Los bloques pueden correr en bash o en zsh (el Bash del agente usa la
-shell del usuario).
+shell del usuario). El fichero se lee sin convertir los saltos: con CRLF, `\\` + `\r` no continua
+(el shell tampoco lo une) y la linea canonica no calza por el `\r`, asi que un bloque con CRLF que
+nombra PROJECT_DIR falla R2; se convierte a LF.
   R1 En una linea de codigo, CLAUDE_PROJECT_DIR solo aparece como `${CLAUDE_PROJECT_DIR:-$PWD}`,
      texto exacto. Cualquier otra mencion falla, aunque fuera segura.
   R2 Si alguna linea de codigo nombra PROJECT_DIR, la primera linea de codigo del bloque es
@@ -34,11 +36,12 @@ shell del usuario).
      no hay expansion posible, asi que la linea es texto aunque caiga dentro de un heredoc o de una
      cadena. Se reporta como R1 o R2 segun la variable que nombre.
   R4 Un bloque cuyo codigo nombra cualquiera de las dos no nombra, en ninguna linea de codigo,
-     IFS, shopt, setopt, unsetopt ni emulate. Son lo que cambia como se expande un uso sin
-     comillas: con `IFS=/` se parte y su primer trozo es vacio (`cd $PROJECT_DIR` -> `cd ''`); con
-     nullglob (bash `shopt`, zsh `setopt`) una ruta con `*` o `?` que no calza desaparece; zsh
-     `setopt sh_word_split`/`emulate sh` reactivan el partido. Con las opciones por defecto una
-     ruta nunca da vacio.
+     IFS, set, shopt, setopt, unsetopt, emulate ni options. Son lo que cambia como se expande un
+     uso sin comillas: con `IFS=/` se parte y su primer trozo es vacio (`cd $PROJECT_DIR` ->
+     `cd ''`); con nullglob (bash `shopt`; zsh `setopt`, `set -o nullglob`, `set -G`,
+     `options[nullglob]=on`) una ruta con `*` o `?` que no calza desaparece; zsh `sh_word_split`,
+     `globsubst` o `emulate sh` reactivan el partido o el glob. Con las opciones por defecto una
+     ruta no vacia nunca da vacio.
 
 Por que basta: la linea canonica corre la primera, fuera de todo if/heredoc (no hay nada antes),
 y nunca da vacio. Despues, ninguna forma permitida puede cambiar la variable.
@@ -52,8 +55,9 @@ Limites aceptados, por clase (perseguirlos es volver a analizar bash):
     pueden dar vacio con un valor no vacio;
   - un nombre de variable sacado de un VALOR (`printf -v "$PROJECT_DIR"`, `declare -n r="$X"`):
     escribe en la variable que nombre ese valor, y solo es PROJECT_DIR si alguien la hereda asi;
-  - opciones heredadas del entorno (BASH_ENV, un ~/.zshenv con setopt nullglob) o cambiadas sin
-    las palabras de R4 (`set -o` no toca nullglob ni IFS; lo que si lo hace esta en R4);
+  - el ENTORNO heredado: opciones (BASH_ENV, un ~/.zshenv con setopt nullglob) y valores que no
+    estan vacios pero no sirven (PROJECT_DIR o CLAUDE_PROJECT_DIR con solo espacios: `:-` no los
+    cambia y un uso sin comillas no da argumento);
   - vaciar PWD antes del respaldo (`PWD=`, `unset PWD`);
   - comandos fuera de un bloque (prosa con `codigo en linea` que el agente copie);
   - la forma permitida escapada o entre comillas simples da un literal, no la ruta (nunca vacio).
@@ -97,7 +101,8 @@ FORMA_R1 = "${CLAUDE_PROJECT_DIR:-$PWD}"
 CANONICA = 'PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"'
 NOMBRE_R1 = re.compile(r"(?<![A-Za-z0-9_])CLAUDE_PROJECT_DIR(?![A-Za-z0-9_])")
 NOMBRE_R2 = re.compile(r"(?<![A-Za-z0-9_])PROJECT_DIR(?![A-Za-z0-9_])")
-NOMBRE_R4 = re.compile(r"(?<![A-Za-z0-9_])(?:IFS|shopt|setopt|unsetopt|emulate)(?![A-Za-z0-9_])")
+NOMBRE_R4 = re.compile(r"(?<![A-Za-z0-9_])(?:IFS|set|shopt|setopt|unsetopt|emulate|options)"
+                       r"(?![A-Za-z0-9_])")
 USO_R2 = re.compile(r"\$PROJECT_DIR(?![A-Za-z0-9_])|\$\{PROJECT_DIR\}")
 
 
@@ -188,7 +193,7 @@ def bloques(lineas, base):
 
 
 def revisar(ruta):
-    with open(ruta, encoding="utf-8") as f:
+    with open(ruta, encoding="utf-8", newline="") as f:
         lineas = f.read().split("\n")
     fallos = []
     n = 0

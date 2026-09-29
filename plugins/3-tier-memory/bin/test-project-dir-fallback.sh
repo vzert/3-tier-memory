@@ -425,16 +425,22 @@ ENCODED=$(echo "${CLAUDE_PROJECT_DIR:-$PWD}" | sed 's/[^A-Za-z0-9]/-/g')
 ```
 EOF
 # R4 ampliada: nullglob (bash shopt, zsh setopt) y el partido de zsh tambien cambian la expansion.
-rojo opciones "3:R4 4:R4 5:R4 6:R4" <<'EOF'
+rojo opciones "3:R4 4:R4 5:R4 6:R4 7:R4 8:R4 9:R4" <<'EOF'
 ```bash
 PROJECT_DIR="${PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}"
 shopt -s nullglob
 setopt nullglob
 unsetopt nomatch
 emulate sh
+set -o globsubst
+set -G
+options[nullglob]=on
 cd $PROJECT_DIR
 ```
 EOF
+# CRLF: el shell no une `\` + `\r`, asi que el checker tampoco (Codex, ronda 4: la canonica partida
+# con CRLF pasaba y bash daba `bad substitution`). Con CRLF la canonica no calza: R2.
+rojo crlf "2:R2 4:R2" < <(printf '```bash\r\nPROJECT_DIR="${PROJECT_DIR:-\\\r\n${CLAUDE_PROJECT_DIR:-$PWD}}"\r\nls "$PROJECT_DIR"\r\n```\r\n')
 verde opciones-sin-variable <<'EOF'
 ```bash
 shopt -s nullglob
@@ -537,7 +543,7 @@ check "cuenta independiente de fences de shell = la del recorrido" "$indep" "${n
 
 echo
 # Si un cambio salta casos en silencio, el total baja: se fija aqui.
-ESPERADOS=103
+ESPERADOS=105
 check "corrieron los $ESPERADOS asertos anteriores (este es el siguiente)" "$N" "$ESPERADOS"
 [ "$FAIL" -eq 0 ] && echo "PASS $N/$N" || echo "FAIL (ver arriba)"
 exit $FAIL
