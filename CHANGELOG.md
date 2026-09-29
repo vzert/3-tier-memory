@@ -1,6 +1,22 @@
 # Changelog
 
 
+## [2.41.5] - 2026-09-29
+Origen: el CI de 14d6328 (run 36594995072) salio rojo solo en windows-latest, en
+`test-raiz-del-proyecto` (18 asertos). macOS y Linux, en verde. Lo detecto la sesion paralela de 2.41.4.
+
+### Fixed
+- **La suite escribia el `cwd` del JSONL en forma Git Bash (`/c/Users/...`).** Claude Code en Windows
+  escribe `C:\...` y codifica su carpeta desde esa forma (`C--Users-...`). Ademas, Git Bash
+  convierte `$PWD` a `C:/...` al pasarlo a `python.exe`, asi que `RAIZ` sale en forma nativa. Con el
+  fixture en `/c/...` nada coincidia: el `cwd` no contenia al shell y las rutas esperadas tenian
+  otra forma. Ahora el fixture usa `cygpath -m` en Windows y queda igual en macOS y Linux. Solo
+  cambia la suite; los bloques no se tocan.
+  - Lo que esto implica para el producto: en Windows, `RAIZ` y la codificacion salen de la forma
+    `C:/...` y coinciden con la carpeta que usa Claude Code. Antes de 2.41.3, el respaldo
+    `${CLAUDE_PROJECT_DIR:-$PWD}` codificaba `/c/...` como `-c-Users-...` y no coincidia nunca.
+    Esto se deduce de la forma de las rutas; no se ha verificado en una instalacion real de Windows.
+
 ## [2.41.4] - 2026-09-28
 Origen: pendiente `p-eff86a1d3a`. El checker de ruta del proyecto de 2.39.3 cerro con la tercera ronda
 de Codex en `break`. Cada ronda habia roto otra forma del analisis de bash (if, heredoc, subshell,

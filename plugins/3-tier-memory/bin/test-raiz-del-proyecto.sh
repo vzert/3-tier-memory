@@ -26,7 +26,11 @@ bad() { printf '  FAIL %s\n' "$1"; FAIL=1; }
 SID="11111111-1111-4111-8111-111111111111"
 A="$TMP/a"; SUB="$A/src"
 mkdir -p "$SUB" "$A/memory" "$TMP/home"
-A=$(cd "$A" && pwd -P); SUB="$A/src"
+# Rutas en la forma que Claude Code escribe en el "cwd" del JSONL: en Windows es C:/... (o C:\...),
+# no la /c/... de Git Bash. Git Bash ademas convierte $PWD a C:/... al pasarlo a python.exe, asi que
+# RAIZ sale en forma nativa (CI de 14d6328: con el fixture en /c/... fallaban 18 asertos).
+nat() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
+A=$(nat "$(cd "$A" && pwd -P)"); SUB="$A/src"
 ENC_A=$(echo "$A" | sed 's/[^A-Za-z0-9]/-/g')
 ENC_SUB=$(echo "$SUB" | sed 's/[^A-Za-z0-9]/-/g')
 mkdir -p "$TMP/home/.claude/projects/$ENC_A"
@@ -112,7 +116,7 @@ echo "$JSONL_DIR"' "$SUB" "22222222-2222-4222-8222-222222222222"
 echo "6. ronda 2 del adversario (Codex, 2026-09-28): que JSONL y que cwd valen"
 BK="$(bloque templates/backfill-3t.md '2. Determine the JSONL directory:')"'
 echo "$RAIZ"'
-B="$TMP/b"; mkdir -p "$B"; B=$(cd "$B" && pwd -P); ENC_B=$(echo "$B" | sed 's/[^A-Za-z0-9]/-/g')
+B="$TMP/b"; mkdir -p "$B"; B=$(nat "$(cd "$B" && pwd -P)"); ENC_B=$(echo "$B" | sed 's/[^A-Za-z0-9]/-/g')
 J="$TMP/home/.claude/projects/$ENC_A/$SID.jsonl"; cp "$J" "$TMP/orig.jsonl"
 # a) la primera linea con cwd es de un subagente en otra carpeta
 { printf '{"type":"assistant","isSidechain":true,"cwd":"%s"}\n' "$B"; cat "$TMP/orig.jsonl"; } > "$J"
@@ -146,7 +150,7 @@ rm -rf "$ENC_SUB_DIR"; mv "$TMP/aparte.jsonl" "$J"
 
 echo "8. ronda 5 del adversario (Codex, 2026-09-29)"
 # a) reanudada entre hermanas que codifican igual (a-b y a_b): vale el cwd que contiene al shell
-H1="$TMP/h/a-b"; H2="$TMP/h/a_b"; mkdir -p "$H1" "$H2/src"; H1=$(cd "$H1" && pwd -P); H2=$(cd "$H2" && pwd -P)
+H1="$TMP/h/a-b"; H2="$TMP/h/a_b"; mkdir -p "$H1" "$H2/src"; H1=$(nat "$(cd "$H1" && pwd -P)"); H2=$(nat "$(cd "$H2" && pwd -P)")
 ENC_H=$(printf '%s\n' "$H2" | sed 's/[^A-Za-z0-9]/-/g'); mkdir -p "$TMP/home/.claude/projects/$ENC_H"
 mv "$J" "$TMP/aparte.jsonl"
 printf '{"type":"user","cwd":"%s"}\n{"type":"user","cwd":"%s"}\n' "$H1" "$H2" > "$TMP/home/.claude/projects/$ENC_H/$SID.jsonl"
