@@ -1,6 +1,20 @@
 # Changelog
 
 
+## [2.41.6] - 2026-09-29
+Origen: el CI de 7c1a6b9 (2.41.5, run 36627562742) siguio rojo solo en windows-latest, en
+`test-raiz-del-proyecto`, ahora con 15 asertos en vez de 18.
+
+### Fixed
+- **En Windows, `os.path.expanduser` de Python lee `USERPROFILE` e ignora `HOME`** (lo dice el
+  fuente de `ntpath.expanduser`). El HOME falso de la suite no le llegaba al bloque, que buscaba el
+  JSONL en el perfil real del runner y caia al respaldo `$PWD`. Los asertos que esperaban ese
+  respaldo pasaban por casualidad. Ahora la suite exporta `USERPROFILE` al mismo HOME falso, en
+  forma nativa. Los bloques no cambian.
+  - En una instalacion real, la parte de shell del bloque usa `$HOME` y la de Python usa
+    `USERPROFILE`. En Git Bash suelen ser la misma carpeta. Si un usuario las tiene distintas,
+    `JSONL_DIR` y la busqueda del JSONL miran carpetas distintas. Queda dentro de `p-e68af8997f`.
+
 ## [2.41.5] - 2026-09-29
 Origen: el CI de 14d6328 (run 36594995072) salio rojo solo en windows-latest, en
 `test-raiz-del-proyecto` (18 asertos). macOS y Linux, en verde. Lo detecto la sesion paralela de 2.41.4.

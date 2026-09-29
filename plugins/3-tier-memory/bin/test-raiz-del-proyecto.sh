@@ -31,6 +31,9 @@ mkdir -p "$SUB" "$A/memory" "$TMP/home"
 # RAIZ sale en forma nativa (CI de 14d6328: con el fixture en /c/... fallaban 18 asertos).
 nat() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s\n' "$1"; fi; }
 A=$(nat "$(cd "$A" && pwd -P)"); SUB="$A/src"
+# En Windows, os.path.expanduser de Python lee USERPROFILE e ignora HOME: sin esto el bloque busca
+# el JSONL en el perfil real del runner (CI de 7c1a6b9: 15 asertos caian al respaldo PWD).
+export USERPROFILE; USERPROFILE=$(nat "$TMP/home")
 ENC_A=$(echo "$A" | sed 's/[^A-Za-z0-9]/-/g')
 ENC_SUB=$(echo "$SUB" | sed 's/[^A-Za-z0-9]/-/g')
 mkdir -p "$TMP/home/.claude/projects/$ENC_A"
