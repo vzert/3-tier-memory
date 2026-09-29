@@ -77,7 +77,13 @@ echo "RECOVER_DIR=$RECOVER_DIR"
 **`recover=0`** — sigue con Step 1. Si el motivo es `sin-compactacion` o
 `checkpoint-posterior-a-la-compactacion`, no digas nada. Si es `sin-jsonl`, `sin-session-id` o
 `sin-script`, NO se pudo comprobar si hubo compactacion: dilo en una linea del reporte de Step 7
-("Recuperacion post-compactacion: no verificable — <motivo>"). Nunca detengas el checkpoint por esto.
+("Recuperacion post-compactacion: no verificable — <motivo>"). Si es `fallo-escritura`, SI hubo
+compactacion y el tramo NO se recupero (el script ya borro los bloques a medias): dilo en una linea
+del reporte ("Recuperacion post-compactacion: FALLO — hubo compactacion y no se pudo escribir el
+tramo (<error>); lo compactado puede faltar en esta ficha"). Si ademas trae `restos=N`, quedaron N
+archivos con texto crudo de la sesion que el script no pudo borrar ni vaciar: agrega a esa linea
+"quedan N archivo(s) con texto crudo en <out> — borralos a mano". En todo `recover=0`, borra el
+directorio: `rm -rf "<RECOVER_DIR impreso arriba>"`. Nunca detengas el checkpoint por esto.
 
 **`recover=1 compactions=N pre_tokens=T chunks=K ...`** — el tramo quedo en K bloques
 `$RECOVER_DIR/chunk-NN.md` (lista en `$RECOVER_DIR/manifest.json`). No los leas tu: pesan decenas de

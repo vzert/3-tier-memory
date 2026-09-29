@@ -264,6 +264,94 @@ for c in audit dry; do
   case "$OUT" in "recover=1 "*) ok "$c: no cuenta como cierre";; *) bad "Q $c: $OUT";; esac
 done
 
+echo "R. un fallo de escritura sale 0 con motivo y no deja bloques con texto crudo (Codex, ronda 1 sobre 2.39.x)"
+# Tres puntos de fallo: el manifest y el segundo bloque (con bloques ya escritos) y el directorio.
+# No se mira el nombre de la excepcion: abrir un directorio da IsADirectoryError en POSIX y
+# PermissionError en Windows.
+for c in manifest chunk dir; do
+  F="$TMP/r-$c.jsonl"; O="$TMP/or-$c"
+  { u p1 "SECRETO-EN-TRAMO"; u p1 "OTRA-ENTRADA-DEL-TRAMO"; bound 300000; summ; ckcmd p2; ckskl p2; } > "$F"
+  case $c in
+    manifest) mkdir -p "$O/manifest.json";;
+    chunk)    mkdir -p "$O/chunk-02.md";;
+    dir)      : > "$O";;
+  esac
+  OUT=$(run "$F" "$O" --chunk-chars 60 2>/dev/null); RC=$?
+  [ $RC -eq 0 ] && ok "$c: sale 0" || bad "R $c: exit=$RC"
+  case "$OUT" in "recover=0 reason=fallo-escritura"*) ok "$c: recover=0 reason=fallo-escritura";; *) bad "R $c: $OUT";; esac
+  if [ -d "$O" ]; then
+    grep -rqF "SECRETO-EN-TRAMO" "$O" && bad "R $c: queda texto crudo del tramo" || ok "$c: no queda texto crudo"
+    [ -z "$(find "$O" -name 'chunk-*.md' -type f)" ] && ok "$c: no quedan bloques" || bad "R $c: quedan bloques"
+  fi
+done
+
+echo "R2. ronda 2 de Codex sobre 2.41.7: sustituto suelto, stdout que falla, archivo o enlace previo"
+# Un \ud800 suelto es JSON valido, pero no se codifica en UTF-8: el bloque sale con reemplazo.
+F="$TMP/r-sur.jsonl"
+{ u p1 "SECRETO-EN-TRAMO"; u p1 'MALO\ud800FIN'; bound 300000; summ; ckcmd p2; ckskl p2; } > "$F"
+OUT=$(run "$F" "$TMP/or-sur" 2>/dev/null); RC=$?
+[ $RC -eq 0 ] && ok "sustituto: sale 0" || bad "R2 sustituto: exit=$RC"
+case "$OUT" in "recover=1 "*) ok "sustituto: recupera el tramo igual";; *) bad "R2 sustituto: $OUT";; esac
+has "sustituto: el bloque lleva el texto de alrededor" "FIN" "$TMP/or-sur/chunk-01.md"
+# stdout se cierra a mitad de la corrida (como una tuberia que se cierra): la linea de salida no
+# llega, asi que no deben quedar bloques que nadie sabe que existen.
+F="$TMP/r-out.jsonl"
+{ u p1 "SECRETO-EN-TRAMO"; bound 300000; summ; ckcmd p2; ckskl p2; } > "$F"
+python3 -c 'import os, runpy, sys; os.close(1); sys.argv[0] = sys.argv.pop(1); runpy.run_path(sys.argv[0], run_name="__main__")' \
+  "$BIN/compaction-recover.py" --jsonl "$F" --out-dir "$TMP/or-out" 2>/dev/null; RC=$?
+[ $RC -eq 0 ] && ok "stdout cerrado: sale 0" || bad "R2 stdout cerrado: exit=$RC"
+grep -rqF "SECRETO-EN-TRAMO" "$TMP/or-out" 2>/dev/null && bad "R2 stdout cerrado: queda texto crudo" || ok "stdout cerrado: no queda texto crudo"
+# Un chunk-01.md que ya existia (archivo, o enlace a otro archivo) no se pisa ni se borra. En Git
+# Bash sin modo desarrollador `ln -s` copia el archivo: los asertos valen para las dos formas.
+for c in archivo enlace; do
+  O="$TMP/or-$c"; mkdir -p "$O"; printf 'CONSERVAR\n' > "$TMP/destino-$c.txt"
+  if [ $c = archivo ]; then printf 'CONSERVAR\n' > "$O/chunk-01.md"; else ln -s "$TMP/destino-$c.txt" "$O/chunk-01.md"; fi
+  OUT=$(run "$F" "$O" 2>/dev/null); RC=$?
+  [ $RC -eq 0 ] && ok "$c previo: sale 0" || bad "R2 $c previo: exit=$RC"
+  case "$OUT" in "recover=0 reason=fallo-escritura"*) ok "$c previo: recover=0 reason=fallo-escritura";; *) bad "R2 $c previo: $OUT";; esac
+  [ -e "$O/chunk-01.md" ] || [ -L "$O/chunk-01.md" ] && ok "$c previo: no lo borra" || bad "R2 $c previo: lo borro"
+  has   "$c previo: el destino no cambia" "CONSERVAR" "$TMP/destino-$c.txt"
+  hasnt "$c previo: no escribe texto crudo en el destino" "SECRETO-EN-TRAMO" "$TMP/destino-$c.txt"
+  grep -rqF "SECRETO-EN-TRAMO" "$O" && bad "R2 $c previo: queda texto crudo" || ok "$c previo: no queda texto crudo"
+done
+
+echo "R3. ronda 3 de Codex sobre 2.41.7: stdout que da ValueError, error con sustituto, borrado que falla"
+F="$TMP/r3.jsonl"
+{ u p1 "SECRETO-EN-TRAMO"; bound 300000; summ; ckcmd p2; ckskl p2; } > "$F"
+# $1 = codigo que se corre antes del script (parchea el proceso); $2 = --out-dir
+# El parche va en su propia linea: con "; class" en una sola, python3 -c sale 1 por SyntaxError y el
+# caso pasa sin probar nada. Se exige que el envoltorio haya llegado a correr el script (ENVUELTO-OK).
+envuelto(){ python3 -c "import io, os, runpy, sys
+$1
+sys.argv[0] = sys.argv.pop(1)
+sys.stderr.write('ENVUELTO-OK\\n')
+runpy.run_path(sys.argv[0], run_name='__main__')" "$BIN/compaction-recover.py" --jsonl "$F" --out-dir "$2" 2>"$TMP/envuelto.err"
+  local rc=$?; grep -q ENVUELTO-OK "$TMP/envuelto.err" || bad "el envoltorio no llego a correr el script: $(tail -1 "$TMP/envuelto.err")"
+  return $rc; }
+# stdout cerrado como objeto de Python: write y flush dan ValueError, no OSError.
+OUT=$(envuelto "class C(io.TextIOBase):
+    def reconfigure(self, **k): pass
+    def write(self, s): raise ValueError('I/O operation on closed file')
+    def flush(self): raise ValueError('I/O operation on closed file')
+sys.stdout = C()" "$TMP/or3-val"); RC=$?
+[ $RC -eq 0 ] && ok "ValueError en stdout: sale 0" || bad "R3 ValueError: exit=$RC"
+grep -rqF "SECRETO-EN-TRAMO" "$TMP/or3-val" 2>/dev/null && bad "R3 ValueError: queda texto crudo" || ok "ValueError en stdout: no queda texto crudo"
+# Un OSError cuyo mensaje trae un sustituto: la linea recover=0 sale igual.
+OUT=$(envuelto "os.makedirs = lambda *a, **k: (_ for _ in ()).throw(OSError('malo \\ud800'))" "$TMP/or3-sur"); RC=$?
+[ $RC -eq 0 ] && ok "error con sustituto: sale 0" || bad "R3 sustituto: exit=$RC"
+case "$OUT" in "recover=0 reason=fallo-escritura"*) ok "error con sustituto: recover=0 reason=fallo-escritura";; *) bad "R3 sustituto: '$OUT'";; esac
+# El borrado falla (el directorio perdio el permiso): el bloque se vacia en vez de quedar con texto.
+mkdir -p "$TMP/or3-rm/manifest.json"
+OUT=$(envuelto "os.remove = lambda p: (_ for _ in ()).throw(PermissionError(13, 'sin permiso', p))" "$TMP/or3-rm"); RC=$?
+[ $RC -eq 0 ] && ok "borrado falla: sale 0" || bad "R3 borrado: exit=$RC"
+case "$OUT" in "recover=0 reason=fallo-escritura"*) ok "borrado falla: recover=0 reason=fallo-escritura";; *) bad "R3 borrado: $OUT";; esac
+grep -rqF "SECRETO-EN-TRAMO" "$TMP/or3-rm" && bad "R3 borrado: queda texto crudo" || ok "borrado falla: el bloque queda vacio"
+# Ni borrar ni vaciar: el texto queda, pero la linea lo dice para que Step 0b avise.
+mkdir -p "$TMP/or3-resto/manifest.json"
+OUT=$(envuelto "os.remove = os.truncate = lambda p, *a: (_ for _ in ()).throw(PermissionError(13, 'sin permiso', p))" "$TMP/or3-resto"); RC=$?
+[ $RC -eq 0 ] && ok "ni borrar ni vaciar: sale 0" || bad "R3 resto: exit=$RC"
+case "$OUT" in "recover=0 reason=fallo-escritura "*" restos=1"*) ok "ni borrar ni vaciar: avisa restos=1";; *) bad "R3 resto: $OUT";; esac
+
 echo "M. compactacion entre la marca del checkpoint actual y Step 0b: se recupera (adversario externo, 2026-09-28)"
 F="$TMP/m.jsonl"
 { u p1 "TRABAJO-M previo"; ckcmd p2; ckskl p2; bound 400000; summ; } > "$F"

@@ -1,6 +1,37 @@
 # Changelog
 
 
+## [2.41.7] - 2026-09-29
+Origen: Codex, ronda 1 sobre 2.39.x (`p-1892aaf627`).
+
+### Fixed
+- **`compaction-recover.py` salia 1 y dejaba texto crudo si fallaba una escritura.** Con
+  `manifest.json` ocupado por un directorio, el script escribia `chunk-01.md` y caia con
+  `IsADirectoryError`. Rompia el "siempre sale 0" y el bloque quedaba publicado: Step 0b solo borra
+  `RECOVER_DIR` con `recover=1`. Ahora cualquier `OSError` al crear el directorio, un bloque o el
+  manifest borra los archivos que esa corrida abrio y sale 0 con
+  `recover=0 reason=fallo-escritura error=<excepcion>`. No borra lo que ya estaba (un directorio
+  con ese nombre, el propio `--out-dir`). Caso R en `test-compaction-recover.sh` (manifest, segundo
+  bloque y `--out-dir` como archivo), rojo contra 14badf1.
+  - Ronda 2 de Codex sobre este arreglo (break): tres huecos. (1) Un `\ud800` suelto es JSON valido
+    pero no se codifica en UTF-8: `UnicodeEncodeError` no es `OSError`, salia 1 y dejaba bloques.
+    Ahora los bloques se escriben con `errors="replace"` y el tramo se recupera igual. (2) Si stdout
+    fallaba en la linea final, salia 120 con los bloques escritos y sin linea: nadie sabia que
+    existian. Ahora la linea se escribe y se vacia dentro del mismo `try`. (3) Un `chunk-01.md` que
+    ya existia se pisaba y, si era un enlace, se escribia el texto crudo en su destino y luego se
+    borraba el enlace. Ahora los archivos se abren con `"x"`: lo que ya estaba no se toca y la
+    corrida sale con `fallo-escritura`. Caso R2, rojo contra la primera version de este arreglo.
+  - Ronda 3 de Codex (break): tres huecos mas en el manejo del fallo. (1) Un stdout ya cerrado da
+    `ValueError`, no `OSError`: salia 120 con los bloques. Ahora tambien se captura. (2) Tras
+    `reconfigure(encoding=...)` stderr es estricto: un sustituto en el mensaje del error tumbaba el
+    aviso y no salia ninguna linea. Ahora la linea `recover=0` sale primero y el detalle va con
+    `ascii()`. (3) Si `os.remove` fallaba (directorio sin permiso), el bloque quedaba en silencio.
+    Ahora se vacia con `os.truncate`; si tampoco se puede, la linea lleva `restos=N out=DIR` y Step 0b
+    lo avisa. Caso R3, rojo contra la version de la ronda 2; su envoltorio exige que el script haya
+    llegado a correr, porque la primera version del caso salia 1 por un `SyntaxError` propio.
+- **Step 0b** trata `fallo-escritura` aparte de "no verificable": hubo compactacion y el tramo no se
+  recupero, y lo dice asi en el reporte. Con cualquier `recover=0` borra `RECOVER_DIR`.
+
 ## [2.41.6] - 2026-09-29
 Origen: el CI de 7c1a6b9 (2.41.5, run 36627562742) siguio rojo solo en windows-latest, en
 `test-raiz-del-proyecto`, ahora con 15 asertos en vez de 18.

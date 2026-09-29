@@ -46,7 +46,12 @@ Salida: bloques `chunk-NN.md` de hasta --chunk-chars caracteres (cortados entre 
 media entrada) y `manifest.json` en --out-dir. En stdout, una linea:
     recover=1 compactions=N pre_tokens=T chunks=K chars=C lines=A-B out=DIR
     recover=0 reason=<motivo>
-Siempre sale 0 salvo error de uso: el checkpoint NO debe caerse porque esto falle; solo avisa.
+    recover=0 reason=fallo-escritura error=<excepcion> [restos=N out=DIR]
+        (hubo compactacion y el tramo NO se recupero; restos=N: N archivos con texto crudo que no se
+        pudieron borrar ni vaciar)
+Siempre sale 0 salvo error de uso: el checkpoint NO debe caerse porque esto falle; solo avisa. Si
+falla una escritura (o la propia linea de salida), borra los archivos que esta corrida creo antes de
+salir. No escribe sobre archivos que ya estaban en --out-dir: los abre con "x".
 
 Los bloques contienen texto crudo de la sesion (puede haber secretos). --out-dir debe estar FUERA de
 memory/ y el checkpoint lo borra al terminar.
@@ -427,7 +432,6 @@ def main():
         if r:
             entries.append(r)
 
-    os.makedirs(a.out_dir, exist_ok=True)
     # Tamano objetivo balanceado: con el tope a secas, 101K salian como 99K + 3K (medido) y un
     # subagente hacia casi todo el trabajo. Se reparte el total entre los bloques que hagan falta.
     total_chars = sum(len(e) + 2 for e in entries)
@@ -443,24 +447,65 @@ def main():
     if cur:
         chunks.append(cur)
 
-    paths, total = [], 0
-    for i, ch in enumerate(chunks, 1):
-        p = os.path.join(a.out_dir, f"chunk-{i:02d}.md")
-        body = (f"# Tramo compactado — bloque {i} de {len(chunks)}\n"
-                f"# Lineas {info['from_line']}-{info['to_line']} de {os.path.basename(path)}\n\n"
-                + "\n\n".join(ch) + "\n")
-        with open(p, "w", encoding="utf-8", newline="\n") as fh:
-            fh.write(body)
-        paths.append(p)
-        total += len(body)
+    # Si una escritura falla, se borra lo que esta corrida creo y se sale 0 con motivo: un bloque a
+    # medias tiene texto crudo de la sesion y Step 0b solo lo usa si ve recover=1 (Codex, ronda 1
+    # sobre 2.39.x: manifest.json como directorio dejaba chunk-01.md y salia 1).
+    # Ronda 2 (sobre 2.41.7): los archivos se abren con "x" y se anotan DESPUES de abrirlos, asi que
+    # un archivo o enlace que ya estaba no se pisa, no se sigue ni se borra; errors="replace" porque
+    # un \ud800 suelto es JSON valido y no se codifica en UTF-8; y la linea de salida se escribe y
+    # vacia dentro del try: si stdout falla, nadie sabra que los bloques existen.
+    paths, created, total = [], [], 0
+    try:
+        os.makedirs(a.out_dir, exist_ok=True)
+        for i, ch in enumerate(chunks, 1):
+            p = os.path.join(a.out_dir, f"chunk-{i:02d}.md")
+            body = (f"# Tramo compactado — bloque {i} de {len(chunks)}\n"
+                    f"# Lineas {info['from_line']}-{info['to_line']} de {os.path.basename(path)}\n\n"
+                    + "\n\n".join(ch) + "\n")
+            with open(p, "x", encoding="utf-8", errors="replace", newline="\n") as fh:
+                created.append(p)
+                fh.write(body)
+            paths.append(p)
+            total += len(body)
 
-    info.update({"jsonl": path, "chunks": paths, "chars": total, "entries": len(entries)})
-    with open(os.path.join(a.out_dir, "manifest.json"), "w", encoding="utf-8", newline="\n") as fh:
-        json.dump(info, fh, ensure_ascii=False, indent=2)
+        info.update({"jsonl": path, "chunks": paths, "chars": total, "entries": len(entries)})
+        mp = os.path.join(a.out_dir, "manifest.json")
+        with open(mp, "x", encoding="utf-8", errors="replace", newline="\n") as fh:
+            created.append(mp)
+            json.dump(info, fh, ensure_ascii=False, indent=2)
 
-    pre = sum(c.get("pre_tokens") or 0 for c in info["compactions"])
-    print(f"recover=1 compactions={len(info['compactions'])} pre_tokens={pre} chunks={len(paths)} "
-          f"chars={total} lines={info['from_line']}-{info['to_line']} out={a.out_dir}")
+        pre = sum(c.get("pre_tokens") or 0 for c in info["compactions"])
+        print(f"recover=1 compactions={len(info['compactions'])} pre_tokens={pre} chunks={len(paths)} "
+              f"chars={total} lines={info['from_line']}-{info['to_line']} out={a.out_dir}")
+        sys.stdout.flush()
+    except (OSError, UnicodeError, ValueError) as e:
+        # ValueError: un stdout ya cerrado (ronda 3). Si no se puede borrar un archivo, se vacia; si
+        # tampoco, queda texto crudo y la linea lo dice (restos=N) para que Step 0b avise.
+        restos = 0
+        for p in created:
+            try:
+                os.remove(p)
+            except OSError:
+                try:
+                    os.truncate(p, 0)
+                except OSError:
+                    restos += 1
+        linea = f"recover=0 reason=fallo-escritura error={type(e).__name__}"
+        if restos:
+            linea += f" restos={restos} out={ascii(a.out_dir)}"
+        # La linea de stdout va primero y el detalle con ascii(): tras reconfigure(encoding=...)
+        # stderr es estricto y un sustituto en el mensaje lo haria fallar (ronda 3).
+        try:
+            print(linea)
+            sys.stdout.flush()
+        except (OSError, UnicodeError, ValueError):
+            # stdout roto: sin esto, el vaciado al salir falla otra vez y Python sale 120.
+            sys.stdout = open(os.devnull, "w", encoding="utf-8", newline="\n")
+        try:
+            print(f"compaction-recover: {ascii(str(e))}", file=sys.stderr)
+        except (OSError, UnicodeError, ValueError):
+            pass
+        return 0
     return 0
 
 
