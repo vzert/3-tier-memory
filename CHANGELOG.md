@@ -1,6 +1,29 @@
 # Changelog
 
 
+## [2.41.9] - 2026-09-30
+Origen: Codex, ronda 5 sobre 2.41.8 (break).
+
+### Fixed
+- **`compaction-recover.py`: la limpieza y la linea de fallo aun podian salir 1 o 120.** Cada
+  hallazgo tiene su variante en el caso R5 de `test-compaction-recover.sh`, roja contra a0967ba.
+  (1) Un `MemoryError` en `os.remove` durante la limpieza salia 1 y dejaba el bloque lleno. Ahora la
+  limpieza captura `Exception` y pasa a vaciar el archivo.
+  (2) Un stdout cuyo `write` da otra excepcion (por ejemplo `RuntimeError`) fallaba tambien en la
+  linea `recover=0` y salia 1. Ahora esa linea captura `Exception`.
+  (3) Con stdout cerrado, si no se podia abrir `os.devnull` (sin descriptores libres), salia 120.
+  Ahora stdout pasa a `None`: no hay que abrir nada y Python no vacia nada al salir. La variante
+  "exito sin os.devnull" es una guarda: pasa tambien contra a0967ba.
+
+### Limites declarados
+- **Carreras con otro proceso del mismo usuario.** Hay dos. (a) Cambiar `--out-dir` por un enlace
+  entre la comprobacion y el `makedirs`. (b) Cambiar o mover un bloque entre la comprobacion de
+  identidad y el borrado. Ese proceso ya puede leer el JSONL original, asi que no gana acceso al
+  texto. Cerrarlas del todo pide `dir_fd`, y Windows no lo tiene. Step 0b usa un directorio nuevo
+  de `mktemp -d`.
+- **Windows sin enlaces reales**: los casos de enlace de R4 se saltan ahi. Su CI solo prueba la
+  identidad (dispositivo, inodo) en la limpieza normal (caso R).
+
 ## [2.41.8] - 2026-09-30
 Origen: Codex, ronda 4 sobre los arreglos de la ronda 3 de 2.41.7 (`p-769a87430a`), veredicto break.
 

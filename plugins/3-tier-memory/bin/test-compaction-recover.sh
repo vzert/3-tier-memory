@@ -436,6 +436,46 @@ for T in "$BIN/../templates/checkpoint-3t.md"; do
   has "Step 0b exige manifest.json no vacio para usar recover=1" 'recover=1` solo vale si `$RECOVER_DIR/manifest.json` existe y no esta vacio' "$T"
 done
 
+echo "R5. ronda 5 de Codex sobre 2.41.8: excepcion durante la limpieza, stdout que falla con otra excepcion"
+# Un MemoryError en os.remove durante la limpieza: el bloque se vacia igual y sale 0.
+mkdir -p "$TMP/or5-mem/manifest.json"
+OUT=$(envuelto "os.remove = lambda p: (_ for _ in ()).throw(MemoryError())" "$TMP/or5-mem"); RC=$?
+[ $RC -eq 0 ] && ok "MemoryError en la limpieza: sale 0" || bad "R5 MemoryError limpieza: exit=$RC"
+case "$OUT" in "recover=0 reason=fallo-escritura"*) ok "MemoryError en la limpieza: recover=0 reason=fallo-escritura";; *) bad "R5 MemoryError limpieza: $OUT";; esac
+grep -rqF "SECRETO-EN-TRAMO" "$TMP/or5-mem" && bad "R5 MemoryError limpieza: queda texto crudo" || ok "MemoryError en la limpieza: no queda texto crudo"
+# stdout cuyo write da RuntimeError: no es OSError/UnicodeError/ValueError, y falla tambien en la
+# linea recover=0.
+OUT=$(envuelto "class C(io.TextIOBase):
+    def reconfigure(self, **k): pass
+    def write(self, s): raise RuntimeError('stdout raro')
+    def flush(self): pass
+sys.stdout = C()" "$TMP/or5-run"); RC=$?
+[ $RC -eq 0 ] && ok "RuntimeError en stdout: sale 0" || bad "R5 RuntimeError stdout: exit=$RC"
+grep -rqF "SECRETO-EN-TRAMO" "$TMP/or5-run" 2>/dev/null && bad "R5 RuntimeError stdout: queda texto crudo" || ok "RuntimeError en stdout: no queda texto crudo"
+# stdout cerrado y ademas no se puede abrir os.devnull (sin descriptores libres).
+OUT=$(envuelto "import builtins
+_op = builtins.open
+def op(f, *a, **k):
+    if f == os.devnull: raise OSError(24, 'demasiados archivos abiertos')
+    return _op(f, *a, **k)
+builtins.open = op
+class C(io.TextIOBase):
+    def reconfigure(self, **k): pass
+    def write(self, s): raise ValueError('I/O operation on closed file')
+    def flush(self): raise ValueError('I/O operation on closed file')
+sys.stdout = C()" "$TMP/or5-null"); RC=$?
+[ $RC -eq 0 ] && ok "stdout cerrado sin os.devnull: sale 0" || bad "R5 sin devnull: exit=$RC"
+grep -rqF "SECRETO-EN-TRAMO" "$TMP/or5-null" 2>/dev/null && bad "R5 sin devnull: queda texto crudo" || ok "stdout cerrado sin os.devnull: no queda texto crudo"
+# Y en la ruta de exito: la linea llega aunque os.devnull no se pueda abrir.
+OUT=$(envuelto "import builtins
+_op = builtins.open
+def op(f, *a, **k):
+    if f == os.devnull: raise OSError(24, 'demasiados archivos abiertos')
+    return _op(f, *a, **k)
+builtins.open = op" "$TMP/or5-exito"); RC=$?
+[ $RC -eq 0 ] && ok "exito sin os.devnull: sale 0" || bad "R5 exito sin devnull: exit=$RC"
+case "$OUT" in "recover=1 "*) ok "exito sin os.devnull: recover=1";; *) bad "R5 exito sin devnull: $OUT";; esac
+
 echo "M. compactacion entre la marca del checkpoint actual y Step 0b: se recupera (adversario externo, 2026-09-28)"
 F="$TMP/m.jsonl"
 { u p1 "TRABAJO-M previo"; ckcmd p2; ckskl p2; bound 400000; summ; } > "$F"

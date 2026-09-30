@@ -492,21 +492,20 @@ def main():
         sys.stdout.flush()
         # La linea ya llego: el vaciado al salir no tiene nada que escribir, pero si falla Python sale
         # 120 con los bloques validos (ronda 4, con un stdout falso; una tuberia real no lo hace).
-        try:
-            sys.stdout = open(os.devnull, "w", encoding="utf-8", newline="\n")
-        except OSError:
-            pass    # sin descriptores libres: no es razon para borrar una recuperacion valida
+        # None y no os.devnull: abrir un archivo puede fallar (ronda 5); con None, Python no vacia nada.
+        sys.stdout = None
     except Exception as e:
         # ValueError: un stdout ya cerrado (ronda 3). Si no se puede borrar un archivo, se vacia; si
         # tampoco, queda y la linea lo dice (restos=N) para que Step 0b avise. Un archivo que ya no
-        # esta, o que ya no es el que esta corrida creo, no se toca ni se cuenta.
+        # esta, o que ya no es el que esta corrida creo, no se toca ni se cuenta. Se captura Exception
+        # y no OSError: un MemoryError en la limpieza salia 1 con el bloque lleno (ronda 5).
         restos = 0
         for p, dev, ino in reversed(created):
             try:
                 st = os.lstat(p)
             except FileNotFoundError:
                 continue
-            except OSError:
+            except Exception:
                 restos += 1
                 continue
             if (st.st_dev, st.st_ino) != (dev, ino):
@@ -516,13 +515,13 @@ def main():
                 continue
             except FileNotFoundError:
                 continue
-            except OSError:
+            except Exception:
                 pass
             try:
                 st = os.lstat(p)
             except FileNotFoundError:
                 continue
-            except OSError:
+            except Exception:
                 st = None
             if st is not None and (st.st_dev, st.st_ino) != (dev, ino):
                 continue
@@ -536,7 +535,7 @@ def main():
                     os.close(fd)
             except FileNotFoundError:
                 pass
-            except OSError:
+            except Exception:
                 restos += 1
         linea = f"recover=0 reason=fallo-escritura error={type(e).__name__}"
         if restos:
@@ -546,12 +545,13 @@ def main():
         try:
             print(linea)
             sys.stdout.flush()
-        except (OSError, UnicodeError, ValueError):
-            # stdout roto: sin esto, el vaciado al salir falla otra vez y Python sale 120.
-            sys.stdout = open(os.devnull, "w", encoding="utf-8", newline="\n")
+        except Exception:
+            # stdout roto: sin esto, el vaciado al salir falla otra vez y Python sale 120. Con
+            # cualquier excepcion, no solo OSError/UnicodeError/ValueError (ronda 5).
+            sys.stdout = None
         try:
             print(f"compaction-recover: {ascii(str(e))}", file=sys.stderr)
-        except (OSError, UnicodeError, ValueError):
+        except Exception:
             pass
         return 0
     return 0
