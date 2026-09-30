@@ -28,6 +28,10 @@ if nombre not in M:
     print(f"0 sust: mutacion desconocida «{nombre}»")
     sys.exit(0)
 s = io.open(p, encoding="utf-8", newline="").read()
+# newline="" conserva los finales de linea del archivo: en el checkout de Windows (autocrlf) son
+# CRLF y un patron con "\n" a secas no calza (CI de 5304798: las 4 SIN PROBAR solo en windows).
+if "\r\n" in s:
+    M[nombre] = [(v.replace("\n", "\r\n"), n.replace("\n", "\r\n")) for v, n in M[nombre]]
 cuentas = [s.count(viejo) for viejo, _ in M[nombre]]
 if cuentas != [1] * len(cuentas):
     print(f"0 sust de {nombre} (cada sustitucion calza {cuentas} veces; se exige 1)")
