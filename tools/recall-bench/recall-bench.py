@@ -1,7 +1,15 @@
 #!/usr/bin/env python3
 """Banco de pruebas del recall de learnings (Fase F0 de memory/plans/plan-ciclo-de-vida-learnings.md).
 
-Mide, sobre casos REALES, tres cosas que el plan quiere mejorar fase a fase:
+Sirve a cualquier instalacion del plugin: el codigo no sabe nada de ningun proyecto concreto. Lo
+concreto vive en un fichero de casos. Hay dos:
+
+- `corpus-neutro/casos.jsonl`, publicado: un corpus de memoria con reglas de patrones comunes (git,
+  CI, shell, publicacion, proceso del agente) y sus casos. Corre en tools/run-tests.sh y en la CI.
+- `casos.jsonl` (no se publica, .gitignore): los casos de TU instalacion, sobre los memory/ de tus
+  proyectos. `minar-casos.py` propone candidatos sacados de tus fichas de sesion.
+
+Mide, sobre casos declarados con cita comprobable, tres cosas que el plan quiere mejorar:
 
 - prompt@4: fraccion de casos del canal "prompt" con alguna regla esperada en el top 4 del motor
   de produccion (bin/recall_rank.py, importado: no una copia).
@@ -16,28 +24,38 @@ Los indices se construyen con build-recall-index.py en un directorio temporal. L
 corpus solo se LEEN. Nunca se corre recall.sh, que compacta el journal y reescribe el indice del
 proyecto que resuelve.
 
-Se NIEGA a correr (sale 2) si hay menos de 20 casos de origen "incidente", menos de 5 del canal
-accion entre ellos (los de origen "medida" corren pero no cuentan para esos minimos), o algun caso sin
-`fuente`, con una `fuente` que no existe, o cuya `cita` no aparece literal en su fuente. La cita es
-lo que ata el caso a algo que paso: un caso sin cita comprobable es un caso inventado.
+Se NIEGA a correr (sale 2) si hay menos de 20 casos con cita (origen "incidente" o "neutro"),
+menos de 5 del canal accion entre ellos, algun caso sin `fuente`, con una `fuente` que no existe, o
+cuya `cita` no aparece literal en su fuente, o algun caso todavia marcado `"revisar": true` (un
+candidato de minar-casos.py que nadie reviso). Los de origen "medida" corren y cuentan en las
+metricas, pero no completan los minimos.
 
 Limite (lo que el banco NO prueba): `origen`, `canal`, `esperadas` y `prohibidas` los declara quien
 escribe el caso. El banco comprueba que la fuente existe, que la cita esta en ella y que las reglas
 citadas existen sin ambiguedad; no puede comprobar que la regla esperada fuera la que aplicaba, ni
-que el caso sea de verdad un incidente. Eso lo revisa una persona sobre casos.jsonl.
+que el caso sea de verdad un incidente. Eso lo revisa una persona.
 
-Formato de un caso (una linea JSON en casos.jsonl):
-  {"id": "...", "corpus": "claude-vzert", "canal": "prompt|accion|dedup",
+Formato de un caso (una linea JSON):
+  {"id": "...", "corpus": "<nombre bajo --corpus-raiz> | <ruta a un proyecto con memory/>",
+   "canal": "prompt|accion|dedup",
    "entrada": "<prompt>" | {"tool_name": ..., "tool_input": {...}} | "<topic>#<N>" (dedup),
    "esperadas": ["<topic>#<N>", ...], "prohibidas": ["<topic>#<N>", ...],
-   "fuente": "<ruta absoluta>", "cita": "<texto literal de la fuente>", "nota": "...",
-   "origen": "incidente|medida"}   (por omision incidente; solo esos cuentan para los minimos)
+   "fuente": "<ruta>", "cita": "<texto literal de la fuente>", "nota": "...",
+   "origen": "incidente|neutro|medida",
+   "linea_base_esperada": {"contiene": [...], "excluye": [...]}}   (opcional)
+  - Rutas relativas (`corpus`, `fuente`) se resuelven contra la carpeta del fichero de casos.
+  - `origen`: incidente (por omision) = un error real de tu instalacion; neutro = un incidente real
+    reescrito en terminos generales para el corpus publicado; medida = una frase con la que se
+    midio algo, no un incidente.
+  - `linea_base_esperada`: lo que el motor de HOY devuelve para ese caso (prompt: el top 4; dedup:
+    los 8 vecinos). Con --comprobar-linea-base el banco sale 1 si no se reproduce. Sirve para fijar
+    una medida (por ejemplo "este duplicado sale junto al original") y ver cuando una fase la cambia.
 
 Uso:
   recall-bench.py [--casos F] [--salida F.json] [--hoy AAAA-MM-DD] [--corpus-raiz DIR]
-                  [--comprobar-h8]
-  --corpus-raiz: donde viven los proyectos (<raiz>/<corpus>/memory). Por defecto ~/Projects.
-  --comprobar-h8: ademas exige la linea base H8 del plan (sale 1 si no se reproduce).
+                  [--comprobar-linea-base]
+  --casos: por defecto tools/recall-bench/casos.jsonl (el de tu instalacion).
+  --corpus-raiz: donde viven los proyectos cuyo `corpus` es un nombre. Por defecto ~/Projects.
 """
 import argparse
 import importlib.util
@@ -49,6 +67,13 @@ import sys
 import tempfile
 from datetime import date
 
+# UTF-8 en stdout y stderr, como los .py de bin/ (regla 63): en Windows el flujo sigue la pagina de
+# codigos local y los mensajes en espanol salen rotos.
+for _flujo in (sys.stdout, sys.stderr):
+    if hasattr(_flujo, "reconfigure"):
+        _flujo.reconfigure(encoding="utf-8")
+
+
 RAIZ = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 BIN = os.path.join(RAIZ, "plugins", "3-tier-memory", "bin")
 AQUI = os.path.dirname(os.path.abspath(__file__))
@@ -56,7 +81,8 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 MIN_CASOS = 20
 MIN_ACCION = 5
 CANALES = ("prompt", "accion", "dedup")
-ORIGENES = ("incidente", "medida")
+ORIGENES = ("incidente", "neutro", "medida")
+CON_CITA = ("incidente", "neutro")
 K = {"prompt": 4, "accion": 2, "dedup": 8}
 RULE_RE = re.compile(r"^\s*(\d+)\.\s+(.*)")
 ID_RE = re.compile(r"^[A-Za-z0-9_.-]+#\d+$")
@@ -125,17 +151,41 @@ def existe_unica(reglas, rid):
     return None
 
 
-def validar(casos, raiz):
-    # Solo cuentan para los minimos los casos declarados de incidente (origen "incidente", el valor
-    # por omision). Los de origen "medida" (las frases con que se midio H8 en el plan) corren y se
-    # reportan, pero no son citas de un incidente y no pueden completar el minimo.
+def resolver(ruta, base):
+    """Ruta absoluta tal cual; relativa, contra la carpeta del fichero de casos."""
+    return ruta if os.path.isabs(ruta) else os.path.normpath(os.path.join(base, ruta))
+
+
+def memory_de(corpus, raiz, base):
+    """El memory/ de un corpus: un nombre bajo --corpus-raiz, o una ruta a un proyecto."""
+    if "/" in corpus or "\\" in corpus or corpus.startswith("."):
+        return os.path.join(resolver(corpus, base), "memory")
+    return os.path.join(raiz, corpus, "memory")
+
+
+def validar_ids(cid, corpus, reglas, rids):
+    for rid in rids:
+        if not isinstance(rid, str) or not ID_RE.match(rid):
+            negarse(f"{cid}: id de regla mal formado {rid!r} (se espera topic#N)")
+        motivo = existe_unica(reglas, rid)
+        if motivo:
+            negarse(f"{cid}: la regla {rid} {motivo} en {corpus}")
+
+
+def validar(casos, raiz, base):
     for c in casos:
         if c.get("origen", "incidente") not in ORIGENES:
             negarse(f"{c.get('id')}: origen desconocido {c.get('origen')!r}")
-    reales = [c for c in casos if c.get("origen", "incidente") == "incidente"]
-    if len(reales) < MIN_CASOS:
-        negarse(f"hay {len(reales)} casos; hacen falta al menos {MIN_CASOS} (de origen incidente)")
-    n_accion = sum(1 for c in reales if c.get("canal") == "accion")
+        if c.get("revisar"):
+            negarse(f"{c.get('id')}: es un candidato sin revisar (\"revisar\": true); revisalo y "
+                    f"quita el campo, o sacalo del fichero")
+    # Solo cuentan para los minimos los casos con cita (incidente o neutro). Los de origen "medida"
+    # corren y se reportan, pero no son citas de un incidente y no pueden completar el minimo.
+    con_cita = [c for c in casos if c.get("origen", "incidente") in CON_CITA]
+    if len(con_cita) < MIN_CASOS:
+        negarse(f"hay {len(con_cita)} casos; hacen falta al menos {MIN_CASOS} "
+                f"(de origen incidente o neutro)")
+    n_accion = sum(1 for c in con_cita if c.get("canal") == "accion")
     if n_accion < MIN_ACCION:
         negarse(f"hay {n_accion} casos del canal accion; hacen falta al menos {MIN_ACCION}")
     ids = set()
@@ -148,7 +198,8 @@ def validar(casos, raiz):
         fuente = c.get("fuente")
         if not fuente:
             negarse(f"{cid}: sin fuente")
-        if not os.path.isabs(fuente) or not os.path.isfile(fuente):
+        fuente = resolver(fuente, base)
+        if not os.path.isfile(fuente):
             negarse(f"{cid}: la fuente no existe: {fuente}")
         cita = c.get("cita")
         if not cita:
@@ -158,23 +209,21 @@ def validar(casos, raiz):
                 negarse(f"{cid}: la cita no aparece literal en la fuente")
         if c.get("canal") not in CANALES:
             negarse(f"{cid}: canal desconocido {c.get('canal')!r}")
-        mem = os.path.join(raiz, c.get("corpus", ""), "memory")
-        if not c.get("corpus") or not os.path.isdir(mem):
+        if not c.get("corpus"):
+            negarse(f"{cid}: sin corpus")
+        mem = memory_de(c["corpus"], raiz, base)
+        if not os.path.isdir(mem):
             negarse(f"{cid}: el corpus no existe: {mem}")
-        if c["corpus"] not in reglas_cache:
-            reglas_cache[c["corpus"]] = reglas_de(mem)
-        reglas = reglas_cache[c["corpus"]]
+        if mem not in reglas_cache:
+            reglas_cache[mem] = reglas_de(mem)
+        c["_mem"] = mem
+        reglas = reglas_cache[mem]
         esperadas = c.get("esperadas")
         if not isinstance(esperadas, list) or not esperadas:
             negarse(f"{cid}: sin esperadas")
         if set(esperadas) & set(c.get("prohibidas") or []):
             negarse(f"{cid}: una regla no puede ser esperada y prohibida a la vez")
-        for rid in esperadas + list(c.get("prohibidas") or []):
-            if not ID_RE.match(rid):
-                negarse(f"{cid}: id de regla mal formado {rid!r} (se espera topic#N)")
-            motivo = existe_unica(reglas, rid)
-            if motivo:
-                negarse(f"{cid}: la regla {rid} {motivo} en {c['corpus']}")
+        validar_ids(cid, c["corpus"], reglas, esperadas + list(c.get("prohibidas") or []))
         e = c.get("entrada")
         if c["canal"] == "prompt" and not (isinstance(e, str) and e.strip()):
             negarse(f"{cid}: entrada de prompt vacia")
@@ -183,9 +232,14 @@ def validar(casos, raiz):
         if c["canal"] == "dedup":
             if not (isinstance(e, str) and ID_RE.match(e)):
                 negarse(f"{cid}: entrada de dedup debe ser topic#N")
-            motivo = existe_unica(reglas, e)
-            if motivo:
-                negarse(f"{cid}: la regla {e} {motivo} en {c['corpus']}")
+            validar_ids(cid, c["corpus"], reglas, [e])
+        lb = c.get("linea_base_esperada")
+        if lb is not None:
+            if c["canal"] == "accion":
+                negarse(f"{cid}: el canal accion no tiene linea base que fijar todavia")
+            if not isinstance(lb, dict) or set(lb) - {"contiene", "excluye"} or not lb:
+                negarse(f"{cid}: linea_base_esperada solo admite 'contiene' y 'excluye'")
+            validar_ids(cid, c["corpus"], reglas, list(lb.get("contiene", [])) + list(lb.get("excluye", [])))
     return reglas_cache
 
 
@@ -199,11 +253,11 @@ def indice_con_ids(memory_dir, reglas, builder, tmp, nombre):
     pendientes = {}
     for topic, rs in reglas.items():
         rel = os.path.join("memory", "learnings", f"{topic}.md")
+        amb = ambiguas(reglas, topic)
         vistos = {}
         for n, texto in rs:
             vistos[n] = vistos.get(n, 0) + 1
-            rid = f"{topic}#{n}" if vistos[n] == 1 and n not in ambiguas(reglas, topic) \
-                else f"{topic}#{n}~{vistos[n]}"
+            rid = f"{topic}#{n}" if n not in amb else f"{topic}#{n}~{vistos[n]}"
             pendientes.setdefault((rel, builder.truncate(texto)), []).append(rid)
     for u in units:
         cola = pendientes.get((u.get("path"), u.get("texto")))
@@ -220,38 +274,32 @@ def jaccard(a, b):
     return len(a & b) / len(a | b) if a | b else 0.0
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--casos", default=os.path.join(AQUI, "casos.jsonl"))
-    ap.add_argument("--salida", default="")
-    ap.add_argument("--hoy", default="")
-    ap.add_argument("--corpus-raiz", default=os.path.expanduser("~/Projects"))
-    ap.add_argument("--comprobar-h8", action="store_true")
-    a = ap.parse_args()
-
-    if not os.path.isfile(a.casos):
-        negarse(f"no existe el fichero de casos: {a.casos}")
+def cargar_casos(ruta):
+    if not os.path.isfile(ruta):
+        negarse(f"no existe el fichero de casos: {ruta}")
     casos = []
-    for i, l in enumerate(open(a.casos, encoding="utf-8"), 1):
-        if l.strip():
-            try:
-                casos.append(json.loads(l))
-            except json.JSONDecodeError as e:
-                negarse(f"linea {i} de casos no es JSON: {e}")
-    reglas_por_corpus = validar(casos, a.corpus_raiz)
+    with open(ruta, encoding="utf-8") as f:
+        for i, l in enumerate(f, 1):
+            if l.strip():
+                try:
+                    casos.append(json.loads(l))
+                except json.JSONDecodeError as e:
+                    negarse(f"linea {i} de casos no es JSON: {e}")
+    return casos
 
-    hoy = date.fromisoformat(a.hoy) if a.hoy else date.today()
+
+def medir(casos, reglas_por_mem, hoy):
     motor, builder = cargar_motor(), cargar_builder()
     detalle = []
     with tempfile.TemporaryDirectory() as tmp:
         indices = {}
-        for corpus, reglas in reglas_por_corpus.items():
-            indices[corpus] = indice_con_ids(os.path.join(a.corpus_raiz, corpus, "memory"),
-                                             reglas, builder, tmp, corpus)
+        for i, (mem, reglas) in enumerate(reglas_por_mem.items()):
+            indices[mem] = indice_con_ids(mem, reglas, builder, tmp, f"idx-{i}")
         for c in casos:
-            units = indices[c["corpus"]]
+            units = indices[c["_mem"]]
             esperadas, prohibidas = set(c["esperadas"]), set(c.get("prohibidas") or [])
-            r = {"id": c["id"], "canal": c["canal"], "corpus": c["corpus"]}
+            r = {"id": c["id"], "canal": c["canal"], "corpus": c["corpus"],
+                 "origen": c.get("origen", "incidente")}
             if c["canal"] == "prompt":
                 top = [etiqueta(u) for *_, u in motor.rank(units, c["entrada"], today=hoy, k=K["prompt"])]
                 r["devueltas"] = top
@@ -276,11 +324,36 @@ def main():
                 vecinos.sort(key=lambda u: jaccard(nuevo["keywords"], u["keywords"]), reverse=True)
                 orden = [u["_rid"] for u in vecinos]
                 puestos = {e: (orden.index(e) + 1 if e in orden else None) for e in sorted(esperadas)}
+                r["devueltas"] = orden[:K["dedup"]]
                 r["puestos"] = puestos
                 r["candidatas"] = len(orden)
                 r["acierto"] = any(p is not None and p <= K["dedup"] for p in puestos.values())
                 r["fuga"] = []
+            lb = c.get("linea_base_esperada")
+            if lb is not None:
+                dev = set(r["devueltas"])
+                falta = sorted(set(lb.get("contiene", [])) - dev)
+                sobra = sorted(set(lb.get("excluye", [])) & dev)
+                r["linea_base"] = "ok" if not (falta or sobra) else \
+                    f"NO: falta {falta}, sobra {sobra}"
             detalle.append(r)
+    return detalle
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--casos", default=os.path.join(AQUI, "casos.jsonl"))
+    ap.add_argument("--salida", default="")
+    ap.add_argument("--hoy", default="")
+    ap.add_argument("--corpus-raiz", default=os.path.expanduser("~/Projects"))
+    ap.add_argument("--comprobar-linea-base", action="store_true")
+    a = ap.parse_args()
+
+    casos = cargar_casos(a.casos)
+    base = os.path.dirname(os.path.abspath(a.casos))
+    reglas_por_mem = validar(casos, a.corpus_raiz, base)
+    hoy = date.fromisoformat(a.hoy) if a.hoy else date.today()
+    detalle = medir(casos, reglas_por_mem, hoy)
 
     def frac(canal):
         cs = [d for d in detalle if d["canal"] == canal]
@@ -291,7 +364,7 @@ def main():
         "hoy": hoy.isoformat(),
         "motor": "plugins/3-tier-memory/bin/recall_rank.py",
         "casos": len(casos),
-        "casos_incidente": sum(1 for c in casos if c.get("origen", "incidente") == "incidente"),
+        "casos_con_cita": sum(1 for c in casos if c.get("origen", "incidente") in CON_CITA),
         "metricas": {
             "prompt@4": frac("prompt"),
             "accion@2": dict(frac("accion"), nota="no medido: canal inexistente en F0"),
@@ -301,43 +374,28 @@ def main():
         },
         "detalle": detalle,
     }
-    texto = json.dumps(res, ensure_ascii=False, indent=2) + "\n"
     if a.salida:
         with open(a.salida, "w", encoding="utf-8") as f:
-            f.write(texto)
+            f.write(json.dumps(res, ensure_ascii=False, indent=2) + "\n")
     m = res["metricas"]
     print(f"casos={len(casos)} prompt@4={m['prompt@4']['aciertos']}/{m['prompt@4']['casos']} "
           f"accion@2=0/{m['accion@2']['casos']} (no medido) "
           f"dedup@8={m['dedup@8']['aciertos']}/{m['dedup@8']['casos']} fuga={m['fuga']['valor']}")
 
-    if a.comprobar_h8:
-        return comprobar_h8(detalle)
+    if a.comprobar_linea_base:
+        fijados = [d for d in detalle if "linea_base" in d]
+        malos = [d for d in fijados if d["linea_base"] != "ok"]
+        for d in malos:
+            print(f"LINEA BASE NO SE REPRODUCE: {d['id']}: {d['linea_base']} "
+                  f"(devuelve {d['devueltas']})", file=sys.stderr)
+        if not fijados:
+            print("recall-bench: --comprobar-linea-base sin ningun caso con linea_base_esperada",
+                  file=sys.stderr)
+            return 1
+        if malos:
+            return 1
+        print(f"linea base reproducida: {len(fijados)} casos fijados")
     return 0
-
-
-H8_TRIO = {"gate-review-pre-push-vps#99", "gate-review-pre-push-vps#108", "gate-review-pre-push-vps#135"}
-
-
-def comprobar_h8(detalle):
-    """H8 del plan: las dos parafrasis sacan 0 de {99,108,135}; la tercera saca 99 y 135 juntas."""
-    por_id = {d["id"]: d for d in detalle}
-    fallos = []
-    for cid in ("cv-h8-parafrasis-1", "cv-h8-parafrasis-2"):
-        d = por_id.get(cid)
-        if d is None:
-            fallos.append(f"falta el caso {cid}")
-        elif H8_TRIO & set(d["devueltas"]):
-            fallos.append(f"{cid} devuelve {sorted(H8_TRIO & set(d['devueltas']))}, H8 dice 0 de 3")
-    d = por_id.get("cv-h8-aborto")
-    if d is None:
-        fallos.append("falta el caso cv-h8-aborto")
-    elif not {"gate-review-pre-push-vps#99", "gate-review-pre-push-vps#135"} <= set(d["devueltas"]):
-        fallos.append(f"cv-h8-aborto devuelve {d['devueltas']}, H8 dice 99 y 135 juntas")
-    for f in fallos:
-        print(f"H8 NO SE REPRODUCE: {f}", file=sys.stderr)
-    if not fallos:
-        print("H8 reproducida: 0 de 3 en las dos parafrasis; 99 y 135 juntas en el aborto")
-    return 1 if fallos else 0
 
 
 if __name__ == "__main__":

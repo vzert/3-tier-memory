@@ -19,7 +19,7 @@ Sale 0 si todo coincide y hay suficientes salidas no vacias; 1 si no.
 
 Uso:
   compare-motores.py [--commit 3119885] [--n 50] [--min-con-salida 30]
-                     [--proyectos claude-vzert,3-tier-memory,Will-Ops,paperclip]
+                     [--corpus-raiz ~/Projects] [--max-corpus 4]
                      [--nuevo <ruta a recall_rank.py>]   (para el sabotaje de test-bench.sh)
                      [--prompts <fichero, un JSON string por linea>] [--memorias <dir,dir>]
 """
@@ -33,6 +33,13 @@ import tempfile
 
 RAIZ = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 BIN = os.path.join(RAIZ, "plugins", "3-tier-memory", "bin")
+
+# UTF-8 en stdout y stderr, como los .py de bin/ (regla 63): en Windows el flujo sigue la pagina de
+# codigos local y los mensajes en espanol salen rotos.
+for _flujo in (sys.stdout, sys.stderr):
+    if hasattr(_flujo, "reconfigure"):
+        _flujo.reconfigure(encoding="utf-8")
+
 
 
 def bloque_viejo(commit):
@@ -48,6 +55,22 @@ def bloque_viejo(commit):
     ini = fuente.index("\n", ini) + 1
     fin = fuente.index("\nPYEOF\n", ini)
     return fuente[ini:fin] + "\n"
+
+
+def descubrir(raiz, maximo):
+    """Los `maximo` memory/ con mas reglas numeradas bajo raiz/*/memory: los corpus mas grandes de
+    esta instalacion, sin nombrar ninguno. Empates por nombre, para que sea determinista."""
+    cands = []
+    for mem in sorted(glob.glob(os.path.join(raiz, "*", "memory"))):
+        n = 0
+        for f in glob.glob(os.path.join(mem, "learnings", "*.md")):
+            try:
+                n += sum(1 for l in open(f, encoding="utf-8") if l[:1].isdigit())
+            except Exception:
+                continue
+        if n:
+            cands.append((-n, mem))
+    return [m for _, m in sorted(cands)[:maximo]]
 
 
 def prompts_reales(n):
@@ -93,7 +116,8 @@ def main():
     ap.add_argument("--commit", default="3119885")
     ap.add_argument("--n", type=int, default=50)
     ap.add_argument("--min-con-salida", type=int, default=30)
-    ap.add_argument("--proyectos", default="claude-vzert,3-tier-memory,Will-Ops,paperclip")
+    ap.add_argument("--corpus-raiz", default=os.path.expanduser("~/Projects"))
+    ap.add_argument("--max-corpus", type=int, default=4)
     ap.add_argument("--nuevo", default=os.path.join(BIN, "recall_rank.py"))
     ap.add_argument("--prompts", default="")
     ap.add_argument("--memorias", default="")
@@ -103,8 +127,11 @@ def main():
         viejo = os.path.join(tmp, "motor_viejo.py")
         open(viejo, "w", encoding="utf-8").write(bloque_viejo(a.commit))
 
-        memorias = [m for m in a.memorias.split(",") if m] or \
-            [os.path.expanduser(f"~/Projects/{p}/memory") for p in a.proyectos.split(",") if p]
+        memorias = [m for m in a.memorias.split(",") if m] or descubrir(a.corpus_raiz, a.max_corpus)
+        if not memorias:
+            print(f"no hay ningun memory/ con reglas bajo {a.corpus_raiz}; usa --memorias",
+                  file=sys.stderr)
+            return 1
         indices = []
         for m in memorias:
             if not os.path.isdir(m):

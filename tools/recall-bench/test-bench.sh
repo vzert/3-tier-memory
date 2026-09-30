@@ -28,12 +28,12 @@ mkdir -p "$M/learnings" "$M/sessions"
 printf '# Pendientes\n' > "$M/_pendientes.md"
 {
   printf -- '---\nimportance: 8\n---\n# Deploy\n\n'
-  printf '1. **Nunca hagas git commit en el clon mientras corre review-team** — el gate lee el sha.\n'
+  printf '1. **Nunca hagas git commit en el clon mientras corre el revisor** — el gate lee el sha.\n'
   printf '2. **El cron del backup corre cada 5 minutos** — no lo bajes a 1 minuto.\n'
   printf '3. **Rotar la llave SSH del VPS cada trimestre** — con ssh-keygen y authorized_keys.\n'
   printf '4. **Postgres necesita vacuum semanal** — si no, la tabla de eventos crece sin freno.\n'
   printf '5. **Cloudflare cachea el HTML 4 horas** — purga tras cada deploy de la landing.\n'
-  printf '6. **No hagas git commit en el clon con review-team corriendo: aborta sin veredicto** — duplicado de la 1.\n'
+  printf '6. **No hagas git commit en el clon con el revisor corriendo: aborta sin veredicto** — duplicado de la 1.\n'
   printf '7. **Los logs de nginx rotan a diario** — logrotate con compress.\n'
   printf '8. **El token de la API caduca en 30 dias** — renuevalo antes del dia 25.\n'
   printf '9. **Docker compose pull antes de up** — si no, corre la imagen vieja.\n'
@@ -42,7 +42,7 @@ printf '# Pendientes\n' > "$M/_pendientes.md"
   printf '12. **El dominio renueva en marzo** — la tarjeta del registrador caduca antes.\n'
 } > "$M/learnings/deploy.md"
 F="$TMP/ficha.md"
-printf 'El agente hizo git commit en el clon mientras corria review-team y el gate aborto.\n' > "$F"
+printf 'El agente hizo git commit en el clon mientras corria el revisor y el gate aborto.\n' > "$F"
 # La ruta de `fuente` viaja DENTRO del JSON: en Git Bash nadie la convierte a la forma nativa
 # (regla 169), y el python de Windows no encontraria /tmp/... Como argumento si se convierte sola.
 nativa() { command -v cygpath >/dev/null 2>&1 && cygpath -m "$1" || printf '%s' "$1"; }
@@ -56,7 +56,7 @@ generar() {  # $1 fichero, $2 n_prompt, $3 n_accion, $4 fuente del ultimo caso
   : > "$1"
   local i
   for i in $(seq 1 "$2"); do
-    caso "p$i" prompt '"voy a hacer git commit en el clon mientras corre review-team"' '["deploy#1"]' "$FN" >> "$1"
+    caso "p$i" prompt '"voy a hacer git commit en el clon mientras corre el revisor"' '["deploy#1"]' "$FN" >> "$1"
   done
   for i in $(seq 1 "$3"); do
     caso "a$i" accion '{"tool_name":"Bash","tool_input":{"command":"git commit -m x"}}' '["deploy#1"]' "$FN" >> "$1"
@@ -119,12 +119,12 @@ else
   mal "$OUT"
 fi
 # y el prompt que no comparte vocabulario no acierta (el acierto no es gratis)
-sed 's/voy a hacer git commit en el clon mientras corre review-team/receta de tamales oaxaquenos/' "$TMP/bueno.jsonl" > "$TMP/fallo.jsonl"
+sed 's/voy a hacer git commit en el clon mientras corre el revisor/receta de tamales oaxaquenos/' "$TMP/bueno.jsonl" > "$TMP/fallo.jsonl"
 OUT=$(correr "$TMP/fallo.jsonl")
 printf '%s' "$OUT" | grep -q "prompt@4=0/14" && ok "sin vocabulario comun: $OUT" || mal "$OUT"
 
 echo "6. compare-motores: viejo == recall_rank.py sobre el corpus sintetico"
-printf '%s\n' '"git commit en el clon con review-team"' '"cron del backup cada 5 minutos"' \
+printf '%s\n' '"git commit en el clon con el revisor"' '"cron del backup cada 5 minutos"' \
   '"rotar la llave ssh del vps"' '"vacuum de postgres semanal"' '"purga de cloudflare tras deploy"' \
   > "$TMP/prompts.jsonl"
 OUT=$(python3 "$CMP" --memorias "$M" --prompts "$TMP/prompts.jsonl" --n 5 --min-con-salida 5 2>&1); RC=$?
@@ -138,6 +138,33 @@ else
   OUT=$(python3 "$CMP" --memorias "$M" --prompts "$TMP/prompts.jsonl" --n 5 --min-con-salida 1 --nuevo "$TMP/mut.py" 2>&1); RC=$?
   [ "$RC" -eq 1 ] && printf '%s' "$OUT" | grep -q "DISTINTO" && ok "lo detecta: $(printf '%s' "$OUT" | tail -1)" || mal "rc=$RC: $OUT"
 fi
+
+NEUTRO=tools/recall-bench/corpus-neutro/casos.jsonl
+
+echo "8. corpus neutro publicado: corre y reproduce sus lineas base fijadas"
+OUT=$(python3 "$BENCH" --casos "$NEUTRO" --hoy 2026-09-30 --comprobar-linea-base 2>&1); RC=$?
+[ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -q "linea base reproducida: 5 casos" && ok "$(printf '%s' "$OUT" | tr '\n' ' ')" || mal "rc=$RC: $OUT"
+
+echo "9. una linea base que no se reproduce sale 1"
+# copia del corpus en el temporal: las rutas de los casos son relativas a su fichero
+cp -R tools/recall-bench/corpus-neutro "$TMP/neutro"
+sed 's/"contiene": \["git-y-ci#3", "git-y-ci#17"\]/"contiene": ["git-y-ci#3", "git-y-ci#9"]/' "$NEUTRO" > "$TMP/neutro/casos.jsonl"
+OUT=$(python3 "$BENCH" --casos "$TMP/neutro/casos.jsonl" --hoy 2026-09-30 --comprobar-linea-base 2>&1); RC=$?
+if ! grep -q 'git-y-ci#9' "$TMP/neutro/casos.jsonl"; then
+  mal "la mutacion de la linea base no se aplico"
+else
+  [ "$RC" -eq 1 ] && printf '%s' "$OUT" | grep -q "NO SE REPRODUCE" && ok "lo detecta" || mal "rc=$RC: $OUT"
+fi
+
+echo "10. minar-casos propone los 20 candidatos del corpus neutro, todos para revisar"
+OUT=$(python3 tools/recall-bench/minar-casos.py --proyecto tools/recall-bench/corpus-neutro --salida "$TMP/cand.jsonl" 2>&1)
+N=$(grep -c '"revisar": true' "$TMP/cand.jsonl")
+printf '%s' "$OUT" | grep -q "20 candidatos (20 con regla resuelta" && [ "$N" -eq 20 ] && ok "$OUT" || mal "revisar=$N: $OUT"
+
+echo "11. el banco se niega a correr con un candidato sin revisar"
+{ cat "$TMP/bueno.jsonl"; head -1 "$TMP/cand.jsonl"; } > "$TMP/s11.jsonl"
+OUT=$(correr "$TMP/s11.jsonl"); RC=$?
+[ "$RC" -eq 2 ] && printf '%s' "$OUT" | grep -q "candidato sin revisar" && ok "se niega: $OUT" || mal "rc=$RC: $OUT"
 
 echo
 if [ "$FALLOS" -eq 0 ]; then echo "test-bench: TODO VERDE"; else echo "test-bench: $FALLOS FALLOS"; exit 1; fi

@@ -13,3 +13,5 @@ __pycache__/
 tools/recall-bench/casos.jsonl
 tools/recall-bench/linea-base-*.json
 tools/recall-bench/resultado-*.json
+# ... salvo el corpus neutro del banco, que se publica (reglas genericas, sin datos de nadie)
+!tools/recall-bench/corpus-neutro/memory/
