@@ -20,9 +20,9 @@ No sabe nada de ningún proyecto concreto. Lo concreto va en un fichero de casos
 - **`corpus-neutro/`** (publicado). Un `memory/` con 68 reglas de patrones comunes (git y CI,
   shell y portabilidad, publicación y privacidad, proceso del agente), 5 fichas de sesión y 25
   casos. 21 reescriben en términos generales un incidente del desarrollo del plugin (`origen:
-  neutro`, la procedencia va en `nota`; la `nota` es una declaración, no una prueba). 5 de esos 21
+  neutro`, la procedencia va en `nota`; la `nota` es una declaración, no una prueba). 4 de esos 21
   traen además `procedencia`: una cita del CHANGELOG público que el banco comprueba
-  (`procedencia_verificada=5/21` en la salida). Los 4 de
+  (`procedencia_verificada=4/21` en la salida). Los 4 de
   duplicados son sintéticos (`origen: medida`: corren, pero no cuentan para los mínimos). Corre en `test-bench.sh`, y por tanto en la CI.
   **Sus números son optimistas**: las reglas y las fichas las escribió la misma persona, así que
   comparten vocabulario. Sirve para detectar regresiones del motor, no para medir el recall real.

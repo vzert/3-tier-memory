@@ -22,7 +22,7 @@ nombra ningun proyecto. Sin cambio de comportamiento para el usuario.
 - **`minar-casos.py`**: propone casos desde las fichas de sesion de cualquier instalacion, todos
   marcados para revisar.
 - **`corpus-neutro/`**: un `memory/` con 68 reglas genericas y 25 casos (21 de incidentes del
-  plugin reescritos, 5 de ellos con su procedencia comprobada contra este CHANGELOG; 4 duplicados
+  plugin reescritos, 4 de ellos con su procedencia comprobada contra este CHANGELOG; 4 duplicados
   sinteticos que no cuentan para los minimos), publicado para que el banco
   corra en la CI. Sus numeros son optimistas (reglas y fichas comparten autor); la medida real son
   los casos de cada instalacion, que no se publican (`.gitignore`).
