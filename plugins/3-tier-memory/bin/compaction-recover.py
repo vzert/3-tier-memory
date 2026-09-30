@@ -64,9 +64,11 @@ import os
 import re
 import sys
 
+# errors="backslashreplace": una ruta con un sustituto (argv con bytes no UTF-8) no tumba el print
+# (ronda 4 de Codex sobre 2.41.7: recover=0 reason=sin-jsonl salia 1 con UnicodeEncodeError).
 for _flujo in (sys.stdout, sys.stderr):
     if hasattr(_flujo, "reconfigure"):
-        _flujo.reconfigure(encoding="utf-8")
+        _flujo.reconfigure(encoding="utf-8", errors="backslashreplace")
 
 CHUNK_CHARS_DEFAULT = 100_000
 MAX_USER = 4000        # un prompt largo del usuario casi siempre es contexto que importa
@@ -454,8 +456,17 @@ def main():
     # un archivo o enlace que ya estaba no se pisa, no se sigue ni se borra; errors="replace" porque
     # un \ud800 suelto es JSON valido y no se codifica en UTF-8; y la linea de salida se escribe y
     # vacia dentro del try: si stdout falla, nadie sabra que los bloques existen.
+    # Antes del try: un preTokens que no es numero no es un fallo de escritura (ronda 4).
+    pre = sum(c["pre_tokens"] for c in info["compactions"]
+              if isinstance(c.get("pre_tokens"), int) and not isinstance(c.get("pre_tokens"), bool))
+    # Ronda 4: se captura Exception (un TypeError o MemoryError a media escritura dejaba el bloque);
+    # un --out-dir que es enlace no se sigue (solo el ultimo tramo: en macOS /tmp y /var son enlaces);
+    # cada archivo se anota con su identidad (dev, ino) para no borrar ni vaciar lo que otro puso en
+    # su lugar; y se limpia al reves, manifest primero: si el manifest existe, los bloques estan.
     paths, created, total = [], [], 0
     try:
+        if os.path.islink(os.path.normpath(a.out_dir)):
+            raise OSError(f"--out-dir es un enlace: {a.out_dir}")
         os.makedirs(a.out_dir, exist_ok=True)
         for i, ch in enumerate(chunks, 1):
             p = os.path.join(a.out_dir, f"chunk-{i:02d}.md")
@@ -463,7 +474,8 @@ def main():
                     f"# Lineas {info['from_line']}-{info['to_line']} de {os.path.basename(path)}\n\n"
                     + "\n\n".join(ch) + "\n")
             with open(p, "x", encoding="utf-8", errors="replace", newline="\n") as fh:
-                created.append(p)
+                st = os.fstat(fh.fileno())
+                created.append((p, st.st_dev, st.st_ino))
                 fh.write(body)
             paths.append(p)
             total += len(body)
@@ -471,25 +483,61 @@ def main():
         info.update({"jsonl": path, "chunks": paths, "chars": total, "entries": len(entries)})
         mp = os.path.join(a.out_dir, "manifest.json")
         with open(mp, "x", encoding="utf-8", errors="replace", newline="\n") as fh:
-            created.append(mp)
+            st = os.fstat(fh.fileno())
+            created.append((mp, st.st_dev, st.st_ino))
             json.dump(info, fh, ensure_ascii=False, indent=2)
 
-        pre = sum(c.get("pre_tokens") or 0 for c in info["compactions"])
         print(f"recover=1 compactions={len(info['compactions'])} pre_tokens={pre} chunks={len(paths)} "
               f"chars={total} lines={info['from_line']}-{info['to_line']} out={a.out_dir}")
         sys.stdout.flush()
-    except (OSError, UnicodeError, ValueError) as e:
+        # La linea ya llego: el vaciado al salir no tiene nada que escribir, pero si falla Python sale
+        # 120 con los bloques validos (ronda 4, con un stdout falso; una tuberia real no lo hace).
+        try:
+            sys.stdout = open(os.devnull, "w", encoding="utf-8", newline="\n")
+        except OSError:
+            pass    # sin descriptores libres: no es razon para borrar una recuperacion valida
+    except Exception as e:
         # ValueError: un stdout ya cerrado (ronda 3). Si no se puede borrar un archivo, se vacia; si
-        # tampoco, queda texto crudo y la linea lo dice (restos=N) para que Step 0b avise.
+        # tampoco, queda y la linea lo dice (restos=N) para que Step 0b avise. Un archivo que ya no
+        # esta, o que ya no es el que esta corrida creo, no se toca ni se cuenta.
         restos = 0
-        for p in created:
+        for p, dev, ino in reversed(created):
+            try:
+                st = os.lstat(p)
+            except FileNotFoundError:
+                continue
+            except OSError:
+                restos += 1
+                continue
+            if (st.st_dev, st.st_ino) != (dev, ino):
+                continue
             try:
                 os.remove(p)
+                continue
+            except FileNotFoundError:
+                continue
             except OSError:
+                pass
+            try:
+                st = os.lstat(p)
+            except FileNotFoundError:
+                continue
+            except OSError:
+                st = None
+            if st is not None and (st.st_dev, st.st_ino) != (dev, ino):
+                continue
+            try:
+                fd = os.open(p, os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0))
                 try:
-                    os.truncate(p, 0)
-                except OSError:
-                    restos += 1
+                    st = os.fstat(fd)
+                    if (st.st_dev, st.st_ino) == (dev, ino):
+                        os.ftruncate(fd, 0)
+                finally:
+                    os.close(fd)
+            except FileNotFoundError:
+                pass
+            except OSError:
+                restos += 1
         linea = f"recover=0 reason=fallo-escritura error={type(e).__name__}"
         if restos:
             linea += f" restos={restos} out={ascii(a.out_dir)}"

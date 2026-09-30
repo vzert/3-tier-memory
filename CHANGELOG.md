@@ -1,6 +1,39 @@
 # Changelog
 
 
+## [2.41.8] - 2026-09-30
+Origen: Codex, ronda 4 sobre los arreglos de la ronda 3 de 2.41.7 (`p-769a87430a`), veredicto break.
+
+### Fixed
+- **`compaction-recover.py`: siete huecos mas en el contrato "sale 0 y no deja texto crudo".**
+  Cada uno tiene su variante en el caso R4 de `test-compaction-recover.sh`, roja contra 1681c09.
+  (1) Solo se capturaban `OSError`, `UnicodeError` y `ValueError`: un `MemoryError` o `TypeError` a
+  media escritura salia 1 y dejaba el bloque. Ahora se captura `Exception`. Ademas, un `preTokens`
+  que no es numero ya no se suma: antes daba `TypeError` despues de escribir los bloques. Ahora ese
+  valor cuenta 0 y el tramo se recupera.
+  (2) Si el vaciado de stdout al salir fallaba, Python salia 120 con la linea ya entregada. Ahora,
+  tras el vaciado que si funciona, stdout pasa a `os.devnull`. Codex lo provoco con un stdout falso;
+  una tuberia real no vuelve a escribir en un vaciado sin datos. Si abrir `os.devnull` falla, no se
+  borra la recuperacion.
+  (3) Una linea `recover=1` cortada, o pegada a un `recover=0`, se podia tomar por exito con los
+  bloques ya borrados. Ahora `manifest.json` es la marca: el script lo escribe al final y lo limpia
+  primero. Step 0b solo usa `recover=1` si el manifest existe y no esta vacio. Aqui lo rojo contra
+  1681c09 es la regla de Step 0b. La variante del script ("print de recover=1 falla") es una guarda:
+  pasa tambien contra 1681c09.
+  (4) `recover=0 reason=sin-jsonl` con un sustituto en la ruta (argv con bytes que no son UTF-8)
+  salia 1. Ahora stdout y stderr usan `errors="backslashreplace"`.
+  (5) `restos=N` contaba un archivo que ya no estaba. Ahora no lo cuenta. `restos` cuenta los
+  archivos de la corrida que no se pudieron borrar ni vaciar, tambien el manifest. Step 0b ya no dice
+  que todos tienen texto crudo.
+  (6) Un `--out-dir` que era un enlace se seguia, y los bloques se escribian en su destino. Ahora
+  sale `fallo-escritura`. Solo se mira el ultimo tramo de la ruta, porque en macOS `/tmp` y `/var`
+  son enlaces.
+  (7) Si otro ponia un enlace en lugar de un bloque antes de la limpieza, `os.truncate` lo seguia y
+  vaciaba un archivo ajeno. Ahora cada archivo se anota con su identidad (dispositivo e inodo).
+  Lo que ya no es el mismo archivo no se borra ni se vacia. El vaciado usa `os.ftruncate` sobre un
+  descriptor abierto con `O_NOFOLLOW`.
+  El caso R3 "ni borrar ni vaciar" ahora parchea tambien `os.ftruncate`.
+
 ## [2.41.7] - 2026-09-29
 Origen: Codex, ronda 1 sobre 2.39.x (`p-1892aaf627`).
 

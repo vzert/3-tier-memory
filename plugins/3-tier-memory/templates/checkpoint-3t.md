@@ -81,9 +81,14 @@ echo "RECOVER_DIR=$RECOVER_DIR"
 compactacion y el tramo NO se recupero (el script ya borro los bloques a medias): dilo en una linea
 del reporte ("Recuperacion post-compactacion: FALLO — hubo compactacion y no se pudo escribir el
 tramo (<error>); lo compactado puede faltar en esta ficha"). Si ademas trae `restos=N`, quedaron N
-archivos con texto crudo de la sesion que el script no pudo borrar ni vaciar: agrega a esa linea
-"quedan N archivo(s) con texto crudo en <out> — borralos a mano". En todo `recover=0`, borra el
+archivos que el script no pudo borrar ni vaciar (pueden tener texto crudo de la sesion): agrega a esa
+linea "quedan N archivo(s) en <out> que pueden tener texto crudo — borralos a mano". En todo `recover=0`, borra el
 directorio: `rm -rf "<RECOVER_DIR impreso arriba>"`. Nunca detengas el checkpoint por esto.
+
+`recover=1` solo vale si `$RECOVER_DIR/manifest.json` existe y no esta vacio: el script lo escribe
+al final y lo borra primero si algo falla. Si la salida empieza con `recover=1` pero el manifest no
+esta o esta vacio (la linea se corto, o salio `recover=1` y `recover=0` pegadas), o si no salio
+ninguna linea `recover=`, tratalo como `fallo-escritura`: reportalo y borra el directorio.
 
 **`recover=1 compactions=N pre_tokens=T chunks=K ...`** — el tramo quedo en K bloques
 `$RECOVER_DIR/chunk-NN.md` (lista en `$RECOVER_DIR/manifest.json`). No los leas tu: pesan decenas de

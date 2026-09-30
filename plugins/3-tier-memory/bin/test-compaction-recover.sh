@@ -348,9 +348,93 @@ case "$OUT" in "recover=0 reason=fallo-escritura"*) ok "borrado falla: recover=0
 grep -rqF "SECRETO-EN-TRAMO" "$TMP/or3-rm" && bad "R3 borrado: queda texto crudo" || ok "borrado falla: el bloque queda vacio"
 # Ni borrar ni vaciar: el texto queda, pero la linea lo dice para que Step 0b avise.
 mkdir -p "$TMP/or3-resto/manifest.json"
-OUT=$(envuelto "os.remove = os.truncate = lambda p, *a: (_ for _ in ()).throw(PermissionError(13, 'sin permiso', p))" "$TMP/or3-resto"); RC=$?
+# Desde la ronda 4 el vaciado usa os.ftruncate sobre un descriptor: se parchean las dos formas.
+OUT=$(envuelto "os.remove = os.truncate = os.ftruncate = lambda p, *a: (_ for _ in ()).throw(PermissionError(13, 'sin permiso', p))" "$TMP/or3-resto"); RC=$?
 [ $RC -eq 0 ] && ok "ni borrar ni vaciar: sale 0" || bad "R3 resto: exit=$RC"
 case "$OUT" in "recover=0 reason=fallo-escritura "*" restos=1"*) ok "ni borrar ni vaciar: avisa restos=1";; *) bad "R3 resto: $OUT";; esac
+
+echo "R4. ronda 4 de Codex sobre 2.41.7: otras excepciones, vaciado al salir, ruta con sustituto,"
+echo "    restos de mas, --out-dir enlace, enlace puesto en lugar del bloque, manifest como marca"
+# Enlaces reales: en Git Bash sin modo desarrollador `ln -s` copia, y los casos de enlace no prueban nada.
+ln -s "$F" "$TMP/prueba-enlace" 2>/dev/null; [ -L "$TMP/prueba-enlace" ] && ENLACES=1 || ENLACES=0
+# Un preTokens que no es numero no es un fallo de escritura: recupera el tramo con pre_tokens=0.
+F4="$TMP/r4-pre.jsonl"
+{ u p1 "SECRETO-EN-TRAMO"; bound '"no-es-numero"'; summ; ckcmd p2; ckskl p2; } > "$F4"
+OUT=$(run "$F4" "$TMP/or4-pre" 2>/dev/null); RC=$?
+[ $RC -eq 0 ] && ok "preTokens no numerico: sale 0" || bad "R4 preTokens: exit=$RC"
+case "$OUT" in "recover=1 compactions=1 pre_tokens=0 "*) ok "preTokens no numerico: recover=1 pre_tokens=0";; *) bad "R4 preTokens: $OUT";; esac
+# Una excepcion que no es OSError a media escritura (MemoryError en el manifest): no queda el bloque.
+OUT=$(envuelto "import json
+json.dump = lambda *a, **k: (_ for _ in ()).throw(MemoryError())" "$TMP/or4-mem"); RC=$?
+[ $RC -eq 0 ] && ok "MemoryError: sale 0" || bad "R4 MemoryError: exit=$RC"
+case "$OUT" in "recover=0 reason=fallo-escritura error=MemoryError"*) ok "MemoryError: recover=0 reason=fallo-escritura";; *) bad "R4 MemoryError: $OUT";; esac
+grep -rqF "SECRETO-EN-TRAMO" "$TMP/or4-mem" 2>/dev/null && bad "R4 MemoryError: queda texto crudo" || ok "MemoryError: no queda texto crudo"
+# stdout cuyo segundo flush falla (el de la salida del interprete): la linea ya llego, sale 0.
+OUT=$(envuelto "class C(io.TextIOBase):
+    n = 0
+    def reconfigure(self, **k): pass
+    def write(self, s): return sys.__stdout__.write(s)
+    def flush(self):
+        C.n += 1
+        if C.n >= 2: raise BrokenPipeError(32, 'tuberia rota al salir')
+        sys.__stdout__.flush()
+sys.stdout = C()" "$TMP/or4-late"); RC=$?
+[ $RC -eq 0 ] && ok "vaciado al salir falla: sale 0" || bad "R4 vaciado al salir: exit=$RC"
+case "$OUT" in "recover=1 "*) ok "vaciado al salir falla: la linea recover=1 llego";; *) bad "R4 vaciado al salir: $OUT";; esac
+# recover=0 reason=sin-jsonl con un sustituto en la ruta (argv con bytes que no son UTF-8).
+OUT=$(envuelto "sys.argv[sys.argv.index('--jsonl') + 1] = 'no-existe-\\udcff'" "$TMP/or4-ruta"); RC=$?
+[ $RC -eq 0 ] && ok "ruta con sustituto: sale 0" || bad "R4 ruta con sustituto: exit=$RC"
+case "$OUT" in "recover=0 reason=sin-jsonl "*) ok "ruta con sustituto: recover=0 reason=sin-jsonl";; *) bad "R4 ruta con sustituto: '$OUT'";; esac
+# os.remove borra y luego falla: el archivo ya no esta, no es un resto.
+mkdir -p "$TMP/or4-ido/manifest.json"
+OUT=$(envuelto "_rm = os.remove
+def rm(p):
+    _rm(p)
+    raise PermissionError(13, 'sin permiso', p)
+os.remove = rm" "$TMP/or4-ido"); RC=$?
+case "$OUT" in *restos=*) bad "R4 archivo ido: cuenta un resto que no existe: $OUT";; "recover=0 reason=fallo-escritura"*) ok "archivo ido: no lo cuenta como resto";; *) bad "R4 archivo ido: $OUT";; esac
+if [ $ENLACES -eq 1 ]; then
+  # --out-dir es un enlace a otro directorio: no se sigue.
+  mkdir -p "$TMP/destino-dir"; ln -s "$TMP/destino-dir" "$TMP/or4-enlace"
+  OUT=$(run "$F" "$TMP/or4-enlace" 2>/dev/null); RC=$?
+  [ $RC -eq 0 ] && ok "--out-dir enlace: sale 0" || bad "R4 --out-dir enlace: exit=$RC"
+  case "$OUT" in "recover=0 reason=fallo-escritura"*) ok "--out-dir enlace: recover=0 reason=fallo-escritura";; *) bad "R4 --out-dir enlace: $OUT";; esac
+  [ -z "$(ls -A "$TMP/destino-dir")" ] && ok "--out-dir enlace: no escribe en el destino" || bad "R4 --out-dir enlace: escribio en el destino"
+  # Otro pone un enlace en lugar del bloque antes de la limpieza: ni se vacia su destino ni se borra.
+  printf 'CONSERVAR\n' > "$TMP/destino-carrera.txt"; mkdir -p "$TMP/or4-carrera/manifest.json"
+  OUT=$(envuelto "_rm = os.remove
+def rm(p):
+    if p.endswith('chunk-01.md'):
+        _rm(p)
+        os.symlink('$TMP/destino-carrera.txt', p)
+    raise PermissionError(13, 'sin permiso', p)
+os.remove = rm" "$TMP/or4-carrera"); RC=$?
+  [ $RC -eq 0 ] && ok "enlace en lugar del bloque: sale 0" || bad "R4 carrera: exit=$RC"
+  has "enlace en lugar del bloque: no vacia el destino" "CONSERVAR" "$TMP/destino-carrera.txt"
+  [ -L "$TMP/or4-carrera/chunk-01.md" ] && ok "enlace en lugar del bloque: no lo borra" || bad "R4 carrera: borro el enlace ajeno"
+else
+  ok "--out-dir enlace y carrera: sin enlaces reales en esta plataforma, no se prueban"
+fi
+# Si el manifest no se puede borrar pero el bloque si, el manifest se vacia (se limpia al reves):
+# Step 0b solo usa recover=1 si manifest.json existe y no esta vacio.
+mkdir -p "$TMP/or4-orden"
+OUT=$(envuelto "_rm = os.remove
+def rm(p):
+    if p.endswith('manifest.json'): raise PermissionError(13, 'sin permiso', p)
+    _rm(p)
+os.remove = rm
+_p = print
+def pr(*a, **k):
+    if a and str(a[0]).startswith('recover=1'): raise OSError('stdout fallo tras el manifest')
+    return _p(*a, **k)
+import builtins
+builtins.print = pr" "$TMP/or4-orden"); RC=$?
+case "$OUT" in "recover=0 reason=fallo-escritura"*) ok "print de recover=1 falla: recover=0";; *) bad "R4 orden: $OUT";; esac
+[ -s "$TMP/or4-orden/manifest.json" ] && bad "R4 orden: el manifest quedo lleno" || ok "print de recover=1 falla: el manifest queda vacio o no esta"
+grep -rqF "SECRETO-EN-TRAMO" "$TMP/or4-orden" && bad "R4 orden: queda texto crudo" || ok "print de recover=1 falla: no queda texto crudo"
+for T in "$BIN/../templates/checkpoint-3t.md"; do
+  has "Step 0b exige manifest.json no vacio para usar recover=1" 'recover=1` solo vale si `$RECOVER_DIR/manifest.json` existe y no esta vacio' "$T"
+done
 
 echo "M. compactacion entre la marca del checkpoint actual y Step 0b: se recupera (adversario externo, 2026-09-28)"
 F="$TMP/m.jsonl"
