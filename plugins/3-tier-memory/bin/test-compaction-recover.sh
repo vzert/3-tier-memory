@@ -427,7 +427,7 @@ else
   ok "--out-dir enlace y carrera: sin enlaces reales en esta plataforma, no se prueban"
 fi
 # Si el manifest no se puede borrar pero el bloque si, el manifest se vacia (se limpia al reves):
-# Step 0b solo usa recover=1 si manifest.json existe y no esta vacio.
+# (Step 0b ya no mira el manifest: usa --verificar, casos R6 y R7.)
 mkdir -p "$TMP/or4-orden"
 OUT=$(envuelto "_rm = os.remove
 def rm(p):
@@ -535,6 +535,57 @@ case "$(ver "$O")" in "verificado=0 "*) ok "verificar: bloque fuera de DIR da ve
 for T in "$BIN/../templates/checkpoint-3t.md"; do
   has "Step 0b corre --verificar antes de usar el tramo" 'compaction-recover.py" --verificar "$RECOVER_DIR"' "$T"
 done
+
+echo "R7. ronda 7 de Codex sobre 2.41.10: --verificar aceptaba listas y bloques que no son el tramo"
+# Cada caso parte de un tramo sano de 2+ bloques y rehace el manifest (o un bloque) con los
+# caracteres cuadrados: la suma sola no basta. $1 = DIR, $2 = codigo Python con m (manifest), d, ch
+# (lista original de bloques), n(p) = caracteres de p leidos como los lee --verificar y h(p) = su
+# huella: el manifest rehecho lleva huellas validas, asi cada caso llega a su propia comprobacion.
+mf(){ python3 - "$1" "$2" <<'PY'
+import hashlib, json, os, sys
+d, code = sys.argv[1], sys.argv[2]
+mp = os.path.join(d, "manifest.json")
+m = json.load(open(mp, encoding="utf-8"))
+ch = list(m["chunks"])
+def n(p):
+    with open(p, encoding="utf-8", errors="replace", newline="") as fh:
+        return len(fh.read())
+def h(p):
+    return hashlib.sha256(open(p, 'rb').read()).hexdigest()
+exec(code)
+json.dump(m, open(mp, "w", encoding="utf-8"))
+PY
+}
+F7="$TMP/r7.jsonl"
+{ u p1 "SECRETO-EN-TRAMO"; u p1 "OTRA-ENTRADA-DEL-TRAMO"; u p1 "TERCERA-ENTRADA-DEL-TRAMO"; bound 300000; summ; ckcmd p2; ckskl p2; } > "$F7"
+O="$TMP/or7-base"; run "$F7" "$O" --chunk-chars 60 >/dev/null 2>&1
+NB=$(ls "$O"/chunk-*.md 2>/dev/null | wc -l | tr -d ' ')
+[ "$NB" -ge 2 ] && ok "R7: el tramo base tiene $NB bloques" || bad "R7: el tramo base tiene $NB bloques (hacen falta 2+)"
+for c in duplicado omitido ajeno mismo-largo chars-bool; do
+  O="$TMP/or7-$c"; run "$F7" "$O" --chunk-chars 60 >/dev/null 2>&1
+  case $c in
+    duplicado)   mf "$O" "m['chunks'] = [ch[0], ch[0]]; m['sha256'] = [h(ch[0])] * 2; m['chars'] = 2 * n(ch[0])";;
+    omitido)     mf "$O" "m['chunks'] = [ch[0]]; m['sha256'] = [h(ch[0])]; m['chars'] = n(ch[0])";;
+    ajeno)       printf 'ARCHIVO AJENO\n' > "$O/otro.md"
+                 mf "$O" "p = os.path.join(d, 'otro.md'); m['chunks'] = [p]; m['sha256'] = [h(p)]; m['chars'] = n(p)";;
+    mismo-largo) python3 -c "import sys; p=sys.argv[1]; s=open(p,encoding='utf-8',newline='').read(); open(p,'w',encoding='utf-8',newline='').write('X'*len(s))" "$O/chunk-01.md";;
+    chars-bool)  printf 'x' > "$O/chunk-01.md"; mf "$O" "m['chunks'] = [ch[0]]; m['sha256'] = [h(ch[0])]; m['chars'] = True";;
+  esac
+  case "$(ver "$O")" in "verificado=0 "*) ok "verificar: $c da verificado=0";; *) bad "R7 verificar $c: '$(ver "$O")'";; esac
+done
+# Un bloque que es una tuberia con nombre: verificado=0 y sin quedarse colgado leyendola.
+O="$TMP/or7-fifo"; run "$F7" "$O" --chunk-chars 60 >/dev/null 2>&1; rm -f "$O/chunk-01.md"
+if mkfifo "$O/chunk-01.md" 2>/dev/null && [ -p "$O/chunk-01.md" ]; then
+  OUT=$(python3 -c "import subprocess, sys
+try:
+    r = subprocess.run([sys.executable, sys.argv[1], '--verificar', sys.argv[2]], capture_output=True, text=True, timeout=10)
+    print(r.stdout.strip())
+except subprocess.TimeoutExpired:
+    print('colgado')" "$BIN/compaction-recover.py" "$O")
+  case "$OUT" in "verificado=0 "*) ok "verificar: tuberia con nombre da verificado=0";; *) bad "R7 verificar fifo: '$OUT'";; esac
+else
+  ok "verificar: sin mkfifo en esta plataforma, la tuberia con nombre no se prueba"
+fi
 
 echo "M. compactacion entre la marca del checkpoint actual y Step 0b: se recupera (adversario externo, 2026-09-28)"
 F="$TMP/m.jsonl"

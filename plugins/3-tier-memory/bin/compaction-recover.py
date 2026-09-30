@@ -50,8 +50,10 @@ media entrada) y `manifest.json` en --out-dir. En stdout, una linea:
         (hubo compactacion y el tramo NO se recupero; restos=N: N archivos con texto crudo que no se
         pudieron borrar ni vaciar)
 Con --verificar DIR no recupera nada: comprueba el tramo que dejo una corrida anterior en DIR y
-imprime `verificado=1 chunks=K chars=C` o `verificado=0 reason=<motivo>`. Step 0b solo usa los
-bloques con verificado=1: una linea recover=1 cortada no prueba que los bloques sigan ahi.
+imprime `verificado=1 chunks=K chars=C` o `verificado=0 reason=<motivo>`. verificado=1 exige que
+cada bloque de la lista sea chunk-NN.md en orden, un archivo normal dentro de DIR, con la huella
+SHA-256 que guardo el manifest y la cabecera "bloque i de N". Step 0b solo usa los bloques con
+verificado=1: una linea recover=1 cortada no prueba que los bloques sigan ahi.
 Siempre sale 0 salvo error de uso: el checkpoint NO debe caerse porque esto falle; solo avisa. Si
 falla una escritura (o la propia linea de salida), borra los archivos que esta corrida creo antes de
 salir. No escribe sobre archivos que ya estaban en --out-dir: los abre con "x".
@@ -62,9 +64,11 @@ memory/ y el checkpoint lo borra al terminar.
 # sella-huellas: no (solo lee el JSONL y escribe en un directorio temporal fuera de memory/)
 
 import argparse
+import hashlib
 import json
 import os
 import re
+import stat
 import sys
 
 # errors="backslashreplace": una ruta con un sustituto (argv con bytes no UTF-8) no tumba el print
@@ -404,21 +408,39 @@ def salida(linea):
 
 
 def verificar(d):
-    """Comprueba el tramo de DIR: manifest JSON, cada bloque dentro de DIR (no un enlace) y la suma de
-    caracteres igual a la del manifest. Un bloque borrado, vaciado o cortado da verificado=0."""
+    """Comprueba el tramo de DIR: manifest JSON; cada bloque es chunk-NN.md en orden, un archivo normal
+    dentro de DIR (no un enlace ni una tuberia), con la huella SHA-256 del manifest y la cabecera
+    "bloque i de N"; y la suma de caracteres igual a la del manifest. Un bloque borrado, vaciado,
+    cortado, cambiado, repetido, omitido o ajeno da verificado=0 (ronda 7: la suma sola dejaba pasar
+    listas repetidas o recortadas, archivos ajenos con el mismo largo y una tuberia que colgaba)."""
     try:
         with open(os.path.join(d, "manifest.json"), encoding="utf-8") as fh:
             m = json.load(fh)
-        chunks, chars = m.get("chunks"), m.get("chars")
-        if not (isinstance(chunks, list) and chunks and isinstance(chars, int)):
+        chunks, chars, sums = m.get("chunks"), m.get("chars"), m.get("sha256")
+        if not (isinstance(chunks, list) and chunks and isinstance(sums, list)
+                and len(sums) == len(chunks)
+                and isinstance(chars, int) and not isinstance(chars, bool)):
             return "verificado=0 reason=manifest-incompleto"
         base, total = os.path.realpath(d), 0
-        for p in chunks:
-            if not isinstance(p, str) or os.path.islink(p) or \
+        for i, (p, h) in enumerate(zip(chunks, sums), 1):
+            if not (isinstance(p, str) and isinstance(h, str)) or os.path.islink(p) or \
+                    os.path.basename(p) != f"chunk-{i:02d}.md" or \
                     os.path.dirname(os.path.realpath(p)) != base:
                 return "verificado=0 reason=bloque-fuera-de-dir"
-            with open(p, encoding="utf-8", errors="replace", newline="") as fh:
-                total += len(fh.read())
+            if not stat.S_ISREG(os.lstat(p).st_mode):
+                return "verificado=0 reason=bloque-no-regular"
+            # O_NONBLOCK: una tuberia puesta tras el lstat no cuelga la apertura.
+            fd = os.open(p, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+            with os.fdopen(fd, "rb") as fh:
+                if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
+                    return "verificado=0 reason=bloque-no-regular"
+                data = fh.read()
+            if hashlib.sha256(data).hexdigest() != h:
+                return f"verificado=0 reason=bloque-cambiado chunk={i}"
+            texto = data.decode("utf-8", errors="replace")
+            if not texto.startswith(f"# Tramo compactado — bloque {i} de {len(chunks)}\n"):
+                return f"verificado=0 reason=cabecera chunk={i}"
+            total += len(texto)
     except Exception as e:
         return f"verificado=0 reason={type(e).__name__}"
     if total != chars:
@@ -511,7 +533,7 @@ def main():
     # un --out-dir que es enlace no se sigue (solo el ultimo tramo: en macOS /tmp y /var son enlaces);
     # cada archivo se anota con su identidad (dev, ino) para no borrar ni vaciar lo que otro puso en
     # su lugar; y se limpia al reves, manifest primero: si el manifest existe, los bloques estan.
-    paths, created, total = [], [], 0
+    paths, sums, created, total = [], [], [], 0
     try:
         if os.path.islink(os.path.normpath(a.out_dir)):
             raise OSError(f"--out-dir es un enlace: {a.out_dir}")
@@ -526,9 +548,11 @@ def main():
                 created.append((p, st.st_dev, st.st_ino))
                 fh.write(body)
             paths.append(p)
+            sums.append(hashlib.sha256(body.encode("utf-8", errors="replace")).hexdigest())
             total += len(body)
 
-        info.update({"jsonl": path, "chunks": paths, "chars": total, "entries": len(entries)})
+        info.update({"jsonl": path, "chunks": paths, "sha256": sums, "chars": total,
+                     "entries": len(entries)})
         mp = os.path.join(a.out_dir, "manifest.json")
         with open(mp, "x", encoding="utf-8", errors="replace", newline="\n") as fh:
             st = os.fstat(fh.fileno())
