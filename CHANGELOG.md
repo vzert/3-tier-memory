@@ -1,6 +1,27 @@
 # Changelog
 
 
+## [2.42.1] - 2026-09-30
+Fase F0 del plan de ciclo de vida de learnings: un banco que mide el recall antes de tocarlo, para
+que cada fase siguiente pueda fallar contra numeros. Sin cambio de comportamiento para el usuario.
+
+### Changed
+- **El motor de recall sale de `recall.sh` a `bin/recall_rank.py`.** Es el mismo codigo, ahora
+  importable. `recall.sh` lo llama con el mismo entorno y el mismo `2>/dev/null`. Salida identica
+  byte a byte al bloque anterior sobre 50 prompts reales y 4 indices
+  (`tools/recall-bench/compare-motores.py`).
+
+### Added
+- **`tools/recall-bench/recall-bench.py`**: mide `prompt@4`, `dedup@8` y `fuga` con el motor de
+  produccion importado; `accion@2` es 0 por construccion hasta que exista el canal (F5). Se niega
+  a correr con menos de 20 casos de incidente real, menos de 5 de accion, una fuente que no existe
+  o una cita que no aparece literal en su fuente. Los casos y la linea base no se publican
+  (`.gitignore`): citan fichas de sesion de otros proyectos.
+- **`tools/recall-bench/test-bench.sh`** (en `tools/run-tests.sh`): los sabotajes del banco sobre un
+  corpus sintetico, y que `compare-motores.py` detecta un motor saboteado.
+- CI con `fetch-depth: 0`: `compare-motores.py` lee el motor de referencia de la historia.
+
+
 ## [2.42.0] - 2026-09-30
 Origen: research `omisiones-cierre-checkpoint`. En 66 cierres de `/checkpoint-3t` tras los que el
 usuario tuvo que preguntar "¿falto algo de tu checkpoint?", el mismo agente encontro omisiones
