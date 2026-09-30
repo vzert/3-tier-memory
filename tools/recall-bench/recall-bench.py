@@ -16,7 +16,8 @@ Los indices se construyen con build-recall-index.py en un directorio temporal. L
 corpus solo se LEEN. Nunca se corre recall.sh, que compacta el journal y reescribe el indice del
 proyecto que resuelve.
 
-Se NIEGA a correr (sale 2) si hay menos de 20 casos, menos de 5 del canal accion, o algun caso sin
+Se NIEGA a correr (sale 2) si hay menos de 20 casos de origen "incidente", menos de 5 del canal
+accion entre ellos (los de origen "medida" corren pero no cuentan para esos minimos), o algun caso sin
 `fuente`, con una `fuente` que no existe, o cuya `cita` no aparece literal en su fuente. La cita es
 lo que ata el caso a algo que paso: un caso sin cita comprobable es un caso inventado.
 
