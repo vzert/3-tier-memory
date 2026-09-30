@@ -8,3 +8,8 @@ __pycache__/
 
 # estado interno de goalspec (per-sesion, nunca se publica)
 .goalspec/
+
+# datos del banco de recall: citan fichas de sesion de otros proyectos y rutas de esta maquina
+tools/recall-bench/casos.jsonl
+tools/recall-bench/linea-base-*.json
+tools/recall-bench/resultado-*.json

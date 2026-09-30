@@ -29,6 +29,9 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
+        with:
+          # tools/recall-bench/compare-motores.py lee el motor viejo de recall en 3119885 (F0).
+          fetch-depth: 0
       - name: version de las herramientas
         shell: bash
         run: |

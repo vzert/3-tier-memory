@@ -60,6 +60,9 @@ correr "check-ignored-tracked" bash tools/check-ignored-tracked.sh
 correr "mutation-check" bash tools/mutation-check.sh
 # learning.update contra un parser CommonMark. Sin markdown-it-py la linea dice SKIP, no verde.
 correr "oraculo-rewrite-rule" python3 tools/oraculo-rewrite-rule.py
+# Banco de recall (F0 del plan de ciclo de vida de learnings): sabotajes y equivalencia de motores
+# sobre un corpus sintetico; casos.jsonl real no se publica.
+correr "recall-bench" bash tools/recall-bench/test-bench.sh
 
 echo
 echo "Suites del plugin"
