@@ -40,6 +40,7 @@ DISPARO = re.compile(
 NUMERO = re.compile(r"(?:reglas?|rules?|learnings?)\s+#?(\d+)(?:\s*(?:y|and|,)\s*#?(\d+))?",
                     re.IGNORECASE)
 RULE_RE = re.compile(r"^\s*(\d+)\.\s+")
+ANCLA = re.compile(r"\[\[learnings/[A-Za-z0-9_.-]+?(?:\.md)?#(\d+)[\]|]")
 ENLACE = re.compile(r"\[\[learnings/([A-Za-z0-9_.-]+?)(?:\.md)?(?:[#|][^\]]*)?\]\]|learnings/([A-Za-z0-9_.-]+?)\.md")
 ORDENES = ("git", "rm", "grep", "ssh", "timeout", "curl", "find", "sed", "cp", "mv", "cat",
            "python3", "python", "bash", "npm", "docker", "kubectl", "gh", "rsync", "scp", "claude")
@@ -106,6 +107,8 @@ def minar(proyecto):
             nums = []
             for m in NUMERO.finditer(linea):
                 nums += [int(x) for x in m.groups() if x]
+            # [[learnings/topic#7]]: el numero va en el ancla del enlace
+            nums += [int(n) for n in ANCLA.findall(linea)]
             candidatas = sorted({rid for n in nums for rid in por_numero.get(n, [])})
             unicas = []
             for n in nums:

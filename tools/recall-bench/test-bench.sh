@@ -156,15 +156,25 @@ else
   [ "$RC" -eq 1 ] && printf '%s' "$OUT" | grep -q "NO SE REPRODUCE" && ok "lo detecta" || mal "rc=$RC: $OUT"
 fi
 
-echo "10. minar-casos propone los 20 candidatos del corpus neutro, todos para revisar"
+echo "10. minar-casos propone los 22 candidatos del corpus neutro, todos para revisar"
 OUT=$(python3 tools/recall-bench/minar-casos.py --proyecto tools/recall-bench/corpus-neutro --salida "$TMP/cand.jsonl" 2>&1)
 N=$(grep -c '"revisar": true' "$TMP/cand.jsonl")
-printf '%s' "$OUT" | grep -q "20 candidatos (20 con regla resuelta" && [ "$N" -eq 20 ] && ok "$OUT" || mal "revisar=$N: $OUT"
+printf '%s' "$OUT" | grep -q "22 candidatos (22 con regla resuelta" && [ "$N" -eq 22 ] && ok "$OUT" || mal "revisar=$N: $OUT"
 
 echo "11. el banco se niega a correr con un candidato sin revisar"
 { cat "$TMP/bueno.jsonl"; head -1 "$TMP/cand.jsonl"; } > "$TMP/s11.jsonl"
 OUT=$(correr "$TMP/s11.jsonl"); RC=$?
 [ "$RC" -eq 2 ] && printf '%s' "$OUT" | grep -q "candidato sin revisar" && ok "se niega: $OUT" || mal "rc=$RC: $OUT"
+
+echo "12. \"revisar\": false tambien se rechaza (el campo se quita al revisar)"
+{ cat "$TMP/bueno.jsonl"; head -1 "$TMP/cand.jsonl" | sed 's/"revisar": true/"revisar": false/'; } > "$TMP/s12.jsonl"
+OUT=$(correr "$TMP/s12.jsonl"); RC=$?
+[ "$RC" -eq 2 ] && printf '%s' "$OUT" | grep -q "candidato sin revisar" && ok "se niega: $OUT" || mal "rc=$RC: $OUT"
+
+echo "13. una linea_base_esperada sin reglas no fija nada y se rechaza"
+sed '1s/"nota":"sintetico"}/"nota":"sintetico","linea_base_esperada":{"excluye":[]}}/' "$TMP/bueno.jsonl" > "$TMP/s13.jsonl"
+OUT=$(correr "$TMP/s13.jsonl"); RC=$?
+[ "$RC" -eq 2 ] && printf '%s' "$OUT" | grep -q "sin ninguna regla" && ok "se niega: $OUT" || mal "rc=$RC: $OUT"
 
 echo
 if [ "$FALLOS" -eq 0 ]; then echo "test-bench: TODO VERDE"; else echo "test-bench: $FALLOS FALLOS"; exit 1; fi

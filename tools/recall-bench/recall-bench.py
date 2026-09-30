@@ -27,7 +27,7 @@ proyecto que resuelve.
 Se NIEGA a correr (sale 2) si hay menos de 20 casos con cita (origen "incidente" o "neutro"),
 menos de 5 del canal accion entre ellos, algun caso sin `fuente`, con una `fuente` que no existe, o
 cuya `cita` no aparece literal en su fuente, o algun caso todavia marcado `"revisar": true` (un
-candidato de minar-casos.py que nadie reviso). Los de origen "medida" corren y cuentan en las
+candidato de minar-casos.py que nadie reviso: el campo, con cualquier valor, se quita al revisar). Los de origen "medida" corren y cuentan en las
 metricas, pero no completan los minimos.
 
 Limite (lo que el banco NO prueba): `origen`, `canal`, `esperadas` y `prohibidas` los declara quien
@@ -176,7 +176,7 @@ def validar(casos, raiz, base):
     for c in casos:
         if c.get("origen", "incidente") not in ORIGENES:
             negarse(f"{c.get('id')}: origen desconocido {c.get('origen')!r}")
-        if c.get("revisar"):
+        if "revisar" in c:
             negarse(f"{c.get('id')}: es un candidato sin revisar (\"revisar\": true); revisalo y "
                     f"quita el campo, o sacalo del fichero")
     # Solo cuentan para los minimos los casos con cita (incidente o neutro). Los de origen "medida"
@@ -239,6 +239,8 @@ def validar(casos, raiz, base):
                 negarse(f"{cid}: el canal accion no tiene linea base que fijar todavia")
             if not isinstance(lb, dict) or set(lb) - {"contiene", "excluye"} or not lb:
                 negarse(f"{cid}: linea_base_esperada solo admite 'contiene' y 'excluye'")
+            if not any(isinstance(v, list) and v for v in lb.values()):
+                negarse(f"{cid}: linea_base_esperada sin ninguna regla: no fijaria nada")
             validar_ids(cid, c["corpus"], reglas, list(lb.get("contiene", [])) + list(lb.get("excluye", [])))
     return reglas_cache
 

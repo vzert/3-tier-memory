@@ -18,9 +18,10 @@ No sabe nada de ningún proyecto concreto. Lo concreto va en un fichero de casos
 ## Dos juegos de casos
 
 - **`corpus-neutro/`** (publicado). Un `memory/` con 68 reglas de patrones comunes (git y CI,
-  shell y portabilidad, publicación y privacidad, proceso del agente), 5 fichas de sesión y 23
-  casos. Cada caso reescribe en términos generales un incidente real del desarrollo del plugin
-  (`origen: neutro`, la procedencia va en `nota`). Corre en `test-bench.sh`, y por tanto en la CI.
+  shell y portabilidad, publicación y privacidad, proceso del agente), 5 fichas de sesión y 25
+  casos. 21 reescriben en términos generales un incidente del desarrollo del plugin (`origen:
+  neutro`, la procedencia va en `nota`; la `nota` es una declaración, no una prueba). Los 4 de
+  duplicados son sintéticos (`origen: medida`: corren, pero no cuentan para los mínimos). Corre en `test-bench.sh`, y por tanto en la CI.
   **Sus números son optimistas**: las reglas y las fichas las escribió la misma persona, así que
   comparten vocabulario. Sirve para detectar regresiones del motor, no para medir el recall real.
 - **`casos.jsonl`** (tuyo, en `.gitignore`). Casos de tu instalación, sobre los `memory/` de tus
