@@ -297,10 +297,21 @@ has "sustituto: el bloque lleva el texto de alrededor" "FIN" "$TMP/or-sur/chunk-
 # llega, asi que no deben quedar bloques que nadie sabe que existen.
 F="$TMP/r-out.jsonl"
 { u p1 "SECRETO-EN-TRAMO"; bound 300000; summ; ckcmd p2; ckskl p2; } > "$F"
-python3 -c 'import os, runpy, sys; os.close(1); sys.argv[0] = sys.argv.pop(1); runpy.run_path(sys.argv[0], run_name="__main__")' \
-  "$BIN/compaction-recover.py" --jsonl "$F" --out-dir "$TMP/or-out" 2>/dev/null; RC=$?
-[ $RC -eq 0 ] && ok "stdout cerrado: sale 0" || bad "R2 stdout cerrado: exit=$RC"
-grep -rqF "SECRETO-EN-TRAMO" "$TMP/or-out" 2>/dev/null && bad "R2 stdout cerrado: queda texto crudo" || ok "stdout cerrado: no queda texto crudo"
+# Las dos formas de stdout, fijadas: con un archivo (se puede posicionar) reconfigure() pide tell()
+# al fd 1 ya cerrado y daba OSError al cargar el modulo (ronda 7: el caso solo fallaba si el test
+# corria con la salida a un archivo; con tuberia o terminal pasaba).
+for s in archivo tuberia; do
+  O="$TMP/or-out-$s"
+  if [ $s = archivo ]; then
+    python3 -c 'import os, runpy, sys; os.close(1); sys.argv[0] = sys.argv.pop(1); runpy.run_path(sys.argv[0], run_name="__main__")' \
+      "$BIN/compaction-recover.py" --jsonl "$F" --out-dir "$O" > "$TMP/stdout-$s.txt" 2>/dev/null; RC=$?
+  else
+    python3 -c 'import os, runpy, sys; os.close(1); sys.argv[0] = sys.argv.pop(1); runpy.run_path(sys.argv[0], run_name="__main__")' \
+      "$BIN/compaction-recover.py" --jsonl "$F" --out-dir "$O" 2>/dev/null | cat >/dev/null; RC=${PIPESTATUS[0]}
+  fi
+  [ "$RC" = 0 ] && ok "stdout cerrado ($s): sale 0" || bad "R2 stdout cerrado ($s): exit=$RC"
+  grep -rqF "SECRETO-EN-TRAMO" "$O" 2>/dev/null && bad "R2 stdout cerrado ($s): queda texto crudo" || ok "stdout cerrado ($s): no queda texto crudo"
+done
 # Un chunk-01.md que ya existia (archivo, o enlace a otro archivo) no se pisa ni se borra. En Git
 # Bash sin modo desarrollador `ln -s` copia el archivo: los asertos valen para las dos formas.
 for c in archivo enlace; do

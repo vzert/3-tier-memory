@@ -69,9 +69,14 @@ import sys
 
 # errors="backslashreplace": una ruta con un sustituto (argv con bytes no UTF-8) no tumba el print
 # (ronda 4 de Codex sobre 2.41.7: recover=0 reason=sin-jsonl salia 1 con UnicodeEncodeError).
+# try: con stdout a un archivo ya cerrado, reconfigure() pide tell() al fd y da OSError al cargar el
+# modulo, antes de que salida() pueda protegerlo (ronda 7 de Codex sobre 2.41.10). Si falla, el
+# flujo queda como estaba y el print siguiente lo maneja salida().
 for _flujo in (sys.stdout, sys.stderr):
-    if hasattr(_flujo, "reconfigure"):
+    try:
         _flujo.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
 
 CHUNK_CHARS_DEFAULT = 100_000
 MAX_USER = 4000        # un prompt largo del usuario casi siempre es contexto que importa
