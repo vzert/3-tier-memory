@@ -13,8 +13,9 @@
 # Cada mutador imprime cuantas sustituciones hizo; CERO significa SIN PROBAR, no aprobado.
 #
 # Uso:  tools/mutation-check.sh        (exit 0 = todas discriminan)
-# Entra en el runner, y un arnes que nadie corre se pudre. Tarda ~2 min (medido 2026-09-29: 94 s
-# con los 15 primeros casos, 125 s con los 24 del contrato de 2.41.4; el "13 s" de antes ya no valia). Si una mutacion deja de aplicarse porque el fuente cambio, esto se pone ROJO con
+# Entra en el runner, y un arnes que nadie corre se pudre. Tarda ~2,5 min (medido 2026-09-29: 94 s
+# con los 15 primeros casos, 125 s con los 24 del contrato de 2.41.4; 2026-09-30: 147 s con los 4
+# de escalada a persona; el "13 s" de antes ya no valia). Si una mutacion deja de aplicarse porque el fuente cambio, esto se pone ROJO con
 # "SIN PROBAR" y hay que actualizar el mutador — no es ruido, es que el arnes dejo de verificar lo
 # que dice verificar, que es el fallo que este fichero existe para evitar.
 #
@@ -103,6 +104,13 @@ caso "open() sin newline=''" check-project-dir-fallback.py m_contrato_projdir.py
 caso "R4 solo IFS" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " opciones: fallos" r4-solo-ifs
 caso "R4 sin set" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " opciones: fallos" r4-sin-set
 caso "R4 sin options" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " opciones: fallos" r4-sin-options
+
+echo
+echo "Escalada a persona (p-667f76a40e): sin el rotulo o sin la llamada, el aviso no llega a systemMessage"
+caso "rotulo fuera-de-banda" journal-compact.py m_escalada_humana.py test-expire-reopen.sh "el texto a la persona nombra git pull" rotulo-fuera-de-banda
+caso "rotulo linea-base-ilegible" journal-compact.py m_escalada_humana.py test-linea-base-corrupta.sh "SI lo entrega .systemMessage nombra la corrupcion" rotulo-linea-base-ilegible
+caso "llamada con JOURNAL_OUT" session-start.sh m_escalada_humana.py test-expire-reopen.sh "el canal a la persona lo lleva" llamada-journal-out
+caso "llamada con DRIFT_OUT" session-start.sh m_escalada_humana.py test-expire-reopen.sh "el texto a la persona nombra git pull" llamada-drift-out
 
 echo
 if [ "$PEND" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $TOTAL)"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi
