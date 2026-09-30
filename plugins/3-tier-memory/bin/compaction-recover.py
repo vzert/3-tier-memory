@@ -49,6 +49,9 @@ media entrada) y `manifest.json` en --out-dir. En stdout, una linea:
     recover=0 reason=fallo-escritura error=<excepcion> [restos=N out=DIR]
         (hubo compactacion y el tramo NO se recupero; restos=N: N archivos con texto crudo que no se
         pudieron borrar ni vaciar)
+Con --verificar DIR no recupera nada: comprueba el tramo que dejo una corrida anterior en DIR y
+imprime `verificado=1 chunks=K chars=C` o `verificado=0 reason=<motivo>`. Step 0b solo usa los
+bloques con verificado=1: una linea recover=1 cortada no prueba que los bloques sigan ahi.
 Siempre sale 0 salvo error de uso: el checkpoint NO debe caerse porque esto falle; solo avisa. Si
 falla una escritura (o la propia linea de salida), borra los archivos que esta corrida creo antes de
 salir. No escribe sobre archivos que ya estaban en --out-dir: los abre con "x".
@@ -385,6 +388,39 @@ def render(o, ask_ids):
     return f"[{ts}] " + "\n".join(out) if ts else "\n".join(out)
 
 
+def salida(linea):
+    """Imprime una linea de resultado. Si stdout esta roto, lo cambia por None: sin eso, el vaciado
+    al salir falla otra vez y Python sale 120 (ronda 6: las salidas tempranas no estaban cubiertas)."""
+    try:
+        print(linea)
+        sys.stdout.flush()
+    except Exception:
+        sys.stdout = None
+
+
+def verificar(d):
+    """Comprueba el tramo de DIR: manifest JSON, cada bloque dentro de DIR (no un enlace) y la suma de
+    caracteres igual a la del manifest. Un bloque borrado, vaciado o cortado da verificado=0."""
+    try:
+        with open(os.path.join(d, "manifest.json"), encoding="utf-8") as fh:
+            m = json.load(fh)
+        chunks, chars = m.get("chunks"), m.get("chars")
+        if not (isinstance(chunks, list) and chunks and isinstance(chars, int)):
+            return "verificado=0 reason=manifest-incompleto"
+        base, total = os.path.realpath(d), 0
+        for p in chunks:
+            if not isinstance(p, str) or os.path.islink(p) or \
+                    os.path.dirname(os.path.realpath(p)) != base:
+                return "verificado=0 reason=bloque-fuera-de-dir"
+            with open(p, encoding="utf-8", errors="replace", newline="") as fh:
+                total += len(fh.read())
+    except Exception as e:
+        return f"verificado=0 reason={type(e).__name__}"
+    if total != chars:
+        return f"verificado=0 reason=caracteres chars={chars} leidos={total}"
+    return f"verificado=1 chunks={len(chunks)} chars={total}"
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--jsonl")
@@ -392,16 +428,23 @@ def main():
     ap.add_argument("--jsonl-dir")
     ap.add_argument("--projects-root", default=os.path.expanduser("~/.claude/projects"),
                     help="donde buscar <session-id>.jsonl si no esta en --jsonl-dir")
-    ap.add_argument("--out-dir", required=True)
+    ap.add_argument("--out-dir")
+    ap.add_argument("--verificar", metavar="DIR",
+                    help="no recupera: comprueba el tramo que dejo una corrida anterior en DIR")
     ap.add_argument("--until-line", type=int, default=0,
                     help="evaluar el archivo como si terminara en esta linea (pruebas y auditoria)")
     ap.add_argument("--chunk-chars", type=int, default=CHUNK_CHARS_DEFAULT)
     a = ap.parse_args()
+    if a.verificar:
+        salida(verificar(a.verificar))
+        return 0
+    if not a.out_dir:
+        ap.error("falta --out-dir")
 
     path = a.jsonl
     if not path:
         if not a.session_id:
-            print("recover=0 reason=sin-session-id")
+            salida("recover=0 reason=sin-session-id")
             return 0
         path = os.path.join(a.jsonl_dir or "", a.session_id + ".jsonl")
         if not (a.jsonl_dir and os.path.isfile(path)):
@@ -415,13 +458,13 @@ def main():
             if hits:
                 path = hits[-1]
     if not os.path.isfile(path):
-        print(f"recover=0 reason=sin-jsonl path={path}")
+        salida(f"recover=0 reason=sin-jsonl path={path}")
         return 0
 
     rows = load(path, a.until_line)
     info, why = find_range(rows)
     if info is None:
-        print(f"recover=0 reason={why}")
+        salida(f"recover=0 reason={why}")
         return 0
 
     entries, ask_ids = [], set()
@@ -532,7 +575,11 @@ def main():
                     if (st.st_dev, st.st_ino) == (dev, ino):
                         os.ftruncate(fd, 0)
                 finally:
-                    os.close(fd)
+                    # Un close que falla despues de vaciar no deja resto (ronda 6).
+                    try:
+                        os.close(fd)
+                    except Exception:
+                        pass
             except FileNotFoundError:
                 pass
             except Exception:

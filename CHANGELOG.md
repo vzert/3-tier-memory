@@ -1,6 +1,29 @@
 # Changelog
 
 
+## [2.41.10] - 2026-09-30
+Origen: Codex, ronda 6 sobre 2.41.9 (break).
+
+### Added
+- **`compaction-recover.py --verificar DIR`**: comprueba el tramo que dejo una corrida anterior. Mira
+  que `manifest.json` sea JSON, que cada bloque este dentro de DIR y no sea un enlace, y que la suma
+  de caracteres cuadre con la del manifest. Imprime `verificado=1 chunks=K chars=C` o
+  `verificado=0 reason=<motivo>`. **Step 0b** lo corre antes de lanzar subagentes, y solo usa el
+  tramo con `verificado=1`. Reemplaza la regla de 2.41.8 ("el manifest existe y no esta vacio"),
+  que Codex rompio: una linea `recover=1` cortada, con el manifest lleno y un bloque borrado, la
+  pasaba. Caso R6: un tramo sano y seis incompletos (sin bloque, bloque vacio, bloque corto,
+  manifest vacio, sin manifest, manifest roto), mas un bloque fuera de DIR.
+
+### Fixed
+- **Salidas tempranas con stdout roto**: `recover=0 reason=sin-jsonl`, `sin-session-id` y
+  `sin-compactacion` salian 120. Ahora todas las lineas pasan por `salida()`, que cambia stdout por
+  `None` si falla. Caso R6, rojo contra 5304798.
+- **`restos=N` contaba un bloque ya vaciado** si `os.close` fallaba despues del `ftruncate`. Ahora un
+  `close` que falla no cuenta. Caso R6, rojo contra 5304798.
+- **Constancia de los enlaces en Windows**: la ultima linea de `test-compaction-recover.sh` dice si
+  hubo enlaces reales. Sin ellos dice "2 saltados", y `tools/run-tests.sh` lo lista como salto en vez
+  de TODO VERDE. Antes el CI no dejaba constancia de que los casos de enlace de R4 no corrieron.
+
 ## [2.41.9] - 2026-09-30
 Origen: Codex, ronda 5 sobre 2.41.8 (break).
 

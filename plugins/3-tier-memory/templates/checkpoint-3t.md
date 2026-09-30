@@ -85,10 +85,16 @@ archivos que el script no pudo borrar ni vaciar (pueden tener texto crudo de la 
 linea "quedan N archivo(s) en <out> que pueden tener texto crudo — borralos a mano". En todo `recover=0`, borra el
 directorio: `rm -rf "<RECOVER_DIR impreso arriba>"`. Nunca detengas el checkpoint por esto.
 
-`recover=1` solo vale si `$RECOVER_DIR/manifest.json` existe y no esta vacio: el script lo escribe
-al final y lo borra primero si algo falla. Si la salida empieza con `recover=1` pero el manifest no
-esta o esta vacio (la linea se corto, o salio `recover=1` y `recover=0` pegadas), o si no salio
-ninguna linea `recover=`, tratalo como `fallo-escritura`: reportalo y borra el directorio.
+`recover=1` solo vale si la comprobacion del tramo da `verificado=1`. Una linea `recover=1` cortada
+(o pegada a un `recover=0`) no prueba que los bloques sigan ahi. Antes de lanzar subagentes, corre:
+
+```bash
+python3 "$JBIN/compaction-recover.py" --verificar "$RECOVER_DIR"
+```
+
+Mira que el manifest sea JSON, que cada bloque este dentro de `RECOVER_DIR` y que los caracteres
+cuadren. Si sale `verificado=0`, o si no salio ninguna linea `recover=`, tratalo como
+`fallo-escritura`: reportalo y borra el directorio.
 
 **`recover=1 compactions=N pre_tokens=T chunks=K ...`** — el tramo quedo en K bloques
 `$RECOVER_DIR/chunk-NN.md` (lista en `$RECOVER_DIR/manifest.json`). No los leas tu: pesan decenas de

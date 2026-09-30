@@ -432,9 +432,8 @@ builtins.print = pr" "$TMP/or4-orden"); RC=$?
 case "$OUT" in "recover=0 reason=fallo-escritura"*) ok "print de recover=1 falla: recover=0";; *) bad "R4 orden: $OUT";; esac
 [ -s "$TMP/or4-orden/manifest.json" ] && bad "R4 orden: el manifest quedo lleno" || ok "print de recover=1 falla: el manifest queda vacio o no esta"
 grep -rqF "SECRETO-EN-TRAMO" "$TMP/or4-orden" && bad "R4 orden: queda texto crudo" || ok "print de recover=1 falla: no queda texto crudo"
-for T in "$BIN/../templates/checkpoint-3t.md"; do
-  has "Step 0b exige manifest.json no vacio para usar recover=1" 'recover=1` solo vale si `$RECOVER_DIR/manifest.json` existe y no esta vacio' "$T"
-done
+# La regla de Step 0b que usaba el manifest como marca la reemplazo --verificar (ronda 6): su aserto
+# esta en R6.
 
 echo "R5. ronda 5 de Codex sobre 2.41.8: excepcion durante la limpieza, stdout que falla con otra excepcion"
 # Un MemoryError en os.remove durante la limpieza: el bloque se vacia igual y sale 0.
@@ -476,6 +475,56 @@ builtins.open = op" "$TMP/or5-exito"); RC=$?
 [ $RC -eq 0 ] && ok "exito sin os.devnull: sale 0" || bad "R5 exito sin devnull: exit=$RC"
 case "$OUT" in "recover=1 "*) ok "exito sin os.devnull: recover=1";; *) bad "R5 exito sin devnull: $OUT";; esac
 
+echo "R6. ronda 6 de Codex sobre 2.41.9: close que falla tras vaciar, stdout roto en las salidas"
+echo "    tempranas, y --verificar para que Step 0b no use un tramo incompleto"
+# os.close falla despues de un ftruncate que si vacio el bloque: no es un resto.
+mkdir -p "$TMP/or6-close/manifest.json"
+OUT=$(envuelto "_cl = os.close
+def cl(fd):
+    _cl(fd)
+    raise OSError(9, 'close fallo')
+os.close = cl
+os.remove = lambda p: (_ for _ in ()).throw(PermissionError(13, 'sin permiso', p))" "$TMP/or6-close"); RC=$?
+case "$OUT" in *restos=*) bad "R6 close: cuenta un resto que ya se vacio: $OUT";; "recover=0 reason=fallo-escritura"*) ok "close falla tras vaciar: no es resto";; *) bad "R6 close: $OUT";; esac
+grep -rqF "SECRETO-EN-TRAMO" "$TMP/or6-close" && bad "R6 close: queda texto crudo" || ok "close falla tras vaciar: el bloque queda vacio"
+# stdout roto en las salidas tempranas (sin JSONL, sin compactacion): sale 0.
+CERRADO="class C(io.TextIOBase):
+    def reconfigure(self, **k): pass
+    def write(self, s): raise ValueError('I/O operation on closed file')
+    def flush(self): raise ValueError('I/O operation on closed file')
+sys.stdout = C()"
+OUT=$(envuelto "$CERRADO
+sys.argv[sys.argv.index('--jsonl') + 1] = 'no-existe.jsonl'" "$TMP/or6-t1"); RC=$?
+[ $RC -eq 0 ] && ok "stdout roto en sin-jsonl: sale 0" || bad "R6 sin-jsonl: exit=$RC"
+F6="$TMP/r6-sin.jsonl"; { u p1 "nada"; ckcmd p2; ckskl p2; } > "$F6"
+OUT=$(envuelto "$CERRADO
+sys.argv[sys.argv.index('--jsonl') + 1] = '$F6'" "$TMP/or6-t2"); RC=$?
+[ $RC -eq 0 ] && ok "stdout roto en sin-compactacion: sale 0" || bad "R6 sin-compactacion: exit=$RC"
+# --verificar DIR: solo verificado=1 si el manifest es JSON, cada bloque esta en DIR y los
+# caracteres cuadran. Un tramo sano, y cinco formas de tramo incompleto.
+ver(){ python3 "$BIN/compaction-recover.py" --verificar "$1" 2>/dev/null; }
+OUT=$(run "$F" "$TMP/or6-sano" --chunk-chars 60 2>/dev/null)
+case "$(ver "$TMP/or6-sano")" in "verificado=1 "*) ok "verificar: tramo sano da verificado=1";; *) bad "R6 verificar sano: $(ver "$TMP/or6-sano")";; esac
+for c in sin-bloque bloque-vacio bloque-corto manifest-vacio sin-manifest manifest-roto; do
+  O="$TMP/or6-$c"; run "$F" "$O" >/dev/null 2>&1
+  case $c in
+    sin-bloque)     rm -f "$O/chunk-01.md";;
+    bloque-vacio)   : > "$O/chunk-01.md";;
+    bloque-corto)   printf '# corto\n' > "$O/chunk-01.md";;
+    manifest-vacio) : > "$O/manifest.json";;
+    sin-manifest)   rm -f "$O/manifest.json";;
+    manifest-roto)  printf '{"chunks": [' > "$O/manifest.json";;
+  esac
+  case "$(ver "$O")" in "verificado=0 "*) ok "verificar: $c da verificado=0";; *) bad "R6 verificar $c: '$(ver "$O")'";; esac
+done
+# Un manifest que apunta a un archivo fuera de DIR no se da por bueno.
+O="$TMP/or6-fuera"; run "$F" "$O" >/dev/null 2>&1
+python3 -c "import json,sys; m=json.load(open(sys.argv[1])); m['chunks']=[sys.argv[2]]; json.dump(m, open(sys.argv[1],'w'))" "$O/manifest.json" "$F"
+case "$(ver "$O")" in "verificado=0 "*) ok "verificar: bloque fuera de DIR da verificado=0";; *) bad "R6 verificar fuera: '$(ver "$O")'";; esac
+for T in "$BIN/../templates/checkpoint-3t.md"; do
+  has "Step 0b corre --verificar antes de usar el tramo" 'compaction-recover.py" --verificar "$RECOVER_DIR"' "$T"
+done
+
 echo "M. compactacion entre la marca del checkpoint actual y Step 0b: se recupera (adversario externo, 2026-09-28)"
 F="$TMP/m.jsonl"
 { u p1 "TRABAJO-M previo"; ckcmd p2; ckskl p2; bound 400000; summ; } > "$F"
@@ -500,5 +549,9 @@ sys.exit(1 if malas else 0)
 PY
 
 echo
-[ $FAIL -eq 0 ] && echo "TODO VERDE" || echo "HAY FALLOS"
+# La ultima linea dice si hubo enlaces reales: sin ellos, los casos de enlace de R4 no corrieron y el
+# resumen de tools/run-tests.sh lo marca como salto (ronda 6: el CI no dejaba constancia).
+if [ $FAIL -ne 0 ]; then echo "HAY FALLOS"
+elif [ $ENLACES -eq 1 ]; then echo "TODO VERDE (enlaces reales: si)"
+else echo "TODO VERDE, 2 saltados (sin enlaces reales)"; fi
 exit $FAIL
