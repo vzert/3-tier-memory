@@ -69,7 +69,7 @@ PROMPT=$(echo "$_HOOK_INPUT" | python3 -c "import json,sys;print(json.load(sys.s
 [ -z "$PROMPT" ] && exit 0
 
 # El motor vive en recall_rank.py desde la Fase F0 (plan ciclo de vida de learnings): el banco
-# tools/recall-bench.py lo importa, asi mide el mismo codigo que corre aqui.
+# tools/recall-bench/recall-bench.py lo importa, asi mide el mismo codigo que corre aqui.
 RECALL_INDEX="$INDEX" RECALL_PROMPT="$PROMPT" python3 "$(dirname "$0")/recall_rank.py" 2>/dev/null
 
 exit 0

@@ -6,7 +6,7 @@ Puntua cada unidad del indice de recall contra el prompt: solapamiento lexico (B
 decaimiento por antiguedad x importance. Imprime las 4 mejores, o nada si ninguna pasa el umbral.
 
 Era el bloque Python embebido en recall.sh (heredoc PYEOF). Se saco a este fichero en la Fase F0
-del plan de ciclo de vida de learnings para que el banco (tools/recall-bench.py) mida el MISMO
+del plan de ciclo de vida de learnings para que el banco (tools/recall-bench/recall-bench.py) mida el MISMO
 motor que corre en produccion, importandolo, en vez de copiarlo. La salida no cambio: se comparo
 byte a byte con el bloque viejo sobre 50 prompts reales (tools/recall-bench/test-bench.sh).
 
