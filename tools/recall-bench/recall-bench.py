@@ -21,6 +21,11 @@ accion entre ellos (los de origen "medida" corren pero no cuentan para esos mini
 `fuente`, con una `fuente` que no existe, o cuya `cita` no aparece literal en su fuente. La cita es
 lo que ata el caso a algo que paso: un caso sin cita comprobable es un caso inventado.
 
+Limite (lo que el banco NO prueba): `origen`, `canal`, `esperadas` y `prohibidas` los declara quien
+escribe el caso. El banco comprueba que la fuente existe, que la cita esta en ella y que las reglas
+citadas existen sin ambiguedad; no puede comprobar que la regla esperada fuera la que aplicaba, ni
+que el caso sea de verdad un incidente. Eso lo revisa una persona sobre casos.jsonl.
+
 Formato de un caso (una linea JSON en casos.jsonl):
   {"id": "...", "corpus": "claude-vzert", "canal": "prompt|accion|dedup",
    "entrada": "<prompt>" | {"tool_name": ..., "tool_input": {...}} | "<topic>#<N>" (dedup),
@@ -121,7 +126,7 @@ def existe_unica(reglas, rid):
 
 
 def validar(casos, raiz):
-    # Solo cuentan para los minimos los casos de un incidente real (origen "incidente", el valor
+    # Solo cuentan para los minimos los casos declarados de incidente (origen "incidente", el valor
     # por omision). Los de origen "medida" (las frases con que se midio H8 en el plan) corren y se
     # reportan, pero no son citas de un incidente y no pueden completar el minimo.
     for c in casos:

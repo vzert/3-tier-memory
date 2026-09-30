@@ -14,9 +14,11 @@ que cada fase siguiente pueda fallar contra numeros. Sin cambio de comportamient
 ### Added
 - **`tools/recall-bench/recall-bench.py`**: mide `prompt@4`, `dedup@8` y `fuga` con el motor de
   produccion importado; `accion@2` es 0 por construccion hasta que exista el canal (F5). Se niega
-  a correr con menos de 20 casos de incidente real, menos de 5 de accion, una fuente que no existe
-  o una cita que no aparece literal en su fuente. Los casos y la linea base no se publican
-  (`.gitignore`): citan fichas de sesion de otros proyectos.
+  a correr con menos de 20 casos declarados de incidente, menos de 5 de accion, una fuente que no
+  existe o una cita que no aparece literal en su fuente. Que un caso sea un incidente real, y que
+  su regla esperada fuera la que aplicaba, lo declara quien lo escribe y lo revisa una persona: el
+  banco solo comprueba la cita. Los casos y la linea base no se publican (`.gitignore`): citan
+  fichas de sesion de otros proyectos.
 - **`tools/recall-bench/test-bench.sh`** (en `tools/run-tests.sh`): los sabotajes del banco sobre un
   corpus sintetico, y que `compare-motores.py` detecta un motor saboteado.
 - CI con `fetch-depth: 0`: `compare-motores.py` lee el motor de referencia de la historia.
