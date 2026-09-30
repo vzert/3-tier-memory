@@ -348,8 +348,9 @@ antes de la revision, el snippet quedo enterrado bajo 2.400-4.300 caracteres en 
 lo repitio. Fuera de `/checkpoint-3t` (por ejemplo, rehacer el snippet despues de cerrar un
 pendiente que cita) no hay revision: pegalo en el acto, como ultimo bloque.
 
-**Pega su salida tal cual, sin resumirla ni reformularla**, como el ultimo bloque de tu respuesta
-(en `/checkpoint-3t`, de tu respuesta a la revision del cierre). El script ya decide el formato correcto por ti — linea unica sin
+**Pega su salida tal cual, sin resumirla ni reformularla**, como el primer bloque del cierre. El
+cierre (8b, 8c, 8d y 8e, en ese orden) va seguido y al final de tu respuesta; en `/checkpoint-3t`,
+al final de tu respuesta a la revision del cierre. 8e es el ultimo bloque. El script ya decide el formato correcto por ti — linea unica sin
 separadores si el caso 5 aplica, bloque completo con separadores en cualquier otro caso — leyendo el MISMO `## Como retomar` que acabas de escribir en 8a. No existe una segunda
 redaccion que pueda divergir de la primera, porque no hay una segunda redaccion: hay una lectura.
 
@@ -386,8 +387,10 @@ result:
 Si falta algo, bloquea el cierre una vez y te dice que pegar o corregir. Limite: en el segundo
 intento seguido ya no bloquea, para no entrar en bucle. Solo avisa al usuario. En un turno de
 `/checkpoint-3t` el primer cierre no exige el snippet, el calendario ni 8e: la revision pide
-pegarlos al final. El segundo cierre los busca solo DESPUES de `REVISION DEL CIERRE:`. Si no estan
-ahi, el aviso al usuario trae el cierre completo, tal como lo imprimen los scripts. Limite: si el
+pegarlos al final. El segundo cierre los busca solo DESPUES de `REVISION DEL CIERRE:`, y ademas
+comprueba que van en orden (8b, 8c, 8d, 8e), que el snippet sale una sola vez ahi y que despues del
+ultimo bloque no quedan mas de 300 caracteres (los separadores y una linea corta). Si algo de eso
+falla, el aviso al usuario trae el cierre completo, tal como lo imprimen los scripts. Limite: si el
 hook no corre (instalacion sin hooks), el cierre no se pega; queda en la ficha.
 
 **El snippet no se congela al terminar el checkpoint (2.33.1).** Si DESPUES, en la misma sesion,

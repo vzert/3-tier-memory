@@ -374,6 +374,11 @@ REVISION_CABECERA = "REVISION DEL CIERRE:"
 # reentrante los mide solo en el texto posterior a `REVISION DEL CIERRE:`.
 cierre_final = []   # lo que la revision pide pegar al final (primer cierre)
 anexo = []          # lo que falto al final, para mostrarselo al usuario (cierre reentrante)
+presentes = []      # (orden, lineas, texto) de cada bloque del cierre, para medir orden y cola
+# Texto tolerado DESPUES del ultimo bloque del cierre: los separadores `───` que imprimen los
+# scripts y una linea corta. Mas que eso ya empuja el cierre hacia arriba (adversario de 2.43.0:
+# el cierre duplicado y seguido de mas texto pasaba sin aviso).
+COLA_MAX = 300
 _todo = "\n".join(textos)
 _j = _todo.rfind(REVISION_CABECERA)
 visto_tras_revision = plano(_todo[_j:]) if _j >= 0 else ""
@@ -458,6 +463,8 @@ def revisar(ficha):
         if diferido and not reentrante:
             cierre_final.append((orden, etiqueta))
             return
+        if diferido:
+            presentes.append((orden, lineas, texto_original))
         n = len(falta(lineas, base))
         problemas.append(pref + f"{etiqueta[0].upper()}{etiqueta[1:]} no esta {donde} ({n} de "
                          f"{len(lineas)} lineas faltan).")
@@ -480,6 +487,8 @@ def revisar(ficha):
         cmd = f"`python3 \"{BIN}/print-como-retomar.py\" \"{ficha}\"`"
         if esperado and (diferido and not reentrante):
             reclamar(f"la salida de {cmd}", esperado, salida, 1)
+        elif esperado and diferido and reentrante and not falta(esperado, base):
+            presentes.append((1, esperado, salida))
         elif esperado and falta(esperado, base):
             if diferido:
                 reclamar("el snippet `Como retomar`", esperado, salida, 1)
@@ -508,6 +517,8 @@ def revisar(ficha):
             reclamar(f"la salida de {cmd8e}", esperado, salida, 4)
         elif esperado and diferido and falta(esperado, base):
             reclamar("el prompt opcional (Step 8e)", esperado, salida, 4)
+        elif esperado and diferido:
+            presentes.append((4, esperado, salida))
         elif esperado and not diferido and falta(esperado):
             problemas.append(pref +
                 f"El prompt opcional (Step 8e) no esta en tu respuesta ({len(falta(esperado))} de "
@@ -530,6 +541,9 @@ def revisar(ficha):
             elif any(falta(c, base) for c in cuerpos) or falta_mas:
                 reclamar("los recordatorios de calendario", [l for c in cuerpos for l in c],
                          "\n\n".join("\n".join(c) for c in cuerpos) + mas, 2)
+            else:
+                presentes.append((2, [l for c in cuerpos for l in c] + ([mas.strip()] if mas else []),
+                                  "\n\n".join("\n".join(c) for c in cuerpos) + mas))
             bloques = []
         for b in bloques[:2]:
             cuerpo = [l for l in b.splitlines()[1:] if l.strip() and not re.fullmatch(r"\s*`{3,}\w*\s*", l)]
@@ -556,6 +570,8 @@ def revisar(ficha):
             reclamar(f"la salida de {cmd8d}", esperado, salida, 3)
         elif esperado and falta(esperado, base):
             reclamar("las recomendaciones de research sin resolver (Step 8d)", esperado, salida, 3)
+        elif esperado:
+            presentes.append((3, esperado, salida))
 
     # 3. Los checks del snippet sobre la ficha final (Step 7a corrio antes de Step 8). El ultimo
     # veredicto del adversario de TODA la sesion va como argumento: un `break` sin cerrar con
@@ -631,6 +647,32 @@ def revisar(ficha):
 
 for _f in fichas:
     revisar(_f)
+
+# Orden, unicidad y cola del cierre (2.43.0, adversario ronda 1). Solo en el cierre reentrante de
+# un turno de /checkpoint-3t y solo si todos los bloques estan tras la revision: si falta alguno ya
+# hay aviso y anexo. Se mide sobre el texto posterior a `REVISION DEL CIERRE:`: un snippet pegado
+# ANTES de la revision (aunque no debia) no cuenta como repeticion, porque pegarlo otra vez al
+# final es el unico arreglo posible y lo que importa es que sea lo ultimo.
+if reentrante and presentes and not anexo:
+    v = visto_tras_revision
+    fines, inicios = [], []
+    for orden, lineas, _ in sorted(presentes, key=lambda x: x[0]):
+        ls = [plano(l) for l in lineas if plano(l)]
+        if not ls:
+            continue
+        inicios.append((orden, v.rfind(ls[0])))
+        fines += [v.rfind(l) + len(l) for l in ls if v.rfind(l) >= 0]
+    otros = []
+    if [i for _, i in inicios] != sorted(i for _, i in inicios):
+        otros.append("no van en el orden snippet, calendario, recomendaciones de research, prompt opcional")
+    snip = [plano(l) for o, ls, _ in presentes if o == 1 for l in ls if plano(l)]
+    if snip and v.count(snip[0]) > 1:
+        otros.append(f"el snippet sale {v.count(snip[0])} veces despues de la revision")
+    if fines and len(v) - max(fines) > COLA_MAX:
+        otros.append(f"despues del ultimo bloque siguen {len(v) - max(fines)} caracteres de texto")
+    if otros:
+        problemas.append("El cierre no quedo como lo ultimo y una sola vez: " + "; ".join(otros) + ".")
+        anexo = [(o, t.strip("\n")) for o, _, t in presentes]
 
 # La revision cerrada del cierre (2.42.0). Medido en 66 cierres de /checkpoint-3t tras los que
 # el usuario pregunto "¿falto algo?": en 62 el MISMO agente, en el MISMO contexto, encontro

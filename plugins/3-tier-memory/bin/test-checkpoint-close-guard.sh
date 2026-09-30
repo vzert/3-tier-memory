@@ -886,6 +886,47 @@ echo "== 2.43.0: snippet ANTES de la revision en la misma respuesta: tambien ent
 { cat "$T/salida-script.txt"; printf '\n%s\n' "$REV_OK"; } > "$T/snip-luego-rev.txt"
 vuelta "$T/t-primero.jsonl" "$T/t.jsonl" "$T/snip-luego-rev.txt"
 chk "lo reclama" "1" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -c 'snippet `Como retomar` no esta despues de tu revision')"
+echo "== 2.43.0 ronda 1: el cierre duplicado y seguido de mas texto: lo reclama =="
+{ cat "$T/rev-y-cierre.txt"; printf '\n'; cat "$T/salida-script.txt"; printf '\n'; cat "$FX/calendario-2129.txt"; printf '\n'; cat "$T/salida-8e.txt"
+  printf '\nNOT LAST: %s\n' "$(printf 'texto de relleno que empuja el cierre hacia arriba %.0s' 1 2 3 4 5 6 7 8)"; } > "$T/dup-cola.txt"
+vuelta "$T/t-primero.jsonl" "$T/t.jsonl" "$T/dup-cola.txt"
+O=$(corre "$T/t.jsonl" true -)
+chk "no bloquea" "0" "$(bloquea "$O")"
+chk "dice que no quedo como lo ultimo" "1" "$(razon "$O" | grep -c 'no quedo como lo ultimo y una sola vez')"
+chk "nombra la repeticion" "1" "$(razon "$O" | grep -c 'el snippet sale 2 veces')"
+chk "y le ensena el cierre al usuario" "1" "$(razon "$O" | grep -c 'El cierre no quedo al final')"
+echo "== 2.43.0 ronda 1: texto largo DESPUES del cierre, sin repetir: lo reclama =="
+{ cat "$T/rev-y-cierre.txt"; printf '\nNOT LAST: %s\n' "$(printf 'texto de relleno que empuja el cierre hacia arriba %.0s' 1 2 3 4 5 6 7 8)"; } > "$T/cola.txt"
+vuelta "$T/t-primero.jsonl" "$T/t.jsonl" "$T/cola.txt"
+chk "reclama la cola" "1" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -c 'despues del ultimo bloque siguen')"
+echo "== 2.43.0 ronda 1: una linea corta despues del cierre es tolerada =="
+{ cat "$T/rev-y-cierre.txt"; printf '\nListo.\n'; } > "$T/cola-corta.txt"
+vuelta "$T/t-primero.jsonl" "$T/t.jsonl" "$T/cola-corta.txt"
+chk "silencio sobre el cierre" "0" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -c 'no quedo como lo ultimo')"
+echo "== 2.43.0 ronda 1: el calendario ANTES del snippet: lo reclama por el orden =="
+{ printf '%s\n\n' "$REV_OK"; cat "$FX/calendario-2129.txt"; printf '\n'; cat "$T/salida-script.txt"; printf '\n'; cat "$T/salida-8e.txt"; } > "$T/orden.txt"
+vuelta "$T/t-primero.jsonl" "$T/t.jsonl" "$T/orden.txt"
+chk "reclama el orden" "1" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -c 'no van en el orden')"
+echo "== 2.43.0 ronda 1: con un prompt opcional (8e) de verdad: falta tras la revision -> lo reclama; presente -> silencio =="
+armar "$M" "$FX/snippet-2120.txt" "$FX/calendario-2129.txt"; fecha30 "$F"
+python3 - "$M/_pendientes.md" <<'PYA'
+import sys
+p = sys.argv[1]; t = open(p, encoding="utf-8").read()
+t = t.replace("## Media prioridad", "- [ ] otro Alta suelto — _origen: [[sessions/2026-09-01-x]]_ — _creado: 2026-09-29_ — _id: p-0a1b2c3d4e_\n\n## Media prioridad", 1)
+open(p, "w", encoding="utf-8").write(t)
+PYA
+python3 "$BIN/print-como-retomar.py" "$F" > "$T/s8b.txt"
+python3 "$BIN/print-pendiente-opcional.py" "$F" > "$T/s8e.txt"
+chk "el fixture trae un 8e con contenido" "1" "$(grep -c 'p-0a1b2c3d4e' "$T/s8e.txt")"
+tx "$T/t8.jsonl" skill "$F" "$T/sin-cierre.txt" "$T/s8b.txt"
+{ printf '%s\n\n' "$REV_OK"; cat "$T/s8b.txt"; printf '\n'; cat "$FX/calendario-2129.txt"; } > "$T/sin8e.txt"
+vuelta "$T/t8.jsonl" "$T/t.jsonl" "$T/sin8e.txt"
+O=$(corre "$T/t.jsonl" true -)
+chk "sin 8e: lo reclama" "1" "$(razon "$O" | grep -c 'prompt opcional (Step 8e) no esta despues de tu revision')"
+chk "y lo anexa" "1" "$(razon "$O" | grep -c 'p-0a1b2c3d4e')"
+{ cat "$T/sin8e.txt"; printf '\n'; cat "$T/s8e.txt"; } > "$T/con8e.txt"
+vuelta "$T/t8.jsonl" "$T/t.jsonl" "$T/con8e.txt"
+chk "con 8e al final: silencio sobre el cierre" "0" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -cE 'despues de tu revision|no quedo como lo ultimo')"
 echo "== 2.43.0: un turno que solo reimprime el snippet (no es /checkpoint-3t) sigue exigiendolo en el acto =="
 tx "$T/t.jsonl" print "$F" "$T/sin-cierre.txt" "$T/salida-script.txt"
 O=$(corre "$T/t.jsonl" false -)

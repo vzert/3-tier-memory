@@ -86,6 +86,7 @@ echo "Cierre al final (2.43.0): el snippet va despues de la revision del cierre"
 caso "cierre diferido" checkpoint-close-guard.sh m_cierre_final.py test-checkpoint-close-guard.sh "no reclama el snippet como falta" diferido-apagado
 caso "orden tras la revision" checkpoint-close-guard.sh m_cierre_final.py test-checkpoint-close-guard.sh "avisa que el snippet no esta despues de la revision" orden-apagado
 caso "anexo al usuario" checkpoint-close-guard.sh m_cierre_final.py test-checkpoint-close-guard.sh "y le ensena el cierre al usuario" sin-anexo
+caso "cola tras el cierre" checkpoint-close-guard.sh m_cierre_final.py test-checkpoint-close-guard.sh "reclama la cola" sin-cola
 
 echo "Contrato de check-project-dir-fallback.py (2.41.4): cada pieza, rota, tumba su aserto"
 caso "verde respaldo" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " respaldo: exit 0" r1-sin-quitar-forma

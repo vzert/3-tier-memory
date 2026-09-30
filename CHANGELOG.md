@@ -19,16 +19,21 @@ buscarlo con scroll.
   avisa al usuario y le pone el cierre completo, tal como lo imprimen los scripts, en el mismo aviso.
   Reproducido sobre los 4 cierres reales: los 2 enterrados salen con el aviso y el cierre anexo; el
   que lo repitio despues de la revision no.
+- **Orden, una sola vez y sin cola** (adversario, ronda 1: el cierre duplicado y seguido de mas texto
+  pasaba sin aviso). El cierre reentrante comprueba tambien que los bloques van en orden (8b, 8c,
+  8d, 8e), que el snippet sale una sola vez tras la revision y que despues del ultimo bloque no
+  quedan mas de 300 caracteres. Si algo falla, avisa y anexa el cierre. Un snippet pegado ANTES de
+  la revision no cuenta como repeticion: pegarlo otra vez al final es el unico arreglo posible.
 - Fuera de `/checkpoint-3t` (rehacer el snippet tras cerrar un pendiente que cita) no hay revision y
   todo sigue igual: se pega en el acto.
-- `templates/checkpoint-3t-step8.md` (8b) y `templates/checkpoint-3t.md` (Step 8) lo explican. README
-  al dia.
+- `templates/checkpoint-3t-step8.md` (8b) y `templates/checkpoint-3t.md` (Step 8) lo explican, con
+  8d incluido; 8b ya no se llama "el ultimo bloque" (lo es 8e). README al dia.
 
 ### Fixed
 - **`tools/mutation-check.sh` no copiaba `bin/fixtures/`.** `cp "$SRC"/*` solo copia ficheros, y
   `test-checkpoint-close-guard.sh` lee sus transcripts de ahi: en la copia del arnes esa suite caia
   sin mutar. Tres casos nuevos (`m_cierre_final.py`): diferir el primer cierre, medir solo tras la
-  revision y anexar el cierre al aviso. Control sin mutar: "NO".
+  revision y anexar el cierre al aviso; y un cuarto (ronda 1) para la cola. Control sin mutar: "NO".
 
 ### Limites declarados
 - Si el hook de cierre no corre (instalacion sin hooks), el cierre no se pega en ese turno. Queda en

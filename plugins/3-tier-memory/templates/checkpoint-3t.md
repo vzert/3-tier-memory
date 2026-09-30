@@ -1129,8 +1129,8 @@ says so explicitly.
 El detalle de este paso vive en su propio fichero, junto a este template (2.42.0: era el 37 % del
 texto y se leia en el mismo bloque que todo lo demas). Imprimelo AHORA y siguelo entero — 8a
 persistir el snippet en la ficha, 8b imprimirlo con `print-como-retomar.py`, 8c recordatorios de
-calendario, 8d recomendaciones de research, 8e prompt opcional. Desde 2.43.0 las salidas de 8b-8e
-no se pegan en este turno: van al final de tu respuesta a la revision del cierre (ver 8b):
+calendario, 8d recomendaciones de research, 8e prompt opcional. Desde 2.43.0 las salidas de 8b, 8c,
+8d y 8e no se pegan en este turno: van al final de tu respuesta a la revision del cierre (ver 8b):
 
 ```bash
 S8=""

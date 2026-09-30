@@ -15,6 +15,8 @@ M = {
         ("base = visto_tras_revision if (diferido and reentrante) else visto", "base = visto")],
     "sin-anexo": [
         ("    if anexo:", "    if False:")],
+    "sin-cola": [
+        ("if fines and len(v) - max(fines) > COLA_MAX:", "if False:")],
 }
 
 p, nombre = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""
