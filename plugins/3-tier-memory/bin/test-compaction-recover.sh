@@ -573,6 +573,14 @@ for c in duplicado omitido ajeno mismo-largo chars-bool; do
   esac
   case "$(ver "$O")" in "verificado=0 "*) ok "verificar: $c da verificado=0";; *) bad "R7 verificar $c: '$(ver "$O")'";; esac
 done
+# Un tramo sano con \r\n y un 0x1A reales en el texto: verificado=1. Guardia en macOS y Linux; en
+# Windows, os.open sin O_BINARY leia en modo texto y la huella no cuadraba (bloque-cambiado).
+O="$TMP/or7-crlf"; F7B="$TMP/r7-crlf.jsonl"
+{ u p1 'LINEA-UNO\r\nLINEA-DOS\u001aFIN'; u p1 "OTRA-ENTRADA-DEL-TRAMO"; bound 300000; summ; ckcmd p2; ckskl p2; } > "$F7B"
+run "$F7B" "$O" --chunk-chars 60 >/dev/null 2>&1
+python3 -c "import sys; d=open(sys.argv[1],'rb').read(); sys.exit(0 if b'\r\n' in d and b'\x1a' in d else 1)" "$O/chunk-01.md" \
+  && ok "verificar: el bloque lleva \\r\\n y 0x1A reales" || bad "R7 crlf: el bloque no lleva \\r\\n y 0x1A"
+case "$(ver "$O")" in "verificado=1 "*) ok "verificar: tramo sano con \\r\\n y 0x1A da verificado=1";; *) bad "R7 verificar crlf: '$(ver "$O")'";; esac
 # Un bloque que es una tuberia con nombre: verificado=0 y sin quedarse colgado leyendola.
 O="$TMP/or7-fifo"; run "$F7" "$O" --chunk-chars 60 >/dev/null 2>&1; rm -f "$O/chunk-01.md"
 if mkfifo "$O/chunk-01.md" 2>/dev/null && [ -p "$O/chunk-01.md" ]; then

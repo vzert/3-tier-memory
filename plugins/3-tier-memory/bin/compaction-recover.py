@@ -429,8 +429,10 @@ def verificar(d):
                 return "verificado=0 reason=bloque-fuera-de-dir"
             if not stat.S_ISREG(os.lstat(p).st_mode):
                 return "verificado=0 reason=bloque-no-regular"
-            # O_NONBLOCK: una tuberia puesta tras el lstat no cuelga la apertura.
-            fd = os.open(p, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
+            # O_NONBLOCK: una tuberia puesta tras el lstat no cuelga la apertura. O_BINARY: en Windows
+            # os.open abre en modo texto (\r\n pasa a \n y 0x1A corta), y la huella no cuadraria.
+            fd = os.open(p, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+                         | getattr(os, "O_BINARY", 0))
             with os.fdopen(fd, "rb") as fh:
                 if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
                     return "verificado=0 reason=bloque-no-regular"
