@@ -1,6 +1,42 @@
 # Changelog
 
 
+## [2.43.0] - 2026-09-30
+Origen: Victor, tras correr 2.42.0 en varios proyectos. La revision del cierre funciona (el agente
+completa lo que le falto), pero el snippet de continuidad queda enterrado debajo de ella y hay que
+buscarlo con scroll.
+
+### Changed
+- **El cierre va al final, una sola vez.** En un turno de `/checkpoint-3t` el snippet (8b), los
+  recordatorios de calendario (8c), las recomendaciones de research (8d) y el prompt opcional (8e)
+  ya no se pegan en el primer cierre. La revision del cierre de `checkpoint-close-guard.sh` pide
+  pegarlos al terminar la respuesta a la revision, en ese orden y sin nada despues, con los comandos
+  y la ruta literal de la ficha. Asi son lo ultimo en pantalla y ya traen lo que se corrigio en la
+  revision. Medido en los 4 cierres reales con revision: pegado antes, el snippet quedo enterrado
+  bajo 2.400-4.300 caracteres en 2, y en 1 el agente lo repitio.
+- **El cierre reentrante mide el orden.** Busca el snippet, el calendario, 8d y 8e solo en el texto
+  posterior a `REVISION DEL CIERRE:`. Si no estan ahi, no puede bloquear otra vez (evita el bucle):
+  avisa al usuario y le pone el cierre completo, tal como lo imprimen los scripts, en el mismo aviso.
+  Reproducido sobre los 4 cierres reales: los 2 enterrados salen con el aviso y el cierre anexo; el
+  que lo repitio despues de la revision no.
+- Fuera de `/checkpoint-3t` (rehacer el snippet tras cerrar un pendiente que cita) no hay revision y
+  todo sigue igual: se pega en el acto.
+- `templates/checkpoint-3t-step8.md` (8b) y `templates/checkpoint-3t.md` (Step 8) lo explican. README
+  al dia.
+
+### Fixed
+- **`tools/mutation-check.sh` no copiaba `bin/fixtures/`.** `cp "$SRC"/*` solo copia ficheros, y
+  `test-checkpoint-close-guard.sh` lee sus transcripts de ahi: en la copia del arnes esa suite caia
+  sin mutar. Tres casos nuevos (`m_cierre_final.py`): diferir el primer cierre, medir solo tras la
+  revision y anexar el cierre al aviso. Control sin mutar: "NO".
+
+### Limites declarados
+- Si el hook de cierre no corre (instalacion sin hooks), el cierre no se pega en ese turno. Queda en
+  la ficha.
+- Se descarto un supuesto fallo: el aviso `Stop hook feedback:` que inyecta Claude Code llega con
+  `isMeta`, asi que el hook no lo toma como un turno nuevo y el cierre reentrante si se revisa
+  (medido en los 15 registros reales).
+
 ## [2.42.1] - 2026-09-30
 Fase F0 del plan de ciclo de vida de learnings: un banco que mide el recall antes de tocarlo, para
 que cada fase siguiente pueda fallar contra numeros. Sirve a cualquier instalacion: el codigo no

@@ -33,6 +33,9 @@ caso() {  # etiqueta | fichero a mutar | mutador | suite | aserto que DEBE caer 
   # arbol real (seccion H) y sin ellos caia en CADA copia, mutada o no. Con la suite en rojo de
   # base, "NO ... vacuo" no podia salir nunca y solo el filtro de `espera` separaba los casos.
   cp -R "$SRC/../templates" "$SRC/../commands" "$(dirname "$D")/" 2>/dev/null
+  # bin/fixtures/ (carpeta): `cp "$SRC"/*` solo copia ficheros, y test-checkpoint-close-guard.sh lee
+  # sus transcripts de ahi. Sin ella esa suite caia sin mutar y el control salia "cae" (2.43.0).
+  cp -R "$SRC/fixtures" "$D/" 2>/dev/null
   TOTAL=$(( TOTAL + 1 ))
   local n; n=$(python3 "$MUT/$m" "$D/$f" ${arg:+"$arg"} 2>&1)
   case "$n" in
@@ -79,6 +82,11 @@ caso "aviso bajo --quiet"       journal-compact.py      m_migracion_quiet.py tes
 caso "aviso a la persona"       journal-compact.py      m_migracion_humano.py test-expire-reopen.sh     "canal a la persona"
 
 echo
+echo "Cierre al final (2.43.0): el snippet va despues de la revision del cierre"
+caso "cierre diferido" checkpoint-close-guard.sh m_cierre_final.py test-checkpoint-close-guard.sh "no reclama el snippet como falta" diferido-apagado
+caso "orden tras la revision" checkpoint-close-guard.sh m_cierre_final.py test-checkpoint-close-guard.sh "avisa que el snippet no esta despues de la revision" orden-apagado
+caso "anexo al usuario" checkpoint-close-guard.sh m_cierre_final.py test-checkpoint-close-guard.sh "y le ensena el cierre al usuario" sin-anexo
+
 echo "Contrato de check-project-dir-fallback.py (2.41.4): cada pieza, rota, tumba su aserto"
 caso "verde respaldo" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " respaldo: exit 0" r1-sin-quitar-forma
 caso "R1 apagada" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " encoded: fallos" r1-apagada

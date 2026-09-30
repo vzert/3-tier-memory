@@ -838,5 +838,59 @@ open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r) for r in R) + "\n
 PYD
 chk "lo exige" "1" "$(razon "$(corre_en "$T/t.jsonl" false - "$G")" | grep -c "$HA")"
 
+# 2.43.0: el cierre (snippet, calendario, 8d, 8e) va AL FINAL, despues de la revision. El cierre
+# reentrante real trae el aviso del hook como un registro `user` con isMeta (medido en los
+# transcripts reales): `vuelta` lo reproduce tal cual y anade la respuesta del agente.
+vuelta() {   # $1 transcript base, $2 salida, $3 fichero con el texto de la respuesta a la revision
+  python3 - "$1" "$2" "$3" <<'PYV'
+import json, sys
+base, out, resp = sys.argv[1:4]
+R = [json.loads(l) for l in open(base, encoding="utf-8") if l.strip()]
+R.append({"type": "user", "isMeta": True, "message": {"role": "user", "content": "Stop hook feedback:\nRevision del cierre de /checkpoint-3t (checkpoint-close-guard.sh). ..."}})
+R.append({"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": open(resp, encoding="utf-8").read()}]}})
+open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r, ensure_ascii=False) for r in R) + "\n")
+PYV
+}
+echo "== 2.43.0: primer cierre de /checkpoint-3t SIN el snippet pegado: no lo reclama, pide el cierre al final =="
+armar "$M" "$FX/snippet-2120.txt" "$FX/calendario-2129.txt"; fecha30 "$F"
+python3 "$BIN/print-como-retomar.py" "$F" > "$T/salida-script.txt"
+python3 "$BIN/print-pendiente-opcional.py" "$F" > "$T/salida-8e.txt"
+printf 'Resumen del checkpoint.\n' > "$T/sin-cierre.txt"
+tx "$T/t.jsonl" skill "$F" "$T/sin-cierre.txt" "$T/salida-script.txt"
+cp "$T/t.jsonl" "$T/t-primero.jsonl"
+O=$(corre "$T/t.jsonl" false -)
+chk "bloquea (la revision)" "1" "$(bloquea "$O")"
+chk "no reclama el snippet como falta" "0" "$(razon "$O" | grep -c 'snippet `Como retomar` no esta')"
+chk "no reclama el recordatorio como falta" "0" "$(razon "$O" | grep -c 'esta en la ficha pero no en')"
+chk "pide el cierre al final de la respuesta" "1" "$(razon "$O" | grep -c 'termina tu respuesta con el cierre')"
+chk "con el comando y la ruta literal de la ficha" "1" "$(razon "$O" | grep -F "print-como-retomar.py\" \"$F\"" | wc -l | tr -d ' ')"
+chk "y los recordatorios de la ficha" "1" "$(razon "$O" | grep -c 'Recordatorios de calendario` de la ficha')"
+echo "== 2.43.0: vuelta con la revision y DESPUES el cierre completo: silencio sobre el cierre =="
+{ printf '%s\n\n' "$REV_OK"; cat "$T/salida-script.txt"; printf '\n'; cat "$FX/calendario-2129.txt"; printf '\n'; cat "$T/salida-8e.txt"; } > "$T/rev-y-cierre.txt"
+vuelta "$T/t-primero.jsonl" "$T/t.jsonl" "$T/rev-y-cierre.txt"
+O=$(corre "$T/t.jsonl" true -)
+chk "no bloquea" "0" "$(bloquea "$O")"
+chk "no reclama nada del cierre" "0" "$(razon "$O" | grep -c 'despues de tu revision')"
+chk "no anexa el cierre" "0" "$(razon "$O" | grep -c 'El cierre no quedo al final')"
+echo "== 2.43.0: el snippet salio en el primer cierre y la vuelta solo trae la revision: enterrado =="
+{ printf 'Resumen.\n\n'; cat "$T/salida-script.txt"; printf '\n'; cat "$FX/calendario-2129.txt"; printf '\n'; cat "$T/salida-8e.txt"; } > "$T/cierre-antes.txt"
+tx "$T/t-antes.jsonl" skill "$F" "$T/cierre-antes.txt" "$T/salida-script.txt"
+printf '%s\n' "$REV_OK" > "$T/solo-rev.txt"
+vuelta "$T/t-antes.jsonl" "$T/t.jsonl" "$T/solo-rev.txt"
+O=$(corre "$T/t.jsonl" true -)
+chk "no bloquea (sin bucle)" "0" "$(bloquea "$O")"
+chk "avisa que el snippet no esta despues de la revision" "1" "$(razon "$O" | grep -c 'snippet `Como retomar` no esta despues de tu revision')"
+chk "y le ensena el cierre al usuario" "1" "$(razon "$O" | grep -c 'El cierre no quedo al final')"
+chk "con la linea Proximo paso del snippet" "1" "$(razon "$O" | grep -cF "$(grep -m1 'Proximo paso' "$T/salida-script.txt")")"
+echo "== 2.43.0: snippet ANTES de la revision en la misma respuesta: tambien enterrado =="
+{ cat "$T/salida-script.txt"; printf '\n%s\n' "$REV_OK"; } > "$T/snip-luego-rev.txt"
+vuelta "$T/t-primero.jsonl" "$T/t.jsonl" "$T/snip-luego-rev.txt"
+chk "lo reclama" "1" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -c 'snippet `Como retomar` no esta despues de tu revision')"
+echo "== 2.43.0: un turno que solo reimprime el snippet (no es /checkpoint-3t) sigue exigiendolo en el acto =="
+tx "$T/t.jsonl" print "$F" "$T/sin-cierre.txt" "$T/salida-script.txt"
+O=$(corre "$T/t.jsonl" false -)
+chk "bloquea" "1" "$(bloquea "$O")"
+chk "por el snippet, como antes" "1" "$(razon "$O" | grep -c 'snippet `Como retomar` no esta en tu respuesta')"
+
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

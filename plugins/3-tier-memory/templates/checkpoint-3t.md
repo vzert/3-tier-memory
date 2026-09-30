@@ -1129,7 +1129,8 @@ says so explicitly.
 El detalle de este paso vive en su propio fichero, junto a este template (2.42.0: era el 37 % del
 texto y se leia en el mismo bloque que todo lo demas). Imprimelo AHORA y siguelo entero — 8a
 persistir el snippet en la ficha, 8b imprimirlo con `print-como-retomar.py`, 8c recordatorios de
-calendario, 8d recomendaciones de research, 8e prompt opcional:
+calendario, 8d recomendaciones de research, 8e prompt opcional. Desde 2.43.0 las salidas de 8b-8e
+no se pegan en este turno: van al final de tu respuesta a la revision del cierre (ver 8b):
 
 ```bash
 S8=""
@@ -1142,4 +1143,5 @@ done
 
 Si imprime `STEP8=NONE`, no inventes el snippet: dilo en el reporte ("Step 8 no corrio: no encuentro
 checkpoint-3t-step8.md") y para aqui. El hook de cierre vuelve a medir el snippet, los
-recordatorios y el prompt opcional sobre la ficha final, y exige cada salida en tu texto.
+recordatorios y el prompt opcional sobre la ficha final, y exige cada salida en tu texto (en
+`/checkpoint-3t`, despues de la revision del cierre).

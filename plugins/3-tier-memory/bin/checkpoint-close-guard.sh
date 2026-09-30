@@ -356,14 +356,27 @@ def plano(s):
 visto = plano("\n".join(textos))
 
 
-def falta(lineas):
-    return [l for l in lineas if plano(l) and plano(l) not in visto]
+def falta(lineas, base=None):
+    base = visto if base is None else base
+    return [l for l in lineas if plano(l) and plano(l) not in base]
 
 
 problemas = []
 # Desde 2.42.0: commits de la sesion en la ficha (chequeo 5) y la revision cerrada del cierre.
 DESDE_REVISION = "2026-09-30"
 pedir_revision = False
+REVISION_CABECERA = "REVISION DEL CIERRE:"
+# El cierre al FINAL (2.43.0). Con la revision de 2.42.0 el snippet, el calendario y el prompt
+# opcional salian en el primer cierre y la respuesta a la revision caia debajo: medido en los 4
+# cierres reales con revision (2026-09-30), en 2 el snippet quedo enterrado bajo 2.400-4.300
+# caracteres y en 1 el agente lo repitio. En un turno de /checkpoint-3t que va a pedir la revision,
+# el primer cierre ya no los exige: la revision pide pegarlos como ultimo bloque, y el cierre
+# reentrante los mide solo en el texto posterior a `REVISION DEL CIERRE:`.
+cierre_final = []   # lo que la revision pide pegar al final (primer cierre)
+anexo = []          # lo que falto al final, para mostrarselo al usuario (cierre reentrante)
+_todo = "\n".join(textos)
+_j = _todo.rfind(REVISION_CABECERA)
+visto_tras_revision = plano(_todo[_j:]) if _j >= 0 else ""
 
 
 def es_checkpoint(r):
@@ -433,6 +446,23 @@ def revisar(ficha):
     except Exception:
         return
     pref = f"[{os.path.basename(ficha)}] " if len(fichas) > 1 else ""
+    m_fecha = re.search(r"^date:\s*(\d{4}-\d{2}-\d{2})\s*$", texto, re.M)
+    # Turno de /checkpoint-3t con revision: el cierre (snippet, 8e, calendario) va AL FINAL.
+    diferido = bool(por_checkpoint and m_fecha and m_fecha.group(1) >= DESDE_REVISION)
+    base = visto_tras_revision if (diferido and reentrante) else visto
+    donde = "despues de tu revision del cierre" if diferido else "en tu respuesta"
+
+    def reclamar(etiqueta, lineas, texto_original, orden):
+        """Lo que falta: en el primer cierre diferido se pide al final; si no, es un problema, y en
+        el reentrante diferido ademas se guarda para ensenarselo al usuario."""
+        if diferido and not reentrante:
+            cierre_final.append((orden, etiqueta))
+            return
+        n = len(falta(lineas, base))
+        problemas.append(pref + f"{etiqueta[0].upper()}{etiqueta[1:]} no esta {donde} ({n} de "
+                         f"{len(lineas)} lineas faltan).")
+        if diferido:
+            anexo.append((orden, texto_original.strip("\n")))
 
     # 1. El snippet: lo que print-como-retomar.py imprime HOY desde la ficha (la unica fuente de verdad).
     sec = seccion(texto, "Como retomar")
@@ -447,18 +477,23 @@ def revisar(ficha):
             salida = ""
         esperado = [l for l in salida.splitlines()
                     if l.strip() and not l.startswith("───") and not l.startswith("Copia y pega esto")]
-        if esperado and falta(esperado):
-            n = len(falta(esperado))
-            problemas.append(pref + 
-                f"El snippet `Como retomar` no esta en tu respuesta ({n} de {len(esperado)} lineas "
-                "faltan). Solo lo viste tu en la salida de una herramienta. Corre "
-                f"`python3 \"$JBIN/print-como-retomar.py\" \"{ficha}\"` y pega su salida tal cual.")
+        cmd = f"`python3 \"{BIN}/print-como-retomar.py\" \"{ficha}\"`"
+        if esperado and (diferido and not reentrante):
+            reclamar(f"la salida de {cmd}", esperado, salida, 1)
+        elif esperado and falta(esperado, base):
+            if diferido:
+                reclamar("el snippet `Como retomar`", esperado, salida, 1)
+            else:
+                n = len(falta(esperado))
+                problemas.append(pref +
+                    f"El snippet `Como retomar` no esta en tu respuesta ({n} de {len(esperado)} lineas "
+                    "faltan). Solo lo viste tu en la salida de una herramienta. Corre "
+                    f"`python3 \"$JBIN/print-como-retomar.py\" \"{ficha}\"` y pega su salida tal cual.")
 
     # 1-bis. El prompt opcional (2.35.0, Step 8e): lo que print-pendiente-opcional.py imprime AHORA
     # desde `_pendientes.md`. Se genera en vivo, no se guarda en la ficha, asi que compararlo aqui
     # contra el estado real es lo que evita pegar un prompt viejo. Solo para fichas desde el corte:
     # una ficha anterior se escribio con un template que no tenia Step 8e.
-    m_fecha = re.search(r"^date:\s*(\d{4}-\d{2}-\d{2})\s*$", texto, re.M)
     if sec is not None and "<filled in Step 8>" not in sec and m_fecha and m_fecha.group(1) >= "2026-09-23":
         try:
             r = subprocess.run([sys.executable, os.path.join(BIN, "print-pendiente-opcional.py"), ficha],
@@ -468,7 +503,12 @@ def revisar(ficha):
             salida = ""
         esperado = [l for l in salida.splitlines()
                     if l.strip() and not l.startswith("───") and not l.startswith("Si tienes tiempo")]
-        if esperado and falta(esperado):
+        cmd8e = f"`python3 \"{BIN}/print-pendiente-opcional.py\" \"{ficha}\"`"
+        if esperado and (diferido and not reentrante):
+            reclamar(f"la salida de {cmd8e}", esperado, salida, 4)
+        elif esperado and diferido and falta(esperado, base):
+            reclamar("el prompt opcional (Step 8e)", esperado, salida, 4)
+        elif esperado and not diferido and falta(esperado):
             problemas.append(pref +
                 f"El prompt opcional (Step 8e) no esta en tu respuesta ({len(falta(esperado))} de "
                 f"{len(esperado)} lineas faltan). Corre `python3 \"$JBIN/print-pendiente-opcional.py\" "
@@ -478,6 +518,19 @@ def revisar(ficha):
     cal = seccion(texto, "Recordatorios de calendario")
     if cal:
         bloques = re.split(r"(?m)^###\s+(?=\d{4}-\d{2}-\d{2}\b)", cal)[1:]
+        if diferido and bloques:
+            cuerpos = [[l for l in b.splitlines()[1:] if l.strip() and not re.fullmatch(r"\s*`{3,}\w*\s*", l)]
+                       for b in bloques[:2]]
+            mas = f"\n+{len(bloques) - 2} con fecha futura en _pendientes.md" if len(bloques) > 2 else ""
+            falta_mas = bool(mas) and not re.search(rf"\+\s*{len(bloques) - 2}\s+con fecha futura", base)
+            if not reentrante:
+                reclamar("los recordatorios de `## Recordatorios de calendario` de la ficha (los 2 "
+                         "primeros completos" + (f" y la linea `+{len(bloques) - 2} con fecha futura`" if mas else "")
+                         + ")", [], "", 2)
+            elif any(falta(c, base) for c in cuerpos) or falta_mas:
+                reclamar("los recordatorios de calendario", [l for c in cuerpos for l in c],
+                         "\n\n".join("\n".join(c) for c in cuerpos) + mas, 2)
+            bloques = []
         for b in bloques[:2]:
             cuerpo = [l for l in b.splitlines()[1:] if l.strip() and not re.fullmatch(r"\s*`{3,}\w*\s*", l)]
             if falta(cuerpo):
@@ -487,6 +540,22 @@ def revisar(ficha):
         if len(bloques) > 2 and not re.search(rf"\+\s*{len(bloques) - 2}\s+con fecha futura", visto):
             problemas.append(pref + f"Hay {len(bloques)} recordatorios de calendario y la respuesta no dice "
                              f"`+{len(bloques) - 2} con fecha futura en _pendientes.md`.")
+
+    # 2-bis. Las recomendaciones de research sin resolver (Step 8d), solo en el cierre diferido: van
+    # en el mismo bloque final que el snippet. Antes de 2.43.0 ningun chequeo las pedia.
+    if diferido and sec is not None and "<filled in Step 8>" not in sec:
+        try:
+            r = subprocess.run([sys.executable, os.path.join(BIN, "print-research-recomendaciones.py"), ficha],
+                               capture_output=True, text=True, timeout=20)
+            salida = r.stdout if r.returncode == 0 else ""
+        except Exception:
+            salida = ""
+        esperado = [l for l in salida.splitlines() if l.strip() and not l.startswith("───")]
+        cmd8d = f"`python3 \"{BIN}/print-research-recomendaciones.py\" \"{ficha}\"`"
+        if esperado and not reentrante:
+            reclamar(f"la salida de {cmd8d}", esperado, salida, 3)
+        elif esperado and falta(esperado, base):
+            reclamar("las recomendaciones de research sin resolver (Step 8d)", esperado, salida, 3)
 
     # 3. Los checks del snippet sobre la ficha final (Step 7a corrio antes de Step 8). El ultimo
     # veredicto del adversario de TODA la sesion va como argumento: un `break` sin cerrar con
@@ -572,7 +641,6 @@ for _f in fichas:
 # agente confesaba como falla y el skill ordena (el 28 % de lo confesado). "ninguno" es valido en
 # cada linea: una lista que empuja a encontrar algo fabrica lo que debe detectar (medido: un
 # callejon inventado para llenar la seccion).
-REVISION_CABECERA = "REVISION DEL CIERRE:"
 REVISION_ITEMS = (
     "Defectos hallados en la sesion (adversario, revisor, test rojo) que no estan en `## Bugs fixed`",
     "Callejones reales (se probo y fallo) que faltan en `## Callejones sin salida`, o uno escrito "
@@ -631,9 +699,12 @@ if not problemas and not (pedir_revision and not reentrante):
 
 cuerpo = "\n".join(f"- {p}" for p in problemas)
 if reentrante:
-    print(json.dumps({"systemMessage":
-        "3-tier-memory: el cierre del checkpoint sigue incompleto tras un aviso:\n" + cuerpo},
-        ensure_ascii=False))
+    msg = "3-tier-memory: el cierre del checkpoint sigue incompleto tras un aviso:\n" + cuerpo
+    if anexo:
+        # El agente ya no puede pegarlo (no hay segundo bloqueo): se le ensena al usuario, al final.
+        msg += ("\n\nEl cierre no quedo al final de la respuesta. Aqui esta, tal como lo imprimen "
+                "los scripts sobre la ficha:\n\n" + "\n\n".join(t for _, t in sorted(anexo, key=lambda x: x[0]) if t))
+    print(json.dumps({"systemMessage": msg}, ensure_ascii=False))
 else:
     partes = []
     if problemas:
@@ -646,11 +717,18 @@ else:
             "entera y contesta en tu texto con este bloque. Cada linea lleva `ninguno`, o lo que "
             "falto con una cita del transcript o el comando o la edicion con que ya lo corregiste. "
             "`ninguno` es la respuesta correcta cuando no falta nada: no inventes para llenar. "
-            "Corrige ahora lo que puedas; declara lo que no. Si corriges la ficha o un pendiente, "
-            "vuelve a pegar lo que cambie (snippet, recordatorios).\n"
+            "Corrige ahora lo que puedas; declara lo que no.\n"
             + REVISION_CABECERA + "\n"
             + "\n".join(f"{n}. {t}:" for n, t in enumerate(REVISION_ITEMS, 1))
             + "\nNo cuenta como falta (lo ordena el skill): " + POR_DISENO + ".")
+        if cierre_final:
+            # Al final y una sola vez: se generan DESPUES de la revision, asi que ya reflejan lo que
+            # corregiste en ella, y quedan como lo ultimo que ve el usuario.
+            partes.append(
+                "Despues del bloque de la revision, termina tu respuesta con el cierre, en este orden, "
+                "tal cual lo imprimen, sin resumirlo y sin nada despues. No lo pegues antes de la "
+                "revision ni dos veces:\n"
+                + "\n".join(f"- {e}" for _, e in sorted(dict.fromkeys(cierre_final), key=lambda x: x[0])))
     print(json.dumps({"decision": "block", "reason": "\n\n".join(partes)}, ensure_ascii=False))
 sys.exit(0)
 PY

@@ -337,8 +337,19 @@ Antes de actuar, dime en 3 lineas donde quedamos.
 python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"
 ```
 
+**Cuando lo pegas (2.43.0).** En un turno de `/checkpoint-3t` **no pegues todavia** la salida de
+8b, ni los recordatorios de 8c, ni la de 8d, ni la de 8e. Corre el script igual: comprueba que 8a
+lleno la seccion. Termina el turno con el reporte de Step 7. Al terminar, el hook de cierre te pide
+la revision del cierre (`REVISION DEL CIERRE:`). Tu respuesta a esa revision termina con estos
+bloques, en este orden, **una sola vez y sin nada despues**: 8b, 8c, 8d, 8e. El hook te da los
+comandos con la ruta literal de la ficha. Asi el cierre es lo ultimo que ve el usuario y ya trae lo
+que corregiste en la revision. Medido en los 4 cierres reales con revision (2026-09-30): pegado
+antes de la revision, el snippet quedo enterrado bajo 2.400-4.300 caracteres en 2, y en 1 el agente
+lo repitio. Fuera de `/checkpoint-3t` (por ejemplo, rehacer el snippet despues de cerrar un
+pendiente que cita) no hay revision: pegalo en el acto, como ultimo bloque.
+
 **Pega su salida tal cual, sin resumirla ni reformularla**, como el ultimo bloque de tu respuesta
-(despues del reporte de Step 7). El script ya decide el formato correcto por ti — linea unica sin
+(en `/checkpoint-3t`, de tu respuesta a la revision del cierre). El script ya decide el formato correcto por ti — linea unica sin
 separadores si el caso 5 aplica, bloque completo con separadores en cualquier otro caso — leyendo el MISMO `## Como retomar` que acabas de escribir en 8a. No existe una segunda
 redaccion que pueda divergir de la primera, porque no hay una segunda redaccion: hay una lectura.
 
@@ -373,7 +384,11 @@ result:
   `resumen:` y cada `SALTADO` que el audit da sobre la ficha final, en su forma de salida.
 
 Si falta algo, bloquea el cierre una vez y te dice que pegar o corregir. Limite: en el segundo
-intento seguido ya no bloquea, para no entrar en bucle. Solo avisa al usuario.
+intento seguido ya no bloquea, para no entrar en bucle. Solo avisa al usuario. En un turno de
+`/checkpoint-3t` el primer cierre no exige el snippet, el calendario ni 8e: la revision pide
+pegarlos al final. El segundo cierre los busca solo DESPUES de `REVISION DEL CIERRE:`. Si no estan
+ahi, el aviso al usuario trae el cierre completo, tal como lo imprimen los scripts. Limite: si el
+hook no corre (instalacion sin hooks), el cierre no se pega; queda en la ficha.
 
 **El snippet no se congela al terminar el checkpoint (2.33.1).** Si DESPUES, en la misma sesion,
 cierras, caducas o bloqueas un pendiente que el `## Como retomar` cita, el snippet que el usuario
