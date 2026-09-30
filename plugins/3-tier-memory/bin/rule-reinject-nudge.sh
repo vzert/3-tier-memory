@@ -63,7 +63,9 @@ mkdir -p "$STATE_DIR" 2>/dev/null
 SAFE_ID=$(printf '%s' "$SESSION_ID" | tr -c 'A-Za-z0-9_-' '-')
 STATEFILE="$STATE_DIR/.rule-reinject-$SAFE_ID"
 
-read -r COUNT DELIVERED < "$STATEFILE" 2>/dev/null
+# En un grupo: `read ... < f 2>/dev/null` abre f ANTES de silenciar stderr, y un archivo de estado
+# ausente (directorio sin permiso, p. ej. el sandbox de codex) escupia "No such file" al prompt.
+{ read -r COUNT DELIVERED < "$STATEFILE"; } 2>/dev/null
 case "$COUNT" in ''|*[!0-9]*) COUNT=0 ;; esac
 case "$DELIVERED" in ''|*[!0-9]*) DELIVERED=0 ;; esac
 
@@ -121,7 +123,7 @@ PYEOF
 # queremos "gastar" la entrega ni avanzar el offset de una rotacion que nunca se mostro.
 if [ -n "$OUTPUT" ]; then
   printf '%s\n' "$OUTPUT"
-  printf '%s %s\n' "$COUNT" "$((DELIVERED + 1))" > "$STATEFILE" 2>/dev/null
+  { printf '%s %s\n' "$COUNT" "$((DELIVERED + 1))" > "$STATEFILE"; } 2>/dev/null
 fi
 
 exit 0

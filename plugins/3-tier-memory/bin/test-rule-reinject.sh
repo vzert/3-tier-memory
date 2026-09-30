@@ -9,7 +9,11 @@
 # bash-journal-nudge.sh / journal-drift-nudge.sh.
 set -e
 BIN="$(cd "$(dirname "$0")" && pwd)"
-T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+T=$(mktemp -d); trap 'chmod -R u+w "$T" 2>/dev/null; rm -rf "$T"' EXIT
+# HOME propio: el estado vive en $HOME/.claude/projects/<proyecto>. Con el HOME real, cada corrida
+# dejaba ahi una carpeta por proyecto temporal (243 medidas el 2026-09-30), y en un sandbox que no
+# deja escribir en HOME (codex) fallaban 12 asertos por el entorno, no por el codigo.
+export HOME="$T/home"; mkdir -p "$HOME/.claude/projects"
 pass=0; fail=0
 chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: esperaba '$2', salio '$3'"; fi; }
 
@@ -125,6 +129,28 @@ OP=$(printf '%s' "$JP" | CLAUDE_PROJECT_DIR="$Q" bash "$BIN/rule-reinject-nudge.
 set -e
 chk "sin _learnings.md: exit 0" "0" "$RC"
 chk "sin _learnings.md: sin salida" "" "$OP"
+
+echo "== directorio de estado sin permiso de escritura: calla, sale 0, stderr vacio =="
+# Caso del sandbox de codex (rondas 4-6 sobre compaction-recover): el hook no puede crear su estado.
+R="$T/sinpermiso"; mkdir -p "$R/memory"; cp "$P/memory/_pendientes.md" "$P/memory/_learnings.md" "$R/memory/"
+chmod 555 "$HOME/.claude/projects"
+if ( : > "$HOME/.claude/projects/.prueba" ) 2>/dev/null; then
+  rm -f "$HOME/.claude/projects/.prueba"; chmod 755 "$HOME/.claude/projects"
+  echo "  ok  sin permiso: chmod no restringe aqui (root o Windows), no se prueba"; pass=$((pass+1))
+else
+  set +e
+  JC=$(python3 -c "import json,sys;print(json.dumps({'hook_event_name':'PostToolUse','tool_name':'Read','cwd':sys.argv[1],'session_id':'sesR'}))" "$R")
+  EC=$(printf '%s' "$JC" | CLAUDE_PROJECT_DIR="$R" bash "$BIN/rule-reinject-count.sh" 2>&1 >/dev/null); RCC=$?
+  JN=$(python3 -c "import json,sys;print(json.dumps({'hook_event_name':'UserPromptSubmit','cwd':sys.argv[1],'session_id':'sesR','prompt':'hola'}))" "$R")
+  ON=$(printf '%s' "$JN" | CLAUDE_PROJECT_DIR="$R" bash "$BIN/rule-reinject-nudge.sh" 2>"$T/nudge.err"); RCN=$?
+  set -e
+  chmod 755 "$HOME/.claude/projects"
+  chk "sin permiso: count sale 0" "0" "$RCC"
+  chk "sin permiso: count no escribe en stderr" "" "$EC"
+  chk "sin permiso: nudge sale 0" "0" "$RCN"
+  chk "sin permiso: nudge no entrega" "" "$ON"
+  chk "sin permiso: nudge no escribe en stderr" "" "$(cat "$T/nudge.err")"
+fi
 
 echo "== sin sistema de memoria: no revienta =="
 Z="$T/vacio"; mkdir -p "$Z"

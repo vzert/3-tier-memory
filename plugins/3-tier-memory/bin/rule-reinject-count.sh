@@ -44,11 +44,12 @@ mkdir -p "$STATE_DIR" 2>/dev/null
 SAFE_ID=$(printf '%s' "$SESSION_ID" | tr -c 'A-Za-z0-9_-' '-')
 STATEFILE="$STATE_DIR/.rule-reinject-$SAFE_ID"
 
-read -r COUNT DELIVERED < "$STATEFILE" 2>/dev/null
+# En un grupo: ver rule-reinject-nudge.sh (el < se abre antes que el 2>/dev/null).
+{ read -r COUNT DELIVERED < "$STATEFILE"; } 2>/dev/null
 case "$COUNT" in ''|*[!0-9]*) COUNT=0 ;; esac
 case "$DELIVERED" in ''|*[!0-9]*) DELIVERED=0 ;; esac
 
 COUNT=$((COUNT + 1))
-printf '%s %s\n' "$COUNT" "$DELIVERED" > "$STATEFILE" 2>/dev/null
+{ printf '%s %s\n' "$COUNT" "$DELIVERED" > "$STATEFILE"; } 2>/dev/null
 
 exit 0
