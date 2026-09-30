@@ -143,14 +143,16 @@ NEUTRO=tools/recall-bench/corpus-neutro/casos.jsonl
 
 echo "8. corpus neutro publicado: corre y reproduce sus lineas base fijadas"
 OUT=$(python3 "$BENCH" --casos "$NEUTRO" --hoy 2026-09-30 --comprobar-linea-base 2>&1); RC=$?
-[ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -q "linea base reproducida: 5 casos" && ok "$(printf '%s' "$OUT" | tr '\n' ' ')" || mal "rc=$RC: $OUT"
+[ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -q "procedencia_verificada=5/21" && printf '%s' "$OUT" | grep -q "linea base reproducida: 5 casos" && ok "$(printf '%s' "$OUT" | tr '\n' ' ')" || mal "rc=$RC: $OUT"
 
 echo "9. una linea base que no se reproduce sale 1"
-# copia del corpus en el temporal: las rutas de los casos son relativas a su fichero
-cp -R tools/recall-bench/corpus-neutro "$TMP/neutro"
-sed 's/"contiene": \["git-y-ci#3", "git-y-ci#17"\]/"contiene": ["git-y-ci#3", "git-y-ci#9"]/' "$NEUTRO" > "$TMP/neutro/casos.jsonl"
-OUT=$(python3 "$BENCH" --casos "$TMP/neutro/casos.jsonl" --hoy 2026-09-30 --comprobar-linea-base 2>&1); RC=$?
-if ! grep -q 'git-y-ci#9' "$TMP/neutro/casos.jsonl"; then
+# copia del corpus en el temporal con la misma forma que el repo: las rutas de los casos son
+# relativas a su fichero, y la procedencia apunta al CHANGELOG de la raiz
+R2="$TMP/repo/tools/recall-bench/corpus-neutro"
+mkdir -p "$TMP/repo/tools/recall-bench" && cp -R tools/recall-bench/corpus-neutro "$R2" && cp CHANGELOG.md "$TMP/repo/"
+sed 's/"contiene": \["git-y-ci#3", "git-y-ci#17"\]/"contiene": ["git-y-ci#3", "git-y-ci#9"]/' "$NEUTRO" > "$R2/casos.jsonl"
+OUT=$(python3 "$BENCH" --casos "$R2/casos.jsonl" --hoy 2026-09-30 --comprobar-linea-base 2>&1); RC=$?
+if ! grep -q 'git-y-ci#9' "$R2/casos.jsonl"; then
   mal "la mutacion de la linea base no se aplico"
 else
   [ "$RC" -eq 1 ] && printf '%s' "$OUT" | grep -q "NO SE REPRODUCE" && ok "lo detecta" || mal "rc=$RC: $OUT"
@@ -175,6 +177,11 @@ echo "13. una linea_base_esperada sin reglas no fija nada y se rechaza"
 sed '1s/"nota":"sintetico"}/"nota":"sintetico","linea_base_esperada":{"excluye":[]}}/' "$TMP/bueno.jsonl" > "$TMP/s13.jsonl"
 OUT=$(correr "$TMP/s13.jsonl"); RC=$?
 [ "$RC" -eq 2 ] && printf '%s' "$OUT" | grep -q "sin ninguna regla" && ok "se niega: $OUT" || mal "rc=$RC: $OUT"
+
+echo "14. una procedencia cuya cita no esta en su fuente se rechaza"
+sed 's/Origen: el CI de windows-latest falla desde/Origen: una frase que no esta en el CHANGELOG/' "$NEUTRO" > "$R2/casos.jsonl"
+OUT=$(python3 "$BENCH" --casos "$R2/casos.jsonl" --hoy 2026-09-30 2>&1); RC=$?
+[ "$RC" -eq 2 ] && printf '%s' "$OUT" | grep -q "cita de la procedencia" && ok "se niega: $OUT" || mal "rc=$RC: $OUT"
 
 echo
 if [ "$FALLOS" -eq 0 ]; then echo "test-bench: TODO VERDE"; else echo "test-bench: $FALLOS FALLOS"; exit 1; fi

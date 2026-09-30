@@ -42,11 +42,14 @@ Formato de un caso (una linea JSON):
    "esperadas": ["<topic>#<N>", ...], "prohibidas": ["<topic>#<N>", ...],
    "fuente": "<ruta>", "cita": "<texto literal de la fuente>", "nota": "...",
    "origen": "incidente|neutro|medida",
-   "linea_base_esperada": {"contiene": [...], "excluye": [...]}}   (opcional)
+   "linea_base_esperada": {"contiene": [...], "excluye": [...]},   (opcional)
+   "procedencia": {"fuente": "<ruta>", "cita": "<texto literal>"}}   (opcional)
   - Rutas relativas (`corpus`, `fuente`) se resuelven contra la carpeta del fichero de casos.
   - `origen`: incidente (por omision) = un error real de tu instalacion; neutro = un incidente real
     reescrito en terminos generales para el corpus publicado; medida = una frase con la que se
     midio algo, no un incidente.
+  - `procedencia`: una segunda fuente, fuera del corpus, que documenta el incidente (por ejemplo el
+    CHANGELOG publico). Se comprueba como la cita. Sin ella, la procedencia es solo la `nota`.
   - `linea_base_esperada`: lo que el motor de HOY devuelve para ese caso (prompt: el top 4; dedup:
     los 8 vecinos). Con --comprobar-linea-base el banco sale 1 si no se reproduce. Sirve para fijar
     una medida (por ejemplo "este duplicado sale junto al original") y ver cuando una fase la cambia.
@@ -207,6 +210,18 @@ def validar(casos, raiz, base):
         with open(fuente, encoding="utf-8") as f:
             if cita not in f.read():
                 negarse(f"{cid}: la cita no aparece literal en la fuente")
+        # procedencia (opcional): una segunda fuente, independiente del corpus, que documenta el
+        # incidente de origen (p. ej. el CHANGELOG publico). Se comprueba igual que fuente y cita.
+        pr = c.get("procedencia")
+        if pr is not None:
+            if not isinstance(pr, dict) or not pr.get("fuente") or not pr.get("cita"):
+                negarse(f"{cid}: procedencia necesita 'fuente' y 'cita'")
+            pf = resolver(pr["fuente"], base)
+            if not os.path.isfile(pf):
+                negarse(f"{cid}: la fuente de la procedencia no existe: {pf}")
+            with open(pf, encoding="utf-8") as f:
+                if pr["cita"] not in f.read():
+                    negarse(f"{cid}: la cita de la procedencia no aparece literal en su fuente")
         if c.get("canal") not in CANALES:
             negarse(f"{cid}: canal desconocido {c.get('canal')!r}")
         if not c.get("corpus"):
@@ -367,6 +382,8 @@ def main():
         "motor": "plugins/3-tier-memory/bin/recall_rank.py",
         "casos": len(casos),
         "casos_con_cita": sum(1 for c in casos if c.get("origen", "incidente") in CON_CITA),
+        # cuantos traen una procedencia comprobada fuera del corpus; el resto es declarada
+        "procedencia_verificada": sum(1 for c in casos if c.get("procedencia")),
         "metricas": {
             "prompt@4": frac("prompt"),
             "accion@2": dict(frac("accion"), nota="no medido: canal inexistente en F0"),
@@ -382,7 +399,8 @@ def main():
     m = res["metricas"]
     print(f"casos={len(casos)} prompt@4={m['prompt@4']['aciertos']}/{m['prompt@4']['casos']} "
           f"accion@2=0/{m['accion@2']['casos']} (no medido) "
-          f"dedup@8={m['dedup@8']['aciertos']}/{m['dedup@8']['casos']} fuga={m['fuga']['valor']}")
+          f"dedup@8={m['dedup@8']['aciertos']}/{m['dedup@8']['casos']} fuga={m['fuga']['valor']} "
+          f"procedencia_verificada={res['procedencia_verificada']}/{res['casos_con_cita']}")
 
     if a.comprobar_linea_base:
         fijados = [d for d in detalle if "linea_base" in d]
