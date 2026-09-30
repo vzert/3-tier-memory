@@ -28,8 +28,9 @@ positivos y el usuario pierde la senal igual. Por eso hay cuatro estados y no do
 
 Esto es la regla 57 de este repo aplicada al cierre: una garantia mecanica no se delega al agente,
 se mide deterministamente. Lo que ningun script puede ver (una afirmacion sin dueno, un paso
-recortado por tamano) se queda en el bloque fijo en prosa de Step 7b — tres preguntas, no una
-checklist.
+recortado por tamano) lo pregunta desde 2.42.0 el hook de cierre (`checkpoint-close-guard.sh`), en
+un turno aparte, con una lista cerrada: hasta 2.41 era un bloque en prosa de Step 7b que se
+contestaba como tramite.
 
 NO repara, NO escribe, NO emite eventos: solo lee `memory/` y el estado de git. Lo que si hace es
 imprimir, junto a cada SALTADO que tiene arreglo barato y determinista, el comando exacto que lo
@@ -128,6 +129,9 @@ COMMIT_RELLENO = re.compile(r"^\s*$|filled in|<[^>]*hash[^>]*>", re.I)
 VERIFICADO = re.compile(r"_verificado:\s*(.*?)_(?=\s|$|[.,;:)\]—])", re.S)
 PENDIENTE_BUG = re.compile(r"_pendiente:\s*(p-[0-9a-f]{10})(?![0-9a-f])")
 DESDE_BUGS_CIERRE = "2026-09-23"
+# `bugs.veredicto_break` (2.42.0): desde aqui un `break` del adversario tiene que salir en
+# `## Bugs fixed` con cualquier snippet, no solo con `Proximo paso: ninguno` (8-sexies).
+DESDE_BUGS_BREAK = "2026-09-30"
 # 2.35.0: desde esta fecha el snippet `Como retomar` no lleva la linea `Sigue abierto:`.
 DESDE_SIN_SIGUE_ABIERTO = "2026-09-23"
 BULLET_PRIMER_NIVEL = re.compile(r"^( {0,3})(?:[-*+]|\d+[.)])[ \t]+")
@@ -242,6 +246,12 @@ def origenes_abiertos(memory_dir):
         if s.startswith("- [ ]") and m_id and m_o:
             out[m_id.group(1)] = m_o.group(1)
     return out
+
+
+# Un defecto de `## Bugs fixed` que nombra al adversario o a su veredicto (bugs.veredicto_break).
+# Solo "adversari…"/"adversar…" (adversario, adversary, adversarial): "break" o "veredicto" sueltos
+# salen en defectos que no tienen nada que ver (adversario de 2.42.0).
+MENCION_ADVERSARIO = re.compile(r"adversar", re.I)
 
 
 def bullets_bugs(sec_bugs):
@@ -992,6 +1002,27 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         else:
             h.append(Hallazgo(HECHO, "bugs.cierre",
                               f"los {len(bugs)} defecto(s) de `## Bugs fixed` declaran su cierre"))
+
+    # 8-quinquies-bis. Un `break` del adversario aparece en `## Bugs fixed` (2.42.0). Medido el
+    # 2026-09-30: el adversario dio `break autonomy-violations=1`, el agente arreglo el defecto y la
+    # ficha no lo nombraba en ninguna parte; 8-sexies no lo vio porque solo mira un snippet
+    # `ninguno`, y el snippet tenia un `Proximo paso` real. El veredicto lo pasa el hook de cierre
+    # (lo lee del transcript, texto propio y tool_result); Step 7a no lo pasa, y entonces este check
+    # no se emite: no puede medir lo que no ve. Mide MENCION, no correccion — el mismo limite que
+    # `bugs.cierre` con `_verificado:`: vigila que el defecto no se omita, no que este bien descrito.
+    if veredicto_adv == "break" and not (fecha_ficha and fecha_ficha < DESDE_BUGS_BREAK):
+        if any(MENCION_ADVERSARIO.search(b) for _, b in bugs):
+            h.append(Hallazgo(HECHO, "bugs.veredicto_break",
+                              "el ultimo veredicto del adversario es `break` y `## Bugs fixed` lo nombra"))
+        else:
+            h.append(Hallazgo(SALTADO, "bugs.veredicto_break",
+                              "el ultimo veredicto del adversario en la sesion es `break` y "
+                              "`## Bugs fixed` no nombra ningun hallazgo del adversario",
+                              ["nombralo aunque ya este arreglado: un defecto arreglado sin nombrar "
+                               "es un defecto que la siguiente sesion no sabe que existio"],
+                              corrige="anade a `## Bugs fixed` cada defecto que marco el adversario, "
+                                      "diciendo que lo marco el, con `_verificado: <como se "
+                                      "comprobo el arreglo>_` o `_pendiente: p-…_` si sigue abierto"))
 
     # 8-sexies. `ninguno` no puede tapar un defecto abierto (2.34.0, p-272254efc5). Dos senales,
     # las dos estructuradas: (1) un `_pendiente:` de `## Bugs fixed` que sigue abierto e inmediato

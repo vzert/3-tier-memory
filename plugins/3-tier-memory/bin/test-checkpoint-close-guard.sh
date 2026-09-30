@@ -515,8 +515,18 @@ $HLD" text -)"
 echo "== break y despues GOAL-CLOSE-WAIVED: silencio =="
 chk "silencio" "" "$(veredicto "$BRK
 [GOAL-CLOSE-WAIVED reason=residuo del sandbox del verificador, no del producto]" text -)"
-echo "== adversarial: el break solo en un tool_result (aun no lo cito el agente): silencio =="
-chk "silencio" "" "$(veredicto "$BRK" tool_result -)"
+# 2.42.0: hasta 2.41 este caso callaba ("aun no lo cito el agente"). Medido el 2026-09-30: el agente
+# nunca lo cito, el veredicto solo estaba en el tool_result y la ficha cerro sin el defecto.
+echo "== 2.42.0: el break solo en un tool_result (el agente nunca lo cito): bloquea =="
+chk "bloquea" "1" "$(bloquea "$(veredicto "$BRK" tool_result -)")"
+echo "== 2.42.0: la PLANTILLA del veredicto en un tool_result (break|hold ...) no es un break: silencio =="
+chk "silencio" "" "$(veredicto "Imprime al final:
+[ADVERSARY-VERDICT: break|hold ungrounded=<n> unfalsified=<n> incomplete=<n> autonomy-violations=<n> unsafe=<n>]
+[ADVERSARY-VERDICT: ...] lines VERBATIM" tool_result -)"
+echo "== 2.42.0: break en un tool_result y despues hold en otro: silencio =="
+chk "silencio" "" "$(veredicto "$BRK
+arreglado, segunda ronda:
+$HLD" tool_result -)"
 echo "== adversarial: break citado a mitad de linea (no es el marcador): silencio =="
 chk "silencio" "" "$(veredicto "la ronda 1 fue $BRK y la arregle" text -)"
 echo "== ronda 1 del adversario: break citado como ejemplo dentro de un fence: silencio =="
@@ -636,5 +646,197 @@ tx "$T/t.jsonl" skill "$F" "$T/r-sin.txt" -
 chk "una ficha anterior al corte no lo exige" "0" "$(falta7a "$(corre "$T/t.jsonl" false -)")"
 
 echo
+
+# ================================================================================================
+# 2.42.0 — la revision cerrada del cierre, el `break` con cualquier snippet, y los commits de la sesion.
+# Medido en 66 cierres tras los que el usuario pregunto "¿falto algo?": en 62 el mismo agente
+# encontro omisiones reales en cuanto se le pregunto. Este hook hace la pregunta, una vez. Las fichas
+# de estos casos llevan fecha 2026-09-30 (el corte); las de arriba, 2026-09-22, no la reciben.
+fecha30() { python3 -c 'import sys;p=sys.argv[1];t=open(p,encoding="utf-8").read();open(p,"w",encoding="utf-8").write(t.replace("date: 2026-09-22","date: 2026-09-30",1))' "$1"; }
+corre_en() {   # $1 transcript, $2 reentrante, $3 fichero de last_assistant_message ("-"), $4 cwd
+  local LAM=""; [ "$3" != "-" ] && LAM="$(cat "$3")"
+  python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":sys.argv[2]=="true","last_assistant_message":sys.argv[3],"cwd":sys.argv[4]}))' "$1" "$2" "$LAM" "$4" \
+    | bash "$HOOK" 2>/dev/null
+}
+razon() { printf '%s' "$1" | python3 -c 'import json,sys;d=sys.stdin.read();j=json.loads(d) if d.strip() else {};print(j.get("reason") or j.get("systemMessage") or "")'; }
+REV_OK='REVISION DEL CIERRE:
+1. ninguno
+2. ninguno
+3. ninguno
+4. ninguno
+5. ninguno
+6. ninguno
+7. ninguno
+8. ninguno
+9. ninguno'
+
+echo "== 2.42.0: checkpoint del 30 sin nada mas que reclamar: bloquea UNA vez con la revision cerrada =="
+armar "$M" "$FX/snippet-2120.txt" "$FX/calendario-2129.txt"; fecha30 "$F"
+python3 "$BIN/print-como-retomar.py" "$F" > "$T/salida-script.txt"
+printf 'Resumen.\n\n%s\n\n%s\n' "$(cat "$T/salida-script.txt")" "$(cat "$FX/calendario-2129.txt")" > "$T/r30.txt"
+tx "$T/t.jsonl" skill "$F" "$T/r30.txt" "$T/salida-script.txt"
+O=$(corre "$T/t.jsonl" false -)
+chk "bloquea" "1" "$(bloquea "$O")"
+chk "con la cabecera de la revision" "1" "$(razon "$O" | grep -c '^REVISION DEL CIERRE:$')"
+chk "con sus 9 lineas numeradas" "9" "$(razon "$O" | grep -cE '^[1-9]\. ')"
+chk "dice que ninguno vale" "1" "$(razon "$O" | grep -c 'no inventes para llenar')"
+chk "trae la lista de lo que no cuenta" "1" "$(razon "$O" | grep -c 'No cuenta como falta')"
+echo "== 2.42.0: la vuelta siguiente (stop_hook_active) sin el bloque contestado: avisa al usuario, no bloquea =="
+O=$(corre "$T/t.jsonl" true -)
+chk "no bloquea" "0" "$(bloquea "$O")"
+chk "avisa que no contesto la revision" "1" "$(razon "$O" | grep -c 'No contestaste la revision del cierre')"
+echo "== 2.42.0: la vuelta siguiente con el bloque completo: no reclama la revision =="
+printf '%s\n' "$REV_OK" > "$T/rev.txt"
+O=$(corre "$T/t.jsonl" true "$T/rev.txt")
+chk "no reclama la revision" "0" "$(razon "$O" | grep -c 'No contestaste la revision')"
+echo "== 2.42.0: bloque con una linea de menos (sin la 9): la reclama =="
+printf '%s\n' "$REV_OK" | sed '$d' > "$T/rev8.txt"
+chk "la reclama" "1" "$(razon "$(corre "$T/t.jsonl" true "$T/rev8.txt")" | grep -c 'No contestaste la revision')"
+echo "== 2.42.0: un turno que solo reimprime el snippet (no es /checkpoint-3t): sin revision =="
+tx "$T/t.jsonl" print "$F" "$T/r30.txt" "$T/salida-script.txt"
+chk "sin revision" "0" "$(razon "$(corre "$T/t.jsonl" false -)" | grep -c 'REVISION DEL CIERRE')"
+echo "== 2.42.0: ficha anterior al corte (22): sin revision =="
+armar "$M" "$FX/snippet-2120.txt" "$FX/calendario-2129.txt"
+python3 "$BIN/print-como-retomar.py" "$F" > "$T/salida-script.txt"
+printf 'Resumen.\n\n%s\n\n%s\n' "$(cat "$T/salida-script.txt")" "$(cat "$FX/calendario-2129.txt")" > "$T/r22.txt"
+tx "$T/t.jsonl" skill "$F" "$T/r22.txt" "$T/salida-script.txt"
+chk "silencio" "" "$(corre "$T/t.jsonl" false -)"
+
+echo "== 2.42.0: break en un tool_result + Proximo paso REAL + Bugs fixed sin nombrarlo: lo reclama =="
+armar "$M" "$FX/snippet-2120.txt"; fecha30 "$F"
+python3 - "$F" <<'PYB'
+import sys; p=sys.argv[1]; t=open(p, encoding="utf-8").read()
+open(p, "w", encoding="utf-8").write(t.replace("## Plans\n", "## Bugs fixed\n- tres casos sin arnes _verificado: mutation-check verde_\n\n## Plans\n", 1))
+PYB
+python3 "$BIN/print-como-retomar.py" "$F" > "$T/salida-script.txt"
+printf 'Resumen.\n\n%s\n' "$(cat "$T/salida-script.txt")" > "$T/rb.txt"
+tx "$T/t.jsonl" skill "$F" "$T/rb.txt" "$T/salida-script.txt"
+python3 - "$T/t.jsonl" "$BRK" <<'PYV'
+import json, sys
+out, brk = sys.argv[1:3]
+R = [json.loads(l) for l in open(out, encoding="utf-8") if l.strip()]
+extra = [{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "adv", "name": "Agent", "input": {"subagent_type": "goalspec:goal-adversary"}}]}},
+         {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "adv", "content": [{"type": "text", "text": "- autonomy: pregunto en prosa\n" + brk}]}]}}]
+open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r) for r in R[:2] + extra + R[2:]) + "\n")
+PYV
+O=$(corre "$T/t.jsonl" false -)
+chk "lo reclama por bugs.veredicto_break" "1" "$(razon "$O" | grep -c 'bugs.veredicto_break')"
+chk "no por el snippet ninguno (el snippet es real)" "0" "$(razon "$O" | grep -c 'snippet.ninguno_defecto')"
+python3 - "$F" <<'PYB'
+import sys; p=sys.argv[1]; t=open(p, encoding="utf-8").read()
+open(p, "w", encoding="utf-8").write(t.replace("## Bugs fixed\n", "## Bugs fixed\n- pregunte el push en prosa: lo marco el adversario _verificado: se pregunto con AskUserQuestion_\n", 1))
+PYB
+chk "con el hallazgo nombrado en Bugs fixed: ya no" "0" "$(razon "$(corre "$T/t.jsonl" false -)" | grep -c 'bugs.veredicto_break')"
+
+echo "== 2.42.0: commits de la sesion que la ficha no nombra =="
+G="$T/git"; mkdir -p "$G"; git -C "$G" init -q; git -C "$G" config user.email t@t; git -C "$G" config user.name t
+echo a > "$G/a"; git -C "$G" add a; git -C "$G" commit -qm "feat: la funcion nueva"
+HA=$(git -C "$G" rev-parse --short=7 HEAD)
+echo b > "$G/b"; git -C "$G" add b; git -C "$G" commit -qm "checkpoint: 2026-09-30-demo — resumen"
+HC=$(git -C "$G" rev-parse --short=7 HEAD)
+armar "$M" "$FX/snippet-2120.txt"; fecha30 "$F"
+python3 "$BIN/print-como-retomar.py" "$F" > "$T/salida-script.txt"
+printf 'Resumen.\n\n%s\n' "$(cat "$T/salida-script.txt")" > "$T/rc.txt"
+tx "$T/t.jsonl" skill "$F" "$T/rc.txt" "$T/salida-script.txt"
+# Commits del turno anterior al checkpoint: uno real ($HA), uno reescrito que ya no esta en HEAD
+# (deadbee), y el commit de memoria de Step 6 ($HC, referencia adelantada por diseno).
+python3 - "$T/t.jsonl" "$HA" "$HC" <<'PYC'
+import json, sys
+out, ha, hc = sys.argv[1:4]
+R = [json.loads(l) for l in open(out, encoding="utf-8") if l.strip()]
+def par(i, cmd, res):
+    return [{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": i, "name": "Bash", "input": {"command": cmd}}]}},
+            {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": i, "content": res}]}}]
+antes = par("c1", 'git add a && git commit -m "feat: la funcion nueva"', f"[main {ha}] feat: la funcion nueva\n 1 file changed") \
+      + par("c2", 'git commit --amend -m "viejo"', "[main deadbee] viejo reescrito")
+despues = par("c3", 'git add memory/ && git commit -m "memoria: cierre de la sesion"', f"[main {hc}] memoria: cierre de la sesion")
+R = R[:2] + antes + R[2:-1] + despues + R[-1:]
+open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r) for r in R) + "\n")
+PYC
+O=$(corre_en "$T/t.jsonl" false - "$G")
+chk "nombra el commit que falta" "1" "$(razon "$O" | grep -c "$HA")"
+chk "no el commit de memoria de Step 6 (posterior a la invocacion, con otro mensaje)" "0" "$(razon "$O" | grep -c "$HC")"
+chk "no el que ya no esta en HEAD" "0" "$(razon "$O" | grep -c 'deadbee')"
+python3 - "$F" "$HA" <<'PYB'
+import sys; p, h = sys.argv[1:3]; t=open(p, encoding="utf-8").read()
+open(p, "w", encoding="utf-8").write(t.replace("## Plans\n", f"## Commits\n- `{h}` la funcion nueva\n\n## Plans\n", 1))
+PYB
+chk "con el hash en la ficha: ya no lo reclama" "0" "$(razon "$(corre_en "$T/t.jsonl" false - "$G")" | grep -c 'commit(s) de esta sesion')"
+echo "== 2.42.0: un commit ANTERIOR al checkpoint previo de la sesion es de la ficha previa: no lo exige =="
+python3 - "$T/t.jsonl" <<'PYP'
+import json, sys
+out = sys.argv[1]
+R = [json.loads(l) for l in open(out, encoding="utf-8") if l.strip()]
+prev = [{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "ck0", "name": "Skill", "input": {"skill": "checkpoint-3t"}}]}},
+        {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "ck0", "content": "Launching skill: checkpoint-3t"}]}}]
+# el checkpoint previo va DESPUES de los commits c1/c2 y ANTES del turno actual
+i = next(k for k, r in enumerate(R) if r.get("type") == "user" and r["message"]["content"] == "guarda el checkpoint")
+R = R[:i] + prev + R[i:]
+open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r) for r in R) + "\n")
+PYP
+python3 - "$F" "$HA" <<'PYB'
+import sys; p, h = sys.argv[1:3]; t=open(p, encoding="utf-8").read()
+open(p, "w", encoding="utf-8").write(t.replace(f"- `{h}` la funcion nueva\n", "- nada\n", 1))
+PYB
+chk "no lo exige" "0" "$(razon "$(corre_en "$T/t.jsonl" false - "$G")" | grep -c 'commit(s) de esta sesion')"
+
+
+echo "== ronda 1 de 2.42.0: la etiqueta con espacio de nombres (/<x>:checkpoint-3t) tambien es un checkpoint =="
+armar "$M" "$FX/snippet-2120.txt" "$FX/calendario-2129.txt"; fecha30 "$F"
+python3 "$BIN/print-como-retomar.py" "$F" > "$T/salida-script.txt"
+printf 'Resumen.\n\n%s\n\n%s\n' "$(cat "$T/salida-script.txt")" "$(cat "$FX/calendario-2129.txt")" > "$T/r30.txt"
+tx "$T/t.jsonl" print "$F" "$T/r30.txt" "$T/salida-script.txt"
+python3 - "$T/t.jsonl" <<'PYN'
+import json, sys
+out = sys.argv[1]
+R = [json.loads(l) for l in open(out, encoding="utf-8") if l.strip()]
+i = next(k for k, r in enumerate(R) if r.get("type") == "user" and r["message"]["content"] == "guarda el checkpoint")
+R[i]["message"]["content"] = "<command-message>checkpoint-3t</command-message>\n<command-name>/3-tier-memory:checkpoint-3t</command-name>"
+open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r) for r in R) + "\n")
+PYN
+chk "pide la revision" "1" "$(razon "$(corre "$T/t.jsonl" false -)" | grep -c '^REVISION DEL CIERRE:$')"
+echo "== ronda 1 de 2.42.0: pegar las 9 lineas del propio aviso (solo etiquetas) no contesta la revision =="
+armar "$M" "$FX/snippet-2120.txt" "$FX/calendario-2129.txt"; fecha30 "$F"
+python3 "$BIN/print-como-retomar.py" "$F" > "$T/salida-script.txt"
+tx "$T/t.jsonl" skill "$F" "$T/r30.txt" "$T/salida-script.txt"
+razon "$(corre "$T/t.jsonl" false -)" | sed -n '/^REVISION DEL CIERRE:$/,/^9\./p' > "$T/eco.txt"
+chk "el eco trae las 9 lineas" "9" "$(grep -cE '^[1-9]\. ' "$T/eco.txt")"
+chk "la reclama" "1" "$(razon "$(corre "$T/t.jsonl" true "$T/eco.txt")" | grep -c 'No contestaste la revision')"
+sed 's/:$/: ninguno/' "$T/eco.txt" > "$T/eco-ninguno.txt"
+chk "etiqueta + ninguno si cuenta" "0" "$(razon "$(corre "$T/t.jsonl" true "$T/eco-ninguno.txt")" | grep -c 'No contestaste la revision')"
+echo "== ronda 1 de 2.42.0: un break DENTRO de un fence en un tool_result es un ejemplo, no el veredicto =="
+armar "$M" "$FX/snippet-2120.txt"; fecha30 "$F"
+python3 "$BIN/print-como-retomar.py" "$F" > "$T/salida-script.txt"
+printf 'Resumen.\n\n%s\n' "$(cat "$T/salida-script.txt")" > "$T/rb.txt"
+tx "$T/t.jsonl" skill "$F" "$T/rb.txt" "$T/salida-script.txt"
+python3 - "$T/t.jsonl" "$BRK" <<'PYF'
+import json, sys
+out, brk = sys.argv[1:3]
+R = [json.loads(l) for l in open(out, encoding="utf-8") if l.strip()]
+extra = [{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "cat", "name": "Bash", "input": {"command": "cat README.md"}}]}},
+         {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "cat", "content": "Ejemplo:\n```\n" + brk + "\n```\n"}]}}]
+open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r) for r in R[:2] + extra + R[2:]) + "\n")
+PYF
+chk "no lo cuenta" "0" "$(razon "$(corre "$T/t.jsonl" false -)" | grep -c 'bugs.veredicto_break')"
+
+
+echo "== ronda 2 de 2.42.0: comando tecleado (etiqueta) + llamada Skill en el mismo turno: el commit de antes SI se exige =="
+armar "$M" "$FX/snippet-2120.txt"; fecha30 "$F"
+python3 "$BIN/print-como-retomar.py" "$F" > "$T/salida-script.txt"
+printf 'Resumen.\n\n%s\n' "$(cat "$T/salida-script.txt")" > "$T/rc.txt"
+tx "$T/t.jsonl" skill "$F" "$T/rc.txt" "$T/salida-script.txt"
+python3 - "$T/t.jsonl" "$HA" <<'PYD'
+import json, sys
+out, ha = sys.argv[1:3]
+R = [json.loads(l) for l in open(out, encoding="utf-8") if l.strip()]
+commit = [{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "c1", "name": "Bash", "input": {"command": 'git commit -m "feat: la funcion nueva"'}}]}},
+          {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "c1", "content": f"[main {ha}] feat: la funcion nueva"}]}}]
+i = next(k for k, r in enumerate(R) if r.get("type") == "user" and r["message"]["content"] == "guarda el checkpoint")
+R[i]["message"]["content"] = "<command-message>checkpoint-3t</command-message>\n<command-name>/checkpoint-3t</command-name>"
+R = R[:i] + commit + R[i:]
+open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r) for r in R) + "\n")
+PYD
+chk "lo exige" "1" "$(razon "$(corre_en "$T/t.jsonl" false - "$G")" | grep -c "$HA")"
+
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

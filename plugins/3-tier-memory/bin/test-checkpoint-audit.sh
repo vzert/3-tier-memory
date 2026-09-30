@@ -1366,6 +1366,35 @@ chk "otro id el mismo dia: HECHO" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*cal
 O=$($AUD "$M9" --session-file "$S9" --no-git --hoy $HOY 2>&1)
 chk "sin recordatorios en la ficha: no aplica" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*calendario.duplicado_entre_fichas.*no aplica')"
 
+# ================================================================================================
+# 2.42.0: un `break` del adversario tiene que salir en `## Bugs fixed` con CUALQUIER snippet, no solo
+# con `Proximo paso: ninguno`. Caso real del 2026-09-30: snippet con un Proximo paso real, el
+# adversario dio `break autonomy-violations=1`, el agente lo arreglo y la ficha no lo nombraba.
+vb() { $AUD "$1" --session-file "$1/sessions/2026-09-19-demo.md" --no-git --hoy 2026-09-30 --solo-snippet ${2:+--veredicto-adversario "$2"} 2>&1 | grep -E "^\s+(HECHO|SALTADO)\s+bugs\.veredicto_break" | awk '{print $1}'; }
+echo "== 2.42.0: break + Proximo paso real + Bugs fixed sin nombrar al adversario: SALTADO =="
+M="$T/mVB1"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
+bugs_ficha "$M" 2026-09-30 "- tres casos sin arnes _verificado: mutation-check verde_"
+chk "SALTADO" "SALTADO" "$(vb "$M" break)"
+chk "el mismo, con hold: la clave no sale" "" "$(vb "$M" hold)"
+chk "el mismo, sin veredicto (Step 7a): la clave no sale" "" "$(vb "$M" "")"
+echo "== 2.42.0: Bugs fixed nombra el hallazgo del adversario: HECHO =="
+M="$T/mVB2"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
+bugs_ficha "$M" 2026-09-30 "- pregunte en prosa el push: el adversario lo marco (autonomy) _verificado: se pregunto con AskUserQuestion_"
+chk "HECHO" "HECHO" "$(vb "$M" break)"
+echo "== 2.42.0: la mencion en un HIJO del item cuenta (el bloque entero), no solo en su primera linea =="
+M="$T/mVB3"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
+bugs_ficha "$M" 2026-09-30 "- pregunte el push en prosa _verificado: corregido_\n  - lo marco el adversario"
+chk "HECHO" "HECHO" "$(vb "$M" break)"
+echo "== 2.42.0: ficha anterior al corte: la clave no sale =="
+M="$T/mVB4"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
+bugs_ficha "$M" 2026-09-29 "- tres casos sin arnes _verificado: verde_"
+chk "sin clave" "" "$(vb "$M" break)"
+
+echo "== ronda 1 de 2.42.0: 'break' o 'veredicto' sueltos no nombran al adversario: SALTADO =="
+M="$T/mVB5"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
+bugs_ficha "$M" 2026-09-30 "- un break que faltaba en el bucle; el veredicto del parser era falso _verificado: test verde_"
+chk "SALTADO" "SALTADO" "$(vb "$M" break)"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

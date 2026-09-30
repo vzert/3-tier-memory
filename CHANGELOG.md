@@ -1,6 +1,64 @@
 # Changelog
 
 
+## [2.42.0] - 2026-09-30
+Origen: research `omisiones-cierre-checkpoint`. En 66 cierres de `/checkpoint-3t` tras los que el
+usuario tuvo que preguntar "¿falto algo de tu checkpoint?", el mismo agente encontro omisiones
+reales en 62 en cuanto se le pregunto. La informacion estaba; faltaba la pregunta. Ninguna version
+anterior bajo esa tasa: cada una cerro el paso que mecanizo y la omision aparecio en otro.
+
+### Added
+- **Revision cerrada del cierre** (`checkpoint-close-guard.sh`). Al terminar el turno de un
+  `/checkpoint-3t`, el hook bloquea UNA vez y pide un bloque `REVISION DEL CIERRE:` con 9 lineas:
+  las categorias que salieron en esos 66 cierres (defectos sin registrar, callejones que faltan o
+  que no se probaron, reglas sin learning, tabla y conteo de 3a, criterios del usuario
+  reinterpretados, plan o research sin actualizar, commits, avisos no reportados, `Proximo paso`
+  vigente). Trae tambien la lista de lo que NO cuenta como falta (lo que el skill ordena: no subir
+  los commits, el hash como referencia adelantada, el alcance acotado de 3a, avisos de otra
+  sesion), porque el 28 % de lo que el agente confesaba al preguntarle era eso. `ninguno` es valido
+  en cada linea. En la vuelta siguiente, si el bloque no esta, avisa al usuario. Comparte el unico
+  bloqueo del hook con los demas chequeos: un solo turno extra.
+- **`bugs.veredicto_break`** (`checkpoint-audit.py`): si el ultimo veredicto del adversario de
+  goalspec en la sesion es `break`, `## Bugs fixed` tiene que nombrar su hallazgo, con cualquier
+  snippet. Antes solo se miraba con `Proximo paso: ninguno`.
+- **Commits de la sesion en la ficha** (chequeo 5 del hook): cada `git commit` de la sesion entre
+  el checkpoint anterior y la invocacion de este tiene que salir en la ficha por su hash. Lo
+  posterior a la invocacion (el commit de memoria de Step 6, se llame como se llame) queda fuera,
+  igual que los commits que ya no estan en la historia de HEAD (reescritos o de otro repositorio).
+- `bin/test-checkpoint-step8-split.sh`.
+
+### Changed
+- **El hook lee el veredicto del adversario tambien en la salida de las herramientas**, no solo en
+  el texto del agente. Caso real: el agente nunca copio el `break` a su texto y la ficha cerro sin
+  el defecto. La plantilla que repiten el skill y el adversario externo
+  (`break|hold ungrounded=<n>…`) no cuenta como veredicto, ni uno dentro de un bloque ``` .
+- **El hook reconoce el comando tecleado con espacio de nombres** (`/<x>:checkpoint-3t`), no solo
+  `/checkpoint-3t`.
+- **Step 7b sale del template**: sus tres preguntas pasan a la revision del hook, en un turno
+  aparte. Escritas dentro del skill se contestaban como tramite.
+- **Step 8 vive en `templates/checkpoint-3t-step8.md`** (era el 37 % del template). El checkpoint
+  lo imprime con un bloque que lo busca junto a `$JBIN`, en `$CLAUDE_PLUGIN_ROOT` y en el cache del
+  plugin; si no lo encuentra imprime `STEP8=NONE` y el template manda no inventar el snippet.
+  `session-start.sh` no lo instala como comando.
+- **`## Callejones sin salida` ya no presiona a llenar la seccion.** Decia que una sesion sin
+  callejones "suele significar que se te olvido", y un agente escribio un callejon que nunca
+  probo. Ahora dice que "Ninguno" es una respuesta correcta y prohibe inventar uno.
+
+### Fixed
+- **`rule-reinject-count.sh` y `rule-reinject-nudge.sh` ya no escriben en stderr si no pueden guardar su estado.** `read ... < f 2>/dev/null` abre `f` antes de silenciar stderr. Con el directorio de estado sin permiso (el sandbox workspace-write de codex niega escribir bajo HOME, confirmado por goal-spec-skill), el nudge escupía "No such file or directory" al prompt. Ahora la lectura y la escritura van en un grupo `{ ...; } 2>/dev/null`. `test-rule-reinject.sh` usa un HOME propio: con el real dejaba una carpeta por proyecto temporal en `~/.claude/projects` (243 medidas), y dentro del sandbox fallaban 11 asertos por el entorno. Caso nuevo "sin permiso", rojo contra 4cc18db; dentro de `codex sandbox -P :workspace` sale 28/0.
+
+### Limites declarados
+- La revision mide la FORMA del bloque, no el juicio: una linea de `ninguno` en cada categoria la
+  pasa (una que solo repite la etiqueta de la pregunta, no). Lo que fuerza la revision es el turno nuevo; el chequeo solo avisa si ni se contesto.
+- `bugs.veredicto_break` mide que un item de `## Bugs fixed` nombre al adversario ("adversar…"), no
+  que el defecto este bien descrito. Un `tool_result` que imprime a inicio de linea un veredicto de otra sesion (un
+  `cat` de un transcript viejo) cuenta como de esta.
+- Los commits hechos en otro repositorio no se exigen. La salida de `git commit` tiene que traer su
+  linea `[rama hash] asunto`: un `git commit -q`, o una herramienta que reescriba esa salida, no deja
+  hash que medir.
+- La linea `RECONCILIACION` que queda vieja porque otra sesion cambio pendientes DESPUES del cierre
+  no la ve ningun chequeo de cierre. Al cierre, el audit ya la recalcula y el hook la exige.
+
 ## [2.41.10] - 2026-09-30
 Origen: Codex, ronda 6 sobre 2.41.9 (break).
 

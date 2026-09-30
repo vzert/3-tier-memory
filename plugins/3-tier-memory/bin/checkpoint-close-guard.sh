@@ -81,6 +81,11 @@ except Exception:
     sys.exit(0)
 
 
+# La etiqueta del comando tecleado: `/checkpoint-3t` o, si llega con espacio de nombres, `/<x>:checkpoint-3t`
+# (adversario de 2.42.0: la forma con prefijo no disparaba nada).
+TAG_CHECKPOINT = re.compile(r"<command-name>/(?:[\w.-]+:)?checkpoint-3t</command-name>")
+
+
 # Mensajes que el harness inyecta como `user` a mitad de un turno y que NO son un prompt del
 # usuario: un teammate que escribe, una notificacion de tarea en segundo plano. Contarlos como
 # inicio de turno dejaba el cierre del checkpoint FUERA del turno mirado y el hook se callaba
@@ -133,26 +138,43 @@ for r in recs:
                                  inp.get("command") or ""):
                 impresas.append(m.group(1).strip("\"'"))
 
-# Ultimo veredicto del adversario de goalspec en TODA la sesion (2.34.0, p-272254efc5): solo el
-# marcador a inicio de linea en texto que escribio el assistant — nunca un tool_result, donde el
-# veredicto llega crudo y todavia no es del agente (el gate de goalspec lee igual). Un
-# `[GOAL-CLOSE-WAIVED` despues del break lo cierra a la vista. `last_assistant_message` va al final:
-# el transcript puede no traer aun el ultimo turno.
-VEREDICTO_ADV = re.compile(r"^\[ADVERSARY-VERDICT:\s*(break|hold)\b|^\[GOAL-CLOSE-WAIVED\b", re.M)
-ultimo_veredicto = None
-_textos_asist = []
-for r in recs:
-    if r.get("type") == "assistant":
-        for b in (r.get("message") or {}).get("content") or []:
-            if isinstance(b, dict) and b.get("type") == "text":
-                _textos_asist.append(b.get("text") or "")
-_textos_asist.append(lam)
+# Ultimo veredicto del adversario de goalspec en TODA la sesion (2.34.0, p-272254efc5). Desde
+# 2.42.0 cuenta tambien el que llega en un tool_result (el subagente `goal-adversary` o
+# `external-adversary.sh`): medido el 2026-09-30, el agente nunca copio su `break` a su texto, el
+# veredicto solo estaba en el tool_result, y la ficha cerro sin nombrar el defecto. La marca va a
+# inicio de linea y su palabra tiene que ir seguida de espacio o `]`: la plantilla que repiten el
+# skill y el adversario externo (`break|hold ungrounded=<n>…`) no es un veredicto. Un
+# `[GOAL-CLOSE-WAIVED` solo cuenta en texto propio: es una declaracion del agente, no del
+# adversario. `last_assistant_message` va al final: el transcript puede no traer aun el ultimo turno.
+# Limite declarado: un tool_result que imprime a inicio de linea el veredicto de OTRA sesion (un
+# `cat` de un transcript viejo) cuenta como de esta. Cuesta un aviso de mas, nunca uno de menos.
+VEREDICTO_ADV = re.compile(r"^\[ADVERSARY-VERDICT:\s*(break|hold)(?=[\s\]])|^\[GOAL-CLOSE-WAIVED\b", re.M)
+VEREDICTO_TOOL = re.compile(r"^\[ADVERSARY-VERDICT:\s*(break|hold)(?=[\s\]])", re.M)
 # Fuera de los bloques ``` : un veredicto citado DENTRO de un fence es un ejemplo, no el marcador
 # (adversario, ronda 1: un `break` de ejemplo en un fence bloqueaba el cierre).
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,}).*?^ {0,3}\1[`~]*\s*$", re.M | re.S)
-for _t in _textos_asist:
-    for m in VEREDICTO_ADV.finditer(FENCE.sub("", _t)):
-        ultimo_veredicto = m.group(1) or "hold"
+ultimo_veredicto = None
+
+
+def _texto_resultado(bloque):
+    rc = bloque.get("content")
+    if isinstance(rc, list):
+        rc = "\n".join(x.get("text", "") for x in rc if isinstance(x, dict))
+    return rc if isinstance(rc, str) else ""
+
+
+for r in recs:
+    for b in (r.get("message") or {}).get("content") or []:
+        if not isinstance(b, dict):
+            continue
+        if r.get("type") == "assistant" and b.get("type") == "text":
+            for m in VEREDICTO_ADV.finditer(FENCE.sub("", b.get("text") or "")):
+                ultimo_veredicto = m.group(1) or "hold"
+        elif r.get("type") == "user" and b.get("type") == "tool_result":
+            for m in VEREDICTO_TOOL.finditer(FENCE.sub("", _texto_resultado(b))):
+                ultimo_veredicto = m.group(1)
+for m in VEREDICTO_ADV.finditer(FENCE.sub("", lam)):
+    ultimo_veredicto = m.group(1) or "hold"
 
 inicio = 0
 for i in range(len(recs) - 1, -1, -1):
@@ -194,7 +216,7 @@ for r in turno:
         # `/checkpoint-3t` tecleado como comando: la marca va en el prompt del usuario.
         txt = c if isinstance(c, str) else " ".join(
             b.get("text", "") for b in (c or []) if isinstance(b, dict) and b.get("type") == "text")
-        if "<command-name>/checkpoint-3t</command-name>" in txt:
+        if TAG_CHECKPOINT.search(txt):
             disparo = por_checkpoint = True
         continue
     if r.get("type") != "assistant" or not isinstance(c, list):
@@ -339,6 +361,70 @@ def falta(lineas):
 
 
 problemas = []
+# Desde 2.42.0: commits de la sesion en la ficha (chequeo 5) y la revision cerrada del cierre.
+DESDE_REVISION = "2026-09-30"
+pedir_revision = False
+
+
+def es_checkpoint(r):
+    """La invocacion de /checkpoint-3t: la llamada `Skill` o el comando tecleado."""
+    c = (r.get("message") or {}).get("content")
+    if r.get("type") == "user":
+        txt = c if isinstance(c, str) else " ".join(
+            b.get("text", "") for b in (c or []) if isinstance(b, dict) and b.get("type") == "text")
+        return bool(TAG_CHECKPOINT.search(txt))
+    if r.get("type") == "assistant" and isinstance(c, list):
+        return any(isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "Skill"
+                   and str((b.get("input") or {}).get("skill", "")).split(":")[-1] == "checkpoint-3t"
+                   for b in c)
+    return False
+
+
+# `[main 83e6926] asunto` o `[main (root-commit) 83e6926] asunto`: la primera linea de `git commit`.
+COMMIT_OUT = re.compile(r"(?m)^\[[^\]\n]*?([0-9a-f]{7,40})\] (.*)$")
+
+
+def commits_de_la_sesion():
+    """(hash, asunto) de cada `git commit` de ESTA sesion entre el checkpoint anterior (el que cerro
+    la ficha previa) y la invocacion de ESTE checkpoint. Lo posterior a la invocacion queda fuera:
+    ahi va el commit de memoria de Step 6, una referencia adelantada por diseno, se llame como se
+    llame (adversario de 2.42.0: filtrar por el asunto `checkpoint:` marcaba un Step 6 con otro
+    mensaje). Solo los que siguen en la historia de HEAD del directorio de la sesion: un commit
+    reescrito por `--amend` o por un rebase, o hecho en otro repositorio, no se exige. Limites
+    declarados: los de otro repositorio no se miran, y un `git commit -q` (o una salida sin la linea
+    `[rama hash] asunto`) no deja hash que medir. Sin git, lista vacia."""
+    # Una invocacion puede dejar DOS marcas (la etiqueta del comando tecleado y la llamada `Skill`):
+    # el checkpoint actual empieza en la PRIMERA marca del turno y el anterior termina en la ultima
+    # marca antes del turno (adversario de 2.42.0, ronda 2: con las dos marcas, un commit anterior a
+    # la etiqueta quedaba fuera de la ventana).
+    cks = [i for i, r in enumerate(recs) if es_checkpoint(r)]
+    actual = [i for i in cks if i >= inicio]
+    if not actual:
+        return []
+    previos = [i for i in cks if i < inicio]
+    desde = previos[-1] if previos else -1
+    cmds, vistos = {}, []
+    for r in recs[desde + 1:actual[0]]:
+        for b in (r.get("message") or {}).get("content") or []:
+            if not isinstance(b, dict):
+                continue
+            if b.get("type") == "tool_use" and b.get("name") == "Bash":
+                cmd = (b.get("input") or {}).get("command") or ""
+                if re.search(r"\bgit\b[^\n]*\bcommit\b", cmd):
+                    cmds[b.get("id")] = cmd
+            elif b.get("type") == "tool_result" and b.get("tool_use_id") in cmds:
+                for m in COMMIT_OUT.finditer(_texto_resultado(b)):
+                    vistos.append((m.group(1), m.group(2)))
+    out = []
+    for h, asunto in dict.fromkeys(vistos):
+        try:
+            rc = subprocess.run(["git", "-C", cwd, "merge-base", "--is-ancestor", h, "HEAD"],
+                                capture_output=True, timeout=10).returncode
+        except Exception:
+            return []
+        if rc == 0:
+            out.append((h, asunto))
+    return out
 
 
 def revisar(ficha):
@@ -459,10 +545,88 @@ def revisar(ficha):
                 "--repo-root .` y pega su salida tal cual; un SALTADO se arregla o se declara, no se calla.")
 
 
+    # 5. `## Commits` contra los commits de la sesion (2.42.0). Medido en los cierres que el usuario
+    # tuvo que preguntar "¿falto algo?": la ficha listaba 1 de 6 commits, o se paraba en el primero.
+    # Se exige el hash (7 caracteres) en cualquier parte de la ficha, no solo en `## Commits`: una
+    # ficha que lo cita en `## Cambios realizados` ya lo registra.
+    global pedir_revision
+    if por_checkpoint and m_fecha and m_fecha.group(1) >= DESDE_REVISION:
+        pedir_revision = True
+        faltan = [f"`{h[:7]}` {asunto[:70]}" for h, asunto in commits_de_la_sesion()
+                  if h[:7] not in texto]
+        if faltan:
+            problemas.append(pref + "La ficha no nombra " + str(len(faltan)) + " commit(s) de esta "
+                             "sesion: " + "; ".join(faltan) + ". Anadelos a `## Commits` (y a "
+                             "`## Cambios realizados` si cambian lo que hizo la sesion).")
+
+
 for _f in fichas:
     revisar(_f)
 
-if not problemas:
+# La revision cerrada del cierre (2.42.0). Medido en 66 cierres de /checkpoint-3t tras los que
+# el usuario pregunto "¿falto algo?": en 62 el MISMO agente, en el MISMO contexto, encontro
+# omisiones reales en cuanto se le pregunto; el bloque de autorevision escrito dentro del skill
+# (el antiguo Step 7b) se contestaba como tramite. Lo que funcionaba era la pregunta llegando como
+# turno nuevo, asi que este hook la hace, una vez, al terminar el turno del checkpoint. Las
+# categorias son las que salieron en esos 66 cierres; la lista de lo que NO cuenta es lo que el
+# agente confesaba como falla y el skill ordena (el 28 % de lo confesado). "ninguno" es valido en
+# cada linea: una lista que empuja a encontrar algo fabrica lo que debe detectar (medido: un
+# callejon inventado para llenar la seccion).
+REVISION_CABECERA = "REVISION DEL CIERRE:"
+REVISION_ITEMS = (
+    "Defectos hallados en la sesion (adversario, revisor, test rojo) que no estan en `## Bugs fixed`",
+    "Callejones reales (se probo y fallo) que faltan en `## Callejones sin salida`, o uno escrito "
+    "que no se probo",
+    "Reglas aprendidas que no llegaron a learning (o quedaron solo en otra seccion)",
+    "Pendientes: la tabla de reconciliacion de 3a impresa en tu texto y su linea RECONCILIACION al "
+    "dia; texto de un pendiente vivo que quedo falso (`pendiente.update`); hallazgos menores o "
+    "afirmaciones sin un pendiente que las cubra",
+    "Criterios de cierre que dio el usuario y que no se cumplieron tal como los escribio (dilo, no "
+    "los reinterpretes en silencio)",
+    "Plan o research que la sesion toco sin `## Estado`, sin su fila al dia o sin upsert",
+    "`## Commits` y `## Cambios realizados` contra lo que la sesion hizo, incluido lo posterior al "
+    "checkpoint",
+    "Avisos de scripts o hooks que viste y no reportaste; pasos que recortaste",
+    "El `Proximo paso` del snippet sigue siendo el siguiente paso real",
+)
+POR_DISENO = ("no publicar los commits (el checkpoint no sube nada); el hash del commit de memoria "
+              "como referencia adelantada; el alcance acotado de 3a con su linea RECONCILIACION; "
+              "avisos que vienen de otra sesion (`ids_invented`, pendientes ajenos vencidos que no "
+              "te toca cerrar)")
+
+
+def revision_contestada():
+    """El bloque esta en el texto del turno: la cabecera y, despues de ella, una linea por cada
+    numero. Mide la FORMA, no el juicio — un bloque de `ninguno` en cada linea lo pasa. Lo que
+    fuerza la revision es el turno nuevo, no este chequeo; esto solo avisa al usuario si ni
+    siquiera se contesto."""
+    resto = "\n".join(textos)
+    j = resto.rfind(REVISION_CABECERA)
+    if j < 0:
+        return False
+    resto = resto[j:]
+    for n, etiqueta in enumerate(REVISION_ITEMS, 1):
+        m = re.search(rf"(?m)^\s*{n}\.\s*(.*)$", resto)
+        if not m:
+            return False
+        # Una linea que solo repite la etiqueta de la pregunta no es una respuesta (adversario de
+        # 2.42.0: pegar las 9 lineas del propio aviso pasaba). Se quita la etiqueta si viene
+        # delante y tiene que quedar algo.
+        resp = plano(m.group(1).replace("`", ""))
+        lab = plano(etiqueta.replace("`", ""))
+        if resp.startswith(lab):
+            resp = resp[len(lab):].lstrip(" :")
+        if not resp:
+            return False
+    return True
+
+
+if pedir_revision and reentrante and not revision_contestada():
+    problemas.append("No contestaste la revision del cierre (`" + REVISION_CABECERA + "` con sus "
+                     + str(len(REVISION_ITEMS)) + " lineas). Preguntale al agente \"¿falto algo de "
+                     "tu checkpoint?\" antes de dar el cierre por bueno.")
+
+if not problemas and not (pedir_revision and not reentrante):
     sys.exit(0)
 
 cuerpo = "\n".join(f"- {p}" for p in problemas)
@@ -471,10 +635,23 @@ if reentrante:
         "3-tier-memory: el cierre del checkpoint sigue incompleto tras un aviso:\n" + cuerpo},
         ensure_ascii=False))
 else:
-    print(json.dumps({"decision": "block", "reason":
-        "Cierre de /checkpoint-3t incompleto (checkpoint-close-guard.sh). Arreglalo antes de "
-        "terminar; el usuario solo ve tu texto, no la salida de las herramientas:\n" + cuerpo},
-        ensure_ascii=False))
+    partes = []
+    if problemas:
+        partes.append("Cierre de /checkpoint-3t incompleto (checkpoint-close-guard.sh). Arreglalo antes "
+                      "de terminar; el usuario solo ve tu texto, no la salida de las herramientas:\n"
+                      + cuerpo)
+    if pedir_revision:
+        partes.append(
+            "Revision del cierre de /checkpoint-3t (checkpoint-close-guard.sh). Relee la sesion "
+            "entera y contesta en tu texto con este bloque. Cada linea lleva `ninguno`, o lo que "
+            "falto con una cita del transcript o el comando o la edicion con que ya lo corregiste. "
+            "`ninguno` es la respuesta correcta cuando no falta nada: no inventes para llenar. "
+            "Corrige ahora lo que puedas; declara lo que no. Si corriges la ficha o un pendiente, "
+            "vuelve a pegar lo que cambie (snippet, recordatorios).\n"
+            + REVISION_CABECERA + "\n"
+            + "\n".join(f"{n}. {t}:" for n, t in enumerate(REVISION_ITEMS, 1))
+            + "\nNo cuenta como falta (lo ordena el skill): " + POR_DISENO + ".")
+    print(json.dumps({"decision": "block", "reason": "\n\n".join(partes)}, ensure_ascii=False))
 sys.exit(0)
 PY
 exit 0
