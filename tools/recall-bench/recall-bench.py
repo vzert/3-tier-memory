@@ -24,7 +24,8 @@ Formato de un caso (una linea JSON en casos.jsonl):
   {"id": "...", "corpus": "claude-vzert", "canal": "prompt|accion|dedup",
    "entrada": "<prompt>" | {"tool_name": ..., "tool_input": {...}} | "<topic>#<N>" (dedup),
    "esperadas": ["<topic>#<N>", ...], "prohibidas": ["<topic>#<N>", ...],
-   "fuente": "<ruta absoluta>", "cita": "<texto literal de la fuente>", "nota": "..."}
+   "fuente": "<ruta absoluta>", "cita": "<texto literal de la fuente>", "nota": "...",
+   "origen": "incidente|medida"}   (por omision incidente; solo esos cuentan para los minimos)
 
 Uso:
   recall-bench.py [--casos F] [--salida F.json] [--hoy AAAA-MM-DD] [--corpus-raiz DIR]
@@ -49,6 +50,7 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 MIN_CASOS = 20
 MIN_ACCION = 5
 CANALES = ("prompt", "accion", "dedup")
+ORIGENES = ("incidente", "medida")
 K = {"prompt": 4, "accion": 2, "dedup": 8}
 RULE_RE = re.compile(r"^\s*(\d+)\.\s+(.*)")
 ID_RE = re.compile(r"^[A-Za-z0-9_.-]+#\d+$")
@@ -118,9 +120,16 @@ def existe_unica(reglas, rid):
 
 
 def validar(casos, raiz):
-    if len(casos) < MIN_CASOS:
-        negarse(f"hay {len(casos)} casos; hacen falta al menos {MIN_CASOS}")
-    n_accion = sum(1 for c in casos if c.get("canal") == "accion")
+    # Solo cuentan para los minimos los casos de un incidente real (origen "incidente", el valor
+    # por omision). Los de origen "medida" (las frases con que se midio H8 en el plan) corren y se
+    # reportan, pero no son citas de un incidente y no pueden completar el minimo.
+    for c in casos:
+        if c.get("origen", "incidente") not in ORIGENES:
+            negarse(f"{c.get('id')}: origen desconocido {c.get('origen')!r}")
+    reales = [c for c in casos if c.get("origen", "incidente") == "incidente"]
+    if len(reales) < MIN_CASOS:
+        negarse(f"hay {len(reales)} casos; hacen falta al menos {MIN_CASOS} (de origen incidente)")
+    n_accion = sum(1 for c in reales if c.get("canal") == "accion")
     if n_accion < MIN_ACCION:
         negarse(f"hay {n_accion} casos del canal accion; hacen falta al menos {MIN_ACCION}")
     ids = set()
@@ -152,6 +161,8 @@ def validar(casos, raiz):
         esperadas = c.get("esperadas")
         if not isinstance(esperadas, list) or not esperadas:
             negarse(f"{cid}: sin esperadas")
+        if set(esperadas) & set(c.get("prohibidas") or []):
+            negarse(f"{cid}: una regla no puede ser esperada y prohibida a la vez")
         for rid in esperadas + list(c.get("prohibidas") or []):
             if not ID_RE.match(rid):
                 negarse(f"{cid}: id de regla mal formado {rid!r} (se espera topic#N)")
@@ -274,6 +285,7 @@ def main():
         "hoy": hoy.isoformat(),
         "motor": "plugins/3-tier-memory/bin/recall_rank.py",
         "casos": len(casos),
+        "casos_incidente": sum(1 for c in casos if c.get("origen", "incidente") == "incidente"),
         "metricas": {
             "prompt@4": frac("prompt"),
             "accion@2": dict(frac("accion"), nota="no medido: canal inexistente en F0"),

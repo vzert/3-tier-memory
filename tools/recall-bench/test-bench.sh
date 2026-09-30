@@ -97,6 +97,17 @@ OUT=$(correr "$TMP/bueno.jsonl"); RC=$?
 [ "$RC" -eq 2 ] && printf '%s' "$OUT" | grep -q "deploy#1 es ambigua" && ok "se niega: $OUT" || mal "rc=$RC: $OUT"
 cp "$TMP/deploy.orig" "$M/learnings/deploy.md"
 
+echo "4c. los casos de origen medida no completan el minimo (19 de incidente + 1 de medida)"
+generar "$TMP/s4c.jsonl" 13 5 "$FN"
+caso "m1" prompt '"una frase de medida"' '["deploy#1"]' "$FN" | sed 's/}$/,"origen":"medida"}/' >> "$TMP/s4c.jsonl"
+OUT=$(correr "$TMP/s4c.jsonl"); RC=$?
+[ "$RC" -eq 2 ] && printf '%s' "$OUT" | grep -q "hay 19 casos" && ok "se niega: $OUT" || mal "rc=$RC: $OUT"
+
+echo "4d. una regla esperada y prohibida a la vez"
+sed '1s/"prohibidas":\[\]/"prohibidas":["deploy#1"]/' "$TMP/bueno.jsonl" > "$TMP/s4d.jsonl"
+OUT=$(correr "$TMP/s4d.jsonl"); RC=$?
+[ "$RC" -eq 2 ] && printf '%s' "$OUT" | grep -q "esperada y prohibida" && ok "se niega: $OUT" || mal "rc=$RC: $OUT"
+
 echo "5. las metricas salen del motor"
 OUT=$(python3 "$BENCH" --corpus-raiz "$TMP/raiz" --hoy 2026-09-30 --casos "$TMP/bueno.jsonl" --salida "$TMP/r.json" 2>&1)
 # la regla 1 comparte casi todo el vocabulario del prompt: debe salir en el top 4 de los 14;
