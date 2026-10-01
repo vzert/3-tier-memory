@@ -64,6 +64,30 @@ caso() {  # etiqueta | fichero a mutar | mutador | suite | aserto que DEBE caer 
   rm -rf "$(dirname "$D")"
 }
 
+# Igual que caso(), pero para un script de tools/ (no de bin/): muta una copia de tools/<f> y corre
+# la suite de tools/ con RUN_TESTS apuntando a la copia.
+caso_tools() {  # etiqueta | fichero de tools/ | mutador | suite de tools/ | aserto | arg
+  local et="$1" f="$2" m="$3" suite="$4" espera="$5" arg="${6:-}"
+  local D; D=$(mktemp -d); cp "tools/$f" "$D/$f"
+  TOTAL=$(( TOTAL + 1 ))
+  local n; n=$(python3 "$MUT/$m" "$D/$f" ${arg:+"$arg"} 2>&1)
+  case "$n" in
+    0\ *) printf '  ?? %-30s LA MUTACION NO SE APLICO (%s) -> SIN PROBAR\n' "$et" "$n"
+          PEND=$(( PEND + 1 )); rm -rf "$D"; return ;;
+  esac
+  local out rc; out=$(RUN_TESTS="$D/$f" bash "tools/$suite" 2>&1); rc=$?
+  if [ "$rc" -eq 0 ]; then
+    printf '  NO %-30s la suite NO cae (%s) -> el aserto es vacuo\n' "$et" "$n"; PEND=$(( PEND + 1 ))
+  elif printf '%s' "$out" | grep -qiE "(FAIL|FALLA).*${espera}"; then
+    printf '  ok %-30s cae por «%s» (%s)\n' "$et" "$espera" "$n"
+  else
+    printf '  ~~ %-30s cae, pero NO por «%s» (%s)\n' "$et" "$espera" "$n"
+    printf '%s' "$out" | grep -iE '^\s*(FAIL|FALLA)' | head -2 | sed 's/^/        /'
+    PEND=$(( PEND + 1 ))
+  fi
+  rm -rf "$D"
+}
+
 echo "Cada comprobacion editada, contra su codigo roto"
 caso "check_ruta / norm"        resolve-plugin-bin.sh   m_resolver.py        test-plugin-bin-resolver.sh "la estable gana a la prerelease"
 caso "CONTROL del resolutor"    test-plugin-bin-resolver.sh m_control.py     test-plugin-bin-resolver.sh "el patron viejo elegia a ciegas"
@@ -169,6 +193,10 @@ caso "comilla impar"           learning_vecinos.py m_learning_dedup.py test-lear
 caso "titulo largo"            learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "titulo de 201: rc 1" titulo-largo
 caso "audit sin decision"      checkpoint-audit.py m_learning_dedup.py test-learning-dedup.sh "sin decision: SALTADO" audit-sin-decision
 caso "audit #N inexistente"    checkpoint-audit.py m_learning_dedup.py test-learning-dedup.sh "#99 que no existe: SALTADO" audit-numero-inexistente
+
+echo "run-tests.sh (p-46153b135b): una suite que sale 0 sin su linea de resumen es FALLA"
+caso_tools "rc=0 sin resumen pasa"  run-tests.sh m_run_tests.py test-run-tests.sh "la del error de sintaxis con trap" sin-resumen-no-exigido
+caso_tools "resumen en cualquier linea" run-tests.sh m_run_tests.py test-run-tests.sh "un resumen a mitad no la salva" resumen-cualquiera
 
 echo
 if [ "$PEND" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $TOTAL)"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi

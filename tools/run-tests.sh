@@ -10,6 +10,8 @@
 # Uso:  tools/run-tests.sh          (exit 0 = todo verde)
 #       tools/run-tests.sh -v       (vuelca la salida completa de cada suite)
 #
+# Una suite verde sale 0 Y termina con su linea de resumen (ver RESUMEN). rc=0 sin resumen es FALLA.
+#
 # sella-huellas: no (las suites trabajan en temporales propios; este script solo las invoca)
 set -u
 cd "$(cd "$(dirname "$0")/.." && pwd)" || exit 2
@@ -23,6 +25,16 @@ TOTAL=0
 LENTAS=""
 SALTADAS=""
 PARCIALES=""
+
+# Ultima linea de una suite que termino: su resumen. Cada suite tiene el suyo (pass=N fail=N,
+# TODO VERDE, RESULT: PASS, == resumen: ...). Una suite NUEVA con otro formato sale FALLA con
+# "sin linea de resumen": anade aqui su formato, no le quites el resumen.
+RESUMEN='^[[:space:]]*(RESULT(ADO)?:? |pass=[0-9]|PASS[ =]|(test-bench: )?TODO VERDE|== resumen: |---- [0-9]+ ok|OK: |LAS EVALUABLES DISCRIMINAN)'
+
+# rc=0 y la ultima linea no es un resumen: la suite murio a mitad. Pasa con `set -e` y un
+# `trap '...' EXIT` (bash 3.2): un error de sintaxis a mitad corta la suite y el rc del trap (0)
+# tapa el 2 del error (p-46153b135b, test-checkpoint-close-guard.sh, 2026-10-01).
+sin_resumen() { ! printf '%s' "$1" | tail -1 | tr -d '\r' | grep -qE "$RESUMEN"; }
 
 correr() {   # $1 = etiqueta, $2... = comando
   local nom="$1"; shift
@@ -42,6 +54,10 @@ correr() {   # $1 = etiqueta, $2... = comando
     # test-session-amend.sh sin chflags). Tampoco es TODO VERDE.
     PARCIALES="$PARCIALES $nom"
     printf '  skip %-32s %3ss  %s\n' "$nom" "$dur" "$(printf '%s' "$out" | tail -1 | cut -c1-46)"
+  elif [ "$rc" -eq 0 ] && sin_resumen "$out"; then
+    FALLOS=$(( FALLOS + 1 ))
+    printf '  FALLA %-32s %3ss  rc=0 sin linea de resumen (murio a mitad?)\n' "$nom" "$dur"
+    printf '%s\n' "$out" | tail -5 | sed 's/^/       /'
   elif [ "$rc" -eq 0 ]; then
     printf '  ok   %-32s %3ss  %s\n' "$nom" "$dur" "$(printf '%s' "$out" | tail -1 | cut -c1-46)"
     [ "$VERBOSE" -eq 1 ] && printf '%s\n' "$out" | sed 's/^/       /'
@@ -53,7 +69,13 @@ correr() {   # $1 = etiqueta, $2... = comando
   return 0
 }
 
+# Una sola suite, para tools/test-run-tests.sh:  tools/run-tests.sh --una <etiqueta> <comando...>
+if [ "${1:-}" = "--una" ]; then
+  shift; correr "$@"; exit $(( FALLOS > 0 ))
+fi
+
 echo "Higiene del repo"
+correr "test-run-tests" bash tools/test-run-tests.sh
 correr "check-ignored-tracked" bash tools/check-ignored-tracked.sh
 # Que las comprobaciones editadas sigan sabiendo fallar. Un aserto que nunca se ha visto fallar no
 # se ha visto funcionar, y en esta sesion tres afirmaron cubrir mas de lo que cubrian.
