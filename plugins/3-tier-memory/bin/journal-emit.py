@@ -76,7 +76,8 @@ Tipos de evento:
                     reescribe una regla a ciegas.
   plan.upsert       --slug S --title T --status ST [--date D] [--sesion [[sessions/..]]]
                     [--pendientes N] [--learnings N] [--inline] [--parent P]            (Fase 2)
-                    Fila en _plans-index.md por slug (o titulo); actualiza celdas dadas.
+                    Fila en _plans-index.md por slug (o titulo, solo filas (inline));
+                    actualiza celdas dadas.
                     --parent anota la celda Status como '<status> (fase de plan-P)'.
   plan.reopen       --slug S [--title T]                                              (2.37.0)
                     Reabre un plan cerrado (completed/abandoned/superseded -> active), conserva

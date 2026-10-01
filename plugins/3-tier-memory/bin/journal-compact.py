@@ -41,8 +41,9 @@ Fase 2 (sesiones, reglas, planes, research) — mismo principio, anclas de tabla
                    regla anclada por prefijo, conservando su numero (I1); --quickref-prefix quita
                    esa linea del Quick Reference sin renumerar. --por N tiene que ser una regla
                    viva del mismo topic; un ciclo va a cuarentena. Replay = noop.
-  plan.upsert      fila en '## Plans' por [[plans/plan-<slug>]] o titulo; actualiza Status,
-                   Sesion, Pendientes, Learnings (Fecha no cambia en updates); poda
+  plan.upsert      fila en '## Plans' por [[plans/plan-<slug>]] o, solo filas (inline), por
+                   titulo; actualiza Status, Sesion, Pendientes, Learnings (Fecha no cambia
+                   en updates); poda
                    completed/abandoned/superseded a los 5 mas recientes por Fecha.
                    --parent <slug> anota la celda Status como '<status> (fase de
                    plan-<slug>)' sin ampliar la tabla; la jerarquia real vive en el
@@ -2745,6 +2746,54 @@ def apply_learning_retire(mem, p):
 PARENT_ANNOTATION_RE = re.compile(r"\(fase de plan-([A-Za-z0-9._-]+)\)")
 
 
+# Wikilink canonico de un plan en la celda 0: la forma que escribe el journal (`\|`) y la de a mano
+# (`|`). Una fila asi tiene dueno; find_plan_rows la encuentra por su slug. El slug tiene los
+# caracteres y el largo (1-121) de SLUG_RE, y va pegado al cierre como en link_re: un enlace que
+# find_plan_rows nunca encontraria (`[[plans/plan-x \|T]]` con espacio, o un slug de 130
+# caracteres) tampoco cuenta como dueno (rondas 3 y 4 de adversario).
+PLAN_OWNER_RE = re.compile(r"\[\[plans/plan-[A-Za-z0-9][A-Za-z0-9._-]{0,120}(?:\\\||\||\]\])")
+
+
+def celda_inline(cell):
+    """True si la celda Plan es de un plan inline: termina en `(inline)` y NO lleva wikilink
+    canonico. Una celda mixta (`[[plans/plan-x\\|T]] (inline)`, escrita a mano) es de plan-x. Un
+    solo criterio para tomar una fila por titulo, para el guardian de --parent y para reescribir el
+    titulo: con criterios distintos, la fila propia mixta perdia su enlace al cambiar de titulo
+    (ronda 6 de adversario)."""
+    return cell.rstrip().endswith("(inline)") and not PLAN_OWNER_RE.search(cell)
+
+
+def plan_sin_archivo(mem, slug):
+    """True si no existe plans/plan-<slug>.md: el plan es (o puede ser) un --inline."""
+    return not os.path.exists(os.path.join(mem, "plans", f"plan-{slug}.md"))
+
+
+def inline_title_row(lines, rows, tplain):
+    """La fila `(inline)` de `rows` cuyo titulo plano es `tplain`, o None. Es el fallback por
+    titulo de plan.upsert y plan.reopen cuando find_plan_rows no encuentra el wikilink del slug.
+
+    SOLO filas `(inline)`, la unica forma sin dueno que escribe el journal. Mas estricto que
+    find_research_row, que acepta cualquier fila sin enlace de research. Antes casaba cualquier fila con ese titulo, y un plan.upsert sin fila propia
+    le cambiaba el enlace a la fila de OTRO plan titulado igual: ese plan perdia su fila en silencio
+    (p-e79c16c7e0). Filtrar solo las filas con `[[plans/` no bastaba (ronda 1 de adversario): un
+    enlace escrito a mano en otra forma (`[[Plans/`, `[[ plans/`) o una fila legacy sin enlace
+    pueden ser de otro plan. Una fila asi ya no casa por titulo: apply_plan_upsert la manda a
+    cuarentena (titulo-ambiguo).
+
+    Los llamantes solo lo usan si el plan puede ser inline: el evento trae --inline, o no existe
+    plans/plan-<slug>.md. Un plan con archivo que choca con una fila `(inline)` puede ser ese plan
+    ya promovido o uno ajeno con el mismo titulo; no se sabe (ronda 3 de adversario).
+
+    Una celda con wikilink canonico Y terminada en `(inline)` (escrita a mano) tiene dueno: no se
+    toma por titulo (ronda 5 de adversario). Ver celda_inline.
+
+    Limite: una fila `(inline)` solo guarda su titulo. Dos planes inline con el mismo titulo son
+    indistinguibles, y el primero en el indice gana."""
+    return next((i for i in rows
+                 if celda_inline(split_cells(lines[i])[0])
+                 and plain(split_cells(lines[i])[0]) == tplain), None)
+
+
 def find_plan_rows(lines, slug):
     """TODOS los indices de fila cuya celda 0 es el wikilink `[[plans/plan-<slug>|...]]`, en
     CUALQUIER tabla del archivo — sin el filtro de ancho de columnas de `find_row_anywhere` (que
@@ -2874,10 +2923,29 @@ def apply_plan_upsert(mem, p):
     if hit is None:
         # Fallback por titulo plano SOLO en la tabla canonica (no en todo el archivo): es para un
         # plan `--inline` (sin wikilink que buscar), y ampliarlo a cualquier tabla del mismo ancho
-        # arriesga enganchar una fila ajena por coincidencia de texto.
-        hit = next((i for i in rows if plain(split_cells(lines[i])[0]) == tplain), None)
+        # arriesga enganchar una fila ajena por coincidencia de texto. Ver inline_title_row.
+        if p.get("inline") or plan_sin_archivo(mem, slug):
+            hit = inline_title_row(lines, rows, tplain)
+        if hit is None:
+            # Una fila con este titulo sin el wikilink canonico de un plan (legacy escrita a mano,
+            # un enlace en otra forma: `[[Plans/`, `[[ plans/`; o una fila `(inline)` cuando este
+            # plan tiene archivo) no se sabe de quien es. Tomarla puede robarsela a otro plan; insertar una fila nueva
+            # duplica el plan si era suya (check-active-plans.py lo contaba dos veces y
+            # repair-plans-index.py no lo veia — ronda 2 de adversario de p-e79c16c7e0). Ninguna
+            # de las dos es segura: cuarentena, y que una persona la arregle.
+            dudosas = [i for i in rows
+                       if plain(split_cells(lines[i])[0]) == tplain
+                       and not PLAN_OWNER_RE.search(split_cells(lines[i])[0])]
+            if dudosas:
+                raise Quarantine(
+                    f"titulo-ambiguo: _plans-index.md tiene una fila titulada '{p['title']}' sin "
+                    f"wikilink canonico de plan — no se sabe si es de plan-{slug} o de otro plan. "
+                    f"Arreglala a mano: si es de plan-{slug}, ponle "
+                    f"[[plans/plan-{slug}\\|<titulo>]] en la celda Plan; si es de otro plan, el "
+                    f"enlace de ese plan; si es de un plan inline sin archivo, termina la celda en "
+                    f"(inline). Luego reaplica el evento.")
     is_inline_row = (
-        split_cells(lines[hit])[0].rstrip().endswith("(inline)")
+        celda_inline(split_cells(lines[hit])[0])
         if hit is not None else bool(p.get("inline"))
     )
     if hit is not None and status:
@@ -3007,7 +3075,7 @@ def apply_plan_upsert(mem, p):
         # (enlace o `(inline)`), nunca inventando una nueva. Medido 2026-09-11 sobre
         # plan-pendientes-diferidos-v2.13.0, cuyo titulo nombraba dos mecanismos ya descartados.
         if p.get("title"):
-            new[0] = (f"{p['title']} (inline)" if cells[0].rstrip().endswith("(inline)")
+            new[0] = (f"{p['title']} (inline)" if celda_inline(cells[0])
                       else f"[[plans/plan-{slug}\\|{p['title']}]]")
         if new == cells:
             return False
@@ -3065,7 +3133,10 @@ def apply_plan_reopen(mem, p):
         # el guardian del upsert ya no deja hacerlo con `--status active`.
         _, (_hdr, _sep, trows) = need_table(lines, "## Plans", "_plans-index.md")
         tplain = plain(p["title"])
-        hit = next((i for i in trows if plain(split_cells(lines[i])[0]) == tplain), None)
+        # Solo si el plan no tiene archivo: un plan con archivo no es inline, y una fila (inline)
+        # con su titulo es de otro plan o de una promocion que no se puede distinguir.
+        if plan_sin_archivo(mem, slug):
+            hit = inline_title_row(lines, trows, tplain)
     if hit is None:
         raise Quarantine(
             f"no-fila: plan-{slug} no tiene fila en _plans-index.md. O la poda la quito (solo se "
