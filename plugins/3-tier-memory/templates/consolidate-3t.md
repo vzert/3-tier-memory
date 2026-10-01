@@ -26,7 +26,7 @@ out of scope for dedup, supersede, and reflection.
 If `memory/` exists in the project root, use it (Model B). Otherwise check auto-memory (Model A).
 
 Since v2.12.0 other agents write rules through the journal (`bin/journal-emit.py` +
-`bin/journal-compact.py`). Compact FIRST, so you dedup and renumber against the real state and not
+`bin/journal-compact.py`). Compact FIRST, so you dedup and mark against the real state and not
 against a copy that is missing rules still sitting in `memory/.journal/pending/`:
 
 ```bash
@@ -57,7 +57,7 @@ fi
 Then read `memory/_learnings.md` and list the topic files in `memory/learnings/`.
 
 Which edits below go through the journal and which do not: **new rules** (Step 3 reflections)
-are emitted as `learning.add` events. **Merges, supersede markers, renumbering and
+are emitted as `learning.add` events. **Merges, supersede markers and
 `last_verified`** (Steps 1, 2, 4) are still direct edits, on purpose: they rewrite existing
 rules after the user approves each one, and no event can express "fold rule B into A". The
 window is bounded because you compacted just now and compact again in Step 4b; keep the direct
@@ -161,13 +161,16 @@ For each pair you confirm is a true duplicate, **print a proposal** before chang
 ```
 DEDUP:
 - learnings/<topic>.md "<texto A>" duplicates learnings/<topic>.md "<texto B>"  (jaccard 0.78)
-  → propose: keep the clearer one, fold the other's unique detail in, remove the duplicate
+  → propose: keep the clearer one, fold the other's unique detail in, mark the other as merged
 ```
 
 Apply only the merges the user approves (or all, if the user said "consolida todo").
 When merging:
 - Keep the clearest phrasing; preserve any unique detail from the other(s).
-- Tier 3: edit the canonical rule in `learnings/<topic>.md`; remove the merged-away rule(s) and renumber if needed.
+- Tier 3: edit the canonical rule in `learnings/<topic>.md`. **Never delete or renumber the
+  merged-away rule(s)**: rules are cited by number ("regla 142") in session files, code and other
+  rules, so its line stays with its number. Mark it with the same inline marker as Step 2, on its
+  own line: `N. **<old rule text>** — ⊘ SUPERSEDED by [[learnings/<topic>#M]] (YYYY-MM-DD): merged into #M`.
 - Tier 2: update the Quick Reference in `_learnings.md` if a merged rule was listed there.
 - If `memory/.memory-config` contains `journal_strict=1`, the plugin's PreToolUse guard denies these
   direct edits to `_learnings.md`. Merges are the one legitimate hand edit: set `journal_strict=0`,

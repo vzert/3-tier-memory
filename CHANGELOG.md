@@ -1,6 +1,45 @@
 # Changelog
 
 
+## [2.43.2] - 2026-10-01
+Origen: Fase F1 del plan de ciclo de vida de learnings. Un checkpoint guardo como regla nueva una
+leccion que el topic ya tenia con otras palabras, y `/consolidate-3t` mandaba renumerar al fusionar,
+lo que rompe las citas por numero ("regla 142"). Solo cambia texto de comandos y plantillas (mas
+README, CHANGELOG y la version); no hay codigo nuevo.
+
+### Changed
+- **`/checkpoint-3t` Step 4 decide antes de emitir (paso 0, Dedup).** Para cada learning candidato
+  el agente lista las reglas del topic (`grep ... | cut -c1-240`, para que un topic grande quepa),
+  compara por la leccion y no por las palabras, y decide una de cuatro: `nueva`, `ya existe #N` (no
+  emite nada), `corrige #N` (`learning.update`) o `reemplaza #N` (emite la nueva y retira N con un
+  `learning.update` que le añade `— ⊘ RETIRADA (fecha, reemplazada por ...)`; la linea de N no se
+  borra ni se renumera; si N esta en el Quick Reference, la marca va tambien ahi, para que la
+  reinyeccion periodica no la siga sirviendo). Step 4 pregunta tambien, aunque no haya learnings
+  nuevos, si la sesion mostro que una regla existente es falsa o ya no aplica.
+- **La ficha registra cada decision**, incluidos los `ya existe`, bajo `## Learnings generados`:
+  `- [[learnings/<topic>]] — **<titulo>** — decision: <...>`. El numero va fuera del wikilink porque
+  `checkpoint-audit.py` lee `[[learnings/<topic>]]` para comprobar el topic.
+- **`/consolidate-3t` ya no renumera ni borra al fusionar.** La regla fusionada se queda con su
+  numero y lleva el marcador de supersede de Step 2 (`⊘ SUPERSEDED by [[learnings/<topic>#M]]`).
+- `commands/migrate.md` (2e): el texto plano de un hook heredado llega al agente en `SessionStart`
+  y `UserPromptSubmit`; en los eventos de herramienta (`PostToolUse`, `PreToolUse`) no le llego al
+  medirlo, solo el JSON `additionalContext`. Medido con `claude -p --settings`: un token impreso en
+  texto plano por el hook no llego al modelo y el mismo token como `additionalContext` si
+  (`PostToolUse` en Claude Code 2.1.286, `PreToolUse` en 2.1.285; otras versiones sin medir). Antes
+  decia que llegaba en todos.
+- La revision del cierre (`checkpoint-close-guard.sh`, 2.42.0) cuenta como hecho a proposito un
+  candidato decidido `ya existe #N`: su linea 3 ("reglas aprendidas que no llegaron a learning") ya
+  no empuja a confesarlo como falla ni a emitirlo.
+- README al dia (Learnings).
+
+### Verificado
+- Un subagente sin contexto, con solo el Step 4 nuevo y un topic real copiado sin sus reglas
+  posteriores, decide `ya existe` ante una regla que repite una anterior con otras palabras; en el
+  corpus neutro del banco, lo mismo con `git-y-ci#17` contra `#3`. Con un learning de verdad nuevo
+  decide `nueva` en los dos corpus.
+- El banco de recall da lo mismo que en 2.42.1 (no hay codigo nuevo): corpus neutro
+  `prompt@4=12/14 dedup@8=4/4 fuga=0`, linea base reproducida.
+
 ## [2.43.1] - 2026-09-30
 Origen: Codex, rondas 7 y 8 sobre `compaction-recover.py` 2.41.10 (break en las dos), y un fallo que
 vio la sesion 3-tier-memory-02 en `test-compaction-recover.sh`.

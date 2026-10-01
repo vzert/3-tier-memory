@@ -81,7 +81,7 @@ That's it. `/checkpoint` saves your session, extracts action items, captures lea
 
 - **Session logs** — automatic session tracking with git commits
 - **Action items tracking** — dual-write system (active aggregator + monthly archive)
-- **Learnings** — topic-based knowledge from past mistakes, injected at session start
+- **Learnings** — topic-based knowledge from past mistakes, injected at session start. Since 2.43.2 `/checkpoint-3t` checks each candidate against the rules already in its topic before saving it and records one decision per learning in the session log (`nueva`, `ya existe #N`, `corrige #N`, `reemplaza #N`); a rule keeps its number forever — `/consolidate-3t` marks merged rules instead of deleting and renumbering them
 - **Plans & Research** — lifecycle tracking from idea to execution (when applicable)
 - **Recovery after compaction** — since 2.39.0, if the session was compacted (once or several times) since the last checkpoint, `/checkpoint-3t` detects it in the session's JSONL, which still holds everything the summary dropped. It extracts that stretch into clean blocks (`bin/compaction-recover.py`) and parallel Sonnet subagents mine them for learnings, action items, plans and research. Those candidates then go through the same dedup and reconciliation as everything else, so letting the context run out no longer loses what happened before the summary
 - **Relevance recall** — on every prompt, the most relevant memory (rules, sessions, action items) is surfaced automatically, ranked by `relevance × recency × importance` (lexical engine, zero dependencies)

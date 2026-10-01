@@ -710,7 +710,8 @@ REVISION_ITEMS = (
 POR_DISENO = ("no publicar los commits (el checkpoint no sube nada); el hash del commit de memoria "
               "como referencia adelantada; el alcance acotado de 3a con su linea RECONCILIACION; "
               "avisos que vienen de otra sesion (`ids_invented`, pendientes ajenos vencidos que no "
-              "te toca cerrar)")
+              "te toca cerrar); un candidato a learning decidido `ya existe #N` en el paso 0 de "
+              "Step 4 (no se emite a proposito)")
 
 
 def revision_contestada():

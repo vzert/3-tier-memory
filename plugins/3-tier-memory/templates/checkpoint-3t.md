@@ -123,7 +123,7 @@ miles de caracteres cada uno.
 2. **Los candidatos son ENTRADA de los Steps 1-5, no un escritor aparte.** Pasan por los mismos
    pasos que lo que tienes en contexto: el slug (Step 1) y el session file (Step 2) cubren TODA la
    sesion, no solo el tramo vivo; cada pendiente pasa por la reconciliacion de Step 3a/3b; cada
-   learning por la deduplicacion de Step 4; cada plan/research por las senales de Step 5. Asi el
+   learning por el paso 0 (Dedup) de Step 4; cada plan/research por las senales de Step 5. Asi el
    dedupe y los ids salen gratis — no emitas eventos directamente desde aqui.
 
 3. **La evidencia mas reciente gana:** contexto vivo > bloque posterior > bloque anterior. Un
@@ -177,7 +177,8 @@ importance: <0-10>
 - <research/investigations done this session with wikilinks, or "Ninguno">
 
 ## Learnings generados
-- <links to learnings/ files, or "Ninguno">
+- [[learnings/<topic>]] — **<titulo de la regla>** — decision: <nueva | ya existe #N (no emitido) | corrige #N | reemplaza #N (#N retirada) | retira #N>
+<one line per candidate, written in Step 4 step 0 (Dedup), including `ya existe`. Or "Ninguno".>
 
 ## Callejones sin salida
 - <what was tried> → <why it failed> → <what to do instead>
@@ -592,7 +593,59 @@ invented: drop it and re-read the file.
 
 Review session for new patterns, gotchas, rules, or mistakes discovered.
 
-For EACH learning, emit one `learning.add` event; the compactor writes both tiers in Step 5a:
+### 0. Dedup — decide ANTES de emitir (cada learning, sin excepcion)
+
+Una regla que ya existe, escrita otra vez con otras palabras, no es un learning nuevo: el recall
+devuelve las dos, el topic crece, y la proxima sesion no sabe cual manda. Paso real: se guardo la
+regla "no hacer commit mientras corre el review" cuando el topic ya tenia "el review aborta si el
+arbol se mueve a mitad", que es la misma leccion.
+
+Para cada learning candidato, antes de emitir nada:
+
+1. Lista las reglas del topic donde lo vas a escribir (ya compactaste en Step 3; recorta cada
+   linea para que un topic grande quepa):
+
+   ```bash
+   grep -E '^([0-9]+\. |[-*] \*\*)' "$MEMORY_DIR/learnings/<topic-slug>.md" | cut -c1-240
+   ```
+
+   Si el topic no existe todavia, o la leccion toca otro topic, busca 2-3 palabras clave en todos:
+   `grep -rniE '<clave1>|<clave2>' "$MEMORY_DIR/learnings/" | cut -c1-240`.
+2. Compara por la LECCION, no por las palabras: dos reglas son la misma si el agente que siguiera
+   la vieja ya no habria cometido el error que te enseño la nueva. Otro incidente, otra fecha u
+   otro ejemplo de la misma leccion NO la hacen nueva.
+3. Decide UNA de estas cuatro:
+   - `nueva` — ninguna regla cubre la leccion. Emite `learning.add` (abajo).
+   - `ya existe #N` — la regla N ya la cubre. **No emitas nada.** Si el incidente de hoy aporta
+     un dato que N no tiene (un comando, una fecha), eso es `corrige #N`, no una regla nueva.
+   - `corrige #N` — N cubre la leccion pero su texto quedo incompleto o falso. `learning.update`
+     de N (seccion siguiente); el numero se conserva.
+   - `reemplaza #N` — la leccion nueva contradice a N y N deja de valer. Emite la nueva con
+     `learning.add` y retira N con un `learning.update` que conserva su texto y le añade al
+     final `— ⊘ RETIRADA (YYYY-MM-DD, reemplazada por la nueva regla "<titulo>")`. La linea de N
+     no se borra ni se renumera. Si N esta en el `## Quick Reference` de `_learnings.md`, pasa en
+     ese mismo `learning.update` `--quickref-prefix`/`--quickref` con la marca tambien: si no, la
+     reinyeccion periodica sigue sirviendo la version corta de N como si valiera.
+4. Escribe la decision en la ficha, bajo `## Learnings generados`: una linea por candidato,
+   **incluidos los `ya existe`** (asi se ve que el dedup se hizo), con este formato exacto:
+
+   ```
+   - [[learnings/<topic-slug>]] — **<titulo de la regla>** — decision: ya existe #N (no emitido)
+   ```
+
+   `decision:` lleva `nueva`, `ya existe #N (no emitido)`, `corrige #N`, `reemplaza #N (#N
+   retirada)` o `retira #N`. El numero va FUERA del wikilink: `checkpoint-audit.py` lee
+   `[[learnings/<topic-slug>]]` para comprobar que el topic existe, y `[[learnings/<topic>#N]]` lo
+   haria buscar un fichero `<topic>#N.md`.
+
+**Pregunta obligatoria, aunque no tengas learnings nuevos:** ¿esta sesion mostro que alguna regla
+EXISTENTE es falsa o ya no aplica? Si la regla sigue viva con otro texto → `corrige #N`
+(`learning.update`). Si ya no aplica y nada la reemplaza → retirala con un `learning.update` que
+conserva su texto y añade `— ⊘ RETIRADA (YYYY-MM-DD): <motivo en una linea>` (y lo mismo en su
+Quick Reference, si esta ahi). Anotalo en la ficha igual que un candidato.
+
+For EACH learning decided `nueva` (or the new half of `reemplaza #N`), emit one `learning.add`
+event; the compactor writes both tiers in Step 5a:
 
 ```bash
 python3 "$JBIN/journal-emit.py" --type learning.add --topic <topic-slug> \
