@@ -25,6 +25,10 @@ M = {
     # checkpoint-close-guard.sh
     "emoji-no-exigido": [
         ("nueva = bool(m_fecha and m_fecha.group(1) >= CORTE_CAPAS)", "nueva = False")],
+    "cabecera-rfind": [
+        ("_j = inicio_revision(_todo)", "_j = _todo.rfind(REVISION_CABECERA)")],
+    "fences-sin-control": [
+        ("            if fences > permitidos:", "            if False:")],
     # checkpoint-audit.py
     "reco-sin-dueno-pasa": [
         ('pendientes_reco.append((r, "sin pendiente que la lleve", l.strip()))', "pass")],

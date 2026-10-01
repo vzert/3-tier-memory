@@ -35,14 +35,22 @@ en color.
 - **`checkpoint-close-guard.sh`** compara cada bloque contra la salida de su script (el calendario
   tambien, en los dos caminos), mide el orden nuevo y, en fichas desde el 2026-10-01, exige la
   cabecera con emoji de cada bloque. En una ficha anterior solo exige el contenido: su cierre se
-  escribio con el formato viejo.
+  escribio con el formato viejo. Desde la cabecera 🔁 tras la revision solo admite los dos fences
+  del snippet (ninguno en el caso 5): un 🔔 o un 🗓️ envuelto en un fence tambien saldria en color.
+
+### Fixed
+- **La cabecera `REVISION DEL CIERRE:` cuenta solo al inicio de una linea** (`checkpoint-close-guard.sh`).
+  Se buscaba con `rfind` en todo el texto, y un recordatorio de calendario que cita la frase a mitad
+  de linea pasaba por la cabecera: el cierre entero quedaba "antes de la revision" y el hook avisaba
+  en falso, tambien de que la revision no estaba contestada. El fallo venia de 2.43.0 y salio con una
+  ficha real (adversario externo de 2.44.0).
 
 ### Tests
 - `test-print-pendiente-opcional.sh` reescrito por capas (37 asertos); `test-print-recordatorios.sh`
   nuevo (13); `test-print-como-retomar.sh` con la cabecera y el fence; `test-checkpoint-close-guard.sh`
-  con 21 asertos de 2.44.0 (156 en total); `test-checkpoint-audit.sh` con el dueno de cada
+  con 26 asertos de 2.44.0 (161 en total); `test-checkpoint-audit.sh` con el dueno de cada
   recomendacion (228).
-- `tools/mutation-check.sh`: 7 casos nuevos (`m_capas_cierre.py`), uno por pieza; 54 de 54
+- `tools/mutation-check.sh`: 9 casos nuevos (`m_capas_cierre.py`), uno por pieza; 56 de 56
   discriminan.
 ## [2.43.3] - 2026-10-01
 Origen: pendiente p-9622e75fe3. La prosa de Step 0b describia el `--verificar` de 2.41.10. Solo

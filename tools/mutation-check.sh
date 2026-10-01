@@ -95,6 +95,8 @@ caso "🔔 uno cada vez" print-pendiente-opcional.py m_capas_cierre.py test-prin
 caso "cabecera 🔁 del snippet" print-como-retomar.py m_capas_cierre.py test-print-como-retomar.sh "empieza con la cabecera" sin-cabecera-retomar
 caso "🗓️ sin fence" print-recordatorios.py m_capas_cierre.py test-print-recordatorios.sh "sin fences" calendario-con-fence
 caso "el hook exige el emoji" checkpoint-close-guard.sh m_capas_cierre.py test-checkpoint-close-guard.sh "reclama el snippet sin emoji" emoji-no-exigido
+caso "cabecera de la revision" checkpoint-close-guard.sh m_capas_cierre.py test-checkpoint-close-guard.sh "la cita no tapa la cabecera" cabecera-rfind
+caso "solo Retomamos en color" checkpoint-close-guard.sh m_capas_cierre.py test-checkpoint-close-guard.sh "reclama el fence fuera del snippet" fences-sin-control
 caso "recomendacion con dueno" checkpoint-audit.py m_capas_cierre.py test-checkpoint-audit.sh "avisa del research" reco-sin-dueno-pasa
 
 echo "Contrato de check-project-dir-fallback.py (2.41.4): cada pieza, rota, tumba su aserto"

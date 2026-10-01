@@ -403,8 +403,21 @@ def exigidas(salida, nueva):
                     continue
         out.append(l)
     return out
+# La cabecera de la revision cuenta solo al INICIO de una linea (admite marcas de markdown delante).
+# Con `rfind` sobre todo el texto, la frase citada dentro de un bloque del cierre (el prompt de un
+# recordatorio que dice "tras REVISION DEL CIERRE: vienen...") pasaba por la cabecera y el cierre
+# entero quedaba "antes de la revision" (adversario externo de 2.44.0, sobre una ficha real).
+CABECERA_RE = re.compile(r"(?m)^[ \t#>*_]*" + re.escape(REVISION_CABECERA))
+
+
+def inicio_revision(t):
+    ms = list(CABECERA_RE.finditer(t))
+    return ms[-1].start() if ms else -1
+
+
+cierre_nuevo = False  # alguna ficha del turno es del corte de capas y va en el cierre diferido
 _todo = "\n".join(textos)
-_j = _todo.rfind(REVISION_CABECERA)
+_j = inicio_revision(_todo)
 visto_tras_revision = plano(_todo[_j:]) if _j >= 0 else ""
 
 
@@ -479,6 +492,8 @@ def revisar(ficha):
     # Turno de /checkpoint-3t con revision: el cierre (snippet, 8e, calendario) va AL FINAL.
     diferido = bool(por_checkpoint and m_fecha and m_fecha.group(1) >= DESDE_REVISION)
     nueva = bool(m_fecha and m_fecha.group(1) >= CORTE_CAPAS)
+    global cierre_nuevo
+    cierre_nuevo = cierre_nuevo or (nueva and diferido)
     base = visto_tras_revision if (diferido and reentrante) else visto
     donde = "despues de tu revision del cierre" if diferido else "en tu respuesta"
 
@@ -679,6 +694,18 @@ if reentrante and presentes and not anexo:
         otros.append(f"el snippet sale {v.count(snip[0])} veces despues de la revision")
     if bloques and not otros and len(v) - cursor > COLA_MAX:
         otros.append(f"despues del ultimo bloque siguen {len(v) - cursor} caracteres de texto")
+    # Solo el snippet va en color (2.44.0, regla 6 de Victor): desde la ultima cabecera 🔁 tras la
+    # revision, los unicos fences permitidos son los dos del snippet (ninguno en el caso 5). Un
+    # 🔔 o un 🗓️ envuelto en un fence tambien saldria en color (adversario externo de 2.44.0).
+    if cierre_nuevo and not otros:
+        crudo = _todo[_j:] if _j >= 0 else ""
+        cabs = [m.start() for m in re.finditer(r"(?m)^🔁 ", crudo)]
+        if cabs:
+            fences = len(re.findall(r"(?m)^[ \t]*(?:`{3,}|~{3,})", crudo[cabs[-1]:]))
+            permitidos = 2 if any(o == 1 and "```" in ls for o, ls, _ in presentes) else 0
+            if fences > permitidos:
+                otros.append(f"hay {fences - permitidos} linea(s) de fence fuera del snippet: solo "
+                             "Retomamos va en color, el pendiente y el calendario van sin fence")
     if otros:
         problemas.append("El cierre no quedo como lo ultimo y una sola vez: " + "; ".join(otros) + ".")
         anexo = [(o, t.strip("\n")) for o, _, t in presentes]
@@ -721,7 +748,7 @@ def revision_contestada():
     fuerza la revision es el turno nuevo, no este chequeo; esto solo avisa al usuario si ni
     siquiera se contesto."""
     resto = "\n".join(textos)
-    j = resto.rfind(REVISION_CABECERA)
+    j = inicio_revision(resto)
     if j < 0:
         return False
     resto = resto[j:]
