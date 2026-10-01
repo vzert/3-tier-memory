@@ -1,8 +1,8 @@
 import io, sys
 # El cierre al FINAL de checkpoint-close-guard.sh (2.43.0): en un turno de /checkpoint-3t el snippet,
-# el calendario, 8d y 8e se pegan despues de la revision del cierre. Tres piezas, cada una con su
+# el calendario, 8d y 8e se pegan despues de la revision del cierre. Cuatro piezas, cada una con su
 # aserto en test-checkpoint-close-guard.sh: diferir el primer cierre, medir solo tras la revision
-# en el cierre reentrante, y ensenarle al usuario el cierre que no quedo al final.
+# en el cierre reentrante, ensenarle al usuario el cierre que no quedo al final, y la cola.
 #
 # Uso: m_cierre_final.py <fichero> <mutacion>
 # Patrones de una sola linea, sin "\n": el checkout de Windows trae CRLF (regla 322).
@@ -16,7 +16,7 @@ M = {
     "sin-anexo": [
         ("    if anexo:", "    if False:")],
     "sin-cola": [
-        ("if fines and len(v) - max(fines) > COLA_MAX:", "if False:")],
+        ("if bloques and not otros and len(v) - cursor > COLA_MAX:", "if False:")],
 }
 
 p, nombre = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""

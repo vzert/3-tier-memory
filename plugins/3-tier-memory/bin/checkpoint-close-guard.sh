@@ -655,21 +655,29 @@ for _f in fichas:
 # final es el unico arreglo posible y lo que importa es que sea lo ultimo.
 if reentrante and presentes and not anexo:
     v = visto_tras_revision
-    fines, inicios = [], []
-    for orden, lineas, _ in sorted(presentes, key=lambda x: x[0]):
-        ls = [plano(l) for l in lineas if plano(l)]
-        if not ls:
-            continue
-        inicios.append((orden, v.rfind(ls[0])))
-        fines += [v.rfind(l) + len(l) for l in ls if v.rfind(l) >= 0]
+    # Se recorre el cierre HACIA ADELANTE, linea a linea y bloque a bloque en su orden, desde el
+    # ULTIMO inicio del primer bloque: el fin es donde termina esa lectura, no la ultima aparicion
+    # de cada linea (adversario de 2.43.0, ronda 2: con `rfind`, una linea de 8e repetida al final
+    # tapaba 500 caracteres de cola). Una linea que no aparece despues de la anterior es desorden.
+    bloques = [[plano(l) for l in ls if plano(l)] for _, ls, _ in sorted(presentes, key=lambda x: x[0])]
+    bloques = [b for b in bloques if b]
     otros = []
-    if [i for _, i in inicios] != sorted(i for _, i in inicios):
-        otros.append("no van en el orden snippet, calendario, recomendaciones de research, prompt opcional")
+    cursor = v.rfind(bloques[0][0]) if bloques else -1
+    for b in bloques:
+        for l in b:
+            pos = v.find(l, cursor)
+            if pos < 0:
+                otros.append("no van en el orden snippet, calendario, recomendaciones de research, prompt opcional")
+                break
+            cursor = pos + len(l)
+        else:
+            continue
+        break
     snip = [plano(l) for o, ls, _ in presentes if o == 1 for l in ls if plano(l)]
     if snip and v.count(snip[0]) > 1:
         otros.append(f"el snippet sale {v.count(snip[0])} veces despues de la revision")
-    if fines and len(v) - max(fines) > COLA_MAX:
-        otros.append(f"despues del ultimo bloque siguen {len(v) - max(fines)} caracteres de texto")
+    if bloques and not otros and len(v) - cursor > COLA_MAX:
+        otros.append(f"despues del ultimo bloque siguen {len(v) - cursor} caracteres de texto")
     if otros:
         problemas.append("El cierre no quedo como lo ultimo y una sola vez: " + "; ".join(otros) + ".")
         anexo = [(o, t.strip("\n")) for o, _, t in presentes]
