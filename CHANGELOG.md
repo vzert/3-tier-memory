@@ -1,6 +1,38 @@
 # Changelog
 
 
+## [2.43.1] - 2026-09-30
+Origen: Codex, rondas 7 y 8 sobre `compaction-recover.py` 2.41.10 (break en las dos), y un fallo que
+vio la sesion 3-tier-memory-02 en `test-compaction-recover.sh`.
+
+### Fixed
+- **`--verificar DIR` ya no da por bueno un tramo que no es el que se escribio.** Con la suma de
+  caracteres sola pasaban rutas repetidas, una lista recortada, un archivo ajeno del mismo largo, un
+  bloque con el contenido cambiado sin cambiar el largo, `chars=true` y una tuberia con nombre (que
+  ademas colgaba la lectura). Ahora el manifest guarda el SHA-256 de cada bloque, y `--verificar`
+  exige: cada bloque se llama `chunk-NN.md` y va en orden; es un archivo normal dentro de DIR (no un
+  enlace, una tuberia ni un dispositivo); su huella cuadra; empieza con la cabecera "bloque i de N";
+  y `chars` es un entero, no un booleano. Caso R7: seis estados, rojos contra 4cc18db.
+- **Un bloque que sobra da `verificado=0`** (ronda 8). En un directorio reusado, un `chunk-02.md` de
+  otra corrida sobrevivia a una corrida de un bloque y pasaba la comprobacion. Ahora cualquier
+  `chunk-NN.md` de DIR fuera de la lista da `reason=bloque-sobrante`. Caso R7 sobrante.
+- **Bloques con `\r\n` o `0x1A` en Windows.** `--verificar` abre con `O_BINARY`: sin el, `os.open`
+  lee en modo texto y la huella de un bloque sano no cuadraria. Caso R7 crlf: en macOS y Linux es una
+  guardia; el rojo de verdad seria en windows-latest.
+- **Exit 1 con stdout a un archivo ya cerrado.** El `reconfigure()` de stdout/stderr corria fuera de
+  todo `try` al cargar el script; con stdout a un archivo, pedia `tell()` al descriptor cerrado. El
+  caso R2 "stdout cerrado" fallaba o pasaba segun adonde mandara la salida quien corria el test.
+  Ahora corre con las dos formas (archivo y tuberia); la de archivo es roja contra 4cc18db.
+- Un comentario del test aun describia la regla vieja de Step 0b ("el manifest existe y no esta
+  vacio").
+
+### Notas
+- Cambio de formato: un manifest de 2.41.10 (sin `sha256`) da `verificado=0
+  reason=manifest-incompleto`. En Step 0b escritor y verificador son la misma version, asi que en uso
+  normal no se cruzan.
+- Siguen declarados: carreras con otro proceso del mismo usuario (`dir_fd`, que Windows no tiene) y
+  los casos de enlace de R4 sin correr en windows-latest (pendiente activar `MSYS=winsymlinks:nativestrict`).
+
 ## [2.43.0] - 2026-09-30
 Origen: Victor, tras correr 2.42.0 en varios proyectos. La revision del cierre funciona (el agente
 completa lo que le falto), pero el snippet de continuidad queda enterrado debajo de ella y hay que
