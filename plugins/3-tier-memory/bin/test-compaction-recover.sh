@@ -366,7 +366,10 @@ case "$OUT" in "recover=0 reason=fallo-escritura "*" restos=1"*) ok "ni borrar n
 
 echo "R4. ronda 4 de Codex sobre 2.41.7: otras excepciones, vaciado al salir, ruta con sustituto,"
 echo "    restos de mas, --out-dir enlace, enlace puesto en lugar del bloque, manifest como marca"
-# Enlaces reales: en Git Bash sin modo desarrollador `ln -s` copia, y los casos de enlace no prueban nada.
+# Enlaces reales: en Git Bash `ln -s` copia por defecto, y los casos de enlace no prueban nada.
+# winsymlinks:nativestrict le pide un enlace nativo de Windows, o que falle si no puede (sin modo
+# desarrollador ni privilegio de administrador): entonces ENLACES=0 y los 2 casos se saltan.
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) export MSYS="${MSYS:+$MSYS }winsymlinks:nativestrict";; esac
 ln -s "$F" "$TMP/prueba-enlace" 2>/dev/null; [ -L "$TMP/prueba-enlace" ] && ENLACES=1 || ENLACES=0
 # Un preTokens que no es numero no es un fallo de escritura: recupera el tramo con pre_tokens=0.
 F4="$TMP/r4-pre.jsonl"
@@ -413,11 +416,13 @@ if [ $ENLACES -eq 1 ]; then
   [ -z "$(ls -A "$TMP/destino-dir")" ] && ok "--out-dir enlace: no escribe en el destino" || bad "R4 --out-dir enlace: escribio en el destino"
   # Otro pone un enlace en lugar del bloque antes de la limpieza: ni se vacia su destino ni se borra.
   printf 'CONSERVAR\n' > "$TMP/destino-carrera.txt"; mkdir -p "$TMP/or4-carrera/manifest.json"
+  # La ruta va DENTRO del codigo de Python, donde MSYS no la convierte: en Windows, forma nativa.
+  DESTINO=$(cygpath -m "$TMP/destino-carrera.txt" 2>/dev/null || printf '%s' "$TMP/destino-carrera.txt")
   OUT=$(envuelto "_rm = os.remove
 def rm(p):
     if p.endswith('chunk-01.md'):
         _rm(p)
-        os.symlink('$TMP/destino-carrera.txt', p)
+        os.symlink('$DESTINO', p)
     raise PermissionError(13, 'sin permiso', p)
 os.remove = rm" "$TMP/or4-carrera"); RC=$?
   [ $RC -eq 0 ] && ok "enlace en lugar del bloque: sale 0" || bad "R4 carrera: exit=$RC"
