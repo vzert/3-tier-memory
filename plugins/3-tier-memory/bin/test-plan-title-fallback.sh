@@ -208,6 +208,100 @@ chk "la fila conserva el enlace a plan-propia" "1" "$(filas '[[plans/plan-propia
 chk "no queda como inline sin dueno" "0" "$(grep -cxF '| Mixta renombrada (inline) | active | 2026-08-01 |  |  |  |' "$M/_plans-index.md")"
 chk "sin cuarentena" "0" "$(cuar)"
 
+# Promocion (p-236102b948). Un plan --inline que despues recibe plans/plan-<slug>.md no se puede
+# promover por regla: el indice queda igual que en el caso 10 (fila (inline) de OTRO plan + plan
+# con archivo), y la fila inline no guarda el slug. La identidad la pone el evento: --promote dice
+# "la UNICA fila (inline) con este titulo es de este plan". Sin --promote sigue el caso 10.
+echo "== 16. --promote: la fila (inline) del plan pasa a [[plans/plan-<slug>|T]], sin duplicar =="
+fixture
+mkdir -p "$M/sessions"; printf "# s1\n" > "$M/sessions/s1.md"
+emit --type plan.upsert --slug prom --inline --title "Plan promovido" --status active --date 2026-09-01 --sesion "[[sessions/s1]]"
+compact
+mkdir -p "$M/plans"; printf '# Plan promovido\n' > "$M/plans/plan-prom.md"
+emit --type plan.upsert --slug prom --promote --title "Plan promovido" --status completed --date 2026-09-05
+compact
+chk "la fila lleva el enlace del plan" "1" "$(filas '[[plans/plan-prom\|Plan promovido]]')"
+chk "no queda fila (inline)" "0" "$(filas 'Plan promovido (inline)')"
+chk "una sola fila con ese titulo" "1" "$(grep -c 'Plan promovido' "$M/_plans-index.md")"
+chk "status nuevo" "completed" "$(status '[[plans/plan-prom\|')"
+chk "conserva la fecha de creacion" "2026-09-01" "$(grep -F '[[plans/plan-prom\|' "$M/_plans-index.md" | awk -F' \\| ' '{print $3}')"
+chk "conserva la sesion" "1" "$(grep -F '[[plans/plan-prom\|' "$M/_plans-index.md" | grep -cF '[[sessions/s1]]')"
+chk "sin cuarentena" "0" "$(cuar)"
+# Replay del mismo evento: ya hay fila propia, --promote no hace nada mas.
+emit --type plan.upsert --slug prom --promote --title "Plan promovido" --status completed --date 2026-09-05
+compact
+chk "replay: sigue una sola fila" "1" "$(grep -c 'Plan promovido' "$M/_plans-index.md")"
+chk "replay: sin cuarentena" "0" "$(cuar)"
+
+echo "== 17. --promote con DOS filas (inline) del mismo titulo: cuarentena, no toma ninguna =="
+fixture
+emit --type plan.upsert --slug base17 --title "Base" --status active --date 2026-09-01
+compact
+printf '| Gemelo (inline) | active | 2026-08-01 |  |  |  |\n' >> "$M/_plans-index.md"
+printf '| Gemelo (inline) | completed | 2026-08-02 |  |  |  |\n' >> "$M/_plans-index.md"
+mkdir -p "$M/plans"; printf '# Gemelo\n' > "$M/plans/plan-gem.md"
+emit --type plan.upsert --slug gem --promote --title "Gemelo" --status active --date 2026-09-02
+compact
+chk "la primera fila inline intacta" "1" "$(grep -cxF '| Gemelo (inline) | active | 2026-08-01 |  |  |  |' "$M/_plans-index.md")"
+chk "la segunda fila inline intacta" "1" "$(grep -cxF '| Gemelo (inline) | completed | 2026-08-02 |  |  |  |' "$M/_plans-index.md")"
+chk "plan-gem sin fila" "0" "$(filas '[[plans/plan-gem\|')"
+chk "el evento va a cuarentena" "1" "$(cuar)"
+chk "motivo titulo-ambiguo" "1" "$(grep -l 'titulo-ambiguo' "$M/.journal/quarantine/"*.reason 2>/dev/null | wc -l | tr -d ' ')"
+
+echo "== 18. --promote nunca toma la fila ENLAZADA de otro plan con el mismo titulo =="
+fixture
+emit --type plan.upsert --slug dueno --title "Enlazado" --status active --date 2026-09-01
+compact
+mkdir -p "$M/plans"; printf '# Enlazado\n' > "$M/plans/plan-ladron.md"
+emit --type plan.upsert --slug ladron --promote --title "Enlazado" --status completed --date 2026-09-02
+compact
+chk "plan-dueno conserva su fila" "active" "$(status '[[plans/plan-dueno\|')"
+chk "plan-ladron sin fila" "0" "$(filas '[[plans/plan-ladron\|')"
+chk "el evento va a cuarentena" "1" "$(cuar)"
+
+echo "== 19. --promote sin plans/plan-<slug>.md: cuarentena, la fila (inline) intacta =="
+fixture
+emit --type plan.upsert --slug sinarch --inline --title "Sin archivo" --status active --date 2026-09-01
+compact
+emit --type plan.upsert --slug sinarch --promote --title "Sin archivo" --status completed --date 2026-09-02
+compact
+chk "la fila inline sigue active" "active" "$(status 'Sin archivo (inline)')"
+chk "el evento va a cuarentena" "1" "$(cuar)"
+
+echo "== 20. --promote sin fila (inline) con ese titulo: cuarentena, no inserta fila =="
+fixture
+emit --type plan.upsert --slug base20 --title "Base" --status active --date 2026-09-01
+compact
+mkdir -p "$M/plans"; printf '# x\n' > "$M/plans/plan-huerfano.md"
+emit --type plan.upsert --slug huerfano --promote --title "No existe" --status active --date 2026-09-02
+compact
+chk "plan-huerfano sin fila" "0" "$(filas '[[plans/plan-huerfano\|')"
+chk "el evento va a cuarentena" "1" "$(cuar)"
+
+echo "== 21. el emisor rechaza --promote junto a --inline =="
+fixture
+python3 "$BIN/journal-emit.py" --memory-dir "$M" --type plan.upsert --slug x21 --promote --inline \
+  --title "X" --status active >/dev/null 2>&1
+chk "sale con error" "1" "$([ $? -ne 0 ] && echo 1 || echo 0)"
+chk "no escribe evento" "0" "$(ls "$M/.journal/pending/" 2>/dev/null | wc -l | tr -d ' ')"
+
+echo "== 22. --promote de un plan inline CERRADO con --status active: noop y el aviso da el orden =="
+# El guardian de reversa (2.37.0) descarta el evento entero, asi que la fila sigue (inline). El
+# aviso no puede mandar solo a plan.reopen: con archivo, reopen no encuentra una fila (inline).
+fixture
+emit --type plan.upsert --slug cerr --inline --title "Inline cerrado prom" --status completed --date 2026-09-01
+compact
+mkdir -p "$M/plans"; printf '# x\n' > "$M/plans/plan-cerr.md"
+emit --type plan.upsert --slug cerr --promote --title "Inline cerrado prom" --status active
+compact
+chk "la fila sigue (inline) y completed" "completed" "$(status 'Inline cerrado prom (inline)')"
+chk "el aviso pide promover con el status cerrado" "1" "$(grep -c 'promueve primero con --promote --status completed' "$M/../compact.log")"
+emit --type plan.upsert --slug cerr --promote --title "Inline cerrado prom" --status completed
+emit --type plan.reopen --slug cerr
+compact
+chk "promovido y reabierto" "active" "$(status '[[plans/plan-cerr\|')"
+chk "sin cuarentena" "0" "$(cuar)"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

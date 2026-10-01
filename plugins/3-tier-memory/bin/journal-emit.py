@@ -75,9 +75,12 @@ Tipos de evento:
                     uno de los cuatro campos, y --text/--quickref exigen su prefijo: no se
                     reescribe una regla a ciegas.
   plan.upsert       --slug S --title T --status ST [--date D] [--sesion [[sessions/..]]]
-                    [--pendientes N] [--learnings N] [--inline] [--parent P]            (Fase 2)
+                    [--pendientes N] [--learnings N] [--inline|--promote] [--parent P]  (Fase 2)
                     Fila en _plans-index.md por slug (o titulo, solo filas (inline));
                     actualiza celdas dadas.
+                    --promote: el plan era --inline y ya tiene plans/plan-S.md; su UNICA fila
+                    (inline) titulada T pasa a [[plans/plan-S|T]]. Sin el flag, ese upsert va a
+                    cuarentena titulo-ambiguo (la fila (inline) no guarda el slug).
                     --parent anota la celda Status como '<status> (fase de plan-P)'.
   plan.reopen       --slug S [--title T]                                              (2.37.0)
                     Reabre un plan cerrado (completed/abandoned/superseded -> active), conserva
@@ -481,6 +484,7 @@ def main():
     ap.add_argument("--pendientes", default="")
     ap.add_argument("--learnings", default="")
     ap.add_argument("--inline", action="store_true")
+    ap.add_argument("--promote", action="store_true")
     ap.add_argument("--parent")
     ap.add_argument("--tema")
     ap.add_argument("--tema-viejo", dest="tema_viejo")   # research.rename
@@ -708,6 +712,9 @@ def main():
                       "-- un plan --inline no lleva wikilink en el indice y el guardian de ciclos "
                       "no lo puede rastrear como eslabon (compact.py lo rechaza igual si ya era "
                       "--inline de un evento anterior)")
+        if a.promote and a.inline:
+            sys.exit("journal-emit: --promote y --inline no se pueden combinar -- --promote convierte "
+                      "la fila (inline) del plan en una fila con su wikilink")
         base["payload"] = {
             "slug": slug,
             "title": cell(need(a.title, "plan.upsert necesita --title")),
@@ -717,6 +724,7 @@ def main():
             "pendientes": cell(a.pendientes),
             "learnings": cell(a.learnings),
             "inline": bool(a.inline),
+            "promote": bool(a.promote),
             "parent": parent,
         }
         avisar_origen_colgante(a.sesion, memory_dir)   # en plan.upsert el campo se llama --sesion

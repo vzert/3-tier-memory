@@ -42,7 +42,8 @@ Fase 2 (sesiones, reglas, planes, research) — mismo principio, anclas de tabla
                    esa linea del Quick Reference sin renumerar. --por N tiene que ser una regla
                    viva del mismo topic; un ciclo va a cuarentena. Replay = noop.
   plan.upsert      fila en '## Plans' por [[plans/plan-<slug>]] o, solo filas (inline), por
-                   titulo; actualiza Status, Sesion, Pendientes, Learnings (Fecha no cambia
+                   titulo; --promote convierte la UNICA fila (inline) con ese titulo en
+                   [[plans/plan-<slug>|T]] si existe plans/plan-<slug>.md; actualiza Status, Sesion, Pendientes, Learnings (Fecha no cambia
                    en updates); poda
                    completed/abandoned/superseded a los 5 mas recientes por Fecha.
                    --parent <slug> anota la celda Status como '<status> (fase de
@@ -2782,7 +2783,8 @@ def inline_title_row(lines, rows, tplain):
 
     Los llamantes solo lo usan si el plan puede ser inline: el evento trae --inline, o no existe
     plans/plan-<slug>.md. Un plan con archivo que choca con una fila `(inline)` puede ser ese plan
-    ya promovido o uno ajeno con el mismo titulo; no se sabe (ronda 3 de adversario).
+    ya promovido o uno ajeno con el mismo titulo; no se sabe (ronda 3 de adversario). Para
+    promoverla, el evento lo afirma con --promote: ver promote_inline_row.
 
     Una celda con wikilink canonico Y terminada en `(inline)` (escrita a mano) tiene dueno: no se
     toma por titulo (ronda 5 de adversario). Ver celda_inline.
@@ -2792,6 +2794,43 @@ def inline_title_row(lines, rows, tplain):
     return next((i for i in rows
                  if celda_inline(split_cells(lines[i])[0])
                  and plain(split_cells(lines[i])[0]) == tplain), None)
+
+
+def promote_inline_row(mem, slug, lines, rows, tplain, title):
+    """La fila `(inline)` que `plan.upsert --promote` convierte en `[[plans/plan-<slug>\\|T]]`
+    (p-236102b948). Sin --promote no hay promocion: el indice de un plan inline que despues recibe
+    plans/plan-<slug>.md es IDENTICO al de un plan con archivo que choca con la fila (inline) de
+    OTRO plan del mismo titulo (ronda 3 de adversario de p-e79c16c7e0), porque la fila inline no
+    guarda el slug. Ninguna regla separa los dos casos; la identidad la pone el evento.
+
+    El flag solo afirma "la fila (inline) titulada T es mia". Lo que se puede comprobar se
+    comprueba, y si falla, cuarentena en vez de adivinar:
+    - el plan tiene archivo (sin archivo no hay a que promover; sigue siendo inline);
+    - hay UNA sola fila inline (celda_inline) con ese titulo en la tabla canonica. Con dos, son
+      indistinguibles (limite de inline_title_row) y tomar la primera puede robar la de otro.
+    Una fila enlazada a otro plan nunca es candidata: celda_inline la excluye.
+
+    Limite declarado, sin test a proposito: con UNA sola fila (inline) titulada T, nada en el
+    indice prueba que sea de este plan y no de otro inline con el mismo titulo. Es la afirmacion
+    del emisor, igual que el choque inline-inline de inline_title_row."""
+    if plan_sin_archivo(mem, slug):
+        raise Quarantine(
+            f"sin-archivo: --promote de plan-{slug}, pero no existe plans/plan-{slug}.md — crea el "
+            f"archivo del plan antes de promover su fila (inline), o emite sin --promote.")
+    cands = [i for i in rows
+             if celda_inline(split_cells(lines[i])[0])
+             and plain(split_cells(lines[i])[0]) == tplain]
+    if not cands:
+        raise Quarantine(
+            f"sin-fila-inline: --promote de plan-{slug}, pero _plans-index.md no tiene una fila "
+            f"'{title} (inline)' — revisa el titulo (tiene que ser el de la fila inline), o emite "
+            f"sin --promote si el plan nunca fue inline.")
+    if len(cands) > 1:
+        raise Quarantine(
+            f"titulo-ambiguo: --promote de plan-{slug}, pero _plans-index.md tiene {len(cands)} "
+            f"filas '{title} (inline)' y no se sabe cual es de este plan. Pon a mano "
+            f"[[plans/plan-{slug}\\|{title}]] en la celda Plan de la suya y reaplica el evento.")
+    return cands[0]
 
 
 def find_plan_rows(lines, slug):
@@ -2920,6 +2959,11 @@ def apply_plan_upsert(mem, p):
             f"sobre este plan; con mas de una fila no hay forma segura de saber cual es la buena"
         )
     hit = own_rows[0] if own_rows else None
+    # --promote solo cuenta si el plan aun no tiene fila propia: en un replay (ya promovido) el
+    # evento es un upsert normal sobre su fila enlazada.
+    promoting = hit is None and bool(p.get("promote"))
+    if promoting:
+        hit = promote_inline_row(mem, slug, lines, rows, tplain, p["title"])
     if hit is None:
         # Fallback por titulo plano SOLO en la tabla canonica (no en todo el archivo): es para un
         # plan `--inline` (sin wikilink que buscar), y ampliarlo a cualquier tabla del mismo ancho
@@ -2943,9 +2987,12 @@ def apply_plan_upsert(mem, p):
                     f"Arreglala a mano: si es de plan-{slug}, ponle "
                     f"[[plans/plan-{slug}\\|<titulo>]] en la celda Plan; si es de otro plan, el "
                     f"enlace de ese plan; si es de un plan inline sin archivo, termina la celda en "
-                    f"(inline). Luego reaplica el evento.")
+                    f"(inline). Luego reaplica el evento. Si es la fila (inline) de plan-{slug} y "
+                    f"el plan ya tiene archivo, basta con reemitir el evento con --promote.")
+    # Una fila que se promueve deja de ser inline en este mismo evento: lleva enlace, puede tener
+    # --parent y su celda 0 se reescribe con el wikilink.
     is_inline_row = (
-        celda_inline(split_cells(lines[hit])[0])
+        not promoting and celda_inline(split_cells(lines[hit])[0])
         if hit is not None else bool(p.get("inline"))
     )
     if hit is not None and status:
@@ -2963,9 +3010,15 @@ def apply_plan_upsert(mem, p):
             # un evento aparte, `plan.reopen`, que deja registro. Se descarta el evento entero, no
             # solo la celda: aplicar sus otras celdas mezclaria un estado viejo con uno nuevo.
             # Cerrado -> cerrado (completed -> superseded) no es retroceso y pasa.
+            # Con --promote la fila sigue (inline) y plan.reopen ya no la encuentra (el plan tiene
+            # archivo, sin fallback por titulo): el orden es promover con el status cerrado y
+            # despues reabrir.
+            como = (f"promueve primero con --promote --status {actual} y despues reabre con "
+                    f"journal-emit.py --type plan.reopen --slug {slug}") if promoting else \
+                f"journal-emit.py --type plan.reopen --slug {slug}"
             log(f"WARN plan.upsert: plan-{slug} esta '{actual}' y el evento lo pasaria a "
                 f"'{entrante}' — no se aplica (un replay viejo no reabre un plan cerrado). Para "
-                f"reabrirlo a proposito: journal-emit.py --type plan.reopen --slug {slug}")
+                f"reabrirlo a proposito: {como}")
             return False
         if entrante in PLAN_CERRADO and actual not in PLAN_CERRADO:
             # El replay del CIERRE que un `plan.reopen` ya revirtio. Sin esto, reabrir era
@@ -3075,7 +3128,7 @@ def apply_plan_upsert(mem, p):
         # (enlace o `(inline)`), nunca inventando una nueva. Medido 2026-09-11 sobre
         # plan-pendientes-diferidos-v2.13.0, cuyo titulo nombraba dos mecanismos ya descartados.
         if p.get("title"):
-            new[0] = (f"{p['title']} (inline)" if celda_inline(cells[0])
+            new[0] = (f"{p['title']} (inline)" if is_inline_row
                       else f"[[plans/plan-{slug}\\|{p['title']}]]")
         if new == cells:
             return False
