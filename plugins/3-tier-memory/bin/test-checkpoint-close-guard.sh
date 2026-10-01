@@ -863,7 +863,9 @@ chk "bloquea (la revision)" "1" "$(bloquea "$O")"
 chk "no reclama el snippet como falta" "0" "$(razon "$O" | grep -c 'snippet `Como retomar` no esta')"
 chk "no reclama el recordatorio como falta" "0" "$(razon "$O" | grep -c 'esta en la ficha pero no en')"
 chk "pide el cierre al final de la respuesta" "1" "$(razon "$O" | grep -c 'termina tu respuesta con el cierre')"
-chk "con el comando y la ruta literal de la ficha" "1" "$(razon "$O" | grep -F "print-como-retomar.py\" \"$F\"" | wc -l | tr -d ' ')"
+# Solo el nombre de la ficha, no la ruta entera: en Windows el hook la escribe normalizada
+# (C:\...\2026-09-22-demo.md) y la prueba la tiene como /tmp/... (CI de f795efc, rojo solo en windows).
+chk "con el comando y la ruta literal de la ficha" "1" "$(razon "$O" | grep -E 'print-como-retomar\.py" "[^"]*2026-09-22-demo\.md"' | wc -l | tr -d ' ')"
 chk "y los recordatorios de la ficha" "1" "$(razon "$O" | grep -c 'Recordatorios de calendario` de la ficha')"
 echo "== 2.43.0: vuelta con la revision y DESPUES el cierre completo: silencio sobre el cierre =="
 { printf '%s\n\n' "$REV_OK"; cat "$T/salida-script.txt"; printf '\n'; cat "$FX/calendario-2129.txt"; printf '\n'; cat "$T/salida-8e.txt"; } > "$T/rev-y-cierre.txt"
