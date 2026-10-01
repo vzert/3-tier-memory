@@ -561,7 +561,7 @@ F7="$TMP/r7.jsonl"
 O="$TMP/or7-base"; run "$F7" "$O" --chunk-chars 60 >/dev/null 2>&1
 NB=$(ls "$O"/chunk-*.md 2>/dev/null | wc -l | tr -d ' ')
 [ "$NB" -ge 2 ] && ok "R7: el tramo base tiene $NB bloques" || bad "R7: el tramo base tiene $NB bloques (hacen falta 2+)"
-for c in duplicado omitido ajeno mismo-largo chars-bool; do
+for c in duplicado omitido ajeno mismo-largo chars-bool sobrante; do
   O="$TMP/or7-$c"; run "$F7" "$O" --chunk-chars 60 >/dev/null 2>&1
   case $c in
     duplicado)   mf "$O" "m['chunks'] = [ch[0], ch[0]]; m['sha256'] = [h(ch[0])] * 2; m['chars'] = 2 * n(ch[0])";;
@@ -570,6 +570,8 @@ for c in duplicado omitido ajeno mismo-largo chars-bool; do
                  mf "$O" "p = os.path.join(d, 'otro.md'); m['chunks'] = [p]; m['sha256'] = [h(p)]; m['chars'] = n(p)";;
     mismo-largo) python3 -c "import sys; p=sys.argv[1]; s=open(p,encoding='utf-8',newline='').read(); open(p,'w',encoding='utf-8',newline='').write('X'*len(s))" "$O/chunk-01.md";;
     chars-bool)  printf 'x' > "$O/chunk-01.md"; mf "$O" "m['chunks'] = [ch[0]]; m['sha256'] = [h(ch[0])]; m['chars'] = True";;
+    # Ronda 8: un bloque de otra corrida que no esta en la lista (directorio reusado) pasaba.
+    sobrante)    printf 'BLOQUE DE OTRA CORRIDA\n' > "$O/chunk-$(printf %02d $((NB + 1))).md";;
   esac
   case "$(ver "$O")" in "verificado=0 "*) ok "verificar: $c da verificado=0";; *) bad "R7 verificar $c: '$(ver "$O")'";; esac
 done

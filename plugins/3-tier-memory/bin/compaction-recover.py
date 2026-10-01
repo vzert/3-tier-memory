@@ -411,8 +411,9 @@ def verificar(d):
     """Comprueba el tramo de DIR: manifest JSON; cada bloque es chunk-NN.md en orden, un archivo normal
     dentro de DIR (no un enlace ni una tuberia), con la huella SHA-256 del manifest y la cabecera
     "bloque i de N"; y la suma de caracteres igual a la del manifest. Un bloque borrado, vaciado,
-    cortado, cambiado, repetido, omitido o ajeno da verificado=0 (ronda 7: la suma sola dejaba pasar
-    listas repetidas o recortadas, archivos ajenos con el mismo largo y una tuberia que colgaba)."""
+    cortado, cambiado, repetido, omitido, ajeno o sobrante (un chunk-NN.md en DIR que no esta en la
+    lista) da verificado=0 (ronda 7: la suma sola dejaba pasar listas repetidas o recortadas, archivos
+    ajenos con el mismo largo y una tuberia que colgaba)."""
     try:
         with open(os.path.join(d, "manifest.json"), encoding="utf-8") as fh:
             m = json.load(fh)
@@ -443,6 +444,12 @@ def verificar(d):
             if not texto.startswith(f"# Tramo compactado — bloque {i} de {len(chunks)}\n"):
                 return f"verificado=0 reason=cabecera chunk={i}"
             total += len(texto)
+        # Ronda 8: un chunk-NN.md de otra corrida (directorio reusado) que no esta en la lista pasaba.
+        # Sin distinguir mayusculas: en APFS y NTFS chunk-01.MD es el mismo nombre.
+        lista = {f"chunk-{i:02d}.md" for i in range(1, len(chunks) + 1)}
+        for nombre in os.listdir(d):
+            if re.fullmatch(r"chunk-\d+\.md", nombre, re.IGNORECASE) and nombre not in lista:
+                return f"verificado=0 reason=bloque-sobrante {nombre}"
     except Exception as e:
         return f"verificado=0 reason={type(e).__name__}"
     if total != chars:
