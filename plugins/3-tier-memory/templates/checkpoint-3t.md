@@ -623,11 +623,11 @@ Para cada learning candidato, antes de emitir nada:
    - `corrige #N` — N cubre la leccion pero su texto quedo incompleto o falso. `learning.update`
      de N (seccion siguiente); el numero se conserva.
    - `reemplaza #N` — la leccion nueva contradice a N y N deja de valer. Emite la nueva con
-     `learning.add` y retira N con un `learning.update` que conserva su texto y le añade al
-     final `— ⊘ RETIRADA (YYYY-MM-DD, reemplazada por la nueva regla "<titulo>")`. La linea de N
-     no se borra ni se renumera. Si N esta en el `## Quick Reference` de `_learnings.md`, pasa en
-     ese mismo `learning.update` `--quickref-prefix`/`--quickref` con la marca tambien: si no, la
-     reinyeccion periodica sigue sirviendo la version corta de N como si valiera.
+     `learning.add ... --supersedes N`: en el mismo escrito el compactador marca N
+     `— ⊘ RETIRADA (FECHA, superada por #M)` (M es el numero de la nueva). La linea de N no se
+     borra ni se renumera, y el recall deja de servirla. Si N esta en el `## Quick Reference` de
+     `_learnings.md`, pasa tambien `--quickref-prefix "<prefijo de su linea>"`: esa linea se
+     quita, porque la reinyeccion periodica seguiria sirviendo la version corta de N.
 4. Escribe la decision en la ficha, bajo `## Learnings generados`: una linea por candidato,
    **incluidos los `ya existe`** (asi se ve que el dedup se hizo), con este formato exacto:
 
@@ -642,9 +642,16 @@ Para cada learning candidato, antes de emitir nada:
 
 **Pregunta obligatoria, aunque no tengas learnings nuevos:** ¿esta sesion mostro que alguna regla
 EXISTENTE es falsa o ya no aplica? Si la regla sigue viva con otro texto → `corrige #N`
-(`learning.update`). Si ya no aplica y nada la reemplaza → retirala con un `learning.update` que
-conserva su texto y añade `— ⊘ RETIRADA (YYYY-MM-DD): <motivo en una linea>` (y lo mismo en su
-Quick Reference, si esta ahi). Anotalo en la ficha igual que un candidato.
+(`learning.update`). Si ya no aplica → `retira #N`:
+
+```bash
+python3 "$JBIN/journal-emit.py" --type learning.retire --topic <topic-slug> \
+  --match-prefix "<primeras palabras de N>" --motivo obsoleta --nota "<por que, una linea>" \
+  [--quickref-prefix "<prefijo de su linea en el Quick Reference>"]
+```
+
+`--motivo duplicada --por M` si otra regla viva M ya dice lo mismo; `superada --por M` si M la
+contradice y vale. El numero de N se conserva. Anotalo en la ficha igual que un candidato.
 
 For EACH learning decided `nueva` (or the new half of `reemplaza #N`), emit one `learning.add`
 event; the compactor writes both tiers in Step 5a:
@@ -654,7 +661,8 @@ python3 "$JBIN/journal-emit.py" --type learning.add --topic <topic-slug> \
   --text "**<Rule name>** — <one-line explanation, no newlines>" \
   [--section "<## header to append under, existing or new>"] \
   [--quickref "**<Rule name>** — <short form for the Quick Reference>"] \
-  [--title "<Topic Title>" --when "<when to consult>" --importance <0-10>]
+  [--title "<Topic Title>" --when "<when to consult>" --importance <0-10>] \
+  [--supersedes N [--quickref-prefix "<prefijo de la linea de N en el Quick Reference>"]]
 ```
 
 ### Corregir una regla YA escrita — `learning.update`, nunca un `learning.add` de correccion

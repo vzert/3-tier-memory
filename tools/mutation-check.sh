@@ -134,5 +134,23 @@ caso "llamada con JOURNAL_OUT" session-start.sh m_escalada_humana.py test-expire
 caso "llamada con DRIFT_OUT" session-start.sh m_escalada_humana.py test-expire-reopen.sh "el texto a la persona nombra git pull" llamada-drift-out
 
 echo
+echo "learning.retire / --supersedes (2.45.0): cada pieza que retira, valida o lee el marcador"
+caso "recall sin filtro"       build-recall-index.py m_learning_retire.py test-learning-retire.sh "la retirada con el marcador nuevo no esta" recall-sin-filtro
+caso "--por sin validar"       journal-compact.py m_learning_retire.py test-learning-retire.sh "motivo no-anchor que nombra #99" por-sin-validar
+caso "ciclo sin detectar"      journal-compact.py m_learning_retire.py test-learning-retire.sh "A por B con B retirada por A: ciclo" ciclo-sin-detectar
+caso "update pierde la marca"  journal-compact.py m_learning_retire.py test-learning-retire.sh "texto nuevo \+ el mismo marcador" update-pierde-marca
+caso "replay de update"        journal-compact.py m_learning_retire.py test-learning-retire.sh "replay del retire y del update" replay-update-retirada
+caso "replay de retire"        journal-compact.py m_learning_retire.py test-learning-retire.sh "replay del retire y del update" retire-replay-sin-numero
+caso "QR reutiliza numero"     journal-compact.py m_learning_retire.py test-learning-retire.sh "el numero 3 no se reutiliza" qr-reutiliza-numero
+caso "supersedes: QR tarde"    journal-compact.py m_learning_retire.py test-learning-retire.sh "ni la nueva ni la marca se escriben" supersedes-qr-tarde
+caso "marca en backticks"      learning_marks.py m_learning_retire.py test-learning-retire.sh "entre comillas invertidas sigue viva" marca-en-backticks
+caso "cabecera ignorada"       learning_marks.py m_learning_retire.py test-learning-retire.sh "topic con cabecera retirada" cabecera-ignorada
+caso "pie siempre"             recall_rank.py m_learning_retire.py test-learning-retire.sh "sin RECALL_PIE no hay pie" pie-siempre
+caso "add no ve la retirada"   journal-compact.py m_learning_retire.py test-learning-retire.sh "replay: una sola regla con ese texto" add-no-ve-retirada
+caso "supersedes tras update"  journal-compact.py m_learning_retire.py test-learning-retire.sh "replay del supersedes tras corregir la nueva" supersedes-replay-tras-update
+caso "fila antes de validar"   journal-compact.py m_learning_retire.py test-learning-retire.sh "_learnings.md intacto" fila-antes-de-validar
+caso "indice viejo se sirve"   recall.sh m_learning_retire.py test-learning-retire.sh "el indice viejo se reconstruyo" indice-viejo-sirve
+
+echo
 if [ "$PEND" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $TOTAL)"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi
 exit $(( PEND > 0 ))

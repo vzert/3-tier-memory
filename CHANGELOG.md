@@ -1,6 +1,77 @@
 # Changelog
 
 
+## [2.45.0] - 2026-10-01
+Origen: F2 del plan de ciclo de vida de los learnings. Una regla que dejaba de valer no tenia
+salida: `learning.update` la podia reescribir, pero ningun lector distinguia una regla marcada, y
+el recall devolvia la retirada junto a la vigente. Medido en un corpus real: una regla y su
+duplicado salian juntos ante el mismo prompt, y ante otra frase del incidente salia solo el
+duplicado.
+
+### Added
+- **`learning.retire`** (`journal-emit.py` + `journal-compact.py`). Retira una regla sin borrarla ni
+  renumerarla: anade `— ⊘ RETIRADA (FECHA, obsoleta|duplicada|superada[ por #N]): <nota>` al final
+  de SU linea. `--por N` es obligatorio con `duplicada|superada` y no se admite con `obsoleta`;
+  tiene que ser una regla viva del mismo topic. Un ciclo (A por B con B retirada por A, o una regla
+  por si misma) va a cuarentena `ciclo`. `--quickref-prefix` quita la linea del `## Quick Reference`
+  sin renumerar el resto: el Quick Reference es lo que SessionStart cuenta y la reinyeccion sirve.
+  El emisor guarda el numero de la regla al emitir, asi que el replay de un retire cuya regla
+  cambio de texto despues sigue siendo noop.
+- **`learning.add --supersedes N`**. Escribe la regla nueva (numero M) y marca N `superada por #M`
+  en el mismo escrito del topic file: si algo falla (N no existe, N es de varias lineas, el prefijo
+  del Quick Reference no casa), no se escribe nada, ni la fila de `## Topic Files`. Con
+  `--quickref-prefix` quita la linea de N del Quick Reference; la version corta nueva toma el
+  siguiente numero, nunca el de N. El Quick Reference es otro fichero: si su escritura falla despues
+  de la del topic, el replay del evento completa lo que falta. El replay de un supersedes cuya regla
+  nueva se corrigio despues es noop (con aviso en el log).
+- **`bin/learning_marks.py`**: el unico lector del marcador. Cuenta como retirada una regla con
+  `— ⊘ RETIRADA` o `— ⊘ SUPERSEDED` detras de su cuerpo (las dos formas viejas del corpus real
+  tambien), y un topic file cuya cabecera `# ` es `# ⊘ SUPERSEDED …`. No cuenta el marcador sin el
+  `—` delante ni dentro de un code span, de una o de varias comillas invertidas (una regla que
+  DESCRIBE el marcador sigue viva).
+
+### Changed
+- **El recall no sirve reglas retiradas** (`build-recall-index.py`): el filtro mira la linea
+  completa, antes de truncar a 240 caracteres. `find-dup-candidates.py` lee ese indice, asi que
+  tampoco las propone como duplicado. `recall.sh` reconstruye el indice si el constructor es mas
+  nuevo que el indice (antes solo si cambiaba `memory/`).
+- **Cada regla que el recall inyecta lleva debajo su topic y su prefijo** (`↳ si ya no es cierta:
+  --topic T --match-prefix "…"`) y una linea final con la orden de `learning.retire` y
+  `learning.update`. Solo lo pide `recall.sh` (`RECALL_PIE`); sin la variable, `recall_rank.py`
+  imprime lo mismo que antes y la equivalencia con el motor de F0 se sigue comprobando byte a byte.
+- **`learning.update` sobre una regla retirada conserva el marcador**: si el texto nuevo no lo trae,
+  el compactador le vuelve a pegar el que tenia, y su replay es noop. Corregir la redaccion no la
+  resucita.
+- **`learning.add` reconoce su regla aunque este retirada**: el replay de un add cuya regla se
+  retiro despues ya no la vuelve a escribir como nueva.
+- **`journal-guard.sh` y `bash-journal-nudge.sh`** nombran `learning.retire` en sus mensajes. Con
+  `journal_strict=1`, `memory/learnings/<topic>.md` sigue editable a mano: el plan pedia denegarlo,
+  pero strict es el defecto de `/setup-memory` y `/migrate`, y romperia crear el topic inicial, el
+  `last_verified` de `/consolidate-3t` y el respaldo sin journal de `/save-learning`.
+- **Plantillas.** `/checkpoint-3t` Step 4: `reemplaza #N` es `learning.add --supersedes N` y
+  `retira #N` es `learning.retire` (antes, un `learning.update` que anadia el marcador a mano).
+  `/consolidate-3t` Steps 1 y 2: la regla fusionada o superada se marca con `learning.retire`.
+
+### Limite medido
+`learning.retire` reescribe la linea con la misma lista blanca que `learning.update` (I2): solo una
+regla de una linea, en la columna 0, sin parrafo ni codigo antes que la puedan absorber. En los
+`memory/` de cuatro proyectos reales eso deja retirables por el journal entre el 59 % y el 88 % de
+las reglas numeradas. El resto va a cuarentena con su motivo (`anterior`, `codigo-antes`,
+`bloque-multilinea`, `forma`); se marca a mano o se simplifica la regla y se reemite. El caso real
+de la fase cayo ahi: la regla seguia a un parrafo sin linea en blanco.
+
+### Pruebas
+- `bin/test-learning-retire.sh` (nuevo, 63 asertos): numero conservado, replay noop (tambien el de
+  un retire tras un update que cambio el prefijo), `--por` inexistente o retirado, ciclo,
+  `--quickref-prefix` sin renumerar, `--supersedes` atomico y sus replays, regla multilinea, recall y
+  dup-candidates sin la retirada (marcador nuevo, las dos formas viejas y la cabecera), controles
+  del marcador citado, `learning.update` que conserva el marcador, eventos mal formados, el pie, el
+  replay de un add cuya regla se retiro despues, y `recall.sh` de punta a punta con un indice viejo.
+- `tools/mutation-check.sh`: 15 mutaciones nuevas (`m_learning_retire.py`), las 15 caen.
+- Banco de recall: el canal dedup toma las palabras de la regla nueva de su texto, no del indice
+  (una regla retirada ya no esta en el). Con una regla real retirada como duplicada en una copia
+  congelada del corpus, `fuga` pasa de 2 a 0 y `prompt@4` no baja (7/14 local, 12/14 neutro).
+
 ## [2.44.0] - 2026-10-01
 Origen: Victor, mirando el bloque final real de un `/checkpoint-3t`: demasiado texto, y los
 prompts opcionales se repetian sesion tras sesion (los mismos dos vencidos durante varias). Pidio

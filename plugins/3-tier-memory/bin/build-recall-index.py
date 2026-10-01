@@ -34,6 +34,9 @@ for _flujo in (sys.stdout, sys.stderr):
     if hasattr(_flujo, "reconfigure"):
         _flujo.reconfigure(encoding="utf-8")
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import learning_marks  # noqa: E402  (bin/learning_marks.py: el marcador de regla retirada)
+
 # Stopwords ES + EN — kept small and high-value; recall is lexical so we only
 # need to drop the highest-frequency noise that would pollute IDF.
 STOPWORDS = set("""
@@ -111,48 +114,61 @@ def truncate(text, n=240):
     return text if len(text) <= n else text[: n - 1].rstrip() + "…"
 
 
-def add_unit(units, tipo, texto, path, fecha, importance):
+def add_unit(units, tipo, texto, path, fecha, importance, regla=False):
     texto = truncate(texto)
     if not texto:
         return
     kws = tokenize(texto)
     if not kws:
         return
-    units.append(
-        {
-            "id": f"{tipo}:{len(units)}",
-            "tipo": tipo,
-            "texto": texto,
-            "path": path,
-            "fecha": fecha or "",
-            "importance": importance,
-            "keywords": kws,
-        }
-    )
+    u = {
+        "id": f"{tipo}:{len(units)}",
+        "tipo": tipo,
+        "texto": texto,
+        "path": path,
+        "fecha": fecha or "",
+        "importance": importance,
+        "keywords": kws,
+    }
+    if regla:
+        # Una regla numerada de un topic file (no el fichero entero ni el Quick Reference): es lo
+        # unico que learning.retire puede anclar, y recall_rank.py solo le pone pie a esas.
+        u["regla"] = True
+    units.append(u)
 
 
 def parse_learnings(memory_dir, units):
     """Each numbered rule in learnings/*.md is a unit (high-signal, atomic).
-    Falls back to Quick Reference bullets in _learnings.md."""
+    Falls back to Quick Reference bullets in _learnings.md.
+
+    Una regla RETIRADA (marcador `— ⊘ RETIRADA`/`SUPERSEDED` en su linea, ver learning_marks.py) no
+    entra, y un topic file cuya cabecera `# ` lo retira no entra entero. Se mira la LINEA completa,
+    antes de truncar: el marcador va al final y `truncate` lo cortaria en una regla larga."""
     ldir = os.path.join(memory_dir, "learnings")
     rule_re = re.compile(r"^\s*\d+\.\s+(.*)")
+    bullet_re = re.compile(r"^\s*[-*]\s+(.*)")
     if os.path.isdir(ldir):
         for fn in sorted(os.listdir(ldir)):
             if not fn.endswith(".md") or is_excluded(fn):
                 continue
             path = os.path.join(ldir, fn)
             content = read(path)
+            if learning_marks.topic_retirado(content):
+                continue
             imp = frontmatter_importance(content)
             rel = os.path.join("memory", "learnings", fn)
             found = False
             for line in content.splitlines():
                 m = rule_re.match(line)
                 if m:
-                    found = True
-                    add_unit(units, "learning", m.group(1), rel, "", imp)
+                    found = True       # aunque este retirada: el fichero SI tiene reglas numeradas
+                    if not learning_marks.regla_retirada(m.group(1)):
+                        add_unit(units, "learning", m.group(1), rel, "", imp, regla=True)
             if not found:
-                # whole-file fallback (strip frontmatter + headers)
+                # whole-file fallback (strip frontmatter + headers), sin las vinetas retiradas
                 body = re.sub(r"^---.*?---", "", content, count=1, flags=re.DOTALL)
+                body = "\n".join(l for l in body.splitlines()
+                                 if not (bullet_re.match(l) and learning_marks.regla_retirada(l)))
                 add_unit(units, "learning", body, rel, "", imp)
 
     # Quick Reference bullets in _learnings.md (critical rules, may overlap)
@@ -161,7 +177,7 @@ def parse_learnings(memory_dir, units):
     if section:
         for line in section.group(1).splitlines():
             s = line.strip()
-            if s.startswith("- "):
+            if s.startswith("- ") and not learning_marks.regla_retirada(s):
                 add_unit(units, "learning", s[2:], "memory/_learnings.md", "", 8)
 
 

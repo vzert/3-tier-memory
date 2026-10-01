@@ -57,11 +57,12 @@ fi
 Then read `memory/_learnings.md` and list the topic files in `memory/learnings/`.
 
 Which edits below go through the journal and which do not: **new rules** (Step 3 reflections)
-are emitted as `learning.add` events. **Merges, supersede markers and
-`last_verified`** (Steps 1, 2, 4) are still direct edits, on purpose: they rewrite existing
-rules after the user approves each one, and no event can express "fold rule B into A". The
-window is bounded because you compacted just now and compact again in Step 4b; keep the direct
-edits short (one topic file at a time, read right before you write).
+are emitted as `learning.add` events, and since 2.45.0 **supersede markers** (Steps 1 and 2) are
+`learning.retire` events: the compactor writes the marker on the rule's own line, keeps its number
+and removes its Quick Reference line. **Folding B's detail into A and `last_verified`** (Steps 1,
+4) are still direct edits, on purpose: they rewrite existing rules after the user approves each
+one. The window is bounded because you compacted just now and compact again in Step 4b; keep the
+direct edits short (one topic file at a time, read right before you write).
 
 ## Step 0.5: Generate duplicate candidates from the recall index (pre-filter)
 
@@ -167,14 +168,18 @@ DEDUP:
 Apply only the merges the user approves (or all, if the user said "consolida todo").
 When merging:
 - Keep the clearest phrasing; preserve any unique detail from the other(s).
-- Tier 3: edit the canonical rule in `learnings/<topic>.md`. **Never delete or renumber the
+- Tier 3: edit the canonical rule M in `learnings/<topic>.md`. **Never delete or renumber the
   merged-away rule(s)**: rules are cited by number ("regla 142") in session files, code and other
-  rules, so its line stays with its number. Mark it with the same inline marker as Step 2, on its
-  own line: `N. **<old rule text>** — ⊘ SUPERSEDED by [[learnings/<topic>#M]] (YYYY-MM-DD): merged into #M`.
-- Tier 2: update the Quick Reference in `_learnings.md` if a merged rule was listed there.
-- If `memory/.memory-config` contains `journal_strict=1`, the plugin's PreToolUse guard denies these
-  direct edits to `_learnings.md`. Merges are the one legitimate hand edit: set `journal_strict=0`,
-  do the merge, set it back to `1` (the guard reads the file on every call; nothing to restart).
+  rules, so its line stays with its number. Retire it through the journal:
+  `journal-emit.py --type learning.retire --topic <topic> --match-prefix "<first words of N>"
+  --motivo duplicada --por M --nota "merged into #M" [--quickref-prefix "<its Quick Reference line>"]`.
+  The compactor appends `— ⊘ RETIRADA (YYYY-MM-DD, duplicada por #M): merged into #M` to N's line.
+- Tier 2: update the Quick Reference in `_learnings.md` if the canonical rule M is listed there
+  (the retired rule's line goes away with `--quickref-prefix`).
+- If `memory/.memory-config` contains `journal_strict=1`, the plugin's PreToolUse guard denies
+  direct edits to `_learnings.md`. A hand edit of the Quick Reference is the one legitimate case
+  left: set `journal_strict=0`, do it, set it back to `1` (the guard reads the file on every call;
+  nothing to restart) — or use `learning.update --quickref-prefix/--quickref` on M.
 
 ## Step 2: Contradictions — supersede, don't overwrite
 
@@ -187,13 +192,18 @@ CONTRADICTION:
   → keep both; mark #N as superseded by #M
 ```
 
-To mark a superseded rule, append an inline marker to the OLDER rule (do not delete it):
+To mark a superseded rule, retire the OLDER rule through the journal (do not delete it):
+```bash
+python3 "$JBIN/journal-emit.py" --type learning.retire --topic <topic> \
+  --match-prefix "<first words of N>" --motivo superada --por M --nota "<one-line reason>" \
+  [--quickref-prefix "<prefix of N's Quick Reference line>"]
 ```
-N. **<old rule text>** — ⊘ SUPERSEDED by [[learnings/<topic>#M]] (YYYY-MM-DD): <one-line reason>
-```
-The newer rule stays as-is. This preserves history (why the old belief existed) while making
-the current truth unambiguous. If the older rule is in the Quick Reference, remove it from there
-(Quick Reference should reflect only current truth).
+The compactor appends `— ⊘ RETIRADA (YYYY-MM-DD, superada por #M): <reason>` to N's line, keeps
+its number, and with `--quickref-prefix` removes N from the Quick Reference (which should reflect
+only current truth). The recall index skips retired rules. The newer rule stays as-is. This
+preserves history (why the old belief existed) while making the current truth unambiguous. Older
+markers written by hand (`— ⊘ SUPERSEDED by [[…]]`, `— ⊘ SUPERSEDED (FECHA, …)`) count as
+retired too.
 
 ## Step 3: Reflection — sessions → higher-level rules
 

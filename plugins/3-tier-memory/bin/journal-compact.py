@@ -34,7 +34,13 @@ Fase 2 (sesiones, reglas, planes, research) — mismo principio, anclas de tabla
                    mismo numero) al final de --section o del ultimo bloque antes de
                    '## Related'; si el archivo solo usa bullets, agrega bullet. --quickref
                    agrega la version corta numerada (max+1) en '## Quick Reference'.
-                   Idempotente por texto normalizado.
+                   Idempotente por texto normalizado. --supersedes N (2.45.0) retira N en el
+                   MISMO escrito del topic file (`superada por #M`, M el numero nuevo): o las
+                   dos cosas o ninguna.
+  learning.retire  (2.45.0) anade `— ⊘ RETIRADA (FECHA, motivo[ por #N]): nota` al final de la
+                   regla anclada por prefijo, conservando su numero (I1); --quickref-prefix quita
+                   esa linea del Quick Reference sin renumerar. --por N tiene que ser una regla
+                   viva del mismo topic; un ciclo va a cuarentena. Replay = noop.
   plan.upsert      fila en '## Plans' por [[plans/plan-<slug>]] o titulo; actualiza Status,
                    Sesion, Pendientes, Learnings (Fecha no cambia en updates); poda
                    completed/abandoned/superseded a los 5 mas recientes por Fecha.
@@ -102,6 +108,9 @@ from datetime import date
 for _flujo in (sys.stdout, sys.stderr):
     if hasattr(_flujo, "reconfigure"):
         _flujo.reconfigure(encoding="utf-8")
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import learning_marks  # noqa: E402  (bin/learning_marks.py: el marcador de regla retirada)
 
 STALE_SECONDS = 60
 POLL_SECONDS = 0.05
@@ -2133,6 +2142,68 @@ def insert_at_section_end(lines, start, end, new_line):
     return at
 
 
+def reglas_numero(lines, start, end, n):
+    """Indices de las reglas numeradas `n.` de lines[start:end]."""
+    return [i for i in range(start, end) if rule_text(lines[i])[0] == n]
+
+
+def es_misma_regla(t, text):
+    """La regla `t` ya dice `text`, retirada o no (el marcador no la hace otra regla)."""
+    return normalize_text(t) == text or normalize_text(learning_marks.sin_marca(t)) == text
+
+
+def comprobar_por(lines, start, end, por, propio, donde):
+    """Indice de la regla viva `por` que sustituye a la retirada; si no vale, Quarantine.
+
+    `por` tiene que existir una sola vez en el mismo topic y seguir viva: retirar una regla en
+    favor de otra ya retirada deja al lector sin regla vigente. Un ciclo (A por B cuando B ya esta
+    retirada por A, o una regla por si misma) va a cuarentena `ciclo`."""
+    if propio is not None and por == propio:
+        raise Quarantine(f"ciclo: en {donde}, la regla #{por} no puede retirarse en favor de si misma")
+    hits = reglas_numero(lines, start, end, por)
+    if not hits:
+        raise Quarantine(f"no-anchor: en {donde} no hay regla #{por} — --por tiene que nombrar una "
+                         f"regla viva del mismo topic")
+    if len(hits) > 1:
+        raise Quarantine(f"ambiguous: en {donde} hay {len(hits)} reglas numeradas #{por} (listas que "
+                         f"reinician) — --por no sabe cual es")
+    _n, tp = rule_text(lines[hits[0]])
+    if learning_marks.regla_retirada(tp):
+        if propio is not None and learning_marks.retirada_por(tp) == propio:
+            raise Quarantine(f"ciclo: en {donde}, #{por} ya esta retirada en favor de #{propio}; "
+                             f"retirar #{propio} por #{por} dejaria las dos sin regla vigente")
+        raise Quarantine(f"no-anchor: en {donde}, #{por} ya esta retirada — --por tiene que nombrar "
+                         f"la regla que hoy vale")
+    return hits[0]
+
+
+def quickref_a_quitar(ilines, qp, retirada_ya):
+    """(s0, s1, indice) de la linea del Quick Reference a quitar, o None si no hay nada que quitar.
+
+    Si la regla del topic ya estaba retirada (replay) y el prefijo no casa, la linea ya se quito:
+    no es un error (I3). Si la regla se retira AHORA y el prefijo no casa, es Quarantine, antes de
+    escribir nada."""
+    sec = section_bounds(ilines, "## Quick Reference")
+    if not sec:
+        if retirada_ya:
+            return None
+        raise Quarantine("no-anchor: falta '## Quick Reference' en _learnings.md y se pidio "
+                         "--quickref-prefix")
+    s0, s1 = sec
+    try:
+        qi, _ = find_rule_anchored(ilines, s0, s1, qp, "", "'## Quick Reference'")
+    except Quarantine:
+        if retirada_ya:
+            return None
+        raise
+    motivo = regla_reescribible(ilines, qi, s1)
+    if motivo:
+        raise Quarantine(f"{motivo}: en '## Quick Reference', {MOTIVOS_REGLA[motivo]}. No se quita "
+                         f"una linea que arrastra contenido; quitala a mano y reemite sin "
+                         f"--quickref-prefix.")
+    return s0, s1, qi
+
+
 def apply_learning_add(mem, p):
     topic = check_slug(p["topic"], "topic")
     title = p.get("title") or topic
@@ -2140,6 +2211,10 @@ def apply_learning_add(mem, p):
     today = date.today().isoformat()
 
     tpath = os.path.join(mem, "learnings", topic + ".md")
+    if p.get("supersedes") and not os.path.isfile(tpath):
+        # Antes de crear nada: o la regla nueva Y la vieja marcada, o ninguna de las dos.
+        raise Quarantine(f"no-anchor: learnings/{topic}.md no existe — --supersedes "
+                         f"#{p['supersedes']} necesita la regla vieja en ese topic")
     if not os.path.isfile(tpath):
         os.makedirs(os.path.dirname(tpath), exist_ok=True)
         fm = ["---", "type: learnings", f"topic: {topic}", f"created: {today}",
@@ -2154,25 +2229,90 @@ def apply_learning_add(mem, p):
     ipath = os.path.join(mem, "_learnings.md")
     if not os.path.isfile(ipath):
         raise Quarantine("no-index: _learnings.md no existe")
-    ilines = read_lines(ipath)
-    tkey = link_re("learnings/", topic)
-    if not any(tkey.search(l) for l in ilines):
+
+    def asegurar_fila():
+        """La fila del topic en '## Topic Files', si falta. True si la escribio."""
+        ilines = read_lines(ipath)
+        tkey = link_re("learnings/", topic)
+        if any(tkey.search(l) for l in ilines):
+            return False
         _, (hdr, sep, rows) = need_table(ilines, "## Topic Files", "_learnings.md")
         at = (rows[-1] + 1) if rows else (sep + 1)
         ilines.insert(at, join_cells([title, f"[[learnings/{topic}]]", p.get("when") or ""]))
         bump_updated(ilines)
         atomic_write(ipath, ilines)
-        changed = True
+        return True
+
+    sup = p.get("supersedes")
+    if not sup:
+        # Con --supersedes la fila se escribe DESPUES de validar: una cuarentena de --supersedes no
+        # puede dejar escrito nada (adversario, ronda 1 de F2: la fila se colaba antes).
+        changed = asegurar_fila() or changed
 
     text = normalize_text(p.get("text") or "")
+    qp = normalize_text(p.get("quickref_prefix") or "")
+    quitar_qr = None
     if text:
         lines = read_lines(tpath)
         start, related = body_region(lines)
         parsed = [rule_text(l) for l in lines[start:related]]
-        if not any(t and normalize_text(t) == text for _, t in parsed):
-            nums = [n for n, _ in parsed if n]
-            bullets = any(n is None and t for n, t in parsed)
-            numbered = bool(nums) or not bullets
+        existe = next((start + k for k, (_, t) in enumerate(parsed)
+                       if t and es_misma_regla(t, text)), None)
+        nums = [n for n, _ in parsed if n]
+        bullets = any(n is None and t for n, t in parsed)
+        numbered = bool(nums) or not bullets
+        retiro = None
+        if sup:
+            # --supersedes N (2.45.0): TODO se comprueba antes de escribir, y la regla vieja se
+            # marca en el MISMO atomic_write que inserta la nueva: no puede quedar la nueva sin
+            # la vieja marcada (ni al reves) por una cuarentena a mitad.
+            donde = f"learnings/{topic}.md"
+            if existe is not None:
+                nuevo_n = rule_text(lines[existe])[0]
+            else:
+                nuevo_n = (max(nums) + 1 if nums else 1) if numbered else None
+            if nuevo_n is None:
+                raise Quarantine(f"forma: {donde} usa vinetas sin numero — --supersedes deja "
+                                 f"escrito `superada por #M` y la regla nueva no tendria numero")
+            hits = reglas_numero(lines, start, related, sup)
+            if len(hits) != 1:
+                raise Quarantine(
+                    f"{'no-anchor' if not hits else 'ambiguous'}: en {donde} hay {len(hits)} "
+                    f"reglas numeradas #{sup} — --supersedes necesita exactamente una")
+            _n, tv = rule_text(lines[hits[0]])
+            if learning_marks.regla_retirada(tv):
+                por_r = learning_marks.retirada_por(tv)
+                if por_r != nuevo_n:
+                    if existe is None and por_r and len(reglas_numero(lines, start, related, por_r)) == 1:
+                        # Replay de un supersedes cuya regla nueva (#por_r) se corrigio despues con
+                        # learning.update: su texto ya no es el del evento, pero N sigue marcada en
+                        # favor de una regla que existe. Mismo criterio que find_rule_anchored:
+                        # replay, no cuarentena (I3), y con aviso, porque sin id no se puede
+                        # distinguir de un supersedes NUEVO sobre una N ya superada — que tampoco
+                        # escribiria nada: N ya no se re-retira (adversario, ronda 1 de F2).
+                        log(f"WARN learning.add --supersedes: en {donde}, #{sup} ya esta superada "
+                            f"por #{por_r} y ninguna regla dice el texto del evento — se toma como "
+                            f"replay y no se escribe nada. Si querias reemplazar otra vez, reemplaza "
+                            f"a #{por_r}.")
+                        existe = hits[0]               # nada que insertar
+                    else:
+                        raise Quarantine(f"no-anchor: en {donde}, #{sup} ya esta retirada (no en "
+                                         f"favor de #{nuevo_n}) — no se re-retira una regla")
+                retirada_ya = True                     # replay: la vieja ya esta marcada por M
+            else:
+                retirada_ya = False
+                motivo = regla_reescribible(lines, hits[0], related)
+                if motivo:
+                    raise Quarantine(f"{motivo}: en {donde}, {MOTIVOS_REGLA[motivo]}. La regla #{sup} "
+                                     f"no se puede marcar, asi que tampoco se escribe la nueva: "
+                                     f"corrigela a mano o simplificala a una linea y reemite.")
+                retiro = (hits[0], tv + learning_marks.marca_canonica(
+                    p.get("fecha") or today, "superada", nuevo_n, p.get("nota") or ""))
+            if qp:
+                quitar_qr = quickref_a_quitar(read_lines(ipath), qp, retirada_ya)
+        if retiro:
+            rewrite_rule(lines, retiro[0], related, retiro[1], f"learnings/{topic}.md")
+        if existe is None:
             new_line = f"{max(nums) + 1 if nums else 1}. {text}" if numbered else f"- {text}"
             section = p.get("section") or ""
             sec = section_bounds(lines, f"## {section}") if section else None
@@ -2185,22 +2325,33 @@ def apply_learning_add(mem, p):
                 lines[at:at] = ["", f"## {section}", "", new_line]
             else:
                 insert_at_section_end(lines, start, related, new_line)
+        if existe is None or retiro:
             bump_updated(lines)
             atomic_write(tpath, lines)
             changed = True
+    if sup:
+        changed = asegurar_fila() or changed
 
     q = normalize_text(p.get("quickref") or "")
-    if q:
+    if q or quitar_qr:
         ilines = read_lines(ipath)
+        qchanged = False
         sec = section_bounds(ilines, "## Quick Reference")
-        if not sec:
+        if q and not sec:
             raise Quarantine("no-anchor: falta '## Quick Reference' en _learnings.md "
                              "(la regla ya quedo en el topic file; agrega el Quick Ref a mano)")
-        s0, s1 = sec
-        parsed = [rule_text(l) for l in ilines[s0:s1]]
-        if not any(t and normalize_text(t) == q for _, t in parsed):
-            nums = [n for n, _ in parsed if n]
-            insert_at_section_end(ilines, s0, s1, f"{max(nums) + 1 if nums else 1}. {q}")
+        # El maximo se toma ANTES de quitar la linea vieja: si era la ultima, la version corta nueva
+        # reutilizaria su numero, y un numero no se reutiliza (I1).
+        qnums = [n for n, _ in (rule_text(l) for l in ilines[sec[0]:sec[1]]) if n] if sec else []
+        if quitar_qr:
+            del ilines[quitar_qr[2]]
+            qchanged = True
+        if q:
+            s0, s1 = section_bounds(ilines, "## Quick Reference")
+            if not any(t and normalize_text(t) == q for _, t in (rule_text(l) for l in ilines[s0:s1])):
+                insert_at_section_end(ilines, s0, s1, f"{max(qnums) + 1 if qnums else 1}. {q}")
+                qchanged = True
+        if qchanged:
             bump_updated(ilines)
             atomic_write(ipath, ilines)
             changed = True
@@ -2242,7 +2393,11 @@ def find_rule_anchored(lines, start, end, prefix, nuevo, donde):
         # La igualdad se mide EXACTA (normalize_text, no plain): asi un cambio que solo toca el
         # enfasis —ponerle negrita al titulo— sigue siendo un cambio y se aplica. Con plain() se
         # leeria como "ya esta corregida" y se perderia en silencio.
-        if pn and normalize_text(t) == pn:
+        # Una regla RETIRADA cuyo texto sin el marcador ya es el nuevo tambien cuenta: learning.update
+        # conserva el marcador (le vuelve a pegar el sufijo), asi que en su replay la linea es
+        # `nuevo + marca` y sin esto el replay iria a cuarentena (I3).
+        if pn and (normalize_text(t) == pn or (learning_marks.regla_retirada(t) and
+                                                normalize_text(learning_marks.sin_marca(t)) == pn)):
             iguales.append(i)
         candidatas.append(t)
 
@@ -2464,6 +2619,12 @@ def apply_learning_update(mem, p):
                                    normalize_text(p.get("match_prefix") or ""), text,
                                    f"learnings/{topic}.md")
         if not ya:
+            # Corregir el texto de una regla retirada no la resucita: si el texto nuevo no trae el
+            # marcador, se le vuelve a pegar el que tenia (2.45.0). Resucitarla seria otra
+            # decision, y no se toma en silencio dentro de una correccion de redaccion.
+            _n, viejo = rule_text(lines[i])
+            if learning_marks.regla_retirada(viejo) and not learning_marks.regla_retirada(text):
+                text = text + learning_marks.sufijo_marca(viejo)
             rewrite_rule(lines, i, related, text, f"learnings/{topic}.md")
             bump_updated(lines)
             atomic_write(tpath, lines)
@@ -2505,6 +2666,79 @@ def apply_learning_update(mem, p):
             atomic_write(ipath, ilines)
             changed = True
 
+    return changed
+
+
+def apply_learning_retire(mem, p):
+    """Retira una regla: le anade el marcador al final de SU linea y conserva el numero (2.45.0).
+
+    Retirar no es borrar (I1): las reglas se citan por numero, y la linea vieja explica por que se
+    creyo lo que se creyo. Lo que cambia es que ningun lector la sirve como vigente: el recall
+    (build-recall-index.py) la salta, y con --quickref-prefix su linea del Quick Reference se QUITA
+    — el Quick Reference es "verdad vigente", session-start.sh lo cuenta y rule-reinject-nudge.sh lo
+    reinyecta, asi que dejarla marcada seguiria inyectandola. El resto no se renumera.
+
+    Todo se comprueba antes de escribir (prefijo, --por, la linea del Quick Reference), asi que una
+    cuarentena no deja el topic marcado con el Quick Reference sin tocar.
+    """
+    topic = check_slug(p["topic"], "topic")
+    donde = f"learnings/{topic}.md"
+    tpath = os.path.join(mem, "learnings", topic + ".md")
+    if not os.path.isfile(tpath):
+        raise Quarantine(f"no-anchor: {donde} no existe — learning.retire marca una regla ya escrita")
+    ipath = os.path.join(mem, "_learnings.md")
+    lines = read_lines(tpath)
+    start, related = body_region(lines)
+    numero = p.get("numero")                   # el emisor lo lee al emitir; None si no pudo
+    try:
+        i, _ = find_rule_anchored(lines, start, related, normalize_text(p.get("match_prefix") or ""),
+                                  "", donde)
+    except Quarantine:
+        # Replay de un retire cuya regla cambio de texto despues (un learning.update posterior):
+        # el prefijo de entonces ya no casa, pero la regla #numero existe y YA esta retirada. Sin
+        # el numero no se puede distinguir de "el prefijo esta mal", y eso si va a cuarentena.
+        h = reglas_numero(lines, start, related, numero) if numero else []
+        if len(h) == 1 and learning_marks.regla_retirada(rule_text(lines[h[0]])[1]):
+            log(f"replay learning.retire: {donde} #{numero} ya esta retirada; su texto cambio "
+                f"despues y el prefijo del evento ya no casa — no se escribe nada")
+            return False
+        raise
+    n, t = rule_text(lines[i])
+    if numero and n is not None and n != numero:
+        raise Quarantine(f"no-anchor: en {donde} el prefijo senala la regla #{n}, pero al emitir "
+                         f"senalaba la #{numero} — otra regla empieza hoy igual; alarga el prefijo "
+                         f"y reemite")
+    ya = learning_marks.regla_retirada(t)
+    por = p.get("por")
+    nuevo = None
+    if not ya:
+        if por:
+            comprobar_por(lines, start, related, por, n, donde)
+        motivo = regla_reescribible(lines, i, related)
+        if motivo:
+            raise Quarantine(f"{motivo}: en {donde}, {MOTIVOS_REGLA[motivo]}. learning.retire solo "
+                             f"marca una regla de una linea; marcala a mano o simplificala y reemite.")
+        nuevo = t + learning_marks.marca_canonica(p.get("fecha") or date.today().isoformat(),
+                                                  p["motivo"], por, p.get("nota") or "")
+    qp = normalize_text(p.get("quickref_prefix") or "")
+    quitar = None
+    ilines = None
+    if qp:
+        if not os.path.isfile(ipath):
+            raise Quarantine("no-index: _learnings.md no existe")
+        ilines = read_lines(ipath)
+        quitar = quickref_a_quitar(ilines, qp, ya)
+    changed = False
+    if nuevo is not None:
+        rewrite_rule(lines, i, related, nuevo, donde)
+        bump_updated(lines)
+        atomic_write(tpath, lines)
+        changed = True
+    if quitar:
+        del ilines[quitar[2]]
+        bump_updated(ilines)
+        atomic_write(ipath, ilines)
+        changed = True
     return changed
 
 
@@ -3246,6 +3480,17 @@ def apply_research_rename(mem, p):
 
 
 # ----------------------------------------------------------------------------- dispatch
+def validar_fecha_evento(p, tipo):
+    """La fecha del marcador viaja en el evento (un replay escribe la misma); tiene que ser real."""
+    f = p.get("fecha")
+    if not f:
+        return
+    try:
+        date.fromisoformat(str(f))
+    except (TypeError, ValueError):
+        raise Quarantine(f"malformed: {tipo} con fecha {f!r} invalida")
+
+
 def validate(ev):
     if not isinstance(ev, dict) or ev.get("v") != 1:
         raise Quarantine("malformed: esquema desconocido (v != 1)")
@@ -3372,6 +3617,42 @@ def validate(ev):
         if not p.get("topic"):
             raise Quarantine("malformed: learning.add sin 'topic'")
         check_slug(p["topic"], "topic")
+        if p.get("supersedes") not in (None, "", 0):
+            if not isinstance(p["supersedes"], int) or isinstance(p["supersedes"], bool) \
+                    or p["supersedes"] < 1:
+                raise Quarantine(f"malformed: learning.add con 'supersedes' {p['supersedes']!r} "
+                                 f"— tiene que ser el numero de una regla")
+            if not p.get("text"):
+                raise Quarantine("malformed: learning.add con 'supersedes' sin 'text'")
+            validar_fecha_evento(p, "learning.add")
+        elif p.get("quickref_prefix"):
+            raise Quarantine("malformed: learning.add con 'quickref_prefix' sin 'supersedes' — "
+                             "solo se quita la linea de la regla que se reemplaza")
+        return t, p
+    elif t == "learning.retire":
+        # El compactador es su propia frontera de confianza (learning 106): el emisor ya rechaza
+        # esto, pero un evento puede venir escrito a mano o de otro emisor.
+        if not p.get("topic"):
+            raise Quarantine("malformed: learning.retire sin 'topic'")
+        if not p.get("match_prefix"):
+            raise Quarantine("malformed: learning.retire sin 'match_prefix' — sin ancla no se sabe "
+                             "que regla retirar")
+        if p.get("motivo") not in learning_marks.MOTIVOS:
+            raise Quarantine(f"malformed: learning.retire con motivo {p.get('motivo')!r}; uno de "
+                             f"{learning_marks.MOTIVOS}")
+        por = p.get("por")
+        if por not in (None, "", 0) and (not isinstance(por, int) or isinstance(por, bool) or por < 1):
+            raise Quarantine(f"malformed: learning.retire con 'por' {por!r} — tiene que ser un numero")
+        num = p.get("numero")
+        if num not in (None, "", 0) and (not isinstance(num, int) or isinstance(num, bool) or num < 1):
+            raise Quarantine(f"malformed: learning.retire con 'numero' {num!r} — tiene que ser un numero")
+        if p["motivo"] == "obsoleta" and por:
+            raise Quarantine("malformed: learning.retire 'obsoleta' no lleva 'por' (nada la reemplaza)")
+        if p["motivo"] != "obsoleta" and not por:
+            raise Quarantine(f"malformed: learning.retire '{p['motivo']}' necesita 'por' (la regla "
+                             f"que la reemplaza)")
+        validar_fecha_evento(p, "learning.retire")
+        check_slug(p["topic"], "topic")
         return t, p
     elif t == "learning.update":
         # El compactador es su propia frontera de confianza (learning 106): journal-emit ya
@@ -3484,6 +3765,8 @@ def apply_event(mem, ev):
         return apply_learning_add(mem, p)
     if t == "learning.update":
         return apply_learning_update(mem, p)
+    if t == "learning.retire":
+        return apply_learning_retire(mem, p)
     if t == "plan.upsert":
         return apply_plan_upsert(mem, p)
     if t == "plan.reopen":

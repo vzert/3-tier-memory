@@ -142,10 +142,42 @@ def main():
     if not top:
         return
     print("MEMORIA RELEVANTE A TU PETICIÓN (del sistema 3-tier; ábrela si aplica, ignórala si no):")
+    # Pie de retirada (2.45.0, F2 del plan de ciclo de vida): solo si recall.sh pasa RECALL_PIE
+    # (la ruta de journal-emit.py). Sin la variable la salida es la del motor de F0, y
+    # tools/recall-bench/compare-motores.py sigue comparando byte a byte contra el bloque viejo.
+    emit = os.environ.get("RECALL_PIE", "")
+    con_pie = False
     for score, relevance, nmatch, u in top:
         tag = LABEL.get(u.get("tipo"), u.get("tipo"))
         path = u.get("path", "")
         print(f"  - [{tag}] {u.get('texto','')}" + (f"  ({path})" if path else ""))
+        ancla = ancla_retiro(u) if emit else None
+        if ancla:
+            con_pie = True
+            print(f"      ↳ si ya no es cierta: --topic {ancla[0]} --match-prefix \"{ancla[1]}\"")
+    if con_pie:
+        mem = os.environ.get("RECALL_MEMORY_DIR", "")
+        print(f"  (↳ = la regla esta vencida: python3 \"{emit}\""
+              + (f" --memory-dir \"{mem}\"" if mem else "")
+              + " --type learning.retire <↳> --motivo obsoleta|duplicada|superada [--por N]."
+              " Si solo cambio su texto: --type learning.update <↳> --text \"<nuevo>\".)")
+
+
+def ancla_retiro(u):
+    """(topic, prefijo) para retirar o corregir una regla numerada servida; None si no es una.
+
+    El prefijo son las 6 primeras palabras sin enfasis: journal-compact compara el prefijo con el
+    texto sin `*`, `_` ni comillas invertidas. Se corta antes de un caracter que el shell
+    interpretaria dentro de comillas dobles."""
+    if not u.get("regla"):
+        return None
+    # `[/\\]`: build-recall-index arma la ruta con os.path.join, que en Windows usa `\`.
+    m = re.match(r"^memory[/\\]learnings[/\\]([A-Za-z0-9][A-Za-z0-9._-]*)\.md$", u.get("path", ""))
+    if not m:
+        return None
+    pref = " ".join(re.sub(r"[*_`]", "", u.get("texto", "")).split()[:6])
+    pref = re.split(r'["$\\!]', pref)[0].strip()
+    return (m.group(1), pref) if pref else None
 
 
 if __name__ == "__main__":

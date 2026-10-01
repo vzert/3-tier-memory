@@ -55,6 +55,17 @@ Tipos de evento:
                     file y su fila en _learnings.md si faltan; --quickref agrega la version
                     corta al Quick Reference (numerada, max+1). Sin --text solo registra el
                     topic. Imprime l-<10 hex> (o l-topic-<topic>).
+                    [--supersedes N [--nota "<una linea>"] [--quickref-prefix QP]]   (2.45.0)
+                    La regla nueva REEMPLAZA a la #N del mismo topic: en el mismo escrito, N
+                    queda marcada `— ⊘ RETIRADA (FECHA, superada por #M)`. O las dos o ninguna.
+                    --quickref-prefix quita la linea vieja de N del Quick Reference.
+  learning.retire   --topic T --match-prefix P --motivo obsoleta|duplicada|superada
+                    [--por N] [--nota "<una linea>"] [--quickref-prefix QP]           (2.45.0)
+                    Retira una regla SIN borrarla ni renumerarla: anade al final de su linea
+                    `— ⊘ RETIRADA (FECHA, <motivo>[ por #N]): <nota>`. El recall deja de
+                    servirla. --por (la regla viva que la reemplaza) es obligatorio con
+                    duplicada|superada y no se admite con obsoleta. --quickref-prefix quita su
+                    linea del Quick Reference (sin renumerar el resto). Imprime l-topic-<T>.
   learning.update   --topic T [--match-prefix P --text "<nuevo>"]
                     [--quickref-prefix QP --quickref "<nuevo>"] [--title TT] [--when W]
                     Corrige una regla YA escrita, CONSERVANDO su numero. Un learning no tiene id
@@ -157,6 +168,49 @@ def normalize_text(text):
 def pendiente_id(text, creado, origen):
     raw = "\n".join([normalize_text(text), (creado or "").strip(), normalize_text(origen)])
     return "p-" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10]
+
+
+MOTIVOS_RETIRO = ("obsoleta", "duplicada", "superada")   # = learning_marks.MOTIVOS
+
+
+def numero_regla(valor, flag):
+    """Entero >= 1 de --por / --supersedes, o None si no se paso. Acepta `135` y `#135`."""
+    v = (valor or "").strip().lstrip("#")
+    if not v:
+        return None
+    if not v.isdigit() or int(v) < 1:
+        sys.exit(f"journal-emit: {flag} debe ser el numero de una regla (p. ej. 99), no {valor!r}")
+    return int(v)
+
+
+def numero_por_prefijo(memory_dir, topic, prefijo):
+    """Numero de la UNICA regla numerada del topic cuyo texto empieza por `prefijo`, o None.
+
+    Viaja en el evento de learning.retire: el ancla es el texto de hoy, y si un learning.update
+    posterior cambia el principio de la regla, en un replay del retire el prefijo ya no casa. Con
+    el numero, el compactador reconoce que esa regla ya esta retirada (replay, I3) en vez de
+    mandarlo a cuarentena. Misma comparacion que journal-compact (sin `*`, `_`, comillas
+    invertidas ni mayusculas)."""
+    def plano(t):
+        return normalize_text(re.sub(r"[*_`]", "", t)).lower()
+    path = os.path.join(memory_dir, "learnings", topic + ".md")
+    try:
+        with open(path, encoding="utf-8") as f:
+            lineas = f.read().splitlines()
+    except OSError:
+        return None
+    pp = plano(prefijo)
+    hits = []
+    for l in lineas:
+        m = re.match(r"^\s*(\d+)\.\s+(.*)$", l)
+        if m and pp and plano(m.group(2)).startswith(pp):
+            hits.append(int(m.group(1)))
+    return hits[0] if len(hits) == 1 else None
+
+
+def una_linea(texto):
+    """La nota del marcador vive en la linea de la regla (I2): sin saltos de linea."""
+    return normalize_text(texto or "")
 
 
 def learning_id(topic, text):
@@ -394,7 +448,7 @@ def main():
                              "pendiente.expire", "pendiente.reopen", "pendiente.window",
                              "pendiente.block",
                              "session.add", "session.amend",
-                             "learning.add", "learning.update",
+                             "learning.add", "learning.update", "learning.retire",
                              "plan.upsert", "plan.reopen", "research.upsert",
                              "research.rename"])
     ap.add_argument("--memory-dir")
@@ -443,6 +497,10 @@ def main():
     ap.add_argument("--quickref-prefix", default="")
     ap.add_argument("--when", default="")
     ap.add_argument("--importance", default="")
+    # learning.retire / learning.add --supersedes (2.45.0)
+    ap.add_argument("--motivo", default="")
+    ap.add_argument("--por", default="")
+    ap.add_argument("--supersedes", default="")
     a = ap.parse_args()
 
     memory_dir = resolve_memory_dir(a.memory_dir)
@@ -557,8 +615,49 @@ def main():
             "importance": imp,
         }
         base["payload"]["id"] = learning_id(topic, text) if text else f"l-topic-{topic}"
+        sup = numero_regla(a.supersedes, "--supersedes")
+        qprefix = normalize_text(a.quickref_prefix or "")
+        if sup:
+            if not text:
+                sys.exit("journal-emit: --supersedes necesita --text (la regla que reemplaza a la vieja)")
+            base["payload"].update({"supersedes": sup, "nota": una_linea(a.nota),
+                                    "quickref_prefix": qprefix,
+                                    "fecha": date.today().isoformat()})
+        elif qprefix:
+            sys.exit("journal-emit: en learning.add, --quickref-prefix solo va con --supersedes "
+                     "(quita la linea del Quick Reference de la regla reemplazada)")
         write_event(memory_dir, base)
         print(base["payload"]["id"])
+        return
+
+    if a.type == "learning.retire":
+        topic = check_slug(a.topic, "--topic")
+        mprefix = normalize_text(a.match_prefix or "")
+        motivo = (a.motivo or "").strip().lower()
+        por = numero_regla(a.por, "--por")
+        if not mprefix:
+            sys.exit("journal-emit: learning.retire necesita --match-prefix (el prefijo del texto "
+                     "ACTUAL de la regla) — una regla no tiene id, sin ancla no se sabe cual retirar")
+        if motivo not in MOTIVOS_RETIRO:
+            sys.exit(f"journal-emit: --motivo debe ser uno de {MOTIVOS_RETIRO}")
+        if motivo == "obsoleta" and por:
+            sys.exit("journal-emit: --motivo obsoleta no lleva --por (nada la reemplaza); si otra "
+                     "regla la reemplaza, el motivo es duplicada o superada")
+        if motivo != "obsoleta" and not por:
+            sys.exit(f"journal-emit: --motivo {motivo} necesita --por N (la regla viva que la "
+                     f"reemplaza, en el mismo topic)")
+        base["payload"] = {
+            "topic": topic,
+            "match_prefix": mprefix,
+            "numero": numero_por_prefijo(memory_dir, topic, mprefix),
+            "motivo": motivo,
+            "por": por,
+            "nota": una_linea(a.nota),
+            "quickref_prefix": normalize_text(a.quickref_prefix or ""),
+            "fecha": date.today().isoformat(),
+        }
+        write_event(memory_dir, base)
+        print(f"l-topic-{topic}")
         return
 
     if a.type == "learning.update":

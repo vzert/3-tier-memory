@@ -59,6 +59,10 @@ if [ ! -f "$INDEX" ]; then
   NEEDS_BUILD=true
 elif [ -n "$(find "$MEMORY_DIR" -name '*.md' -not -path '*/archive/*' -not -name '*.bak*' -not -name '*.archived.md' -not -name 'archived-*.md' -newer "$INDEX" -print -quit 2>/dev/null)" ]; then
   NEEDS_BUILD=true
+elif [ "$BUILDER" -nt "$INDEX" ] || [ "$(dirname "$BUILDER")/learning_marks.py" -nt "$INDEX" ]; then
+  # Un constructor nuevo (2.45.0: salta las reglas retiradas y marca las numeradas) no sirve de
+  # nada sobre un indice que construyo el viejo: sin cambios en memory/, nadie lo reconstruia.
+  NEEDS_BUILD=true
 fi
 if [ "$NEEDS_BUILD" = true ] && [ -f "$BUILDER" ]; then
   python3 "$BUILDER" "$MEMORY_DIR" "$INDEX" >/dev/null 2>&1
@@ -70,6 +74,10 @@ PROMPT=$(echo "$_HOOK_INPUT" | python3 -c "import json,sys;print(json.load(sys.s
 
 # El motor vive en recall_rank.py desde la Fase F0 (plan ciclo de vida de learnings): el banco
 # tools/recall-bench/recall-bench.py lo importa, asi mide el mismo codigo que corre aqui.
-RECALL_INDEX="$INDEX" RECALL_PROMPT="$PROMPT" python3 "$(dirname "$0")/recall_rank.py" 2>/dev/null
+# RECALL_PIE (2.45.0): cada regla servida lleva debajo su topic y su prefijo, y una linea final
+# dice como retirarla o corregirla por el journal. El agente que descubre en su trabajo que una
+# regla esta vencida tiene la orden delante, en vez de seguirla o editarla a mano.
+RECALL_INDEX="$INDEX" RECALL_PROMPT="$PROMPT" RECALL_PIE="$(dirname "$0")/journal-emit.py" \
+  RECALL_MEMORY_DIR="$MEMORY_DIR" python3 "$(dirname "$0")/recall_rank.py" 2>/dev/null
 
 exit 0

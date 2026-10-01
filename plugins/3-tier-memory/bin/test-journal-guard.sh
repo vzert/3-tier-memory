@@ -84,6 +84,8 @@ fi
 expect_pass "MEMORY.md (Tier 1) pasa" Edit "$P/memory/MEMORY.md"
 expect_pass "sessions/ (Tier 3) pasa" Write "$P/memory/sessions/2026-09-02-x.md"
 expect_pass "learnings/<topic>.md (Tier 3) pasa" Edit "$P/memory/learnings/topic.md"
+# 2.45.0 no lo deniega: con strict=1 (el defecto de setup-memory) romperia crear el topic inicial,
+# el last_verified de /consolidate-3t y el respaldo sin journal de /save-learning; queda para otra fase.
 expect_pass "pendientes/ que no es mensual pasa" Write "$P/memory/pendientes/notas.md"
 expect_pass "_*.md fuera de memory/ pasa" Write "$P/src/_config.md"
 expect_pass "archivo cualquiera pasa" Write "$P/src/main.py"

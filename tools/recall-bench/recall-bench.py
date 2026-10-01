@@ -328,17 +328,18 @@ def medir(casos, reglas_por_mem, hoy):
                 r["fuga"] = []
                 r["nota"] = "canal inexistente en F0: 0 por construccion (lo implementa F5)"
             else:
-                por_id = {u["_rid"]: u for u in units if u.get("_rid")}
-                nuevo = por_id.get(c["entrada"])
-                if nuevo is None:
-                    print(f"recall-bench: {c['id']}: la regla {c['entrada']} no esta en el indice",
-                          file=sys.stderr)
-                    sys.exit(1)
-                topic = c["entrada"].split("#")[0]
+                # Las palabras de la regla nueva salen de su TEXTO, igual que las calcula el
+                # constructor (truncate + tokenize), no de buscarla en el indice: desde 2.45.0 una
+                # regla retirada no esta en el indice, y el duplicado que se retiro sigue siendo
+                # un caso de dedup valido (la pregunta es si al emitirlo se habria visto el
+                # original). Para una regla viva da las mismas palabras que el indice.
+                topic, n = c["entrada"].split("#")[0], int(c["entrada"].split("#")[1])
+                texto = next(t for k, t in reglas_por_mem[c["_mem"]][topic] if k == n)
+                nuevo_kw = builder.tokenize(builder.truncate(texto))
                 vecinos = [u for u in units if u.get("_rid") and u["_rid"].split("#")[0] == topic
                            and u["_rid"] != c["entrada"]]
                 # orden estable: empates conservan el orden del indice
-                vecinos.sort(key=lambda u: jaccard(nuevo["keywords"], u["keywords"]), reverse=True)
+                vecinos.sort(key=lambda u: jaccard(nuevo_kw, u["keywords"]), reverse=True)
                 orden = [u["_rid"] for u in vecinos]
                 puestos = {e: (orden.index(e) + 1 if e in orden else None) for e in sorted(esperadas)}
                 r["devueltas"] = orden[:K["dedup"]]
@@ -387,9 +388,9 @@ def main():
         "metricas": {
             "prompt@4": frac("prompt"),
             "accion@2": dict(frac("accion"), nota="no medido: canal inexistente en F0"),
-            "dedup@8": dict(frac("dedup"), fuente_palabras="keywords del indice (Jaccard)"),
+            "dedup@8": dict(frac("dedup"), fuente_palabras="texto de la regla nueva (truncate+tokenize) contra keywords del indice (Jaccard)"),
             "fuga": {"valor": sum(len(d["fuga"]) for d in detalle),
-                     "nota": "informativa en F0: ninguna regla es retirable todavia"},
+                     "nota": "reglas prohibidas devueltas; desde 2.45.0 (F2) una regla retirada no se sirve"},
         },
         "detalle": detalle,
     }
