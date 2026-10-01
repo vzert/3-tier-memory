@@ -129,7 +129,7 @@ armar "$M" "$FX/snippet-1813.txt" "$FX/calendario-1880.txt"
 tx "$T/t.jsonl" skill "$F" "$FX/respuesta-turno-1813.txt" -
 O=$(corre "$T/t.jsonl" false -)
 chk "bloquea" "1" "$(bloquea "$O")"
-chk "nombra el recordatorio que falta" "1" "$(printf '%s' "$O" | grep -c 'recordatorio de calendario')"
+chk "nombra el recordatorio que falta" "1" "$(printf '%s' "$O" | grep -c 'recordatorios de calendario no estan')"
 chk "el snippet SI estaba pegado: no lo reclama" "0" "$(printf '%s' "$O" | grep -c 'snippet `Como retomar` no esta')"
 chk "y de paso F1: Proximo paso bloqueado por un tercero" "1" "$(printf '%s' "$O" | grep -c 'p-a4439fa8fd esta bloqueado')"
 
@@ -258,7 +258,7 @@ R.append({"type": "assistant", "message": {"content": [{"type": "text", "text": 
 open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r) for r in R) + "\n")
 PYT
 O=$(corre "$T/t.jsonl" false -)
-chk "bloquea por la primera ficha (su calendario falta)" "1" "$(printf '%s' "$O" | grep -c 'recordatorio de calendario')"
+chk "bloquea por la primera ficha (su calendario falta)" "1" "$(printf '%s' "$O" | grep -c 'recordatorios de calendario no estan')"
 
 echo "== ronda 2: las dos fichas en UNA sola llamada Bash — tambien se revisan las dos =="
 python3 - "$T/t.jsonl" "$F" "$F2" "$T/solo2.txt" <<'PYT'
@@ -271,7 +271,7 @@ R = [{"type": "user", "message": {"role": "user", "content": "cierra"}},
      {"type": "assistant", "message": {"content": [{"type": "text", "text": open(txt, encoding="utf-8").read()}]}}]
 open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r) for r in R) + "\n")
 PYT
-chk "bloquea por la segunda ficha del mismo comando" "1" "$(corre "$T/t.jsonl" false - | grep -c 'recordatorio de calendario')"
+chk "bloquea por la segunda ficha del mismo comando" "1" "$(corre "$T/t.jsonl" false - | grep -c 'recordatorios de calendario no estan')"
 
 echo "== 2.33.1 (p-c72a33ae7a), caso REAL: se cierra un pendiente que el snippet cita y el snippet no se rehace =="
 # Fixture: bin/fixtures/cierre-9ce2e917/ — el snippet que Victor tenia (con p-477bb60303 en
@@ -564,14 +564,16 @@ PYV
 chk "silencio" "" "$(corre "$T/t.jsonl" false -)"
 
 # ================================================================================================
-# 2.35.0 — Step 8e: en una ficha desde el 2026-09-23 el hook exige tambien el prompt opcional que
-# print-pendiente-opcional.py imprime EN VIVO desde _pendientes.md.
+# 2.35.0 — Step 8e: en una ficha desde el 2026-09-23 el hook exige tambien el bloque de pendiente que
+# print-pendiente-opcional.py imprime EN VIVO desde _pendientes.md. Desde 2.44.0 el candidato vence
+# HOY: con el snippet completo de la ficha, un Alta suelto ya no sale (solo en el caso 5).
+HOY=$(python3 -c 'import datetime; print(datetime.date.today().isoformat())')
 opcional() {   # arma la ficha 2120 con fecha 2026-09-23 y un Alta candidato
   armar "$M" "$FX/snippet-2120.txt" "$FX/calendario-2129.txt"
   sed -i.bak 's/^date: 2026-09-22$/date: 2026-09-23/' "$F" && rm -f "$F.bak"
-  python3 - "$M/_pendientes.md" <<'PYO'
+  python3 - "$M/_pendientes.md" "$HOY" <<'PYO'
 import sys; p=sys.argv[1]; t=open(p, encoding="utf-8").read()
-t=t.replace("## Alta prioridad\n\n","## Alta prioridad\n\n- [ ] alta candidata del prompt opcional — _creado: 2026-09-23_ — _id: p-0a0a0a0a0a_\n",1)
+t=t.replace("## Alta prioridad\n\n","## Alta prioridad\n\n- [ ] alta candidata del prompt opcional — _creado: 2026-09-23_ — _revisar: " + sys.argv[2] + "_ — _id: p-0a0a0a0a0a_\n",1)
 open(p, "w", encoding="utf-8").write(t)
 PYO
   python3 "$BIN/print-como-retomar.py" "$F" > "$T/o-snip.txt"
@@ -584,7 +586,7 @@ printf 'Resumen.\n\n%s\n\n%s\n' "$(cat "$T/o-snip.txt")" "$(cat "$FX/calendario-
 tx "$T/t.jsonl" skill "$F" "$T/o-sin.txt" -
 O=$(corre "$T/t.jsonl" false -)
 chk "bloquea" "1" "$(bloquea "$O")"
-chk "por el prompt opcional" "1" "$(printf '%s' "$O" | grep -c 'prompt opcional (Step 8e)')"
+chk "por el bloque de pendiente" "1" "$(printf '%s' "$O" | grep -c 'bloque de pendiente (Step 8e)')"
 echo "== 2.35.0: con el prompt opcional pegado: silencio =="
 printf 'Resumen.\n\n%s\n\n%s\n\n%s\n' "$(cat "$T/o-snip.txt")" "$(cat "$FX/calendario-2129.txt")" "$(cat "$T/o-opc.txt")" > "$T/o-con.txt"
 tx "$T/t.jsonl" skill "$F" "$T/o-con.txt" -
@@ -866,9 +868,9 @@ chk "pide el cierre al final de la respuesta" "1" "$(razon "$O" | grep -c 'termi
 # Solo el nombre de la ficha, no la ruta entera: en Windows el hook la escribe normalizada
 # (C:\...\2026-09-22-demo.md) y la prueba la tiene como /tmp/... (CI de f795efc, rojo solo en windows).
 chk "con el comando y la ruta literal de la ficha" "1" "$(razon "$O" | grep -E 'print-como-retomar\.py" "[^"]*2026-09-22-demo\.md"' | wc -l | tr -d ' ')"
-chk "y los recordatorios de la ficha" "1" "$(razon "$O" | grep -c 'Recordatorios de calendario` de la ficha')"
+chk "y los recordatorios de la ficha" "1" "$(razon "$O" | grep -c 'print-recordatorios\.py')"
 echo "== 2.43.0: vuelta con la revision y DESPUES el cierre completo: silencio sobre el cierre =="
-{ printf '%s\n\n' "$REV_OK"; cat "$T/salida-script.txt"; printf '\n'; cat "$FX/calendario-2129.txt"; printf '\n'; cat "$T/salida-8e.txt"; } > "$T/rev-y-cierre.txt"
+{ printf '%s\n\n' "$REV_OK"; cat "$T/salida-script.txt"; printf '\n'; cat "$T/salida-8e.txt"; printf '\n'; cat "$FX/calendario-2129.txt"; } > "$T/rev-y-cierre.txt"
 vuelta "$T/t-primero.jsonl" "$T/t.jsonl" "$T/rev-y-cierre.txt"
 O=$(corre "$T/t.jsonl" true -)
 chk "no bloquea" "0" "$(bloquea "$O")"
@@ -889,7 +891,7 @@ echo "== 2.43.0: snippet ANTES de la revision en la misma respuesta: tambien ent
 vuelta "$T/t-primero.jsonl" "$T/t.jsonl" "$T/snip-luego-rev.txt"
 chk "lo reclama" "1" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -c 'snippet `Como retomar` no esta despues de tu revision')"
 echo "== 2.43.0 ronda 1: el cierre duplicado y seguido de mas texto: lo reclama =="
-{ cat "$T/rev-y-cierre.txt"; printf '\n'; cat "$T/salida-script.txt"; printf '\n'; cat "$FX/calendario-2129.txt"; printf '\n'; cat "$T/salida-8e.txt"
+{ cat "$T/rev-y-cierre.txt"; printf '\n'; cat "$T/salida-script.txt"; printf '\n'; cat "$T/salida-8e.txt"; printf '\n'; cat "$FX/calendario-2129.txt"
   printf '\nNOT LAST: %s\n' "$(printf 'texto de relleno que empuja el cierre hacia arriba %.0s' 1 2 3 4 5 6 7 8)"; } > "$T/dup-cola.txt"
 vuelta "$T/t-primero.jsonl" "$T/t.jsonl" "$T/dup-cola.txt"
 O=$(corre "$T/t.jsonl" true -)
@@ -911,10 +913,10 @@ vuelta "$T/t-primero.jsonl" "$T/t.jsonl" "$T/orden.txt"
 chk "reclama el orden" "1" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -c 'no van en el orden')"
 echo "== 2.43.0 ronda 1: con un prompt opcional (8e) de verdad: falta tras la revision -> lo reclama; presente -> silencio =="
 armar "$M" "$FX/snippet-2120.txt" "$FX/calendario-2129.txt"; fecha30 "$F"
-python3 - "$M/_pendientes.md" <<'PYA'
+python3 - "$M/_pendientes.md" "$HOY" <<'PYA'
 import sys
 p = sys.argv[1]; t = open(p, encoding="utf-8").read()
-t = t.replace("## Media prioridad", "- [ ] otro Alta suelto — _origen: [[sessions/2026-09-01-x]]_ — _creado: 2026-09-29_ — _id: p-0a1b2c3d4e_\n\n## Media prioridad", 1)
+t = t.replace("## Media prioridad", "- [ ] otro Alta suelto — _origen: [[sessions/2026-09-01-x]]_ — _creado: 2026-09-29_ — _revisar: " + sys.argv[2] + "_ — _id: p-0a1b2c3d4e_\n\n## Media prioridad", 1)
 open(p, "w", encoding="utf-8").write(t)
 PYA
 python3 "$BIN/print-como-retomar.py" "$F" > "$T/s8b.txt"
@@ -924,9 +926,9 @@ tx "$T/t8.jsonl" skill "$F" "$T/sin-cierre.txt" "$T/s8b.txt"
 { printf '%s\n\n' "$REV_OK"; cat "$T/s8b.txt"; printf '\n'; cat "$FX/calendario-2129.txt"; } > "$T/sin8e.txt"
 vuelta "$T/t8.jsonl" "$T/t.jsonl" "$T/sin8e.txt"
 O=$(corre "$T/t.jsonl" true -)
-chk "sin 8e: lo reclama" "1" "$(razon "$O" | grep -c 'prompt opcional (Step 8e) no esta despues de tu revision')"
+chk "sin 8e: lo reclama" "1" "$(razon "$O" | grep -c 'bloque de pendiente (Step 8e) no esta despues de tu revision')"
 chk "y lo anexa" "1" "$(razon "$O" | grep -c 'p-0a1b2c3d4e')"
-{ cat "$T/sin8e.txt"; printf '\n'; cat "$T/s8e.txt"; } > "$T/con8e.txt"
+{ printf '%s\n\n' "$REV_OK"; cat "$T/s8b.txt"; printf '\n'; cat "$T/s8e.txt"; printf '\n'; cat "$FX/calendario-2129.txt"; } > "$T/con8e.txt"
 vuelta "$T/t8.jsonl" "$T/t.jsonl" "$T/con8e.txt"
 chk "con 8e al final: silencio sobre el cierre" "0" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -cE 'despues de tu revision|no quedo como lo ultimo')"
 echo "== 2.43.0 ronda 2: cola larga seguida de una linea del cierre repetida: sigue siendo cola =="
@@ -938,6 +940,72 @@ tx "$T/t.jsonl" print "$F" "$T/sin-cierre.txt" "$T/salida-script.txt"
 O=$(corre "$T/t.jsonl" false -)
 chk "bloquea" "1" "$(bloquea "$O")"
 chk "por el snippet, como antes" "1" "$(razon "$O" | grep -c 'snippet `Como retomar` no esta en tu respuesta')"
+
+# ================================================================================================
+# 2.44.0 — capas y emojis del cierre (reglas de Victor del 2026-10-01). Desde la ficha del corte
+# (2026-10-01) el hook exige las cabeceras: 🔁 snippet en fence, 🔔 vence hoy / ➕ opcional, 🗓️
+# calendario sin fence; orden snippet, pendiente, calendario.
+fecha01() { python3 -c 'import sys;p=sys.argv[1];t=open(p,encoding="utf-8").read();open(p,"w",encoding="utf-8").write(t.replace("date: 2026-09-22","date: 2026-10-01",1))' "$1"; }
+vence_hoy() {   # $1 _pendientes.md, $2 id: un Media que vence hoy
+  python3 - "$1" "$HOY" "$2" <<'PYH'
+import sys
+p, hoy, pid = sys.argv[1:4]; t = open(p, encoding="utf-8").read()
+t = t.replace("## Baja prioridad", f"- [ ] media que vence hoy — _origen: [[sessions/2026-09-01-x]]_ — _creado: 2026-09-20_ — _revisar: {hoy}_ — _id: {pid}_\n\n## Baja prioridad", 1)
+open(p, "w", encoding="utf-8").write(t)
+PYH
+}
+echo "== 2.44.0: los tres scripts sobre una ficha del corte con un pendiente que vence hoy =="
+armar "$M" "$FX/snippet-2120.txt" "$FX/calendario-2129.txt"; fecha01 "$F"
+vence_hoy "$M/_pendientes.md" p-0b0b0b0b0b
+python3 "$BIN/print-como-retomar.py" "$F" > "$T/n8b.txt"
+python3 "$BIN/print-pendiente-opcional.py" "$F" > "$T/n8e.txt"
+python3 "$BIN/print-recordatorios.py" "$F" > "$T/n8c.txt"
+chk "8b abre con 🔁" "1" "$(head -1 "$T/n8b.txt" | grep -c '^🔁 ')"
+chk "8b: el snippet va dentro de un fence" "2" "$(grep -c '^```$' "$T/n8b.txt")"
+chk "8e: 🔔 con el que vence hoy" "1" "$(grep -c '^🔔 ' "$T/n8e.txt")"
+chk "8e: uno solo" "1" "$(grep -c '^Retomamos:.*p-0b0b0b0b0b' "$T/n8e.txt")"
+chk "8e: sin ➕ (hay Retomamos y vence uno hoy)" "0" "$(grep -c '^➕' "$T/n8e.txt")"
+chk "8c abre con 🗓️" "1" "$(head -1 "$T/n8c.txt" | grep -c '^🗓️ Recordatorio para el 2026-09-27')"
+chk "8c: sin fence (sin color)" "0" "$(grep -c '^```' "$T/n8c.txt")"
+chk "8c: conserva el prompt del evento" "1" "$(grep -c '^Retomamos: verificar si las dos reglas' "$T/n8c.txt")"
+echo "== 2.44.0: primer cierre: pide los tres comandos, con print-recordatorios.py =="
+tx "$T/t44.jsonl" skill "$F" "$T/sin-cierre.txt" "$T/n8b.txt"
+O=$(corre "$T/t44.jsonl" false -)
+chk "pide print-recordatorios.py" "1" "$(razon "$O" | grep -c 'print-recordatorios\.py')"
+chk "pide print-pendiente-opcional.py" "1" "$(razon "$O" | grep -c 'print-pendiente-opcional\.py')"
+chk "ya no pide 8d" "0" "$(razon "$O" | grep -c 'print-research-recomendaciones')"
+echo "== 2.44.0: vuelta con el cierre nuevo en orden: silencio sobre el cierre =="
+{ printf '%s\n\n' "$REV_OK"; cat "$T/n8b.txt"; printf '\n'; cat "$T/n8e.txt"; printf '\n'; cat "$T/n8c.txt"; } > "$T/r44.txt"
+vuelta "$T/t44.jsonl" "$T/t.jsonl" "$T/r44.txt"
+chk "silencio" "0" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -cE 'despues de tu revision|no quedo como lo ultimo')"
+echo "== 2.44.0: el snippet sin su cabecera 🔁: lo reclama =="
+{ printf '%s\n\n' "$REV_OK"; tail -n +2 "$T/n8b.txt"; printf '\n'; cat "$T/n8e.txt"; printf '\n'; cat "$T/n8c.txt"; } > "$T/r44-sin.txt"
+vuelta "$T/t44.jsonl" "$T/t.jsonl" "$T/r44-sin.txt"
+chk "reclama el snippet sin emoji" "1" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -c 'snippet `Como retomar` no esta despues de tu revision')"
+echo "== 2.44.0: el bloque 🔔 sin su cabecera: lo reclama =="
+{ printf '%s\n\n' "$REV_OK"; cat "$T/n8b.txt"; printf '\n'; tail -n +2 "$T/n8e.txt"; printf '\n'; cat "$T/n8c.txt"; } > "$T/r44-sin8e.txt"
+vuelta "$T/t44.jsonl" "$T/t.jsonl" "$T/r44-sin8e.txt"
+chk "reclama el bloque de pendiente sin emoji" "1" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -c 'bloque de pendiente (Step 8e) no esta despues de tu revision')"
+echo "== 2.44.0: el calendario antes del pendiente: lo reclama por el orden =="
+{ printf '%s\n\n' "$REV_OK"; cat "$T/n8b.txt"; printf '\n'; cat "$T/n8c.txt"; printf '\n'; cat "$T/n8e.txt"; } > "$T/r44-orden.txt"
+vuelta "$T/t44.jsonl" "$T/t.jsonl" "$T/r44-orden.txt"
+chk "reclama el orden" "1" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -c 'no van en el orden snippet, pendiente, calendario')"
+echo "== 2.44.0: la misma respuesta sin emojis ni fences sobre una ficha anterior al corte: silencio =="
+sed -i.bak 's/^date: 2026-10-01$/date: 2026-09-30/' "$F" && rm -f "$F.bak"
+grep -v -e '^🔁 Siguiente' -e '^🔔 ' -e '^🗓️ ' -e '^```$' "$T/r44.txt" > "$T/r44-viejo.txt"
+tx "$T/t44v.jsonl" skill "$F" "$T/sin-cierre.txt" "$T/n8b.txt"
+vuelta "$T/t44v.jsonl" "$T/t.jsonl" "$T/r44-viejo.txt"
+chk "silencio" "0" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -cE 'despues de tu revision|no quedo como lo ultimo')"
+echo "== 2.44.0: caso 5 sin nada que venza hoy -> ➕; con uno que vence hoy -> 🔔 y no ➕ =="
+armar "$M" -; fecha01 "$F"
+python3 "$BIN/print-pendiente-opcional.py" "$F" > "$T/c5.txt"
+chk "➕ con el Alta abierto" "1" "$(grep -c '^➕ ' "$T/c5.txt")"
+chk "propone el Alta" "1" "$(grep -c 'p-daf3051915' "$T/c5.txt")"
+chk "caso 5 en una linea con 🔁" "1" "$(python3 "$BIN/print-como-retomar.py" "$F" | grep -c '^🔁 Como retomar: Ninguno')"
+vence_hoy "$M/_pendientes.md" p-0c0c0c0c0c
+python3 "$BIN/print-pendiente-opcional.py" "$F" > "$T/c5h.txt"
+chk "🔔 con el que vence hoy" "1" "$(grep -c '^🔔 ' "$T/c5h.txt")"
+chk "y sin ➕" "0" "$(grep -c '^➕' "$T/c5h.txt")"
 
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

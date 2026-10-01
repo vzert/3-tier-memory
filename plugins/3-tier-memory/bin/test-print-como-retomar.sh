@@ -34,7 +34,7 @@ EOF
 OUTA="$(correr "$FA")"
 check "una sola linea de salida" "$(printf '%s\n' "$OUTA" | wc -l | tr -d ' ')" "1"
 check "contenido completo, sin partir" "$OUTA" \
-  "Como retomar: Ninguno — el plan \`plan-x\` cerro con sus 4 fases resueltas; no queda trabajo abierto de este plan."
+  "🔁 Como retomar: Ninguno — el plan \`plan-x\` cerro con sus 4 fases resueltas; no queda trabajo abierto de este plan."
 
 echo "B. forma de una linea SIN envolver (caso comun) sale identica"
 FB="$TMP/b.md"
@@ -45,9 +45,9 @@ Ninguno — sesion de verificacion puntual, no dejo trabajo pendiente.
 
 ## Related
 EOF
-check "linea tal cual" "$(correr "$FB")" "Como retomar: Ninguno — sesion de verificacion puntual, no dejo trabajo pendiente."
+check "linea tal cual" "$(correr "$FB")" "🔁 Como retomar: Ninguno — sesion de verificacion puntual, no dejo trabajo pendiente."
 
-echo "C. bloque fenced completo sale con separadores, contenido intacto"
+echo "C. bloque fenced completo: cabecera 🔁 y el snippet dentro de un fence (2.44.0), contenido intacto"
 FC="$TMP/c.md"
 cat > "$FC" <<'EOF'
 ## Como retomar
@@ -65,8 +65,10 @@ Antes de actuar, dime en 3 lineas donde quedamos.
 ## Related
 EOF
 OUTC="$(correr "$FC")"
-check "empieza con el separador superior" "$(printf '%s\n' "$OUTC" | head -1)" "─── ¿Como retomar en la siguiente sesion? ───"
-check "termina con el separador inferior" "$(printf '%s\n' "$OUTC" | tail -1)" "─────────────────────────────────────────────"
+check "empieza con la cabecera 🔁" "$(printf '%s\n' "$OUTC" | head -1)" "🔁 Siguiente sesión — copia y pega:"
+check "abre el fence en la segunda linea" "$(printf '%s\n' "$OUTC" | sed -n 2p)" "\`\`\`"
+check "cierra el fence en la ultima" "$(printf '%s\n' "$OUTC" | tail -1)" "\`\`\`"
+check "sin separadores ni introduccion" "$(printf '%s\n' "$OUTC" | grep -c '───\|Copia y pega esto')" "0"
 check "conserva el contenido del fence" "$(printf '%s\n' "$OUTC" | grep -c 'Retomamos: contexto de prueba.')" "1"
 
 echo "D. placeholder sin llenar (Step 8a no corrio): exit 1, sin stdout"
@@ -101,7 +103,7 @@ cat > "$FF" <<'EOF'
 
 Ninguno — ultima seccion del archivo, sin encabezado despues.
 EOF
-check "lee hasta EOF sin fallar" "$(correr "$FF")" "Como retomar: Ninguno — ultima seccion del archivo, sin encabezado despues."
+check "lee hasta EOF sin fallar" "$(correr "$FF")" "🔁 Como retomar: Ninguno — ultima seccion del archivo, sin encabezado despues."
 
 echo
 [ $FAIL -eq 0 ] && echo "TODO VERDE" || echo "HAY FALLOS"

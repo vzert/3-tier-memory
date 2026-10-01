@@ -122,7 +122,7 @@ def main():
             print(f"      - {item}")
     print("Antes de escribir \"## Research: Ninguno\" en el session log, confirma que ninguna de "
           "estas recomendaciones se resolvio (implementada, declinada, o diferida explicitamente) "
-          "en esta sesion. Step 8 arma el prompt de retomarlas con print-research-recomendaciones.py.")
+          "en esta sesion. Cada una sin marcar cita el pendiente abierto que la lleva (Step 5).")
 
 
 if __name__ == "__main__":

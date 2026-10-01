@@ -87,6 +87,15 @@ caso "cierre diferido" checkpoint-close-guard.sh m_cierre_final.py test-checkpoi
 caso "orden tras la revision" checkpoint-close-guard.sh m_cierre_final.py test-checkpoint-close-guard.sh "avisa que el snippet no esta despues de la revision" orden-apagado
 caso "anexo al usuario" checkpoint-close-guard.sh m_cierre_final.py test-checkpoint-close-guard.sh "y le ensena el cierre al usuario" sin-anexo
 caso "cola tras el cierre" checkpoint-close-guard.sh m_cierre_final.py test-checkpoint-close-guard.sh "reclama la cola" sin-cola
+echo
+echo "Capas y emojis del cierre (2.44.0): cada pieza, apagada, tumba su aserto"
+caso "➕ solo en el caso 5" print-pendiente-opcional.py m_capas_cierre.py test-print-pendiente-opcional.sh "snippet completo y nada vence hoy" capa3-sin-gate
+caso "🔔 solo _revisar = hoy" print-pendiente-opcional.py m_capas_cierre.py test-print-pendiente-opcional.sh "el que vence hoy" hoy-incluye-vencidos
+caso "🔔 uno cada vez" print-pendiente-opcional.py m_capas_cierre.py test-print-pendiente-opcional.sh "uno solo" hoy-sin-tope
+caso "cabecera 🔁 del snippet" print-como-retomar.py m_capas_cierre.py test-print-como-retomar.sh "empieza con la cabecera" sin-cabecera-retomar
+caso "🗓️ sin fence" print-recordatorios.py m_capas_cierre.py test-print-recordatorios.sh "sin fences" calendario-con-fence
+caso "el hook exige el emoji" checkpoint-close-guard.sh m_capas_cierre.py test-checkpoint-close-guard.sh "reclama el snippet sin emoji" emoji-no-exigido
+caso "recomendacion con dueno" checkpoint-audit.py m_capas_cierre.py test-checkpoint-audit.sh "avisa del research" reco-sin-dueno-pasa
 
 echo "Contrato de check-project-dir-fallback.py (2.41.4): cada pieza, rota, tumba su aserto"
 caso "verde respaldo" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " respaldo: exit 0" r1-sin-quitar-forma

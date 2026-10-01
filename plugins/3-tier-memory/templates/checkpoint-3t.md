@@ -200,9 +200,6 @@ importance: <0-10>
 ## Recordatorios de calendario
 <filled in Step 8c-2 — borra esta seccion si no hubo pendientes con fecha futura>
 
-## Recomendaciones de research sin resolver
-<filled in Step 8d — borra esta seccion si print-research-recomendaciones.py no imprimio nada>
-
 ## Related
 - [[_session-index]]
 - [[_pendientes]]
@@ -331,9 +328,10 @@ several candidate recommendations, of which this session (or a past one) only ac
 Without it, the recommendations you did NOT act on live only as prose inside a research already
 marked `completed` — nothing lists them again, ever, unless someone happens to reopen that exact
 file. If it prints any research with unresolved `## Recomendaciones` items, read them NOW, before
-Step 5 — Step 8d will build the "retomar" prompt for whatever is still unchecked, but only if you
-either resolved them (checked off, with a pointer to the plan/pendiente that tracks it, or a
-`declinado: <motivo>` note) or left them alone on purpose.
+Step 5. Since 2.44.0 they are not pasted in the closing (Step 8d): every item still unchecked must
+cite, in its own line, the OPEN pendiente that carries it (`p-…`; create it in Step 3b if missing),
+or be checked off (implemented, or `-- declinado: <motivo>`). `checkpoint-audit.py`
+(`research.recomendaciones`) flags any unchecked item without an open pendiente.
 
 **Read `adopted` and `rows_added` before you call anything broken — on the FIRST checkpoint of a
 memory that predates 2.12.0 they are both expected and non-zero, and nothing is wrong.** Such a
@@ -918,14 +916,15 @@ recíproca ni detección de ciclos. Este es ese mismo espíritu, aplicado a rese
 - [x] <recomendación descartada> — declinado: <motivo corto>
 ```
 
-Marca `[x]` solo cuando la recomendación tiene un destino real: un plan/pendiente que la
-implementa, o una nota explícita de por qué se descarta. Dejarla `[ ]` es la señal correcta
-mientras nadie ha decidido nada — no la marques solo para "limpiar" la lista.
+Marca `[x]` solo cuando la recomendación tiene un destino real: un plan que la implementa, o una
+nota explícita de por qué se descarta. Mientras siga `[ ]`, su línea cita el pendiente abierto que
+la lleva (`p-…`, desde 2.44.0): ese pendiente es el que sale en el cierre (🔔/➕) o en el
+calendario. No la marques solo para "limpiar" la lista.
 
 `check-active-research.py` (Step 3-pre) avisa en cada checkpoint mientras queden `[ ]` sin
 marcar en cualquier research — no solo en el de hoy. `print-research-recomendaciones.py` (Step
-8d) arma el prompt de retomar a partir de esta misma sección, para los research que ESTA sesión
-enlazó en su `## Research` — una sola fuente de verdad, nunca una segunda redacción.
+8d) lista las sin marcar de los research que ESTA sesión enlazó en su `## Research`, para que les
+des un pendiente; su salida es para ti, no se pega en el cierre.
 
 ### If NO signals found for either:
 Write "Ninguno" in the session log sections and skip the index updates.
@@ -1137,7 +1136,7 @@ libre produce un muro de falsos positivos y el usuario se queda tan ciego como c
 **Que hacer con cada `SALTADO` o `PARCIAL`:**
 
 1. **Si el script imprime una linea `corrige:`, ejecutala ahora.** Son arreglos baratos y
-   deterministas (emitir el `plan.upsert` que falto, compactar el journal, correr Step 8d). Vuelve
+   deterministas (emitir el `plan.upsert` que falto, compactar el journal, listar con Step 8d las recomendaciones sin pendiente). Vuelve
    a correr el audit y marca ese punto como `CORREGIDO` en el reporte. No le devuelvas al usuario
    un trabajo de un comando.
 2. **Si no hay `corrige:` o el arreglo pide criterio**, se queda `SALTADO` y entra literal en el
@@ -1186,8 +1185,9 @@ says so explicitly.
 El detalle de este paso vive en su propio fichero, junto a este template (2.42.0: era el 37 % del
 texto y se leia en el mismo bloque que todo lo demas). Imprimelo AHORA y siguelo entero — 8a
 persistir el snippet en la ficha, 8b imprimirlo con `print-como-retomar.py`, 8c recordatorios de
-calendario, 8d recomendaciones de research, 8e prompt opcional. Desde 2.43.0 las salidas de 8b, 8c,
-8d y 8e no se pegan en este turno: van al final de tu respuesta a la revision del cierre (ver 8b):
+calendario, 8d recomendaciones de research (ya no van en el cierre), 8e el pendiente que vence hoy
+o el opcional. Desde 2.43.0 las salidas de 8b, 8e y 8c no se pegan en este turno: van al final de
+tu respuesta a la revision del cierre, en ese orden y cada una con su emoji (ver 8b):
 
 ```bash
 S8=""
@@ -1200,5 +1200,5 @@ done
 
 Si imprime `STEP8=NONE`, no inventes el snippet: dilo en el reporte ("Step 8 no corrio: no encuentro
 checkpoint-3t-step8.md") y para aqui. El hook de cierre vuelve a medir el snippet, los
-recordatorios y el prompt opcional sobre la ficha final, y exige cada salida en tu texto (en
+recordatorios y el bloque de pendiente (8e) sobre la ficha final, y exige cada salida en tu texto (en
 `/checkpoint-3t`, despues de la revision del cierre).

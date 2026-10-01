@@ -284,6 +284,18 @@ CMD=${CMD//<SESSION_FILE>/\"$S\"}
 set +e; SAL=$(JBIN="$BIN" MEMORY_DIR="$M" bash -c "$CMD" 2>&1); RC=$?; set -e
 chk "el corrige impreso corre con exit 0" "0" "$RC"
 chk "el corrige impreso lista la recomendacion sin marcar" "1" "$(printf '%s' "$SAL" | grep -c 'otra sin decidir')"
+chk "dice que le falta pendiente" "1" "$(printf '%s' "$O" | grep -c 'demo — sin pendiente que la lleve')"
+
+echo "== 2.44.0: la recomendacion sin marcar que cita un pendiente abierto: HECHO (va por las capas del cierre) =="
+sed -i.bak 's/^- \[ \] otra sin decidir$/- [ ] otra sin decidir — la lleva p-2222222222/' "$M/research/demo.md" && rm -f "$M/research/demo.md.bak"
+O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
+chk "HECHO con dueno abierto" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*research.recomendaciones')"
+echo "== 2.44.0: si su pendiente ya no esta abierto: SALTADO =="
+sed -i.bak 's/la lleva p-2222222222/la lleva p-7a7a7a7a7a/' "$M/research/demo.md" && rm -f "$M/research/demo.md.bak"
+O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
+chk "SALTADO con dueno cerrado" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*research.recomendaciones')"
+chk "lo dice" "1" "$(printf '%s' "$O" | grep -c 'su pendiente ya no esta abierto (p-7a7a7a7a7a)')"
+sed -i.bak 's/ — la lleva p-7a7a7a7a7a$//' "$M/research/demo.md" && rm -f "$M/research/demo.md.bak"
 
 echo "== wikilink de research ROTO: SALTADO, nunca un HECHO por no poder mirar =="
 # Un enlace roto no es "sin recomendaciones": es que no se pudo mirar. La version anterior lo

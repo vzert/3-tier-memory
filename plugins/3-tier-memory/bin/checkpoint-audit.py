@@ -1164,9 +1164,14 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             h.append(Hallazgo(HECHO, "snippet.ids_vivos",
                               f"los {len(ids_sa)} id(s) de `Sigue abierto:` siguen abiertos"))
 
-    # 9. Research con recomendaciones sin resolver que ESTA ficha enlaza
+    # 9. Research con recomendaciones sin resolver que ESTA ficha enlaza. Desde 2.44.0 no van en el
+    # cierre (Victor, 2026-10-01: no le servian y repetian lo que ya tenia su pendiente). En su
+    # lugar, cada recomendacion sin marcar tiene que CITAR un pendiente abierto (`p-…`), que es el
+    # que la lleva por las capas del cierre y el calendario; o marcarse `[x]` (declinada). Asi no
+    # vuelve el caso del 2026-09-17 (tres recomendaciones sin dueno que nadie recordo).
     sec_res = seccion_por_prefijo(secs, "Research") or ""
     researches = sorted(set(WIKILINK_RESEARCH.findall(sec_res)))
+    ids_vivos_reco = {p[0] for p in pendientes_abiertos(memory_dir) if p[0]}
     pendientes_reco = []
     rotos_reco = []
     for r in researches:
@@ -1180,26 +1185,34 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         cuerpo = seccion_por_prefijo(secciones(leer(ruta)), "Recomendaciones")
         if cuerpo is None:
             continue
-        sin = [l.strip() for l in cuerpo.splitlines() if re.match(r"^-\s*\[\s\]\s+", l.strip())]
-        if sin:
-            pendientes_reco.append((r, len(sin)))
+        for l in cuerpo.splitlines():
+            if not re.match(r"^-\s*\[\s\]\s+", l.strip()):
+                continue
+            ids = ID_PENDIENTE.findall(l)
+            if not ids:
+                pendientes_reco.append((r, "sin pendiente que la lleve", l.strip()))
+            elif not any(i in ids_vivos_reco for i in ids):
+                pendientes_reco.append((r, "su pendiente ya no esta abierto (" + ", ".join(ids) + ")",
+                                        l.strip()))
     if not researches:
         h.append(Hallazgo(HECHO, "research.recomendaciones", "la ficha no enlaza ningun research"))
     elif pendientes_reco or rotos_reco:
         detalle = []
         if pendientes_reco:
-            detalle.append(f"{len(pendientes_reco)} con recomendaciones sin resolver")
+            detalle.append(f"{len(pendientes_reco)} recomendacion(es) sin marcar sin un pendiente abierto")
         if rotos_reco:
             detalle.append(f"{len(rotos_reco)} con wikilink roto")
         h.append(Hallazgo(SALTADO, "research.recomendaciones",
                           "research enlazado(s): " + ", ".join(detalle),
-                          [f"{r} — {n} sin marcar" for r, n in pendientes_reco]
+                          [f"{r} — {m}: {l[:120]}" for r, m, l in pendientes_reco]
                           + [f"{r} — {m}" for r, m in rotos_reco],
                           corrige='python3 "$JBIN/print-research-recomendaciones.py" '
-                                  "<SESSION_FILE>   # Step 8d; un wikilink roto se arregla en la ficha"))
+                                  "<SESSION_FILE>   # lista las sin marcar; cada una cita un "
+                                  "pendiente abierto (Step 3b) o se marca [x] -- declinado; un "
+                                  "wikilink roto se arregla en la ficha"))
     else:
         h.append(Hallazgo(HECHO, "research.recomendaciones",
-                          "ningun research enlazado tiene recomendaciones sin marcar"))
+                          "toda recomendacion sin marcar cita un pendiente abierto"))
 
     # 10. La ficha tiene fila en _session-index.md
     idx_ses = os.path.join(memory_dir, "_session-index.md")

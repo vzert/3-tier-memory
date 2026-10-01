@@ -20,6 +20,10 @@ items. Si ningun research enlazado tiene items sin marcar (o `## Research` dice 
 existe la seccion), no imprime nada y sale 0 -- silencio es el caso normal, a diferencia de
 `## Como retomar` que siempre tiene contenido que imprimir.
 
+Desde 2.44.0 su salida NO se pega en el cierre (Victor, 2026-10-01: repetia lo que ya tenia su
+pendiente). La usa el agente en Step 5 para dar a cada recomendacion sin marcar un pendiente abierto
+que la lleve; checkpoint-audit.py (`research.recomendaciones`) lo exige.
+
 Uso:  print-research-recomendaciones.py SESSION_FILE
 """
 # sella-huellas: no (solo lee el session file y los research que enlaza; no escribe nada)
@@ -33,7 +37,7 @@ for _flujo in (sys.stdout, sys.stderr):
 
 SEP_TOP_FMT = "─── Recomendaciones sin resolver: research/{slug} ───"
 SEP_BOTTOM = "────────────────────────────────────"
-INTRO = "Copia y pega esto al iniciar una nueva sesion de Claude Code:"
+INTRO = "Para el agente (Step 5), no para el cierre: cada una necesita un pendiente abierto que la lleve."
 
 UNCHECKED_RE = re.compile(r"^-\s*\[\s\]\s+(.+)$")
 LINK_RE = re.compile(r"\[\[research/([^\]|]+?)(?:\|[^\]]*)?\]\]")
@@ -122,8 +126,8 @@ def main():
         print(f"Retomamos las recomendaciones sin resolver de research/{slug}.md:")
         for item in items:
             print(f"- {item}")
-        print("Decide, para cada una: abrir un plan, declinarla (marca [x] -- declinado: motivo), "
-              "o diferirla explicitamente.")
+        print("Para cada una: cita en su linea el pendiente abierto que la lleva (p-…; crealo en "
+              "Step 3b si no existe), abre un plan, o declinala (marca [x] -- declinado: motivo).")
         print(SEP_BOTTOM)
         printed_any = True
 

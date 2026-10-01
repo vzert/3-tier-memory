@@ -1,6 +1,49 @@
 # Changelog
 
 
+## [2.44.0] - 2026-10-01
+Origen: Victor, mirando el bloque final real de un `/checkpoint-3t`: demasiado texto, y los
+prompts opcionales se repetian sesion tras sesion (los mismos dos vencidos durante varias). Pidio
+siete reglas (p-7edba631a2). El cierre pasa a ir en capas, con un emoji por bloque y solo el snippet
+en color.
+
+### Changed
+- **Capas del bloque de pendiente (`print-pendiente-opcional.py`, Step 8e).** Imprime a lo sumo un
+  bloque: 🔔 **vence hoy** — un pendiente con `_revisar` igual a hoy (los ya vencidos no), con
+  cualquier snippet; si vencen varios, uno cada vez (mayor prioridad, luego la fila de arriba). ➕
+  **opcional** — solo si el snippet es el caso 5 (nada que retomar) y no vence ninguno hoy; elige
+  como antes (hasta 2 vencidos, o el Alta mas reciente). El detector del caso 5 es el de
+  `print-como-retomar.py` (se importa, no se copia).
+- **El snippet abre con 🔁 y va dentro de un fence ``` (`print-como-retomar.py`).** En la terminal el
+  fence sale en color: es el unico bloque del cierre que va en color. El caso 5 es una linea,
+  `🔁 Como retomar: Ninguno — …`. Sin separadores `───` ni frase de introduccion.
+- **Calendario por script, sin fence (`print-recordatorios.py`, nuevo, Step 8c).** Imprime los dos
+  primeros recordatorios de la ficha sin el fence del prompt, con cabecera 🗓️, y `+N con fecha
+  futura` si hay mas. En la ficha el prompt sigue en su fence. La plantilla del bloque cambia su
+  cabecera a `🗓️ Recordatorio para el <FECHA> — ponlo en tu calendario:` y pierde el separador. 8c
+  deja explicito que solo sale si la sesion dejo algo a futuro (un pendiente creado, o con la fecha
+  cambiada, en esta sesion).
+- **Orden del cierre: 🔁 snippet, 🔔/➕ pendiente, 🗓️ calendario.** Antes: snippet, calendario,
+  recomendaciones de research, opcional.
+- **Las recomendaciones de research sin resolver (8d) ya no van en el cierre.** Cada una sin marcar
+  tiene que citar en su linea el pendiente abierto que la lleva (`p-…`), o marcarse `[x]`; ese
+  pendiente es el que sale en las capas o en el calendario. `checkpoint-audit.py`
+  (`research.recomendaciones`) da `SALTADO` si alguna no cita un pendiente abierto (antes, si
+  quedaba alguna sin marcar, con o sin dueno). La plantilla de la ficha pierde la seccion
+  `## Recomendaciones de research sin resolver`. `print-research-recomendaciones.py` queda como
+  herramienta del agente en Step 5; su salida no se pega.
+- **`checkpoint-close-guard.sh`** compara cada bloque contra la salida de su script (el calendario
+  tambien, en los dos caminos), mide el orden nuevo y, en fichas desde el 2026-10-01, exige la
+  cabecera con emoji de cada bloque. En una ficha anterior solo exige el contenido: su cierre se
+  escribio con el formato viejo.
+
+### Tests
+- `test-print-pendiente-opcional.sh` reescrito por capas (37 asertos); `test-print-recordatorios.sh`
+  nuevo (13); `test-print-como-retomar.sh` con la cabecera y el fence; `test-checkpoint-close-guard.sh`
+  con 21 asertos de 2.44.0 (156 en total); `test-checkpoint-audit.sh` con el dueno de cada
+  recomendacion (228).
+- `tools/mutation-check.sh`: 7 casos nuevos (`m_capas_cierre.py`), uno por pieza; 54 de 54
+  discriminan.
 ## [2.43.3] - 2026-10-01
 Origen: pendiente p-9622e75fe3. La prosa de Step 0b describia el `--verificar` de 2.41.10. Solo
 cambia texto de la plantilla (mas CHANGELOG y la version); no hay codigo nuevo.

@@ -379,6 +379,30 @@ presentes = []      # (orden, lineas, texto) de cada bloque del cierre, para med
 # scripts y una linea corta. Mas que eso ya empuja el cierre hacia arriba (adversario de 2.43.0:
 # el cierre duplicado y seguido de mas texto pasaba sin aviso).
 COLA_MAX = 300
+# Capas y emojis del cierre (2.44.0, reglas de Victor del 2026-10-01): cada bloque abre con su emoji
+# (🔁 snippet, 🔔/➕ pendiente, 🗓️ calendario) y el snippet va en un fence. Desde este corte el hook
+# exige tambien esas cabeceras; en una ficha anterior, la respuesta se escribio con el formato viejo
+# y solo se exige el contenido (las cabeceras se quitan y el `🔁 ` delante de la linea del caso 5).
+CORTE_CAPAS = "2026-10-01"
+EMOJIS = ("🔁", "🔔", "➕", "🗓️")
+
+
+def exigidas(salida, nueva):
+    """Las lineas de la salida de un script que la respuesta tiene que traer."""
+    out = []
+    for l in salida.splitlines():
+        if not l.strip() or l.startswith("───") or l.startswith(("Copia y pega esto", "Si tienes tiempo")):
+            continue
+        if not nueva:
+            if re.fullmatch(r"\s*`{3,}\s*", l):
+                continue
+            e = next((e for e in EMOJIS if l.startswith(e)), None)
+            if e:
+                l = l[len(e):].strip()
+                if l.endswith(":"):
+                    continue
+        out.append(l)
+    return out
 _todo = "\n".join(textos)
 _j = _todo.rfind(REVISION_CABECERA)
 visto_tras_revision = plano(_todo[_j:]) if _j >= 0 else ""
@@ -454,6 +478,7 @@ def revisar(ficha):
     m_fecha = re.search(r"^date:\s*(\d{4}-\d{2}-\d{2})\s*$", texto, re.M)
     # Turno de /checkpoint-3t con revision: el cierre (snippet, 8e, calendario) va AL FINAL.
     diferido = bool(por_checkpoint and m_fecha and m_fecha.group(1) >= DESDE_REVISION)
+    nueva = bool(m_fecha and m_fecha.group(1) >= CORTE_CAPAS)
     base = visto_tras_revision if (diferido and reentrante) else visto
     donde = "despues de tu revision del cierre" if diferido else "en tu respuesta"
 
@@ -482,8 +507,7 @@ def revisar(ficha):
             salida = r.stdout if r.returncode == 0 else ""
         except Exception:
             salida = ""
-        esperado = [l for l in salida.splitlines()
-                    if l.strip() and not l.startswith("───") and not l.startswith("Copia y pega esto")]
+        esperado = exigidas(salida, nueva)
         cmd = f"`python3 \"{BIN}/print-como-retomar.py\" \"{ficha}\"`"
         if esperado and (diferido and not reentrante):
             reclamar(f"la salida de {cmd}", esperado, salida, 1)
@@ -499,10 +523,10 @@ def revisar(ficha):
                     "faltan). Solo lo viste tu en la salida de una herramienta. Corre "
                     f"`python3 \"$JBIN/print-como-retomar.py\" \"{ficha}\"` y pega su salida tal cual.")
 
-    # 1-bis. El prompt opcional (2.35.0, Step 8e): lo que print-pendiente-opcional.py imprime AHORA
-    # desde `_pendientes.md`. Se genera en vivo, no se guarda en la ficha, asi que compararlo aqui
-    # contra el estado real es lo que evita pegar un prompt viejo. Solo para fichas desde el corte:
-    # una ficha anterior se escribio con un template que no tenia Step 8e.
+    # 1-bis. El bloque de pendiente (Step 8e): lo que print-pendiente-opcional.py imprime AHORA desde
+    # `_pendientes.md` — desde 2.44.0, 🔔 el que vence hoy o ➕ el opcional, nunca los dos. Se genera
+    # en vivo, no se guarda en la ficha, asi que compararlo aqui contra el estado real es lo que evita
+    # pegar uno viejo. Solo para fichas desde el corte: una anterior no tenia Step 8e.
     if sec is not None and "<filled in Step 8>" not in sec and m_fecha and m_fecha.group(1) >= "2026-09-23":
         try:
             r = subprocess.run([sys.executable, os.path.join(BIN, "print-pendiente-opcional.py"), ficha],
@@ -510,68 +534,45 @@ def revisar(ficha):
             salida = r.stdout if r.returncode == 0 else ""
         except Exception:
             salida = ""
-        esperado = [l for l in salida.splitlines()
-                    if l.strip() and not l.startswith("───") and not l.startswith("Si tienes tiempo")]
+        esperado = exigidas(salida, nueva)
         cmd8e = f"`python3 \"{BIN}/print-pendiente-opcional.py\" \"{ficha}\"`"
         if esperado and (diferido and not reentrante):
-            reclamar(f"la salida de {cmd8e}", esperado, salida, 4)
+            reclamar(f"la salida de {cmd8e}", esperado, salida, 2)
         elif esperado and diferido and falta(esperado, base):
-            reclamar("el prompt opcional (Step 8e)", esperado, salida, 4)
+            reclamar("el bloque de pendiente (Step 8e)", esperado, salida, 2)
         elif esperado and diferido:
-            presentes.append((4, esperado, salida))
+            presentes.append((2, esperado, salida))
         elif esperado and not diferido and falta(esperado):
             problemas.append(pref +
-                f"El prompt opcional (Step 8e) no esta en tu respuesta ({len(falta(esperado))} de "
+                f"El bloque de pendiente (Step 8e) no esta en tu respuesta ({len(falta(esperado))} de "
                 f"{len(esperado)} lineas faltan). Corre `python3 \"$JBIN/print-pendiente-opcional.py\" "
                 f"\"{ficha}\"` y pega su salida tal cual.")
 
-    # 2. Recordatorios de calendario: los 2 primeros completos; el resto con `+N con fecha futura`.
-    cal = seccion(texto, "Recordatorios de calendario")
-    if cal:
-        bloques = re.split(r"(?m)^###\s+(?=\d{4}-\d{2}-\d{2}\b)", cal)[1:]
-        if diferido and bloques:
-            cuerpos = [[l for l in b.splitlines()[1:] if l.strip() and not re.fullmatch(r"\s*`{3,}\w*\s*", l)]
-                       for b in bloques[:2]]
-            mas = f"\n+{len(bloques) - 2} con fecha futura en _pendientes.md" if len(bloques) > 2 else ""
-            falta_mas = bool(mas) and not re.search(rf"\+\s*{len(bloques) - 2}\s+con fecha futura", base)
-            if not reentrante:
-                reclamar("los recordatorios de `## Recordatorios de calendario` de la ficha (los 2 "
-                         "primeros completos" + (f" y la linea `+{len(bloques) - 2} con fecha futura`" if mas else "")
-                         + ")", [], "", 2)
-            elif any(falta(c, base) for c in cuerpos) or falta_mas:
-                reclamar("los recordatorios de calendario", [l for c in cuerpos for l in c],
-                         "\n\n".join("\n".join(c) for c in cuerpos) + mas, 2)
-            else:
-                presentes.append((2, [l for c in cuerpos for l in c] + ([mas.strip()] if mas else []),
-                                  "\n\n".join("\n".join(c) for c in cuerpos) + mas))
-            bloques = []
-        for b in bloques[:2]:
-            cuerpo = [l for l in b.splitlines()[1:] if l.strip() and not re.fullmatch(r"\s*`{3,}\w*\s*", l)]
-            if falta(cuerpo):
-                titulo = b.splitlines()[0].strip()
-                problemas.append(pref + f"El recordatorio de calendario `{titulo}` esta en la ficha pero no en "
-                                 "tu respuesta. Pegalo completo (Titulo, Descripcion y el prompt).")
-        if len(bloques) > 2 and not re.search(rf"\+\s*{len(bloques) - 2}\s+con fecha futura", visto):
-            problemas.append(pref + f"Hay {len(bloques)} recordatorios de calendario y la respuesta no dice "
-                             f"`+{len(bloques) - 2} con fecha futura en _pendientes.md`.")
-
-    # 2-bis. Las recomendaciones de research sin resolver (Step 8d), solo en el cierre diferido: van
-    # en el mismo bloque final que el snippet. Antes de 2.43.0 ningun chequeo las pedia.
-    if diferido and sec is not None and "<filled in Step 8>" not in sec:
+    # 2. Recordatorios de calendario (Step 8c): desde 2.44.0, lo que imprime print-recordatorios.py
+    # sobre la ficha — los 2 primeros sin fence y `+N con fecha futura` si hay mas. Antes se
+    # comparaba el cuerpo de los bloques de la ficha y el agente los copiaba a mano con su fence.
+    # (8d, las recomendaciones de research, ya no van en el cierre desde 2.44.0: cada una sin marcar
+    # tiene que citar un pendiente, y checkpoint-audit.py lo mide en `research.recomendaciones`.)
+    if seccion(texto, "Recordatorios de calendario"):
         try:
-            r = subprocess.run([sys.executable, os.path.join(BIN, "print-research-recomendaciones.py"), ficha],
+            r = subprocess.run([sys.executable, os.path.join(BIN, "print-recordatorios.py"), ficha],
                                capture_output=True, text=True, timeout=20)
             salida = r.stdout if r.returncode == 0 else ""
         except Exception:
             salida = ""
-        esperado = [l for l in salida.splitlines() if l.strip() and not l.startswith("───")]
-        cmd8d = f"`python3 \"{BIN}/print-research-recomendaciones.py\" \"{ficha}\"`"
-        if esperado and not reentrante:
-            reclamar(f"la salida de {cmd8d}", esperado, salida, 3)
-        elif esperado and falta(esperado, base):
-            reclamar("las recomendaciones de research sin resolver (Step 8d)", esperado, salida, 3)
-        elif esperado:
+        esperado = exigidas(salida, nueva)
+        cmd8c = f"`python3 \"{BIN}/print-recordatorios.py\" \"{ficha}\"`"
+        if esperado and (diferido and not reentrante):
+            reclamar(f"la salida de {cmd8c}", esperado, salida, 3)
+        elif esperado and diferido and falta(esperado, base):
+            reclamar("los recordatorios de calendario", esperado, salida, 3)
+        elif esperado and diferido:
             presentes.append((3, esperado, salida))
+        elif esperado and falta(esperado):
+            problemas.append(pref +
+                f"Los recordatorios de calendario no estan en tu respuesta ({len(falta(esperado))} de "
+                f"{len(esperado)} lineas faltan). Corre `python3 \"$JBIN/print-recordatorios.py\" "
+                f"\"{ficha}\"` y pega su salida tal cual.")
 
     # 3. Los checks del snippet sobre la ficha final (Step 7a corrio antes de Step 8). El ultimo
     # veredicto del adversario de TODA la sesion va como argumento: un `break` sin cerrar con
@@ -667,7 +668,7 @@ if reentrante and presentes and not anexo:
         for l in b:
             pos = v.find(l, cursor)
             if pos < 0:
-                otros.append("no van en el orden snippet, calendario, recomendaciones de research, prompt opcional")
+                otros.append("no van en el orden snippet, pendiente, calendario")
                 break
             cursor = pos + len(l)
         else:

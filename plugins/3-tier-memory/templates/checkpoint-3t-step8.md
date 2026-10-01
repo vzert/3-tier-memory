@@ -338,21 +338,30 @@ python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"
 ```
 
 **Cuando lo pegas (2.43.0).** En un turno de `/checkpoint-3t` **no pegues todavia** la salida de
-8b, ni los recordatorios de 8c, ni la de 8d, ni la de 8e. Corre el script igual: comprueba que 8a
-lleno la seccion. Termina el turno con el reporte de Step 7. Al terminar, el hook de cierre te pide
-la revision del cierre (`REVISION DEL CIERRE:`). Tu respuesta a esa revision termina con estos
-bloques, en este orden, **una sola vez y sin nada despues**: 8b, 8c, 8d, 8e. El hook te da los
-comandos con la ruta literal de la ficha. Asi el cierre es lo ultimo que ve el usuario y ya trae lo
+8b, ni la de 8e, ni la de 8c. Corre el script igual: comprueba que 8a lleno la seccion. Termina el
+turno con el reporte de Step 7. Al terminar, el hook de cierre te pide la revision del cierre
+(`REVISION DEL CIERRE:`). Tu respuesta a esa revision termina con estos bloques, en este orden,
+**una sola vez y sin nada despues**: 🔁 snippet (8b), 🔔 o ➕ pendiente (8e) y 🗓️ calendario (8c),
+cada uno solo si su script imprime algo (desde 2.44.0). El hook te da los comandos con la ruta
+literal de la ficha. Asi el cierre es lo ultimo que ve el usuario y ya trae lo
 que corregiste en la revision. Medido en los 4 cierres reales con revision (2026-09-30): pegado
 antes de la revision, el snippet quedo enterrado bajo 2.400-4.300 caracteres en 2, y en 1 el agente
 lo repitio. Fuera de `/checkpoint-3t` (por ejemplo, rehacer el snippet despues de cerrar un
 pendiente que cita) no hay revision: pegalo en el acto, como ultimo bloque.
 
 **Pega su salida tal cual, sin resumirla ni reformularla**, como el primer bloque del cierre. El
-cierre (8b, 8c, 8d y 8e, en ese orden) va seguido y al final de tu respuesta; en `/checkpoint-3t`,
-al final de tu respuesta a la revision del cierre. 8e es el ultimo bloque. El script ya decide el formato correcto por ti — linea unica sin
-separadores si el caso 5 aplica, bloque completo con separadores en cualquier otro caso — leyendo el MISMO `## Como retomar` que acabas de escribir en 8a. No existe una segunda
-redaccion que pueda divergir de la primera, porque no hay una segunda redaccion: hay una lectura.
+cierre (🔁 8b, 🔔/➕ 8e y 🗓️ 8c, en ese orden) va seguido y al final de tu respuesta; en
+`/checkpoint-3t`, al final de tu respuesta a la revision del cierre. El script ya decide el formato
+correcto por ti — `🔁 Como retomar: Ninguno — …` en una linea si el caso 5 aplica; si no, la
+cabecera `🔁 Siguiente sesión — copia y pega:` y el snippet dentro de un fence ``` — leyendo el
+MISMO `## Como retomar` que acabas de escribir en 8a. No existe una segunda redaccion que pueda
+divergir de la primera, porque no hay una segunda redaccion: hay una lectura.
+
+**Menos texto, un emoji por bloque, solo Retomamos en color (2.44.0).** Victor (2026-10-01),
+mirando un cierre real: demasiado texto, y los mismos prompts opcionales se repetian sesion tras
+sesion. Cada bloque abre con su emoji (🔁 retomar, 🔔 vence hoy, ➕ opcional, 🗓️ calendario) para
+ver de un vistazo donde empieza, sin separadores `───` ni frases de introduccion. Solo el snippet va
+en un fence, que en la terminal sale en color: es el bloque principal. El resto va sin fence.
 
 **Por que un script y no "redacta lo mismo otra vez".** Medido en vivo (2026-09-15, este mismo
 repo): el agente que acababa de escribir el bloque en 8a, en el turno siguiente, no lo repitio —
@@ -377,8 +386,8 @@ de una ficha de esta sesion (con `journal-emit.py` o con `expire-pendientes.py -
 exige varias cosas en el TEXTO de tu respuesta, nunca en un tool
 result:
 - cada linea que imprime `print-como-retomar.py`;
-- los dos primeros recordatorios de `## Recordatorios de calendario`, completos (y `+N con fecha
-  futura` si hay mas);
+- cada linea que imprime `print-recordatorios.py` (los dos primeros recordatorios, sin fence, y
+  `+N con fecha futura` si hay mas);
 - que `checkpoint-audit.py --solo-snippet` no marque `SALTADO` sobre la ficha final. Step 7a corre
   antes que Step 8 y no ve el snippet.
 - en un turno que corrio `/checkpoint-3t` (desde 2.41.0), la salida de Step 7a: la linea
@@ -386,10 +395,11 @@ result:
 
 Si falta algo, bloquea el cierre una vez y te dice que pegar o corregir. Limite: en el segundo
 intento seguido ya no bloquea, para no entrar en bucle. Solo avisa al usuario. En un turno de
-`/checkpoint-3t` el primer cierre no exige el snippet, el calendario ni 8e: la revision pide
+`/checkpoint-3t` el primer cierre no exige el snippet, 8e ni el calendario: la revision pide
 pegarlos al final. El segundo cierre los busca solo DESPUES de `REVISION DEL CIERRE:`, y ademas
-comprueba que van en orden (8b, 8c, 8d, 8e), que el snippet sale una sola vez ahi y que despues del
-ultimo bloque no quedan mas de 300 caracteres (los separadores y una linea corta). Si algo de eso
+comprueba que van en orden (8b, 8e, 8c), que el snippet sale una sola vez ahi y que despues del
+ultimo bloque no quedan mas de 300 caracteres (una linea corta). En una ficha desde el 2026-10-01
+exige tambien la cabecera con emoji de cada bloque. Si algo de eso
 falla, el aviso al usuario trae el cierre completo, tal como lo imprimen los scripts. Limite: si el
 hook no corre (instalacion sin hooks), el cierre no se pega; queda en la ficha.
 
@@ -400,7 +410,7 @@ y pega el snippet nuevo en esa misma respuesta. Caso real: tras el checkpoint de
 `p-477bb60303` (el push) y la respuesta no aviso; el snippet seguia listandolo en `Sigue abierto`
 (linea quitada en 2.35.0). Lo vigila el hook: dispara tambien en un turno que emite
 `pendiente.resolve`, `pendiente.expire` o `pendiente.block` sobre un id citado en la ficha de esta
-sesion, y en ese turno vuelve a exigir el snippet y el prompt opcional de Step 8e, que se genera en
+sesion, y en ese turno vuelve a exigir el snippet y el bloque de pendiente de Step 8e, que se genera en
 vivo. En fichas anteriores al 2026-09-23 `checkpoint-audit.py` sigue marcando `SALTADO` en
 `snippet.ids_vivos` si `Sigue abierto:` nombra un id que ya no esta abierto. Registrar un pendiente NUEVO tambien puede cambiar el snippet (un Alta nuevo gana
 `Proximo paso`); eso no lo detecta ningun script: revisa la escalera y rehaz el snippet.
@@ -412,11 +422,19 @@ caso, asi que revisalo dos veces contra el session file antes de imprimirlo.
 
 **8c. Recordatorio de calendario para los pendientes con fecha futura**:
 
-Si algun pendiente de esta sesion (nuevo o reconciliado) **nombra una fecha posterior a hoy** —
-`revisar el 2026-09-22`, `target 2026-10-01`, `T+7`, `en 2 semanas` resuelto a fecha — imprime
-**un bloque aparte por cada uno, despues del snippet**. Imprime maximo 2; si hay mas, di
-`+N con fecha futura en _pendientes.md`. El tope es para no llenar la terminal: en el session
-file (8c-2) van **todos**, sin tope.
+Solo si esta sesion **dejo algo a futuro** (regla de Victor, 2026-10-01): un pendiente que esta
+sesion creo, o cuya fecha cambio, y que **nombra una fecha posterior a hoy** — `revisar el
+2026-09-22`, `target 2026-10-01`, `T+7`, `en 2 semanas` resuelto a fecha. Un pendiente que ya tenia
+esa misma fecha agendada no genera bloque (ver "Un pendiente, un recordatorio vivo", abajo). Si no
+hay ninguno, no hay bloque de calendario: no lo anuncies ni lo rellenes. Cada uno va en un bloque
+aparte en la ficha (8c-2, **todos**, sin tope); en el cierre se pega lo que imprime:
+
+```bash
+python3 "$JBIN/print-recordatorios.py" "$SESSION_FILE"
+```
+
+Imprime los dos primeros **sin el fence** del prompt (solo Retomamos va en color) y, si hay mas,
+`+N con fecha futura en _pendientes.md`. El tope es para no llenar la terminal.
 
 **Un pendiente, un recordatorio vivo (2.39.2).** Antes de generar el bloque, busca si OTRA ficha
 ya tiene un recordatorio con fecha futura para ese mismo `_id:`
@@ -452,8 +470,7 @@ donde se corre esto* cuando pegas el prompt. Sin la linea de dentro, `Contexto:`
 relativa que no resuelve contra nada.
 
 ````
-─── Recordatorio para el <FECHA> ───
-Ponlo en tu calendario:
+🗓️ Recordatorio para el <FECHA> — ponlo en tu calendario:
 
 Título: [<proyecto>] <la pregunta que se responde ese dia, en una linea>
 
@@ -469,7 +486,6 @@ Contexto: memory/sessions/DATE-SLUG.md
 Comprueba: <que hay que mirar ese dia, con las cifras y el criterio si se acordo uno>
 Si ya no aplica, cierralo con /checkpoint-3t en vez de dejarlo abierto.
 ```
-────────────────────────────────────
 ````
 
 - `Título`: abre con `[<proyecto>]` y sigue con la pregunta. Tiene que ser legible en la vista de
@@ -523,10 +539,11 @@ por convencion, y esa costumbre se cuela justo aqui: en 2.15.0 el encabezado que
 y el `Título:` con `línea/más`, dos versiones del mismo titulo en el mismo bloque. Lo encontro un
 verificador externo, no la vista.
 
-Los bloques persistidos son **identicos** a los impresos — misma regla que en 8a/8b: el usuario
-copia de la terminal o del fichero indistintamente, y dos versiones del mismo recordatorio son dos
-versiones de la verdad. Si en la terminal dijiste `+N con fecha futura en _pendientes.md`, en el
-fichero estan los N.
+Los bloques persistidos tienen el **mismo texto** que los impresos — misma regla que en 8a/8b: dos
+versiones del mismo recordatorio son dos versiones de la verdad. La unica diferencia la pone
+`print-recordatorios.py`: en la ficha el prompt va dentro de su fence (para copiarlo de ahi), en la
+terminal sin fence. Si en la terminal salio `+N con fecha futura en _pendientes.md`, en el fichero
+estan los N.
 
 **Por que este bloque.** Medido 2026-09-11: **11% de los pendientes nuevos traen una fecha
 posterior a su creacion** (28 en 30 dias sobre 5 instalaciones, ~1 al dia) y **395 de 996
@@ -540,65 +557,57 @@ un mismo calendario, y tres campos que no dicen *donde* dejan un prompt que no s
 correr. El snippet de 8a/8b no tiene este problema porque se pega en el acto, sabiendo donde estas;
 este se pega dentro de un mes.
 
-**8d. Recomendaciones de research sin resolver — bloque aparte, igual que el de calendario**:
+**8d. Recomendaciones de research sin resolver — ya no van en el cierre (2.44.0)**:
 
-Si algún research que el `## Research` de este session log enlaza (de esta sesión, o uno viejo
-que solo revisaste) tiene una sección `## Recomendaciones` con ítems `- [ ]` sin marcar, corre:
+Hasta 2.43.0 este paso pegaba en el cierre las recomendaciones `- [ ]` sin marcar de los research
+que la ficha enlaza. Victor (2026-10-01): no le servian, y repetian lo que ya llevaba su pendiente
+(la unica sin marcar ese dia ya tenia `p-5f81a0ac93` con fecha). Desde 2.44.0:
 
-```bash
-python3 "$JBIN/print-research-recomendaciones.py" "$SESSION_FILE"
-```
+- **No hay bloque de research en el cierre** ni seccion `## Recomendaciones de research sin
+  resolver` en la ficha (las fichas anteriores la conservan).
+- **Cada recomendacion sin marcar cita en su linea el pendiente abierto que la lleva** (`p-…`), o se
+  marca `[x]` (implementada o `-- declinado: motivo`). Si no tiene pendiente, crealo en Step 3b y
+  pon su id en la linea del research. Ese pendiente es el que sale despues en las capas del cierre
+  (🔔 si vence hoy, ➕ si toca) o en el calendario: la recomendacion no se pierde, que es el caso
+  del 2026-09-17 por el que existia este paso (una sesion implemento 1 de 4 recomendaciones y las
+  otras 3 no salieron en ningun lado).
+- Para ver cuales faltan: `python3 "$JBIN/print-research-recomendaciones.py" "$SESSION_FILE"` (su
+  salida es para ti, no se pega). `checkpoint-audit.py` marca `SALTADO` en
+  `research.recomendaciones` si alguna sin marcar no cita un pendiente abierto, o si un wikilink de
+  `## Research` esta roto.
 
-**Pega su salida tal cual, sin resumirla**, después del bloque de "Como retomar" (y después de
-los recordatorios de calendario si los hay) — mismo motivo que 8b: una segunda redacción es una
-segunda oportunidad de divergir o de sustituir el formato exigido por un resumen propio. Si no
-imprime nada, no hay nada que pegar — el silencio en stdout es el caso normal (la mayoría de los
-research no tienen recomendaciones múltiples, y los que las tienen normalmente ya se resolvieron).
-**Si el script avisa por stderr que un wikilink de `## Research` no se pudo leer, no lo ignores**
-— puede ser un research legítimamente `(inline)` (sin archivo propio), o puede ser un enlace roto
-que esconde recomendaciones sin resolver que el script no pudo revisar. Repáralo o confírmalo
-antes de asumir que ese research no tiene nada pendiente.
-
-**Va fuera del bloque `## Como retomar`, no dentro — misma regla que el recordatorio de
-calendario (8c).** No depende de qué caso de `<next-step>` haya aplicado: si el caso 5 colapsó
-"Como retomar" a una línea porque esta sesión no dejó nada del TRABAJO DE HOY que retomar, un
-research con recomendaciones sin resolver de una sesión anterior sigue sin resolverse igual, y
-el colapso de una no tiene por qué implicar el otro. Confundir los dos fue exactamente lo que
-pasó el 2026-09-17 en este mismo repo: una sesión implementó 1 de 4 recomendaciones de un
-research, cerró con "Como retomar: ninguno" (caso 5, correcto para el trabajo de hoy), y las
-otras 3 recomendaciones no aparecieron en ningún lado del cierre — el usuario tuvo que señalarlo
-él mismo, en la sesión siguiente, porque nada se lo recordó.
-
-**Persistir en el session file**: agrega la misma salida (o "Ninguna" si no imprimió nada) en una
-sección `## Recomendaciones de research sin resolver`, entre `## Recordatorios de calendario` (o
-`## Como retomar` si no hubo recordatorios) y `## Related`. Igual que 8c-2: los bloques
-persistidos son idénticos a los impresos.
-
-**8e. Prompt opcional para cerrar un pendiente en otra sesion (2.35.0)**:
+**8e. El pendiente del cierre: 🔔 vence hoy o ➕ opcional (capas desde 2.44.0)**:
 
 ```bash
 python3 "$JBIN/print-pendiente-opcional.py" "$SESSION_FILE"
 ```
 
-**Pega su salida tal cual** como el ultimo bloque de tu respuesta, despues de los de 8b, 8c y 8d.
-Si no imprime nada, no hay nada que pegar. Es para el humano: un prompt completo (proyecto,
-pendiente con su id, ficha de origen, motivo, clausula de cierre) que puede abrir en otra sesion,
-ahora o cuando tenga tiempo. Reemplaza la linea `Sigue abierto:` que el snippet llevaba hasta
-2.34.0, que el agente no usaba y el humano no podia accionar.
+**Pega su salida tal cual** justo despues del snippet (8b) y antes del calendario (8c). Si no
+imprime nada, no hay nada que pegar. Es para el humano: un prompt completo (proyecto, pendiente con
+su id, ficha de origen, clausula de cierre) que puede abrir en otra sesion.
 
-El script elige por campos de `_pendientes.md`, nunca por el texto (regla 216):
-1. los que vencen hoy o ya vencieron (`_revisar` <= hoy), el mas viejo primero — hasta 2;
-2. si no hay ninguno, el Alta con `_creado` mas reciente (a igual fecha, la fila mas arriba).
+El cierre va en capas (Victor, 2026-10-01): 1) Retomamos, siempre; 2) el pendiente que vence HOY;
+3) el opcional. El script imprime a lo sumo uno de los dos bloques, porque la capa 3 exige que no
+venza ninguno hoy:
 
-Nunca propone un pendiente con `_bloqueado:`, uno con `_revisar` futuro (ya tiene su recordatorio
-de calendario) ni el que cita `Proximo paso:`. Sale haya o no recordatorios de calendario: un
-recordatorio es para otra fecha y no compite con lo que se puede hacer hoy. Cuando `Proximo paso`
-es `ninguno`, este es el unico prompt accionable del cierre.
+- **🔔 Vence hoy.** Un pendiente con `_revisar` igual a hoy — los ya vencidos no. Sale con cualquier
+  snippet, para que no pase desapercibido. Si vencen varios, uno cada vez: el de mayor prioridad y,
+  dentro de ella, la fila mas arriba.
+- **➕ Opcional.** Solo si el snippet es el caso 5 (`🔁 Como retomar: Ninguno — …`) y no vence
+  ninguno hoy. Elige como antes de 2.44.0: hasta 2 vencidos (`_revisar` anterior a hoy), el mas
+  viejo primero; si no hay, el Alta con `_creado` mas reciente (a igual fecha, la fila mas arriba).
+
+Por que capas: hasta 2.43.0 el prompt opcional salia en cada cierre, y los mismos dos vencidos se
+repetian durante varias sesiones. Ahora solo sale cuando la sesion no deja nada que retomar.
+
+El script elige por campos de `_pendientes.md` y por la forma de `## Como retomar`, nunca por el
+texto (regla 216). Nunca propone un pendiente con `_bloqueado:`, uno con `_revisar` futuro (ya tiene
+su recordatorio de calendario) ni el que cita `Proximo paso:`.
 
 **No se guarda en la ficha.** Se genera en vivo desde `_pendientes.md`, y el hook de cierre
 (`checkpoint-close-guard.sh`) lo vuelve a correr y exige cada linea en tu respuesta. Si en la misma
 sesion cambias el estado de un pendiente citado en la ficha, el hook lo pide otra vez con el estado
-nuevo. Limite: cerrar DESPUES el pendiente que este prompt propone, sin tocar ninguno de la ficha,
+nuevo. Limite: cerrar DESPUES el pendiente que este bloque propone, sin tocar ninguno de la ficha,
 no vuelve a disparar el hook; el propio prompt dice "si ya no aplica, cierralo".
 
-No agregues git commit aqui — el cambio al session file ya quedo dentro del flujo de Step 6, pero como Step 8 corre DESPUES, ni `## Como retomar` ni `## Recordatorios de calendario` ni `## Recomendaciones de research sin resolver` estaran en el commit. Es aceptable: el snippet vive en disco y el commit es best-effort. Si el usuario quiere comitearlo, puede `git add memory/sessions/DATE-SLUG.md && git commit --amend --no-edit` manualmente o esperar al proximo checkpoint.
+No agregues git commit aqui — el cambio al session file ya quedo dentro del flujo de Step 6, pero como Step 8 corre DESPUES, ni `## Como retomar` ni `## Recordatorios de calendario` estaran en el commit. Es aceptable: el snippet vive en disco y el commit es best-effort. Si el usuario quiere comitearlo, puede `git add memory/sessions/DATE-SLUG.md && git commit --amend --no-edit` manualmente o esperar al proximo checkpoint.

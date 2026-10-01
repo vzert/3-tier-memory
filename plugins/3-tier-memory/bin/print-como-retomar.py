@@ -21,9 +21,11 @@ transforma mecanicamente al formato de terminal, nunca la reinterpreta.
 
 Que hace: lee la seccion `## Como retomar` de SESSION_FILE (entre ese encabezado y el siguiente
 `## `). Si es la forma de una linea (`Ninguno — ...`, sin bloque de codigo — caso 5, sin
-excepcion), la imprime con el formato de linea unica que Step 8b ya define (sin separadores,
-para pegar dentro del reporte de Step 7). Si es un bloque de codigo (el snippet de 6 lineas, con
-o sin condicionales), la imprime completa con los separadores visuales de Step 8b.
+excepcion), la imprime en una sola linea con el emoji del bloque. Si es un bloque de codigo (el
+snippet de 6 lineas, con o sin condicionales), imprime una cabecera con el emoji y el snippet
+DENTRO de un fence ``` (2.44.0): pegado en la respuesta, el fence es lo que sale en color, y es el
+unico bloque del cierre que va en color (Victor lo comprobo el 2026-10-01). Sin separadores ni
+texto de introduccion: el emoji marca donde empieza el bloque.
 Si la seccion esta vacia o dice solo el placeholder (`<filled in Step 8>`), no imprime nada y
 sale con codigo 1 — Step 8a todavia no corrio.
 
@@ -37,9 +39,20 @@ for _flujo in (sys.stdout, sys.stderr):
     if hasattr(_flujo, "reconfigure"):
         _flujo.reconfigure(encoding="utf-8")
 
-SEP_TOP = "─── ¿Como retomar en la siguiente sesion? ───"
-SEP_BOTTOM = "─────────────────────────────────────────────"
-INTRO = "Copia y pega esto al iniciar una nueva sesion de Claude Code:"
+# Un emoji por tipo de bloque del cierre (2.44.0, elegidos por Victor): 🔁 retomar, 🔔 vence hoy y
+# ➕ opcional (print-pendiente-opcional.py), 🗓️ calendario (print-recordatorios.py).
+CABECERA = "🔁 Siguiente sesión — copia y pega:"
+LINEA_CASO5 = "🔁 Como retomar:"
+FENCE = "```"
+
+
+def es_caso5(body):
+    """El snippet colapsado del caso 5: `## Como retomar` lleno y SIN bloque de codigo. Lo usa
+    tambien print-pendiente-opcional.py para decidir la capa opcional: un solo detector."""
+    return bool(body) and body != "<filled in Step 8>" and not FENCE_RE.match(body)
+
+
+FENCE_RE = re.compile(r"^```(?:markdown)?\s*\n([\s\S]*?)\n```\s*$")
 
 
 def extract_section(text):
@@ -77,21 +90,20 @@ def main():
         print("⚠ print-como-retomar.py: Step 8a todavia no lleno esta seccion.", file=sys.stderr)
         return 1
 
-    fence = re.match(r"^```(?:markdown)?\s*\n([\s\S]*?)\n```\s*$", body)
+    fence = FENCE_RE.match(body)
     if fence:
         inner = fence.group(1).strip("\n")
-        print(SEP_TOP)
-        print(INTRO)
-        print()
+        print(CABECERA)
+        print(FENCE)
         print(inner)
-        print(SEP_BOTTOM)
+        print(FENCE)
         return 0
 
     # forma de una linea: "Ninguno — <media-linea>." (caso 5, sin excepcion).
     # El markdown de origen a veces envuelve esta "una linea" en varios renglones fisicos (editor,
     # o una sesion anterior a esta convencion) — colapsar a una sola linea real antes de imprimir,
     # o "Como retomar: " queda pegado al primer renglon y el resto sale suelto debajo, partido.
-    print(f"Como retomar: {' '.join(body.split())}")
+    print(f"{LINEA_CASO5} {' '.join(body.split())}")
     return 0
 
 
