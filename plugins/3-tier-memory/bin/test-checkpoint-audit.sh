@@ -1567,6 +1567,27 @@ print(len(malos))
 PY
 )"
 
+echo "== p-a9f0514be0: colapso 'Ninguno' con un vencido de OTRA sesion listado como '- [ ]' (2.35.0+) =="
+# Caso real: ficha 2026-10-01-enlaces-reales-windows-r4. pendientes.vencidos exige mencionar el
+# vencido ajeno y reconciliacion_linea lo cuenta solo con casilla; con casilla, sigue_abierto lo
+# contaba como propio y rechazaba el colapso. snippet.proximo_paso ya filtraba por `_origen`.
+sa_ficha() {   # $1 memoria, $2 origen del pendiente listado
+  local M="$1"; nueva_memoria "$M"; local S="$M/sessions/2026-10-01-demo.md"; ficha_completa "$S"
+  python3 - "$S" <<'PYS'
+import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+t=t.replace("date: 2026-09-19","date: 2026-10-01",1)
+t=t.replace("## Pendientes\n- Ninguno","## Pendientes\n- [ ] (otra sesion, vencido) medir algo — `p-0a0a0a0a0a` (still-open)",1)
+open(p,"w",encoding="utf-8").write(t)
+PYS
+  printf -- '- [ ] medir algo — _origen: [[sessions/%s]]_ — _creado: 2026-09-20_ — _id: p-0a0a0a0a0a_ — _revisar: 2026-09-26_\n' "$2" > "$M/.l"
+  python3 -c 'import sys;p=sys.argv[1];t=open(p, encoding="utf-8").read();open(p, "w", encoding="utf-8").write(t.replace("## Media prioridad\n","## Media prioridad\n\n"+open(sys.argv[2], encoding="utf-8").read(),1))' "$M/_pendientes.md" "$M/.l"
+}
+sa_out() { $AUD "$1" --session-file "$1/sessions/2026-10-01-demo.md" --no-git --hoy 2026-10-01 --solo-snippet 2>&1; }
+M="$T/mSA1"; sa_ficha "$M" 2026-09-20-otra
+chk "vencido ajeno con casilla: el colapso vale (HECHO)" "1" "$(sa_out "$M" | grep -c 'HECHO .*snippet.sigue_abierto')"
+M="$T/mSA2"; sa_ficha "$M" 2026-10-01-demo
+chk "control: el mismo pendiente nacido en esta ficha sigue siendo SALTADO" "1" "$(sa_out "$M" | grep -c 'SALTADO .*snippet.sigue_abierto')"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

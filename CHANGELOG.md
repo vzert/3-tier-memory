@@ -1,6 +1,20 @@
 # Changelog
 
 
+## [2.45.1] - 2026-10-01
+Origen: el cierre de una sesion real (`p-a9f0514be0`). `checkpoint-audit.py` se contradecia con los
+pendientes vencidos de OTRA sesion: `pendientes.vencidos` exige que la ficha los mencione, y la
+linea `RECONCILIACION:` solo los cuenta como revisados si van con casilla `- [ ]`. Con casilla,
+`snippet.sigue_abierto` los contaba como trabajo propio y rechazaba `Como retomar: Ninguno`. Una
+sesion sin trabajo propio no podia cerrar con `Ninguno` mientras hubiera un vencido ajeno.
+
+### Fixed
+- **`snippet.sigue_abierto` solo cuenta como propios los pendientes nacidos en la ficha**
+  (`_origen: [[sessions/<esta ficha>]]`), el mismo criterio que `snippet.proximo_paso` ya usaba.
+  Solo cambia la rama de las fichas desde el 2026-09-23 (sin `Sigue abierto:`). Caso rojo en
+  `test-checkpoint-audit.sh`, mas el control: el mismo pendiente nacido en la ficha sigue en
+  `SALTADO`.
+
 ## [2.45.0] - 2026-10-01
 Origen: F2 del plan de ciclo de vida de los learnings. Una regla que dejaba de valer no tenia
 salida: `learning.update` la podia reescribir, pero ningun lector distinguia una regla marcada, y

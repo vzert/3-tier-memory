@@ -837,8 +837,13 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         # propios quedan en `## Pendientes` de la ficha, que el snippet manda leer. Lo que SIGUE
         # valiendo es la guardia del colapso: el caso 5 de una linea no puede tapar un pendiente
         # propio que se puede hacer ya (sin `_bloqueado`, sin `_revisar` futuro).
+        # Propio = nacido en esta ficha (`_origen`), mismo criterio que snippet.proximo_paso: un
+        # vencido de OTRA sesion que Step 3a reconcilio y lista con `- [ ]` (pendientes.vencidos
+        # exige mencionarlo) no es trabajo que el colapso tape (p-a9f0514be0).
         _bloq = bloqueados_abiertos(memory_dir)
-        accionables_propios = [i for i in abiertos_ficha if i not in _bloq]
+        _origen = origenes_abiertos(memory_dir)
+        accionables_propios = [i for i in abiertos_ficha
+                               if i not in _bloq and _origen.get(i) == slug]
         if "```" not in sec_retomar and accionables_propios:
             h.append(Hallazgo(SALTADO, "snippet.sigue_abierto",
                               f"bloque `Como retomar` colapsado pero la sesion deja "
