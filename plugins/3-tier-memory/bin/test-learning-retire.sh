@@ -313,11 +313,15 @@ chk "nada escrito" "$H" "$(huella)"
 echo "== 13. el pie del recall: solo con RECALL_PIE, con topic y prefijo =="
 fixture; indice
 SIN=$(RECALL_INDEX="$T/idx.jsonl" RECALL_PROMPT="empujar fila ledger required check main" python3 "$BIN/recall_rank.py")
-CON=$(RECALL_INDEX="$T/idx.jsonl" RECALL_PROMPT="empujar fila ledger required check main" RECALL_PIE="/x/journal-emit.py" python3 "$BIN/recall_rank.py")
+CON=$(RECALL_INDEX="$T/idx.jsonl" RECALL_PROMPT="empujar fila ledger required check main" RECALL_PIE="RUTA/journal-emit.py" python3 "$BIN/recall_rank.py")
 chk "sin RECALL_PIE no hay pie (la salida del motor de F0)" "0" "$(printf '%s' "$SIN" | grep -c '↳' | tr -d ' ')"
 has "con RECALL_PIE: topic y prefijo de la regla" "$CON" '--topic gate --match-prefix "Nunca empujar sin la fila del"'
-has "con RECALL_PIE: la orden con la ruta del emisor" "$CON" 'python3 "/x/journal-emit.py" --type learning.retire'
-chk "quitando el pie queda exactamente la salida sin pie" "$SIN" "$(printf '%s\n' "$CON" | grep -v '↳')"
+# Sin barra inicial: en Git Bash, MSYS reescribe un valor de entorno que parece ruta POSIX (`/x/...`
+# llega a python como `X:/...`). recall.sh pasa una ruta real, que la conversion deja bien.
+has "con RECALL_PIE: la orden con la ruta del emisor" "$CON" 'python3 "RUTA/journal-emit.py" --type learning.retire'
+# Sin CR: en Windows python escribe CRLF y el grep de Git Bash quita el CR de lo que filtra.
+chk "quitando el pie queda exactamente la salida sin pie" "$(printf '%s' "$SIN" | tr -d '\r')" \
+  "$(printf '%s\n' "$CON" | tr -d '\r' | grep -v '↳')"
 
 echo "== 14. el replay de un learning.add cuya regla se retiro despues no la vuelve a escribir =="
 # Topic propio (lo crea el add): en gate.md una regla anadida al final seguiria a la multilinea 6

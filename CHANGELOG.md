@@ -1,6 +1,15 @@
 # Changelog
 
 
+## [2.45.2] - 2026-10-01
+### Fixed
+- **`test-learning-retire.sh` caso 13 en Windows (CI de 2.45.0 roja solo en windows-latest).** Dos
+  asertos de la prueba, no del producto: Git Bash reescribe un valor de entorno que parece ruta POSIX
+  (`RECALL_PIE=/x/journal-emit.py` llegaba a python como `X:/journal-emit.py`), y la comparacion
+  "salida con pie menos el pie = salida sin pie" fallaba por el CR de las lineas de python. La
+  prueba usa ahora una ruta sin barra inicial y compara sin CR. El caso 15, que corre `recall.sh`
+  de punta a punta con la ruta real, ya pasaba en Windows.
+
 ## [2.45.1] - 2026-10-01
 Origen: el cierre de una sesion real (`p-a9f0514be0`). `checkpoint-audit.py` se contradecia con los
 pendientes vencidos de OTRA sesion: `pendientes.vencidos` exige que la ficha los mencione, y la
