@@ -92,9 +92,13 @@ directorio: `rm -rf "<RECOVER_DIR impreso arriba>"`. Nunca detengas el checkpoin
 python3 "$JBIN/compaction-recover.py" --verificar "$RECOVER_DIR"
 ```
 
-Mira que el manifest sea JSON, que cada bloque este dentro de `RECOVER_DIR` y que los caracteres
-cuadren. Si sale `verificado=0`, o si no salio ninguna linea `recover=`, tratalo como
-`fallo-escritura`: reportalo y borra el directorio.
+Las comprobaciones las hace el comando; tu solo lees su linea, no revisas el manifest a mano. Da
+`verificado=1` solo si el tramo es exactamente el que se escribio: el manifest es JSON y guarda la
+huella SHA-256 de cada bloque; cada bloque se llama `chunk-NN.md`, va en orden y es un archivo
+normal dentro de `RECOVER_DIR` (no un enlace, una tuberia ni un dispositivo); su huella cuadra;
+empieza con la cabecera "bloque i de N"; no hay en `RECOVER_DIR` ningun `chunk-NN.md` que falte en
+la lista; y la suma de caracteres cuadra. Si sale `verificado=0`, o si no salio ninguna linea
+`recover=`, tratalo como `fallo-escritura`: reportalo y borra el directorio.
 
 **`recover=1 compactions=N pre_tokens=T chunks=K ...`** — el tramo quedo en K bloques
 `$RECOVER_DIR/chunk-NN.md` (lista en `$RECOVER_DIR/manifest.json`). No los leas tu: pesan decenas de

@@ -1,6 +1,18 @@
 # Changelog
 
 
+## [2.43.3] - 2026-10-01
+Origen: pendiente p-9622e75fe3. La prosa de Step 0b describia el `--verificar` de 2.41.10. Solo
+cambia texto de la plantilla (mas CHANGELOG y la version); no hay codigo nuevo.
+
+### Changed
+- **`/checkpoint-3t` Step 0b describe el `--verificar` real de 2.43.1.** Decia "mira que el manifest
+  sea JSON, que cada bloque este dentro de `RECOVER_DIR` y que los caracteres cuadren", que ademas
+  invitaba al agente a revisarlo a mano. Ahora dice que las comprobaciones las hace el comando y
+  nombra las que hace: huella SHA-256 por bloque, `chunk-NN.md` en orden, archivo normal dentro de
+  `RECOVER_DIR`, cabecera "bloque i de N", ningun `chunk-NN.md` sobrante y la suma de caracteres.
+  Codex (ronda 9, sobre el arreglo del bloque sobrante de 2.43.1) no encontro defectos de codigo.
+
 ## [2.43.2] - 2026-10-01
 Origen: Fase F1 del plan de ciclo de vida de learnings. Un checkpoint guardo como regla nueva una
 leccion que el topic ya tenia con otras palabras, y `/consolidate-3t` mandaba renumerar al fusionar,
