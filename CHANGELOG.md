@@ -30,6 +30,11 @@ buscarlo con scroll.
   8d incluido; 8b ya no se llama "el ultimo bloque" (lo es 8e). README al dia.
 
 ### Fixed
+- **`checkpoint-audit.py`: todo `corrige:` de comando corre tal cual y deja su clave en HECHO.**
+  `research.recomendaciones` pasaba un argumento de mas; `plan.indice` e `indice.sesion` llevaban un
+  '…' literal; `indice.commit` no compactaba; `pendientes.dualwrite` no corria `repair-dualwrite`.
+  `plan.indice` busca la fila por el enlace exacto y, con filas duplicadas o un titulo repetido, da
+  el corrige en prosa (`p-01a16467ad`, sesion 3-tier-memory-1e).
 - **`tools/mutation-check.sh` no copiaba `bin/fixtures/`.** `cp "$SRC"/*` solo copia ficheros, y
   `test-checkpoint-close-guard.sh` lee sus transcripts de ahi: en la copia del arnes esa suite caia
   sin mutar. Tres casos nuevos (`m_cierre_final.py`): diferir el primer cierre, medir solo tras la
