@@ -624,14 +624,14 @@ chk "  y nombra la clave del SALTADO" "1" "$(printf '%s' "$O" | grep -c "$SALT")
 # La salida solo en el tool_result (el usuario no la ve) no cuenta.
 python3 - "$T/t.jsonl" "$T/audit.txt" <<'PY'
 import json, sys
-t, audit = sys.argv[1], open(sys.argv[2]).read()
-recs = [json.loads(l) for l in open(t)]
+t, audit = sys.argv[1], open(sys.argv[2], encoding="utf-8").read()
+recs = [json.loads(l) for l in open(t, encoding="utf-8")]
 recs.insert(len(recs) - 1, {"type": "assistant", "message": {"role": "assistant", "content": [
     {"type": "tool_use", "id": "t9", "name": "Bash", "input": {"command": "python3 checkpoint-audit.py memory"}}]}})
 recs.insert(len(recs) - 1, {"type": "user", "message": {"role": "user", "content": [
     {"type": "tool_result", "tool_use_id": "t9", "content": audit}]}})
-recs[-1]["message"]["content"] = [{"type": "text", "text": open(sys.argv[1].replace("t.jsonl", "snip.txt")).read()}]
-open(t, "w").write("\n".join(json.dumps(r) for r in recs) + "\n")
+recs[-1]["message"]["content"] = [{"type": "text", "text": open(sys.argv[1].replace("t.jsonl", "snip.txt"), encoding="utf-8").read()}]
+open(t, "w", encoding="utf-8").write("\n".join(json.dumps(r) for r in recs) + "\n")
 PY
 chk "la salida solo en un tool_result no cuenta" "1" "$(falta7a "$(corre "$T/t.jsonl" false -)")"
 # Adversario de 2.41.0: un resumen inventado con saltado=0 y las claves citadas en prosa callaba.
