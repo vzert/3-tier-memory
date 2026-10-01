@@ -701,7 +701,9 @@ if reentrante and presentes and not anexo:
         crudo = _todo[_j:] if _j >= 0 else ""
         cabs = [m.start() for m in re.finditer(r"(?m)^🔁 ", crudo)]
         if cabs:
-            fences = len(re.findall(r"(?m)^[ \t]*(?:`{3,}|~{3,})", crudo[cabs[-1]:]))
+            # Tambien dentro de una cita markdown (`> ````): tambien sale en color (adversario
+            # externo de 2.44.0, ronda 2).
+            fences = len(re.findall(r"(?m)^[ \t>]*(?:`{3,}|~{3,})", crudo[cabs[-1]:]))
             permitidos = 2 if any(o == 1 and "```" in ls for o, ls, _ in presentes) else 0
             if fences > permitidos:
                 otros.append(f"hay {fences - permitidos} linea(s) de fence fuera del snippet: solo "

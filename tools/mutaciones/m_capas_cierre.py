@@ -29,6 +29,8 @@ M = {
         ("_j = inicio_revision(_todo)", "_j = _todo.rfind(REVISION_CABECERA)")],
     "fences-sin-control": [
         ("            if fences > permitidos:", "            if False:")],
+    "fence-sin-cita": [
+        ('fences = len(re.findall(r"(?m)^[ \\t>]*(?:`{3,}|~{3,})"', 'fences = len(re.findall(r"(?m)^[ \\t]*(?:`{3,}|~{3,})"')],
     # checkpoint-audit.py
     "reco-sin-dueno-pasa": [
         ('pendientes_reco.append((r, "sin pendiente que la lleve", l.strip()))', "pass")],
