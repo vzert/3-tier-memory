@@ -49,8 +49,10 @@ import datetime
 import glob
 import os
 import re
+import shlex
 import subprocess
 import sys
+import unicodedata
 
 for _flujo in (sys.stdout, sys.stderr):
     if hasattr(_flujo, "reconfigure"):
@@ -323,6 +325,63 @@ def marcados_rezagados(memory_dir):
     if not os.path.exists(path):
         return []
     return [l.strip() for l in leer(path).splitlines() if l.strip().startswith("- [x]")]
+
+
+# Marcadores que un `corrige:` de comando puede llevar: solo lo que el audit NO puede saber. Todo
+# lo demas va escrito, para que el comando corra tal cual (p-01a16467ad: un `…` literal o un
+# argumento de mas hacian salir 2 al script, y el agente lo descubria al ejecutarlo en el cierre).
+ANOTACION_FASE = re.compile(r"\s*\(fase de plan-[A-Za-z0-9._-]+\)")
+FRONTMATTER_STATUS = re.compile(r"^status:\s*(\S.*?)\s*$", re.M)
+TITULO_H1 = re.compile(r"^#\s+(.+?)\s*$", re.M)
+COMPACTA = 'python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"'
+
+
+def frontmatter_status(texto):
+    """`status:` del frontmatter (entre los dos `---` iniciales), o None."""
+    if not texto.startswith("---"):
+        return None
+    fin = texto.find("\n---", 3)
+    m = FRONTMATTER_STATUS.search(texto[:fin] if fin > 0 else "")
+    return m.group(1) if m else None
+
+
+def titulo_h1(texto):
+    m = TITULO_H1.search(texto)
+    return m.group(1) if m else None
+
+
+def corrige_plan_upsert(memory_dir, plan, fila, slug):
+    """El `plan.upsert` que deja la fila de `plan` apuntando a esta sesion. Titulo y status salen
+    de la fila si existe (sin la anotacion `(fase de plan-X)`: el compactador la conserva, y
+    copiarla la duplicaria), si no del plan en disco; un status que no esta en ningun sitio queda
+    como `<status>`, nunca inventado."""
+    texto = ""
+    ruta = os.path.join(memory_dir, "plans", plan + ".md")
+    if os.path.exists(ruta):
+        texto = leer(ruta)
+    titulo = status = None
+    if fila:
+        alias = re.search(r"\[\[plans/[^\]|]+\|([^\]]+)\]\]", fila[0])
+        titulo = alias.group(1).strip() if alias else None
+        status = ANOTACION_FASE.sub("", fila[1]).strip() if len(fila) > 1 else None
+    titulo = titulo or titulo_h1(texto) or plan
+    status = status or frontmatter_status(texto)
+    slug_plan = plan[len("plan-"):] if plan.startswith("plan-") else plan
+    return ('python3 "$JBIN/journal-emit.py" --type plan.upsert --slug ' + shlex.quote(slug_plan)
+            + " --title " + shlex.quote(titulo)
+            + " --status " + (shlex.quote(status) if status else "'<status>'")
+            + " --sesion " + shlex.quote(f"[[sessions/{slug}]]"))
+
+
+def titulo_plano(celda):
+    """Titulo de una celda de _plans-index.md como lo compara `plain()` del compactador: sin
+    wikilink, sin `(inline)`, sin enfasis, en NFC y en minusculas. Sin el NFC, un titulo con la
+    misma letra en otra forma Unicode (e + tilde combinada) no chocaba aqui y si en el
+    compactador (adversario, ronda 2 de p-01a16467ad)."""
+    t = re.sub(r"\[\[([^\]|]*?)(?:\|([^\]]*))?\]\]", lambda m: m.group(2) or m.group(1), celda)
+    t = re.sub(r"\((?:inline|backfill)\)", "", t, flags=re.I)
+    t = unicodedata.normalize("NFC", re.sub(r"[*_`]", "", t))
+    return " ".join(t.split()).lower()
 
 
 def filas_tabla(path):
@@ -602,21 +661,43 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                               f"los {len(planes)} plan(es) enlazado(s) tienen `## Estado`"))
 
         filas = filas_tabla(os.path.join(memory_dir, "_plans-index.md"))
-        stale = []
+        # La fila de un plan es la de SU enlace exacto, como `find_plan_rows` del compactador: con
+        # la subcadena `[[plans/plan-demo`, la fila de plan-demo-v2 contaba como la de plan-demo,
+        # y el corrige (que copia su titulo) acababa reescribiendo la fila del otro plan.
+        # Adversario, ronda 1 de p-01a16467ad. Lo mismo para la celda Sesion.
+        en_sesion = re.compile(r"\[\[sessions/" + re.escape(slug) + r"(?:\||\]\])")
+        stale, ambiguos = [], []
         for p in planes:
-            fila = next((f for f in filas if f and ("[[plans/" + p) in f[0]), None)
-            if fila is None:
-                stale.append((p, "sin fila en _plans-index.md"))
-            elif len(fila) < 4 or slug not in fila[3]:
-                stale.append((p, "la fila del indice no apunta a esta sesion"))
+            suyas = [f for f in filas
+                     if f and re.search(r"\[\[plans/" + re.escape(p) + r"(?:\||\]\])", f[0])]
+            fila = suyas[0] if suyas else None
+            if len(suyas) > 1:
+                stale.append((p, f"{len(suyas)} filas del mismo plan en _plans-index.md", None))
+                ambiguos.append(f"{p} tiene {len(suyas)} filas (el compactador manda el evento a "
+                                "cuarentena): dejale una")
+            elif fila is None:
+                stale.append((p, "sin fila en _plans-index.md", None))
+                # Sin fila propia, el compactador busca por TITULO: si otra fila tiene el mismo,
+                # el evento la reescribe como si fuera de este plan.
+                ruta_p = os.path.join(memory_dir, "plans", p + ".md")
+                tit = titulo_plano(titulo_h1(leer(ruta_p) if os.path.exists(ruta_p) else "") or p)
+                if any(f and titulo_plano(f[0]) == tit for f in filas[1:]):
+                    ambiguos.append(f"{p} no tiene fila y otra fila tiene su mismo titulo: el "
+                                    "plan.upsert la reescribiria; dale un --title distinto")
+            elif len(fila) < 4 or not en_sesion.search(fila[3]):
+                stale.append((p, "la fila del indice no apunta a esta sesion", fila))
         if stale:
+            comandos = " && ".join([corrige_plan_upsert(memory_dir, p, f, slug)
+                                    for p, _, f in stale] + [COMPACTA])
             h.append(Hallazgo(SALTADO, "plan.indice",
                               f"{len(stale)} fila(s) de _plans-index.md sin actualizar "
                               "(falto el evento plan.upsert)",
-                              [f"{p} — {m}" for p, m in stale],
-                              corrige=('python3 "$JBIN/journal-emit.py" --type plan.upsert --slug <plan> '
-                                       f'--sesion "[[sessions/{slug}]]" … && python3 "$JBIN/journal-compact.py" '
-                                       '--memory-dir "$MEMORY_DIR"')))
+                              [f"{p} — {m}" for p, m, _ in stale],
+                              # Un caso que el comando no puede arreglar sin dano no recibe un
+                              # comando para pegar: recibe la decision que falta, en prosa.
+                              corrige=("antes de emitir, a mano: " + "; ".join(ambiguos)
+                                       + ". Despues, con los valores revisados: " + comandos)
+                                      if ambiguos else comandos))
         else:
             h.append(Hallazgo(HECHO, "plan.indice",
                               "la fila de cada plan enlazado apunta a esta sesion"))
@@ -718,7 +799,11 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             h.append(Hallazgo(SALTADO, "pendientes.dualwrite",
                               f"{len(huerfanos)} id(s) de la ficha sin fila en pendientes/YYYY-MM.md",
                               huerfanos,
-                              corrige='python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"'))
+                              # Step 3-pre: compactar escribe la fila de un pendiente.add sin
+                              # aplicar; repair-dualwrite, la de una linea escrita a mano. Solo
+                              # compactar dejaba la segunda igual y el re-audit seguia SALTADO.
+                              corrige=COMPACTA + ' && python3 "$JBIN/repair-dualwrite.py" '
+                                      '"$MEMORY_DIR" --apply --fix-pipes'))
         else:
             h.append(Hallazgo(HECHO, "pendientes.dualwrite",
                               f"los {len(ids_ficha)} id(s) tienen su fila mensual"))
@@ -1110,7 +1195,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                           "research enlazado(s): " + ", ".join(detalle),
                           [f"{r} — {n} sin marcar" for r, n in pendientes_reco]
                           + [f"{r} — {m}" for r, m in rotos_reco],
-                          corrige='python3 "$JBIN/print-research-recomendaciones.py" "$MEMORY_DIR" '
+                          corrige='python3 "$JBIN/print-research-recomendaciones.py" '
                                   "<SESSION_FILE>   # Step 8d; un wikilink roto se arregla en la ficha"))
     else:
         h.append(Hallazgo(HECHO, "research.recomendaciones",
@@ -1135,7 +1220,12 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         else:
             h.append(Hallazgo(SALTADO, "indice.sesion",
                               "la ficha no tiene fila en _session-index.md",
-                              corrige=f'python3 "$JBIN/journal-emit.py" --type session.add --slug "{slug}" …'))
+                              corrige=('python3 "$JBIN/journal-emit.py" --type session.add --slug '
+                                       + shlex.quote(slug) + " --date " + slug[:10]
+                                       + (" --status " + shlex.quote(frontmatter_status(texto))
+                                          if frontmatter_status(texto) else "")
+                                       + " --summary " + shlex.quote(titulo_h1(texto) or slug)
+                                       + " && " + COMPACTA)))
 
     # 10-bis. La celda Commit de ESA fila (2.39.2, p-d1a1ce615f). indice.sesion solo miraba que la
     # fila existiera: dos checkpoints seguidos de este repo (2026-09-24 y 25, memory/ en
@@ -1156,9 +1246,9 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         h.append(Hallazgo(SALTADO, "indice.commit",
                           "la celda Commit de esta ficha en _session-index.md no trae hash ni N/A: "
                           f"[{fila_propia[col_commit].strip() if col_commit < len(fila_propia) else ''}]",
-                          corrige=f'python3 "$JBIN/journal-emit.py" --type session.add --slug "{slug}" '
-                                  f"--date {fecha_ficha} --commit '`<hash>`'   # o --commit \"N/A\" si "
-                                  'Step 6 no comiteo (Step 6d); despues journal-compact.py'))
+                          corrige='python3 "$JBIN/journal-emit.py" --type session.add --slug '
+                                  f"{shlex.quote(slug)} --date {fecha_ficha} --commit '`<hash>`' && {COMPACTA}"
+                                  '   # o --commit "N/A" si Step 6 no comiteo (Step 6d)'))
     else:
         h.append(Hallazgo(HECHO, "indice.commit",
                           f"celda Commit de esta ficha: {fila_propia[col_commit].strip()}"))
@@ -1224,8 +1314,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     if n_pend or n_cuar:
         h.append(Hallazgo(SALTADO, "journal.limpio",
                           f"journal con {n_pend} evento(s) sin aplicar y {n_cuar} en cuarentena",
-                          corrige='python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"'
-                                  if n_pend else
+                          corrige=COMPACTA if n_pend else
                                   "lee memory/.journal/quarantine/*.reason y decide; no se borra solo"))
     else:
         h.append(Hallazgo(HECHO, "journal.limpio", "sin eventos sin aplicar ni en cuarentena"))

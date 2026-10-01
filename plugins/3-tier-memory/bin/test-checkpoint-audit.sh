@@ -277,6 +277,13 @@ PY
 O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
 chk "avisa del research" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*research.recomendaciones')"
 chk "remite a Step 8d" "1" "$(printf '%s' "$O" | grep -A3 'research.recomendaciones' | grep -c 'corrige:.*print-research-recomendaciones.py')"
+# El corrige: impreso se EJECUTA tal cual (solo se sustituye <SESSION_FILE>): antes pasaba
+# "$MEMORY_DIR" de mas y el script salia 2 con "uso: ..." — p-01a16467ad.
+CMD=$(printf '%s' "$O" | grep -A3 'research.recomendaciones' | grep 'corrige:' | sed 's/.*corrige: //')
+CMD=${CMD//<SESSION_FILE>/\"$S\"}
+set +e; SAL=$(JBIN="$BIN" MEMORY_DIR="$M" bash -c "$CMD" 2>&1); RC=$?; set -e
+chk "el corrige impreso corre con exit 0" "0" "$RC"
+chk "el corrige impreso lista la recomendacion sin marcar" "1" "$(printf '%s' "$SAL" | grep -c 'otra sin decidir')"
 
 echo "== wikilink de research ROTO: SALTADO, nunca un HECHO por no poder mirar =="
 # Un enlace roto no es "sin recomendaciones": es que no se pudo mirar. La version anterior lo
@@ -1394,6 +1401,159 @@ echo "== ronda 1 de 2.42.0: 'break' o 'veredicto' sueltos no nombran al adversar
 M="$T/mVB5"; ficha_pp "$M" - "$OK_PP" ""; pend_linea "$M" p-1234567890 "arreglar el parser" ""
 bugs_ficha "$M" 2026-09-30 "- un break que faltaba en el bucle; el veredicto del parser era falso _verificado: test verde_"
 chk "SALTADO" "SALTADO" "$(vb "$M" break)"
+
+echo "== todo corrige: que es un comando corre tal cual y deja su clave en HECHO (p-01a16467ad) =="
+# Contrato: un corrige: que empieza por `python3` se ejecuta tal cual; solo se sustituyen los
+# marcadores de lo que el audit no puede saber (<SESSION_FILE>, <hash>, <status>). Antes, dos
+# llevaban un `…` literal (bash lo pasa como argumento: exit 2), uno dejaba el compactar dentro
+# del comentario y otro compactaba cuando lo que faltaba era repair-dualwrite. Salir 0 no basta:
+# el re-audit tiene que dar HECHO. Los corrige: en prosa siguen en prosa (decide el agente).
+corrige_de() {   # $1 = salida del audit, $2 = clave -> su corrige:, sin el prefijo
+  printf '%s\n' "$1" | awk -v k="$2" '
+    $2 == k { on = 1; next }
+    on && $1 ~ /^(HECHO|SALTADO|PARCIAL|POR-DISE|resumen:)/ { exit }
+    on && /corrige: / { sub(/.*corrige: /, ""); print; exit }'
+}
+corre_corrige() {   # $1 = memoria, $2 = ficha, $3 = clave, $4 = valor de <status> -> rc
+  local o c
+  o=$($AUD "$1" --session-file "$2" --no-git --hoy $HOY 2>&1)
+  c=$(corrige_de "$o" "$3")
+  c=${c//<SESSION_FILE>/\"$2\"}; c=${c//<hash>/abc1234}; c=${c//<status>/${4:-active}}
+  if [ -z "$c" ] || printf '%s' "$c" | grep -q '…\|<[A-Za-z_]*>'; then echo "SIN-COMANDO[$c]"; return; fi
+  set +e; JBIN="$BIN" MEMORY_DIR="$1" bash -c "$c" >"$T/corrige.out" 2>&1; echo $?; set -e
+}
+clave_en() {   # $1 = memoria, $2 = ficha, $3 = clave -> estado
+  $AUD "$1" --session-file "$2" --no-git --hoy $HOY 2>&1 | awk -v k="$3" '$2 == k { print $1; exit }'
+}
+estado_plan() { { printf -- '---\ntype: plan\n---\n# %s\n' "${2:-Plan demo}"; cat; } > "$1" <<'EOF'
+
+## Estado
+- Fase actual: 2
+- Proxima accion: nada
+- Bloqueo: ninguno
+- Fecha: 2026-09-19
+EOF
+}
+enlaza_planes() {   # $1 = ficha, $2.. = slugs de plan
+  local f="$1"; shift
+  python3 - "$f" "$@" <<'PY'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Plans\n- Ninguno","## Plans\n"+"\n".join(f"- [[plans/{s}]] — tocado" for s in sys.argv[2:]))
+open(p,'w',encoding='utf-8').write(t)
+PY
+}
+
+MX="$T/mX1"; nueva_memoria "$MX"; SX="$MX/sessions/2026-09-19-demo.md"; ficha_completa "$SX"
+estado_plan "$MX/plans/plan-demo.md"; enlaza_planes "$SX" plan-demo
+chk "plan.indice sin fila: el corrige corre" "0" "$(corre_corrige "$MX" "$SX" plan.indice active)"
+chk "plan.indice sin fila: re-audit HECHO" "HECHO" "$(clave_en "$MX" "$SX" plan.indice)"
+
+MX="$T/mX2"; nueva_memoria "$MX"; SX="$MX/sessions/2026-09-19-demo.md"; ficha_completa "$SX"
+estado_plan "$MX/plans/plan-demo.md"; estado_plan "$MX/plans/plan-otro.md" "Plan otro"; enlaza_planes "$SX" plan-demo plan-otro
+cat >> "$MX/_plans-index.md" <<'EOF'
+| [[plans/plan-demo\|Plan demo]] | active (fase de plan-otro) | 2026-09-01 | [[sessions/2026-09-01-vieja]] | 0 | 0 |
+EOF
+chk "plan.indice fila vieja + plan sin fila: el corrige corre" "0" "$(corre_corrige "$MX" "$SX" plan.indice testing)"
+chk "plan.indice dos planes: re-audit HECHO" "HECHO" "$(clave_en "$MX" "$SX" plan.indice)"
+chk "la anotacion de fase no se duplica" "1" "$(grep -c 'plan-demo.*| active (fase de plan-otro) |' "$MX/_plans-index.md")"
+chk "la Fecha de la fila vieja no cambia" "1" "$(grep -c 'plan-demo.*| 2026-09-01 |' "$MX/_plans-index.md")"
+
+MX="$T/mX3"; nueva_memoria "$MX"; SX="$MX/sessions/2026-09-19-demo.md"; ficha_completa "$SX"
+cat >> "$MX/_pendientes.md" <<'EOF'
+- [ ] escrito a mano sin fila mensual — _creado: 2026-09-19_ — _id: p-abcdef0123_
+EOF
+python3 - "$SX" <<'PY'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("## Pendientes\n- Ninguno","## Pendientes\n- [ ] escrito a mano — `p-abcdef0123`")
+open(p,'w',encoding='utf-8').write(t)
+PY
+chk "pendientes.dualwrite: SALTADO antes" "SALTADO" "$(clave_en "$MX" "$SX" pendientes.dualwrite)"
+chk "pendientes.dualwrite: el corrige corre" "0" "$(corre_corrige "$MX" "$SX" pendientes.dualwrite)"
+chk "pendientes.dualwrite: re-audit HECHO" "HECHO" "$(clave_en "$MX" "$SX" pendientes.dualwrite)"
+
+MX="$T/mX4"; nueva_memoria "$MX"; SX="$MX/sessions/2026-09-19-demo.md"; ficha_completa "$SX"
+python3 "$BIN/journal-emit.py" --memory-dir "$MX" --type session.add --slug 2026-09-19-demo --status completada >/dev/null
+chk "journal.limpio: SALTADO antes" "SALTADO" "$(clave_en "$MX" "$SX" journal.limpio)"
+chk "journal.limpio: el corrige corre" "0" "$(corre_corrige "$MX" "$SX" journal.limpio)"
+chk "journal.limpio: re-audit HECHO" "HECHO" "$(clave_en "$MX" "$SX" journal.limpio)"
+
+MX="$T/mX5"; nueva_memoria "$MX"; SX="$MX/sessions/2026-09-24-recien.md"; ficha_completa "$SX"
+chk "indice.sesion: SALTADO antes" "SALTADO" "$(clave_en "$MX" "$SX" indice.sesion)"
+chk "indice.sesion: el corrige corre" "0" "$(corre_corrige "$MX" "$SX" indice.sesion)"
+chk "indice.sesion: re-audit HECHO" "HECHO" "$(clave_en "$MX" "$SX" indice.sesion)"
+chk "indice.commit: SALTADO (celda vacia) antes" "SALTADO" "$(clave_en "$MX" "$SX" indice.commit)"
+chk "indice.commit: el corrige corre" "0" "$(corre_corrige "$MX" "$SX" indice.commit)"
+chk "indice.commit: re-audit HECHO" "HECHO" "$(clave_en "$MX" "$SX" indice.commit)"
+
+echo "== ronda 1 del adversario (p-01a16467ad): plan.indice no toca la fila de otro plan =="
+MX="$T/mX6"; nueva_memoria "$MX"; SX="$MX/sessions/2026-09-19-demo.md"; ficha_completa "$SX"
+estado_plan "$MX/plans/plan-demo.md"; enlaza_planes "$SX" plan-demo
+cat >> "$MX/_plans-index.md" <<'EOF'
+| [[plans/plan-demo-v2\|Otra cosa]] | active | 2026-09-01 | [[sessions/2026-09-01-vieja]] | 0 | 0 |
+EOF
+chk "subcadena plan-demo-v2: SALTADO sin fila propia" "1" "$($AUD "$MX" --session-file "$SX" --no-git --hoy $HOY 2>&1 | grep -c 'plan-demo — sin fila')"
+chk "subcadena: el corrige corre" "0" "$(corre_corrige "$MX" "$SX" plan.indice active)"
+chk "subcadena: re-audit HECHO" "HECHO" "$(clave_en "$MX" "$SX" plan.indice)"
+# grep -F: en un patron basico, `\|` es alternancia y el aserto pasaba con la fila corrupta
+# (adversario, ronda 2).
+chk "la fila de plan-demo-v2 queda intacta" "1" "$(grep -cxF '| [[plans/plan-demo-v2\|Otra cosa]] | active | 2026-09-01 | [[sessions/2026-09-01-vieja]] | 0 | 0 |' "$MX/_plans-index.md")"
+
+MX="$T/mX7"; nueva_memoria "$MX"; SX="$MX/sessions/2026-09-19-demo.md"; ficha_completa "$SX"
+estado_plan "$MX/plans/plan-demo.md"; enlaza_planes "$SX" plan-demo
+chk "<status> con espacios y metacaracteres: el corrige corre" "0" "$(corre_corrige "$MX" "$SX" plan.indice 'en pausa; $(false) `x`')"
+chk "<status> con espacios: re-audit HECHO" "HECHO" "$(clave_en "$MX" "$SX" plan.indice)"
+chk "<status> llega literal al indice, sin expandirse" "1" "$(grep -cF '| en pausa; $(false) `x` |' "$MX/_plans-index.md")"
+
+MX="$T/mX8"; nueva_memoria "$MX"; SX="$MX/sessions/2026-09-19-demo.md"; ficha_completa "$SX"
+estado_plan "$MX/plans/plan-demo.md"; enlaza_planes "$SX" plan-demo
+cat >> "$MX/_plans-index.md" <<'EOF'
+| [[plans/plan-demo\|Plan demo]] | active | 2026-09-01 | [[sessions/2026-09-01-vieja]] | 0 | 0 |
+| [[plans/plan-demo\|Plan demo]] | draft | 2026-08-01 | [[sessions/2026-08-01-mas-vieja]] | 0 | 0 |
+EOF
+O=$($AUD "$MX" --session-file "$SX" --no-git --hoy $HOY 2>&1)
+chk "filas duplicadas: SALTADO" "SALTADO" "$(clave_en "$MX" "$SX" plan.indice)"
+chk "filas duplicadas: el corrige no es un comando para pegar" "0" "$(corrige_de "$O" plan.indice | grep -c '^python3')"
+chk "filas duplicadas: el corrige lo dice" "1" "$(corrige_de "$O" plan.indice | grep -c 'tiene 2 filas')"
+
+MX="$T/mX9"; nueva_memoria "$MX"; SX="$MX/sessions/2026-09-19-demo.md"; ficha_completa "$SX"
+estado_plan "$MX/plans/plan-demo.md" "Titulo compartido"; enlaza_planes "$SX" plan-demo
+cat >> "$MX/_plans-index.md" <<'EOF'
+| [[plans/plan-ajeno\|Titulo compartido]] | active | 2026-09-01 | [[sessions/2026-09-01-vieja]] | 0 | 0 |
+EOF
+O=$($AUD "$MX" --session-file "$SX" --no-git --hoy $HOY 2>&1)
+chk "titulo de otra fila: el corrige no es un comando para pegar" "0" "$(corrige_de "$O" plan.indice | grep -c '^python3')"
+chk "titulo de otra fila: el corrige lo dice" "1" "$(corrige_de "$O" plan.indice | grep -c 'mismo titulo')"
+
+MX="$T/mXu"; nueva_memoria "$MX"; SX="$MX/sessions/2026-09-19-demo.md"; ficha_completa "$SX"
+estado_plan "$MX/plans/plan-demo.md" "$(printf 'Revisio\xcc\x81n')"; enlaza_planes "$SX" plan-demo
+printf '| [[plans/plan-ajeno\\|Revisi\xc3\xb3n]] | active | 2026-09-01 | [[sessions/2026-09-01-vieja]] | 0 | 0 |\n' >> "$MX/_plans-index.md"
+O=$($AUD "$MX" --session-file "$SX" --no-git --hoy $HOY 2>&1)
+chk "titulo igual en otra forma Unicode (NFD/NFC): no es un comando para pegar" "0" "$(corrige_de "$O" plan.indice | grep -c '^python3')"
+
+MX="$T/mXa"; nueva_memoria "$MX"; SX="$MX/sessions/2026-09-19-demo.md"; ficha_completa "$SX"
+estado_plan "$MX/plans/plan-demo.md"; enlaza_planes "$SX" plan-demo
+cat >> "$MX/_plans-index.md" <<'EOF'
+| [[plans/plan-demo\|Plan demo]] | active | 2026-09-01 | [[sessions/2026-09-19-demo-2]] | 0 | 0 |
+EOF
+chk "celda Sesion de otra ficha con el slug como prefijo: SALTADO" "SALTADO" "$(clave_en "$MX" "$SX" plan.indice)"
+
+echo "== ningun corrige= de checkpoint-audit.py que empieza por python3 lleva un '…' literal =="
+chk "sin '…' en los corrige de comando" "0" "$(python3 - "$BIN/checkpoint-audit.py" <<'PY'
+import ast, sys
+arbol = ast.parse(open(sys.argv[1], encoding="utf-8").read())
+def texto(n):
+    if isinstance(n, ast.Constant) and isinstance(n.value, str): return n.value
+    if isinstance(n, ast.JoinedStr): return "".join(texto(v) if not isinstance(v, ast.FormattedValue) else "{}" for v in n.values)
+    if isinstance(n, ast.BinOp): return texto(n.left) + texto(n.right)
+    if isinstance(n, ast.IfExp): return texto(n.body) + "\n" + texto(n.orelse)
+    return ""
+malos = [n.lineno for n in ast.walk(arbol) if isinstance(n, ast.keyword) and n.arg == "corrige"
+         and any(l.startswith("python3") and "…" in l for l in texto(n.value).split("\n"))]
+print(len(malos))
+PY
+)"
 
 echo
 echo "pass=$pass fail=$fail"
