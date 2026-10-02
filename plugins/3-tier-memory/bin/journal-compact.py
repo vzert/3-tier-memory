@@ -3004,7 +3004,17 @@ def apply_plan_upsert(mem, p):
         # Fallback por titulo plano SOLO en la tabla canonica (no en todo el archivo): es para un
         # plan `--inline` (sin wikilink que buscar), y ampliarlo a cualquier tabla del mismo ancho
         # arriesga enganchar una fila ajena por coincidencia de texto. Ver inline_title_row.
-        if p.get("inline") or plan_sin_archivo(mem, slug):
+        # Solo un plan SIN archivo usa el fallback, traiga --inline o no. Con --inline bastaba el
+        # flag, y un plan con plans/plan-<slug>.md (o un enlace roto con ese nombre) tomaba por
+        # titulo la fila (inline) de OTRO plan (ronda 4 de adversario de bd440b2). Un --inline con
+        # archivo es contradictorio: la salida es --promote.
+        if p.get("inline") and not plan_sin_archivo(mem, slug):
+            raise Quarantine(
+                f"inline-con-archivo: plan.upsert --inline de plan-{slug}, pero existe "
+                f"plans/plan-{slug}.md — un plan con archivo no es inline. Si su fila (inline) "
+                f"es de este plan, reemite el evento con --promote en vez de --inline; si no, "
+                f"emitelo sin --inline.")
+        if plan_sin_archivo(mem, slug):
             hit = inline_title_row(lines, rows, tplain)
         if hit is None:
             # Una fila con este titulo sin el wikilink canonico de un plan (legacy escrita a mano,
@@ -3669,11 +3679,13 @@ def validate(ev):
     # cualquier tipo de evento (visto en la ronda 2 de adversario de bd440b2). Sin ts sigue valido
     # (0), como siempre; un `ts` PRESENTE tiene que ser un numero entero finito: `null` y
     # `Infinity` (json los acepta) tambien rompian el archivado (ronda 3 de adversario de bd440b2).
+    # Y tiene que caber en time.gmtime, que es lo que hace el archivado: 10**30 pasaba int() y
+    # rompia despues de escribir el indice (ronda 4). El mismo calculo, aqui, antes de aplicar.
     if "ts" in ev:
         try:
-            int(ev["ts"])
-        except (TypeError, ValueError, OverflowError):
-            raise Quarantine(f"malformed: ts '{ev['ts']}' no es un numero")
+            time.gmtime(int(ev["ts"]) / 1e9)
+        except (TypeError, ValueError, OverflowError, OSError):
+            raise Quarantine(f"malformed: ts '{ev['ts']}' no es un instante valido")
     if t == "pendiente.add":
         for k in ("id", "text", "prioridad", "origen", "creado"):
             if not p.get(k):

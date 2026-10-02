@@ -78,6 +78,8 @@ Tipos de evento:
                     [--pendientes N] [--learnings N] [--inline|--promote] [--parent P]  (Fase 2)
                     Fila en _plans-index.md por slug (o titulo, solo filas (inline));
                     actualiza celdas dadas.
+                    --inline solo para un plan sin plans/plan-S.md (con el archivo: cuarentena
+                    inline-con-archivo).
                     --promote: el plan era --inline y ya tiene plans/plan-S.md; su UNICA fila
                     (inline) titulada T pasa a [[plans/plan-S|T]]. Sin el flag, ese upsert va a
                     cuarentena titulo-ambiguo (la fila (inline) no guarda el slug).

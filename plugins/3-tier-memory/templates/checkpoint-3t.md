@@ -734,9 +734,14 @@ Do NOT skip this step. Actively scan the conversation for these signals:
     [--pendientes N] [--learnings "N rules"] [--inline] [--parent <parent-slug>]
   ```
   New plan → row `| [[plans/plan-<slug>\|<title>]] | <status> | DATE | <sesion> | ... |` at the top of
-  `## Plans` (`--inline` writes `<title> (inline)` instead of the link). Existing plan (matched by
-  `plans/plan-<slug>` or by title) → only the cells you pass are updated; Fecha never changes. The
-  compactor prunes completed/abandoned rows to the 5 most recent by date.
+  `## Plans` (`--inline` writes `<title> (inline)` instead of the link; only for a plan WITHOUT
+  `plans/plan-<slug>.md`). Existing plan (matched by `plans/plan-<slug>`, or, only for a plan without
+  that file, by the title of its `(inline)` row) → only the cells you pass are updated; Fecha never
+  changes. A row with that title that the compactor cannot prove is this plan's goes to quarantine
+  (`titulo-ambiguo`), never taken. **An `--inline` plan that later gets its file**: emit the upsert
+  with `--promote` instead of `--inline` — it turns its only `<title> (inline)` row into the link
+  (quarantine if there are two such rows or none); `--inline` with the file present is quarantined
+  (`inline-con-archivo`). The compactor prunes completed/abandoned rows to the 5 most recent by date.
   **Reopening a closed plan** (completed/abandoned/superseded → active) is NOT a `plan.upsert`: since
   2.37.0 an upsert that moves the status backwards is dropped with a WARN (that is what stops a
   replayed old event from un-closing a plan). Emit

@@ -464,6 +464,32 @@ for v in None inf; do
 done
 chk "los dos en cuarentena malformed" "2" "$(grep -l '^malformed: ts' "$M/.journal/quarantine/"*.reason 2>/dev/null | wc -l | tr -d ' ')"
 
+echo "== 34. --inline de un plan CON archivo (o enlace roto): cuarentena que nombra --promote, la fila ajena intacta =="
+fixture
+emit --type plan.upsert --slug ajeno34 --inline --title "Inline ajeno 34" --status active --date 2026-09-01
+compact
+mkdir -p "$M/plans"; printf '# x\n' > "$M/plans/plan-con34.md"; ln -s "$M/no-existe.md" "$M/plans/plan-roto34.md"
+emit --type plan.upsert --slug con34 --inline --title "Inline ajeno 34" --status completed --date 2026-09-02
+emit --type plan.upsert --slug roto34 --inline --title "Inline ajeno 34" --status completed --date 2026-09-02
+emit --type plan.upsert --slug con34b --inline --title "Titulo libre 34" --status active --date 2026-09-02
+printf '# x\n' > "$M/plans/plan-con34b.md"
+compact
+chk "la fila inline ajena sigue active" "active" "$(status 'Inline ajeno 34 (inline)')"
+chk "una sola fila con ese titulo" "1" "$(grep -c 'Inline ajeno 34' "$M/_plans-index.md")"
+chk "--inline con archivo y titulo libre: no inserta fila inline" "0" "$(filas 'Titulo libre 34')"
+chk "los tres en cuarentena" "3" "$(cuar)"
+chk "el motivo nombra --promote" "3" "$(grep -l '^inline-con-archivo.*--promote' "$M/.journal/quarantine/"*.reason 2>/dev/null | wc -l | tr -d ' ')"
+
+echo "== 35. ts que time.gmtime no acepta (10**30): cuarentena antes de tocar el indice =="
+fixture
+emit --type plan.upsert --slug enorme35 --title "Ts enorme" --status active --date 2026-09-02
+f=$(ls "$M/.journal/pending/"*.json); python3 -c "import json,sys;d=json.load(open(sys.argv[1]));d['ts']=10**30;json.dump(d,open(sys.argv[1],'w'))" "$f"
+python3 "$BIN/journal-compact.py" --memory-dir "$M" --log "$M/../compact.log" --quiet >/dev/null 2>&1
+chk "el compactador no se cae" "0" "$?"
+chk "el indice no cambio" "0" "$(filas '[[plans/plan-enorme35\|')"
+chk "nada atascado en pending" "0" "$(ls "$M/.journal/pending/" | wc -l | tr -d ' ')"
+chk "cuarentena malformed" "1" "$(grep -l '^malformed: ts' "$M/.journal/quarantine/"*.reason 2>/dev/null | wc -l | tr -d ' ')"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
