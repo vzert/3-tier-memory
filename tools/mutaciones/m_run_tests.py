@@ -11,6 +11,9 @@ M = {
     "resumen-cualquiera": [
         ("sin_resumen() { ! printf '%s' \"$1\" | tail -1 | tr -d '\\r' | grep -qE \"$RESUMEN\"; }",
          "sin_resumen() { ! printf '%s' \"$1\" | grep -qE \"$RESUMEN\"; }")],
+    "resumen-prefijo": [
+        ('RESUMEN="^[[:space:]]*($(IFS=\'|\'; echo \"${RESUMEN_FORMAS[*]}\"))[[:space:]]*\\$"',
+         'RESUMEN="^[[:space:]]*($(IFS=\'|\'; echo \"${RESUMEN_FORMAS[*]}\"))"')],
 }
 p, nombre = sys.argv[1], sys.argv[2]
 s = io.open(p, encoding="utf-8", newline="").read()

@@ -26,10 +26,28 @@ LENTAS=""
 SALTADAS=""
 PARCIALES=""
 
-# Ultima linea de una suite que termino: su resumen. Cada suite tiene el suyo (pass=N fail=N,
-# TODO VERDE, RESULT: PASS, == resumen: ...). Una suite NUEVA con otro formato sale FALLA con
-# "sin linea de resumen": anade aqui su formato, no le quites el resumen.
-RESUMEN='^[[:space:]]*(RESULT(ADO)?:? |pass=[0-9]|PASS[ =]|(test-bench: )?TODO VERDE|== resumen: |---- [0-9]+ ok|OK: |LAS EVALUABLES DISCRIMINAN)'
+# Ultima linea de una suite que termino: su resumen, ENTERO y con cero fallos. Cada suite tiene el
+# suyo; cada alternativa casa la linea completa (un prefijo como `RESULT:` u `OK:` lo imprime
+# cualquier seccion a mitad). Una suite NUEVA con otro formato sale FALLA con "sin linea de
+# resumen": anade aqui su formato, no le quites el resumen. Limite: una suite que imprime su propio
+# resumen a mitad y luego muere con rc=0 sigue pasando; eso solo lo ve la suite.
+RESUMEN_FORMAS=(
+  'pass=[0-9]+ fail=0'                                  # la mayoria
+  'RESULT:? pass=[0-9]+ fail=0( skip=[0-9]+)?'          # test-bash-nudge, test-journal-guard...
+  'RESULT: PASS'                                        # test-anchor-heal, test-journal-race
+  'PASS=[0-9]+ FAIL=0 SKIP=[0-9]+'                      # test-backfill-dedup
+  'PASS [0-9]+/[0-9]+'                                  # test-project-dir-fallback
+  'PASS test-[a-z-]+'                                   # test-research-row-lookup, -session-index-heal
+  'TODO VERDE( \(enlaces reales: si\))?'              # varias; test-compaction-recover
+  'test-bench: TODO VERDE'                              # tools/recall-bench/test-bench.sh
+  'RESULTADO: [0-9]+ ok, 0 fallas'                      # test-plan-reopen, -research-rename, -session-amend
+  '== resumen: [0-9]+ ok, 0 fallas =='                  # test-guardar-huellas-escritos, -linea-base-corrupta
+  '---- [0-9]+ ok, 0 fallo\(s\)'                      # test-parser
+  'OK: ningun fichero trackeado esta excluido por \.gitignore'  # tools/check-ignored-tracked.sh
+  'LAS EVALUABLES DISCRIMINAN \(de [0-9]+\)'          # tools/mutation-check.sh
+  'docs [0-9]+, clases de fallo 0'                      # tools/oraculo-rewrite-rule.py (con markdown-it-py)
+)
+RESUMEN="^[[:space:]]*($(IFS='|'; echo "${RESUMEN_FORMAS[*]}"))[[:space:]]*\$"
 
 # rc=0 y la ultima linea no es un resumen: la suite murio a mitad. Pasa con `set -e` y un
 # `trap '...' EXIT` (bash 3.2): un error de sintaxis a mitad corta la suite y el rc del trap (0)

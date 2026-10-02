@@ -67,6 +67,21 @@ RESULTADO: 45 ok, 0 fallas
   ---- 26 ok, 0 fallo(s)
 OK: ningun fichero trackeado esta excluido por .gitignore
 LAS EVALUABLES DISCRIMINAN (de 57)
+docs 1240, clases de fallo 0
+EOF
+
+echo "== una linea que solo EMPIEZA como un resumen, o con fallos, no vale (adversario, ronda 1) =="
+while IFS= read -r ult; do
+  n=$((n+1))
+  printf 'echo "  ok  algo"\nprintf "%%s\\n" %q\n' "$ult" > "$T/floja$n.sh"
+  chk "FALLA con «${ult}» y rc=0" "FALLA" "$(veredicto "$T/floja$n.sh")"
+done <<'EOF'
+RESULT: 
+OK: algo
+TODO VERDE de la seccion 3
+pass=10 fail=0 extra
+pass=3 fail=1
+docs 1240, clases de fallo 2
 EOF
 printf 'printf "pass=1 fail=0\\r\\n"\n' > "$T/crlf.sh"
 chk "ok con el resumen en CRLF (Windows)" "ok" "$(veredicto "$T/crlf.sh")"

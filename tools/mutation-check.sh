@@ -197,6 +197,7 @@ caso "audit #N inexistente"    checkpoint-audit.py m_learning_dedup.py test-lear
 echo "run-tests.sh (p-46153b135b): una suite que sale 0 sin su linea de resumen es FALLA"
 caso_tools "rc=0 sin resumen pasa"  run-tests.sh m_run_tests.py test-run-tests.sh "la del error de sintaxis con trap" sin-resumen-no-exigido
 caso_tools "resumen en cualquier linea" run-tests.sh m_run_tests.py test-run-tests.sh "un resumen a mitad no la salva" resumen-cualquiera
+caso_tools "resumen por prefijo" run-tests.sh m_run_tests.py test-run-tests.sh "FALLA con «TODO VERDE de la seccion 3»" resumen-prefijo
 
 echo
 if [ "$PEND" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $TOTAL)"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi
