@@ -115,7 +115,11 @@ def truncate(text, n=240):
 
 
 def add_unit(units, tipo, texto, path, fecha, importance, regla=False):
-    texto = truncate(texto)
+    # Los disparadores (F4) se leen de la linea ENTERA, antes de truncar: van al final y truncate
+    # los cortaria en cualquier regla de mas de 240 caracteres. El texto que se muestra va sin el
+    # comentario.
+    disp = learning_marks.disparadores_de(texto) if regla else None
+    texto = truncate(learning_marks.sin_disparadores(texto) if regla else texto)
     if not texto:
         return
     kws = tokenize(texto)
@@ -134,6 +138,12 @@ def add_unit(units, tipo, texto, path, fecha, importance, regla=False):
         # Una regla numerada de un topic file (no el fichero entero ni el Quick Reference): es lo
         # unico que learning.retire puede anclar, y recall_rank.py solo le pone pie a esas.
         u["regla"] = True
+    if disp and disp["frases"]:
+        # Palabras de las frases de disparo que la regla no dice ya: recall_rank.py les da peso
+        # propio (PESO_DISPARADORES). Las que ya estan en keywords no se duplican.
+        extra = [w for w in tokenize(" ".join(disp["frases"])) if w not in set(kws)]
+        if extra:
+            u["kw_disparadores"] = extra
     units.append(u)
 
 

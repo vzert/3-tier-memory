@@ -69,6 +69,11 @@ Tipos de evento:
                     forma `**Titulo** — cuerpo`, `**` y comillas invertidas en numero par y un
                     titulo de 200 caracteres como mucho. El mismo texto exacto no se bloquea
                     (el compactador no lo escribe dos veces).
+                    [--disparadores "frases=a | b | c; cmd=x, y; path=g/*; tool=Bash"] (2.48.0)
+                    Como describiria el momento alguien que NO conoce la regla (3-6 frases),
+                    mas los comandos, rutas y herramientas de ese momento. Van al final de la
+                    linea como comentario HTML: el recall indexa las frases y no las muestra.
+                    Sin ellos, aviso por stderr (sera error cuando la F7 migre los corpus).
   learning.retire   --topic T --match-prefix P --motivo obsoleta|duplicada|superada
                     [--por N] [--nota "<una linea>"] [--quickref-prefix QP]           (2.45.0)
                     Retira una regla SIN borrarla ni renumerarla: anade al final de su linea
@@ -78,6 +83,9 @@ Tipos de evento:
                     linea del Quick Reference (sin renumerar el resto). Imprime l-topic-<T>.
   learning.update   --topic T [--match-prefix P --text "<nuevo>"]
                     [--quickref-prefix QP --quickref "<nuevo>"] [--title TT] [--when W]
+                    [--match-prefix P --disparadores "<frases=...>"]                     (2.48.0)
+                    --disparadores sin --text enriquece la regla sin cambiar su texto; con
+                    --text sin --disparadores, la regla conserva los que tenia.
                     Corrige una regla YA escrita, CONSERVANDO su numero. Un learning no tiene id
                     en la linea: el ancla es topic + prefijo del texto de hoy. El numero se
                     conserva porque las reglas se citan por numero ("learning 106"); renumerar
@@ -518,6 +526,32 @@ def decision_de(valor, supersedes_raw, sup, memory_dir="", topic=""):
     return f"reemplaza:{n}"
 
 
+EJEMPLO_DISPARADORES = ('--disparadores "frases=ya termine la rama y limpio el worktree | git '
+                        'worktree remove se queja de cambios | cleanup de carpetas viejas; '
+                        'cmd=git worktree remove; tool=Bash"')
+
+
+def disparadores_arg(valor, text):
+    """--disparadores validado (F4), o "" si no se paso. Sale con error si no vale: un comentario
+    roto en la linea de la regla no lo leeria nadie, y el error tiene que salir aqui, donde la
+    persona lo puede corregir (el compactador lo mandaria a cuarentena)."""
+    import learning_marks
+    if text and learning_marks.sufijo_disparadores(text):
+        sys.exit("journal-emit: el comentario de disparadores no va pegado a --text: pasalo con "
+                 "--disparadores (sin <!-- -->).")
+    if valor is None:
+        return ""
+    v = " ".join(valor.split())
+    malos = learning_marks.problemas_disparadores(v)
+    if malos:
+        sys.exit("journal-emit: --disparadores no vale:\n  - " + "\n  - ".join(malos)
+                 + f"\nForma: {EJEMPLO_DISPARADORES}\n(frases: {learning_marks.FRASES_MIN}-"
+                 f"{learning_marks.FRASES_MAX}, separadas por '|'; cmd, path y tool opcionales, "
+                 f"separados por ','; sin '--' ni '<' '>': un flag largo no hace falta, cmd es un "
+                 f"prefijo)")
+    return v
+
+
 def dedup_al_emitir(memory_dir, topic, text, decision, solo_vecinos):
     """Dedup de learning.add (2.47.0): chequeo de forma y vecinos de la regla nueva, por STDERR.
 
@@ -634,6 +668,8 @@ def main():
     # learning.add: dedup al emitir (2.47.0)
     ap.add_argument("--decision", default="")
     ap.add_argument("--solo-vecinos", dest="solo_vecinos", action="store_true")
+    # learning.add / learning.update: disparadores (F4, 2.48.0)
+    ap.add_argument("--disparadores", default=None)
     a = ap.parse_args()
 
     memory_dir = resolve_memory_dir(a.memory_dir)
@@ -748,6 +784,16 @@ def main():
             "importance": imp,
         }
         base["payload"]["id"] = learning_id(topic, text) if text else f"l-topic-{topic}"
+        disp = disparadores_arg(a.disparadores, text)
+        if disp and not text:
+            sys.exit("journal-emit: --disparadores necesita --text (la regla que los lleva)")
+        if disp:
+            base["payload"]["disparadores"] = disp
+        elif text and not a.solo_vecinos:
+            # F4, paso 6: aviso, no error, hasta que la F7 migre los corpus existentes.
+            print("journal-emit: AVISO — learning.add sin --disparadores: sin ellos, una parafrasis "
+                  "del momento del error no encuentra esta regla en el recall. Forma: "
+                  + EJEMPLO_DISPARADORES, file=sys.stderr)
         sup = numero_regla(a.supersedes, "--supersedes")
         if (a.decision or a.solo_vecinos) and not text:
             sys.exit("journal-emit: --decision y --solo-vecinos necesitan --text (la regla nueva)")
@@ -821,17 +867,22 @@ def main():
         if quickref and not qprefix:
             sys.exit("journal-emit: --quickref necesita --quickref-prefix (el prefijo de la regla "
                      "ACTUAL del Quick Reference)")
-        if mprefix and not text:
-            sys.exit("journal-emit: --match-prefix sin --text no corrige nada")
+        disp = disparadores_arg(a.disparadores, text)
+        if (text or disp) and not mprefix:
+            sys.exit("journal-emit: --disparadores necesita --match-prefix (el prefijo del texto "
+                     "ACTUAL de la regla que los lleva)")
+        if mprefix and not (text or disp):
+            sys.exit("journal-emit: --match-prefix sin --text ni --disparadores no corrige nada")
         if qprefix and not quickref:
             sys.exit("journal-emit: --quickref-prefix sin --quickref no corrige nada")
-        if not (text or quickref or title or when):
+        if not (text or quickref or title or when or disp):
             sys.exit("journal-emit: learning.update necesita al menos uno de --text, --quickref, "
-                     "--title o --when")
+                     "--title, --when o --disparadores")
         base["payload"] = {
             "topic": topic,
             "match_prefix": mprefix,
             "text": text,
+            "disparadores": disp,
             "quickref_prefix": qprefix,
             "quickref": quickref,
             "title": title,

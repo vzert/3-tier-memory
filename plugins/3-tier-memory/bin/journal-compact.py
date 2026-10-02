@@ -2311,14 +2311,18 @@ def apply_learning_add(mem, p):
                     raise Quarantine(f"{motivo}: en {donde}, {MOTIVOS_REGLA[motivo]}. La regla #{sup} "
                                      f"no se puede marcar, asi que tampoco se escribe la nueva: "
                                      f"corrigela a mano o simplificala a una linea y reemite.")
-                retiro = (hits[0], tv + learning_marks.marca_canonica(
-                    p.get("fecha") or today, "superada", nuevo_n, p.get("nota") or ""))
+                retiro = (hits[0], learning_marks.con_marca(tv, learning_marks.marca_canonica(
+                    p.get("fecha") or today, "superada", nuevo_n, p.get("nota") or "")))
             if qp:
                 quitar_qr = quickref_a_quitar(read_lines(ipath), qp, retirada_ya)
         if retiro:
             rewrite_rule(lines, retiro[0], related, retiro[1], f"learnings/{topic}.md")
         if existe is None:
-            new_line = f"{max(nums) + 1 if nums else 1}. {text}" if numbered else f"- {text}"
+            # Los disparadores (F4) van al final de la linea, como comentario HTML: el recall
+            # indexa sus frases y no los muestra (learning_marks.disparadores_de).
+            disp = (learning_marks.comentario_disparadores(p["disparadores"])
+                    if p.get("disparadores") else "")
+            new_line = (f"{max(nums) + 1 if nums else 1}. {text}" if numbered else f"- {text}") + disp
             section = p.get("section") or ""
             sec = section_bounds(lines, f"## {section}") if section else None
             if sec and sec[0] < related:
@@ -2398,11 +2402,11 @@ def find_rule_anchored(lines, start, end, prefix, nuevo, donde):
         # La igualdad se mide EXACTA (normalize_text, no plain): asi un cambio que solo toca el
         # enfasis —ponerle negrita al titulo— sigue siendo un cambio y se aplica. Con plain() se
         # leeria como "ya esta corregida" y se perderia en silencio.
-        # Una regla RETIRADA cuyo texto sin el marcador ya es el nuevo tambien cuenta: learning.update
-        # conserva el marcador (le vuelve a pegar el sufijo), asi que en su replay la linea es
-        # `nuevo + marca` y sin esto el replay iria a cuarentena (I3).
-        if pn and (normalize_text(t) == pn or (learning_marks.regla_retirada(t) and
-                                                normalize_text(learning_marks.sin_marca(t)) == pn)):
+        # Una regla RETIRADA o ENRIQUECIDA cuyo texto sin el marcador ni el comentario de
+        # disparadores ya es el nuevo tambien cuenta: learning.update conserva los dos (les vuelve a
+        # pegar su sufijo), asi que en su replay la linea es `nuevo + marca + disparadores` y sin
+        # esto el replay iria a cuarentena (I3).
+        if pn and (normalize_text(t) == pn or normalize_text(learning_marks.sin_marca(t)) == pn):
             iguales.append(i)
         candidatas.append(t)
 
@@ -2594,6 +2598,19 @@ def find_topic_row(lines, topic):
     return None
 
 
+def validar_disparadores(p, tipo):
+    """'disparadores' (F4), si viene, es una cadena valida; y el texto no trae ya un comentario de
+    disparadores pegado (iria detras del marcador de retirada y nadie lo leeria como tal)."""
+    d = p.get("disparadores")
+    if d not in (None, ""):
+        malos = learning_marks.problemas_disparadores(d) if isinstance(d, str) else ["no es texto"]
+        if malos:
+            raise Quarantine(f"malformed: {tipo} con 'disparadores' invalidos: {'; '.join(malos)}")
+    if p.get("text") and learning_marks.sufijo_disparadores(str(p["text"])):
+        raise Quarantine(f"malformed: {tipo} con un comentario de disparadores dentro de 'text' — "
+                         f"van en 'disparadores' (--disparadores), no pegados al texto")
+
+
 def apply_learning_update(mem, p):
     """Corrige una regla YA escrita en cualquiera de las tres superficies de un learning.
 
@@ -2613,24 +2630,33 @@ def apply_learning_update(mem, p):
     changed = False
 
     text = normalize_text(p.get("text") or "")
-    if text:
+    disp_nuevo = p.get("disparadores") or ""
+    if text or disp_nuevo:
         tpath = os.path.join(mem, "learnings", topic + ".md")
         if not os.path.isfile(tpath):
             raise Quarantine(f"no-anchor: learnings/{topic}.md no existe — learning.update corrige "
                              f"una regla ya escrita, no la crea (para eso esta learning.add)")
         lines = read_lines(tpath)
         start, related = body_region(lines)
-        i, ya = find_rule_anchored(lines, start, related,
-                                   normalize_text(p.get("match_prefix") or ""), text,
-                                   f"learnings/{topic}.md")
-        if not ya:
-            # Corregir el texto de una regla retirada no la resucita: si el texto nuevo no trae el
-            # marcador, se le vuelve a pegar el que tenia (2.45.0). Resucitarla seria otra
-            # decision, y no se toma en silencio dentro de una correccion de redaccion.
-            _n, viejo = rule_text(lines[i])
-            if learning_marks.regla_retirada(viejo) and not learning_marks.regla_retirada(text):
-                text = text + learning_marks.sufijo_marca(viejo)
-            rewrite_rule(lines, i, related, text, f"learnings/{topic}.md")
+        i, _ya = find_rule_anchored(lines, start, related,
+                                    normalize_text(p.get("match_prefix") or ""), text,
+                                    f"learnings/{topic}.md")
+        _n, viejo = rule_text(lines[i])
+        # La linea final es cuerpo + marcador + disparadores, y cada parte se conserva si el evento
+        # no trae otra:
+        #  - sin --text (2.48.0, F4: enriquecer una regla vieja) el cuerpo es el de hoy;
+        #  - corregir el texto de una regla retirada no la resucita: si el texto nuevo no trae el
+        #    marcador, se le vuelve a pegar el que tenia (2.45.0). Resucitarla seria otra decision,
+        #    y no se toma en silencio dentro de una correccion de redaccion;
+        #  - corregir el texto no tira los disparadores (F4, paso 2): se conservan si no llegan otros.
+        # Se compara la linea entera: un replay (o un update que no cambia nada) no escribe.
+        cuerpo = text or learning_marks.sin_marca(viejo)
+        marca = "" if (text and learning_marks.regla_retirada(text)) else learning_marks.sufijo_marca(viejo)
+        coment = (learning_marks.comentario_disparadores(disp_nuevo) if disp_nuevo
+                  else learning_marks.sufijo_disparadores(viejo))
+        final = cuerpo + marca + coment
+        if normalize_text(final) != normalize_text(viejo):
+            rewrite_rule(lines, i, related, final, f"learnings/{topic}.md")
             bump_updated(lines)
             atomic_write(tpath, lines)
             changed = True
@@ -2723,8 +2749,8 @@ def apply_learning_retire(mem, p):
         if motivo:
             raise Quarantine(f"{motivo}: en {donde}, {MOTIVOS_REGLA[motivo]}. learning.retire solo "
                              f"marca una regla de una linea; marcala a mano o simplificala y reemite.")
-        nuevo = t + learning_marks.marca_canonica(p.get("fecha") or date.today().isoformat(),
-                                                  p["motivo"], por, p.get("nota") or "")
+        nuevo = learning_marks.con_marca(t, learning_marks.marca_canonica(
+            p.get("fecha") or date.today().isoformat(), p["motivo"], por, p.get("nota") or ""))
     qp = normalize_text(p.get("quickref_prefix") or "")
     quitar = None
     ilines = None
@@ -3806,6 +3832,7 @@ def validate(ev):
         if not p.get("topic"):
             raise Quarantine("malformed: learning.add sin 'topic'")
         check_slug(p["topic"], "topic")
+        validar_disparadores(p, "learning.add")
         if p.get("supersedes") not in (None, "", 0):
             if not isinstance(p["supersedes"], int) or isinstance(p["supersedes"], bool) \
                     or p["supersedes"] < 1:
@@ -3848,11 +3875,13 @@ def validate(ev):
         # rechaza estos casos, pero un evento puede venir escrito a mano o de otro emisor.
         if not p.get("topic"):
             raise Quarantine("malformed: learning.update sin 'topic'")
-        if not (p.get("text") or p.get("quickref") or p.get("title") or p.get("when")):
+        if not (p.get("text") or p.get("quickref") or p.get("title") or p.get("when")
+                or p.get("disparadores")):
             raise Quarantine("malformed: learning.update sin nada que corregir")
-        if p.get("text") and not p.get("match_prefix"):
-            raise Quarantine("malformed: learning.update con 'text' sin 'match_prefix' — sin ancla "
-                             "no se sabe que regla reescribir")
+        if (p.get("text") or p.get("disparadores")) and not p.get("match_prefix"):
+            raise Quarantine("malformed: learning.update con 'text' o 'disparadores' sin "
+                             "'match_prefix' — sin ancla no se sabe que regla reescribir")
+        validar_disparadores(p, "learning.update")
         if p.get("quickref") and not p.get("quickref_prefix"):
             raise Quarantine("malformed: learning.update con 'quickref' sin 'quickref_prefix'")
         check_slug(p["topic"], "topic")

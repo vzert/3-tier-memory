@@ -105,6 +105,12 @@ def cargar_vecinos():
     return learning_vecinos
 
 
+def cargar_marks():
+    sys.path.insert(0, BIN)
+    import learning_marks
+    return learning_marks
+
+
 def cargar_builder():
     spec = importlib.util.spec_from_file_location(
         "build_recall_index", os.path.join(BIN, "build-recall-index.py"))
@@ -273,7 +279,9 @@ def indice_con_ids(memory_dir, reglas, builder, tmp, nombre):
     subprocess.run([sys.executable, os.path.join(BIN, "build-recall-index.py"), memory_dir, out],
                    capture_output=True, check=True)
     units = [json.loads(l) for l in open(out, encoding="utf-8") if l.strip()]
-    # (path, texto truncado) -> [N...] en orden de aparicion, como los emite el builder
+    # (path, texto truncado) -> [N...] en orden de aparicion, como los emite el builder: sin el
+    # comentario de disparadores (F4), que el builder quita antes de truncar con la MISMA funcion.
+    marks = cargar_marks()
     pendientes = {}
     for topic, rs in reglas.items():
         rel = os.path.join("memory", "learnings", f"{topic}.md")
@@ -282,7 +290,7 @@ def indice_con_ids(memory_dir, reglas, builder, tmp, nombre):
         for n, texto in rs:
             vistos[n] = vistos.get(n, 0) + 1
             rid = f"{topic}#{n}" if n not in amb else f"{topic}#{n}~{vistos[n]}"
-            pendientes.setdefault((rel, builder.truncate(texto)), []).append(rid)
+            pendientes.setdefault((rel, builder.truncate(marks.sin_disparadores(texto))), []).append(rid)
     for u in units:
         cola = pendientes.get((u.get("path"), u.get("texto")))
         u["_rid"] = cola.pop(0) if cola else None
@@ -312,8 +320,21 @@ def medir(casos, reglas_por_mem, hoy):
     detalle = []
     with tempfile.TemporaryDirectory() as tmp:
         indices = {}
+        marks = cargar_marks()
         for i, (mem, reglas) in enumerate(reglas_por_mem.items()):
             indices[mem] = indice_con_ids(mem, reglas, builder, tmp, f"idx-{i}")
+            # Una regla esperada viva que no casa con ninguna unidad del indice daria 0 aciertos
+            # en silencio (el mapeo es por texto truncado): se niega, no mide. Las retiradas no
+            # estan en el indice a proposito (2.45.0).
+            ids = {u.get("_rid") for u in indices[mem]}
+            texto = {f"{t}#{n}": x for t, rs in reglas.items() for n, x in rs}
+            for c in casos:
+                if c["_mem"] != mem or c["canal"] != "prompt":
+                    continue
+                for rid in c["esperadas"]:
+                    if rid not in ids and not marks.regla_retirada(texto.get(rid, "")):
+                        negarse(f"caso {c['id']}: la regla esperada {rid} esta viva pero no casa "
+                                f"con ninguna unidad del indice (mapeo por texto truncado roto)")
         for c in casos:
             units = indices[c["_mem"]]
             esperadas, prohibidas = set(c["esperadas"]), set(c.get("prohibidas") or [])

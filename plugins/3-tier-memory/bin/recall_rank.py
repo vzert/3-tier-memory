@@ -47,6 +47,14 @@ WORD_RE = re.compile(r"[a-záéíóúüñ0-9]{2,}", re.IGNORECASE)
 HALFLIFE = {"session": 30.0, "pendiente": 60.0, "plan": 180.0,
             "research": 180.0, "learning": 3650.0}
 
+# Peso de una palabra que la unidad solo tiene por sus frases de disparo (F4: `kw_disparadores`,
+# las escribe build-recall-index.py desde el comentario `<!-- disparadores: ... -->` de la regla).
+# Las frases describen a proposito el momento en que la regla aplica, con las palabras de quien no
+# la conoce; una palabra del cuerpo puede estar de paso. Fijado ANTES de medir (sesion F4,
+# 2026-10-02); tools/recall-bench reporta tambien 1,0 y 2,0. Un indice sin el campo puntua igual
+# que antes de F4.
+PESO_DISPARADORES = 1.5
+
 LABEL = {"learning": "regla", "session": "sesión", "pendiente": "pendiente",
          "plan": "plan", "research": "research"}
 
@@ -89,7 +97,7 @@ def rank(units, prompt, today=None, k=4):
     # document frequency for IDF (rare terms in the corpus carry more signal)
     df = {}
     for u in units:
-        for kw in set(u.get("keywords", [])):
+        for kw in set(u.get("keywords", [])) | set(u.get("kw_disparadores", [])):
             df[kw] = df.get(kw, 0) + 1
 
     def idf(term):
@@ -114,10 +122,11 @@ def rank(units, prompt, today=None, k=4):
     scored = []
     for u in units:
         kws = set(u.get("keywords", []))
-        matched = q_terms & kws
+        kwd = set(u.get("kw_disparadores", [])) - kws
+        matched = q_terms & (kws | kwd)
         if not matched:
             continue
-        relevance = sum(idf(t) for t in matched)
+        relevance = sum(idf(t) * (PESO_DISPARADORES if t in kwd else 1.0) for t in matched)
         if relevance <= 0:
             continue
         imp = u.get("importance", 5) or 5
