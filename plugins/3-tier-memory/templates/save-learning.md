@@ -66,6 +66,11 @@ python3 "$JBIN/journal-emit.py" --type learning.add --topic <topic-slug> \
   [--title "<Topic Title>" --when "<when to consult>" --importance <0-10>]   # when the topic is new
 ```
 
+Desde 2.46.0 el emisor imprime por stderr las 8 reglas del topic mas parecidas, y se niega (sale 1,
+sin escribir) si una se parece mucho y no pasas `--decision nueva` o `--decision reemplaza:N`, o
+si el texto no tiene la forma `**Titulo** — cuerpo`. Lee la lista: si una regla ya dice lo mismo,
+no emitas; si quedo incompleta, `learning.update`. `--solo-vecinos` muestra la lista sin escribir.
+
 **Si la regla YA EXISTE y quedo falsa, corrigela — no anadas otra que la contradiga.** Emitir un
 `learning.add` que diga "la regla N esta vencida" deja el indice mal Y anotado: la falsa sigue
 ahi, con otra al lado diciendo que no le hagas caso, y el recall devuelve las dos.

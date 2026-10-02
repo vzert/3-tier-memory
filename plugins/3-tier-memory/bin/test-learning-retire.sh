@@ -151,31 +151,31 @@ chk "prefijo del Quick Reference que no casa: cuarentena y NI el topic se marca"
 
 echo "== 7. --supersedes: nueva + vieja marcada en el mismo escrito; atomico si falla =="
 fixture
-OUT=$(emit --type learning.add --topic gate --text "**El clon se limpia con git clean -fdx**" --supersedes 3 \
+OUT=$(emit --type learning.add --topic gate --text "**El clon se limpia con git clean -fdx** — reset no basta" --supersedes 3 \
   --nota "reset no quita lo no versionado" --quickref "**Clon: git clean -fdx**" --quickref-prefix "Tres corto")
 compact --quiet >/dev/null
-chk "la regla nueva es la 8" "8. **El clon se limpia con git clean -fdx**" "$(regla 8)"
+chk "la regla nueva es la 8" "8. **El clon se limpia con git clean -fdx** — reset no basta" "$(regla 8)"
 chk "la 3 queda superada por #8" "3. **El clon se limpia con reset** — antiguo — ⊘ RETIRADA ($HOY, superada por #8): reset no quita lo no versionado" "$(regla 3)"
 chk "Quick Reference: la 3 fuera, la nueva es la 4 (el numero 3 no se reutiliza)" \
   "1. **Uno corto** — a|2. **Dos corto** — b|4. **Clon: git clean -fdx**" "$(qr | grep -E '^[0-9]+\. ' | paste -sd'|' -)"
 H=$(huella); replay; compact --quiet >/dev/null
 chk "replay del supersedes: noop, sin cuarentena" "$H|0" "$(huella)|$(cuar)"
 fixture; H=$(huella)
-emit --type learning.add --topic gate --text "**Otra multilinea mejor**" --supersedes 6 >/dev/null
+emit --type learning.add --topic gate --text "**Otra multilinea mejor** — cuerpo" --supersedes 6 >/dev/null
 compact --quiet >/dev/null
 chk "N de varias lineas: cuarentena y la nueva NO se escribe" "1|$H" "$(cuar)|$(huella)"
 has "con el motivo de rewrite_rule" "$(motivo)" "bloque-multilinea"
 fixture; H=$(huella)
-emit --type learning.add --topic gate --text "**Nueva con Quick Reference mal citado**" --supersedes 3 \
+emit --type learning.add --topic gate --text "**Nueva con Quick Reference mal citado** — cuerpo" --supersedes 3 \
   --quickref-prefix "No existe esta linea" >/dev/null
 compact --quiet >/dev/null
 chk "Quick Reference que no casa: cuarentena y ni la nueva ni la marca se escriben" "1|$H" "$(cuar)|$(huella)"
 fixture; H=$(huella)
-emit --type learning.add --topic gate --text "**Reemplaza a una que no existe**" --supersedes 42 >/dev/null
+emit --type learning.add --topic gate --text "**Reemplaza a una que no existe** — cuerpo" --supersedes 42 >/dev/null
 compact --quiet >/dev/null
 chk "N inexistente: cuarentena y la nueva NO se escribe" "1|$H" "$(cuar)|$(huella)"
 fixture; H=$(huella)
-emit --type learning.add --topic otro --text "**En un topic que no existe**" --supersedes 1 >/dev/null
+emit --type learning.add --topic otro --text "**En un topic que no existe** — cuerpo" --supersedes 1 >/dev/null
 compact --quiet >/dev/null
 chk "topic inexistente: cuarentena y no se crea el topic" "1|no" "$(cuar)|$([ -f "$M/learnings/otro.md" ] && echo si || echo no)"
 
@@ -185,7 +185,7 @@ echo "== 7b. --supersedes: replays y escrituras a medias (adversario, ronda 1) =
 fixture
 emit --type learning.add --topic limpio --text "**El clon se limpia con reset** — antiguo" >/dev/null
 compact --quiet >/dev/null
-emit --type learning.add --topic limpio --text "**El clon se limpia con git clean -fdx**" --supersedes 1 >/dev/null
+emit --type learning.add --topic limpio --text "**El clon se limpia con git clean -fdx** — reset no basta" --supersedes 1 >/dev/null
 compact --quiet >/dev/null
 # La regla nueva (#2) se corrige despues y su texto deja de ser el del evento.
 emit --type learning.update --topic limpio --match-prefix "El clon se limpia con git clean" \
@@ -202,7 +202,7 @@ import sys; p = sys.argv[1]; s = open(p, encoding="utf-8").read()
 open(p, "w", encoding="utf-8").write(s.replace("| Gate | [[learnings/gate]] | antes de empujar |\n", ""))
 PY
 H=$(huella)
-emit --type learning.add --topic gate --text "**Reemplaza a una que no existe**" --supersedes 42 >/dev/null
+emit --type learning.add --topic gate --text "**Reemplaza a una que no existe** — cuerpo" --supersedes 42 >/dev/null
 compact --quiet >/dev/null
 chk "supersedes invalido con la fila de Topic Files ausente: cuarentena y _learnings.md intacto" "1|$H" "$(cuar)|$(huella)"
 fixture
@@ -299,7 +299,7 @@ emit --type learning.retire --topic gate --match-prefix "x" --motivo obsoleta --
 emit --type learning.retire --topic gate --match-prefix "x" --motivo duplicada >/dev/null 2>&1; R2=$?
 emit --type learning.retire --topic gate --motivo obsoleta >/dev/null 2>&1; R3=$?
 emit --type learning.retire --topic gate --match-prefix "x" --motivo borrada >/dev/null 2>&1; R4=$?
-emit --type learning.add --topic gate --text "x" --quickref-prefix "Uno" >/dev/null 2>&1; R5=$?
+emit --type learning.add --topic gate --text "**Bien formada** — x" --quickref-prefix "Uno" >/dev/null 2>&1; R5=$?
 set -e
 chk "obsoleta con --por / duplicada sin --por / sin prefijo / motivo raro / quickref-prefix sin supersedes: los 5 salen !=0" \
   "1 1 1 1 1" "$([ $R1 -ne 0 ] && echo 1) $([ $R2 -ne 0 ] && echo 1) $([ $R3 -ne 0 ] && echo 1) $([ $R4 -ne 0 ] && echo 1) $([ $R5 -ne 0 ] && echo 1)"

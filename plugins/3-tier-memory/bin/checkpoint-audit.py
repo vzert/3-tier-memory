@@ -91,6 +91,10 @@ ID_PENDIENTE = re.compile(r"\bp-[0-9a-f]{10}(?![0-9a-f])")
 CAMPO_ID = re.compile(r"_id:\s*(p-[0-9a-f]{10})(?![0-9a-f])")
 WIKILINK_PLAN = re.compile(r"\[\[plans/([^\]|]+?)(?:\|[^\]]*)?\]\]")
 WIKILINK_LEARNING = re.compile(r"\[\[learnings/([^\]|]+?)(?:\|[^\]]*)?\]\]")
+# La decision de dedup de un learning en la ficha (Step 4, paso 0). `nueva` puede llevar detras el
+# numero que le dio el compactador (`nueva (#350)`); las demas citan la regla existente.
+DECISION_LEARNING = re.compile(
+    r"decision:\s*(nueva|(?:ya existe|corrige|reemplaza|retira)\s+#(\d+))\b", re.IGNORECASE)
 WIKILINK_RESEARCH = re.compile(r"\[\[research/([^\]|]+?)(?:\|[^\]]*)?\]\]")
 REVISAR = re.compile(r"_revisar:\s*(\d{4}-\d{2}-\d{2})_")
 # `_bloqueado: QUE_` (2.33.0): el pendiente espera a algo FUERA de la sesion. Lo escribe el
@@ -779,6 +783,40 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         else:
             h.append(Hallazgo(HECHO, "learnings.dualwrite",
                               f"los {len(topicos)} topico(s) existen y estan en _learnings.md"))
+
+    # 6b. Cada learning de la ficha lleva su decision de dedup (Step 4, paso 0; 2.46.0). El evento
+    # learning.add no registra la sesion (sin CLAUDE_SESSION_ID cada emision lleva un id aleatorio),
+    # asi que no se pueden contar los learning.add de ESTA sesion: se mira la ficha. Toda linea con
+    # [[learnings/<topic>]] dice `decision: nueva|ya existe #N|corrige #N|reemplaza #N|retira #N`,
+    # y la regla #N que cita existe en ese topic. Un titulo de la ficha no se compara con el del
+    # topic: se resume a menudo, y exigirlo daria falsos SALTADO.
+    malas = []
+    for l in sec_learn.splitlines():
+        mt = WIKILINK_LEARNING.search(l)
+        if not mt:
+            continue
+        md = DECISION_LEARNING.search(l)
+        if not md:
+            malas.append(f"{l.strip()[:120]} — sin `decision:` valida")
+            continue
+        if md.group(2):
+            n = int(md.group(2))
+            tp = os.path.join(memory_dir, "learnings", mt.group(1) + ".md")
+            nums = {int(x) for x in re.findall(r"^\s*(\d+)\.\s", leer(tp), re.M)} \
+                if os.path.exists(tp) else set()
+            if n not in nums:
+                malas.append(f"{l.strip()[:120]} — {mt.group(1)} no tiene regla #{n}")
+    if topicos and malas:
+        h.append(Hallazgo(SALTADO, "learnings.decision",
+                          f"{len(malas)} learning(s) de la ficha sin decision de dedup comprobable",
+                          malas,
+                          corrige="Step 4, paso 0: decide cada learning contra los vecinos que "
+                                  "imprime `journal-emit.py --type learning.add ... --solo-vecinos` "
+                                  "y escribe `decision: <nueva|ya existe #N (no emitido)|corrige #N|"
+                                  "reemplaza #N|retira #N>` en su linea"))
+    elif topicos:
+        h.append(Hallazgo(HECHO, "learnings.decision",
+                          "cada learning de la ficha lleva su decision de dedup"))
 
     # 7. Pendientes nuevos de la ficha con su fila mensual (Tier 3)
     sec_pend = seccion_por_prefijo(secs, "Pendientes") or ""

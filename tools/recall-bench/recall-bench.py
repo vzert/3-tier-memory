@@ -16,7 +16,8 @@ Mide, sobre casos declarados con cita comprobable, tres cosas que el plan quiere
 - fuga: reglas "prohibidas" que el motor devuelve (por ejemplo el segundo miembro de un
   duplicado). En F0 es informativa: todavia no hay forma de retirar una regla (F2/F7).
 - dedup@8: fraccion de casos "dedup" cuya regla original sale entre los 8 vecinos mas parecidos
-  (Jaccard sobre las keywords del indice, dentro del mismo topic) de la regla duplicada.
+  de la regla duplicada, con la funcion que imprime `journal-emit.py learning.add` (desde 2.46.0,
+  bin/learning_vecinos.py: Dice-IDF sobre el texto completo, mismo topic, reglas anteriores).
 - accion@2: el canal "accion" (recall en PreToolUse) no existe todavia; su valor en F0 es 0 por
   construccion y queda anotado como no medido. La F5 lo implementa.
 
@@ -96,6 +97,12 @@ def cargar_motor():
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     return m
+
+
+def cargar_vecinos():
+    sys.path.insert(0, BIN)
+    import learning_vecinos
+    return learning_vecinos
 
 
 def cargar_builder():
@@ -286,11 +293,6 @@ def etiqueta(u):
     return u.get("_rid") or f"{u.get('tipo')}:{u.get('path')}"
 
 
-def jaccard(a, b):
-    a, b = set(a), set(b)
-    return len(a & b) / len(a | b) if a | b else 0.0
-
-
 def cargar_casos(ruta):
     if not os.path.isfile(ruta):
         negarse(f"no existe el fichero de casos: {ruta}")
@@ -306,7 +308,7 @@ def cargar_casos(ruta):
 
 
 def medir(casos, reglas_por_mem, hoy):
-    motor, builder = cargar_motor(), cargar_builder()
+    motor, builder, vecinos_mod = cargar_motor(), cargar_builder(), cargar_vecinos()
     detalle = []
     with tempfile.TemporaryDirectory() as tmp:
         indices = {}
@@ -328,19 +330,19 @@ def medir(casos, reglas_por_mem, hoy):
                 r["fuga"] = []
                 r["nota"] = "canal inexistente en F0: 0 por construccion (lo implementa F5)"
             else:
-                # Las palabras de la regla nueva salen de su TEXTO, igual que las calcula el
-                # constructor (truncate + tokenize), no de buscarla en el indice: desde 2.45.0 una
-                # regla retirada no esta en el indice, y el duplicado que se retiro sigue siendo
-                # un caso de dedup valido (la pregunta es si al emitirlo se habria visto el
-                # original). Para una regla viva da las mismas palabras que el indice.
+                # Los vecinos los calcula la MISMA funcion que imprime journal-emit.py learning.add
+                # (bin/learning_vecinos.py, importada): Dice ponderado por IDF sobre el texto
+                # completo de cada regla, retiradas fuera. Candidatas: las reglas del topic con
+                # numero MENOR que la del caso, que es lo que el topic tenia cuando se emitio (el
+                # compactador numera max+1). La regla del caso puede estar retirada (desde 2.45.0
+                # el duplicado se retira) y sigue siendo un caso valido: la pregunta es si al
+                # emitirla se habria visto la original.
                 topic, n = c["entrada"].split("#")[0], int(c["entrada"].split("#")[1])
-                texto = next(t for k, t in reglas_por_mem[c["_mem"]][topic] if k == n)
-                nuevo_kw = builder.tokenize(builder.truncate(texto))
-                vecinos = [u for u in units if u.get("_rid") and u["_rid"].split("#")[0] == topic
-                           and u["_rid"] != c["entrada"]]
-                # orden estable: empates conservan el orden del indice
-                vecinos.sort(key=lambda u: jaccard(nuevo_kw, u["keywords"]), reverse=True)
-                orden = [u["_rid"] for u in vecinos]
+                amb = ambiguas(reglas_por_mem[c["_mem"]], topic)
+                todas = reglas_por_mem[c["_mem"]][topic]
+                texto = next(t for k, t in todas if k == n)
+                cand = [(f"{topic}#{k}", t) for k, t in todas if k < n and k not in amb]
+                orden = [e for _, e, _ in vecinos_mod.vecinos(texto, cand, k=len(cand))]
                 puestos = {e: (orden.index(e) + 1 if e in orden else None) for e in sorted(esperadas)}
                 r["devueltas"] = orden[:K["dedup"]]
                 r["puestos"] = puestos
@@ -388,7 +390,7 @@ def main():
         "metricas": {
             "prompt@4": frac("prompt"),
             "accion@2": dict(frac("accion"), nota="no medido: canal inexistente en F0"),
-            "dedup@8": dict(frac("dedup"), fuente_palabras="texto de la regla nueva (truncate+tokenize) contra keywords del indice (Jaccard)"),
+            "dedup@8": dict(frac("dedup"), fuente_palabras="bin/learning_vecinos.py (la de journal-emit learning.add): Dice ponderado por IDF, tokenize() del texto completo de cada regla, mismo topic, reglas con numero menor que la del caso, retiradas fuera"),
             "fuga": {"valor": sum(len(d["fuga"]) for d in detalle),
                      "nota": "reglas prohibidas devueltas; desde 2.45.0 (F2) una regla retirada no se sirve"},
         },

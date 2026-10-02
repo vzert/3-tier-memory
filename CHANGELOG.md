@@ -1,6 +1,47 @@
 # Changelog
 
 
+## [2.47.0] - 2026-10-02
+Origen: F3 del plan de ciclo de vida de los learnings. Un duplicado escrito con otras palabras
+entraba sin que nadie lo viera: el paso 0 de 2.43.2 pedia leer los titulos del topic con `grep`, y
+en un corpus real la regla repetida estaba entre 134 candidatas. Medido: ningun umbral de parecido
+separa un duplicado parafraseado de una regla nueva de verdad (los duplicados reales dan 0,16-0,24;
+reglas nuevas del mismo topic llegan a 0,39), pero el duplicado si queda entre las 8 mas parecidas.
+
+### Added
+- **`learning.add` imprime los vecinos de la regla nueva** (`bin/learning_vecinos.py`, nuevo): las
+  8 reglas vivas del topic mas parecidas, por stderr, con numero, parecido y titulo. stdout no
+  cambia (sigue siendo solo el id). Medida: Dice ponderado por IDF sobre el texto completo, con el
+  tokenizador del recall importado de `build-recall-index.py`; las reglas retiradas no son vecinas.
+  No es "palabras comunes / palabras de la nueva": esa medida premia a la regla mas larga del
+  topic, y en un topic real una regla de 51 KB salia primera para los 30 ultimos `learning.add`.
+- **`--decision nueva|reemplaza:N`**: si la vecina mas parecida llega a 0,5 y no hay decision, el
+  emisor sale 1 sin escribir y dice como decidir. `reemplaza:N` es `--supersedes N` (2.45.0). La
+  decision viaja en el payload. `corrige:N` sale 1 y remite a `learning.update`: una regla nueva
+  que corrige a otra que sigue viva deja las dos en el recall.
+- **`--solo-vecinos`**: imprime la lista y no escribe nada. Es lo que lee el paso 0 del Step 4 de
+  `/checkpoint-3t` antes de decidir (sustituye al `grep` de titulos).
+- **Chequeo de forma** de la regla nueva: `**Titulo** — cuerpo`, `**` y comillas invertidas en
+  numero par, titulo de 200 caracteres como mucho. No adivina truncados por la ultima palabra.
+  Solo mira textos nuevos: las reglas ya escritas no cambian.
+- **`checkpoint-audit.py` `learnings.decision`**: cada learning de `## Learnings generados` lleva
+  `decision: nueva|ya existe #N|corrige #N|reemplaza #N|retira #N`, y la #N que cita existe en su
+  topic. Se mira la ficha porque el evento no registra la sesion.
+- **`tools/recall-bench/bloqueos-reales.py`**: reproduce los ultimos N `learning.add` del journal
+  contra el topic tal como estaba y cuenta cuantos habria bloqueado.
+
+### Changed
+- El mismo texto exacto no bloquea: la identidad topic + texto se mantiene y el compactador no lo
+  escribe dos veces.
+- `recall-bench.py`: `dedup@8` se mide con la misma funcion del emisor, sobre las reglas con numero
+  menor que la del caso (lo que el topic tenia al emitirla).
+- Plantillas `save-learning`, `consolidate-3t` y `backfill-3t`: una nota sobre la lista y el bloqueo.
+- `test-learning-retire.sh`: los textos de sus fixtures llevan cuerpo (`**X** — y`), para que cada
+  caso siga fallando por lo que prueba y no por la forma.
+- `test-journal-race.sh`: sus 12 reglas sinteticas solo se distinguen por un numero suelto (que el
+  tokenizador descarta), asi que cada `learning.add` pasa `--decision nueva`; la prueba mide
+  concurrencia, no dedup.
+
 ## [2.46.1] - 2026-10-02
 ### Fixed
 - **`test-plan-title-fallback.sh` casos 32 y 34 en Windows (CI de 2.46.0 roja solo en

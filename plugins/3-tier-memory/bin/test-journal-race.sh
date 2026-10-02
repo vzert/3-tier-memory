@@ -3,6 +3,8 @@
 # sesiones, reglas, planes y research (Fase 2) a la vez y nada se pierde, nada se duplica,
 # ningun numero de regla se repite, ningun lock queda huerfano.
 #
+# (2.46.0: las 12 reglas solo se distinguen por un numero suelto, que el tokenizador descarta; para
+# el dedup al emitir son la misma regla, asi que cada learning.add pasa --decision nueva.)
 # Cuerpo tomado tal cual de memory/plans/plan-journal-concurrencia-v2.12.0.md. Cada corrida
 # lanza 2 workers (10 add + 5 resolve cada uno = 30 eventos concurrentes) contra 2
 # compactadores simultaneos, y un barrido final. Se exige 5/5 corridas limpias, mas:
@@ -171,7 +173,7 @@ for t in 1 2 3 4 5; do
   rm -r $M/.journal 2>/dev/null; seed_f2
   worker2() { W=$1; for i in 1 2 3 4 5 6; do
       python3 bin/journal-emit.py --type learning.add --topic race-topic --title "Race Topic" --when "al probar" \
-        --text "**w$W regla $i trial $t** — detalle con | pipe" --quickref "w$W qr $i trial $t" >/dev/null || exit 2
+        --text "**w$W regla $i trial $t** — detalle con | pipe" --decision nueva --quickref "w$W qr $i trial $t" >/dev/null || exit 2
       python3 bin/journal-emit.py --type session.add --slug "2026-01-0$i-w$W-trial$t" --date "2026-01-0$i" \
         --status completada --summary "w$W sesion $i \| con pipe" >/dev/null || exit 2
     done

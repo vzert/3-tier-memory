@@ -227,6 +227,11 @@ python3 "$JBIN/journal-emit.py" --type learning.add --topic <topic-slug> \
   [--quickref "**<insight>** — <short form>"]   # only if broadly critical
 ```
 
+Desde 2.46.0 el emisor imprime por stderr las 8 reglas del topic mas parecidas, y se niega (sale 1,
+sin escribir) si una se parece mucho y no pasas `--decision nueva` o `--decision reemplaza:N`, o
+si el texto no tiene la forma `**Titulo** — cuerpo`. Lee la lista: si una regla ya dice lo mismo,
+no emitas; si quedo incompleta, `learning.update`. `--solo-vecinos` muestra la lista sin escribir.
+
 The topic file's `last_verified: DATE` is refreshed in Step 4 (direct edit).
 
 **Fallback (no JBIN)**: append the rule with the next number to `learnings/<topic>.md` and the Quick

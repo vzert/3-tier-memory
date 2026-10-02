@@ -604,15 +604,19 @@ arbol se mueve a mitad", que es la misma leccion.
 
 Para cada learning candidato, antes de emitir nada:
 
-1. Lista las reglas del topic donde lo vas a escribir (ya compactaste en Step 3; recorta cada
-   linea para que un topic grande quepa):
+1. Pide al emisor las 8 reglas vivas del topic mas parecidas a la candidata (ya compactaste en
+   Step 3). `--solo-vecinos` no escribe nada: imprime la lista por stderr, y avisa si la forma
+   del texto esta mal:
 
    ```bash
-   grep -E '^([0-9]+\. |[-*] \*\*)' "$MEMORY_DIR/learnings/<topic-slug>.md" | cut -c1-240
+   python3 "$JBIN/journal-emit.py" --type learning.add --topic <topic-slug> \
+     --text "**<Rule name>** — <one-line explanation>" --solo-vecinos
    ```
 
-   Si el topic no existe todavia, o la leccion toca otro topic, busca 2-3 palabras clave en todos:
-   `grep -rniE '<clave1>|<clave2>' "$MEMORY_DIR/learnings/" | cut -c1-240`.
+   La lista sale por parecido de palabras (Dice ponderado por IDF): un duplicado escrito con otras
+   palabras suele salir en ella, pero no siempre el primero (el caso real de abajo salio 6.º).
+   Lee las 8. Si el topic no existe todavia, o la leccion toca otro topic, busca 2-3 palabras
+   clave en todos: `grep -rniE '<clave1>|<clave2>' "$MEMORY_DIR/learnings/" | cut -c1-240`.
 2. Compara por la LECCION, no por las palabras: dos reglas son la misma si el agente que siguiera
    la vieja ya no habria cometido el error que te enseño la nueva. Otro incidente, otra fecha u
    otro ejemplo de la misma leccion NO la hacen nueva.
@@ -654,16 +658,23 @@ python3 "$JBIN/journal-emit.py" --type learning.retire --topic <topic-slug> \
 contradice y vale. El numero de N se conserva. Anotalo en la ficha igual que un candidato.
 
 For EACH learning decided `nueva` (or the new half of `reemplaza #N`), emit one `learning.add`
-event; the compactor writes both tiers in Step 5a:
+event with its decision; the compactor writes both tiers in Step 5a:
 
 ```bash
 python3 "$JBIN/journal-emit.py" --type learning.add --topic <topic-slug> \
   --text "**<Rule name>** — <one-line explanation, no newlines>" \
+  --decision <nueva|reemplaza:N> \
   [--section "<## header to append under, existing or new>"] \
   [--quickref "**<Rule name>** — <short form for the Quick Reference>"] \
   [--title "<Topic Title>" --when "<when to consult>" --importance <0-10>] \
-  [--supersedes N [--quickref-prefix "<prefijo de la linea de N en el Quick Reference>"]]
+  [--quickref-prefix "<prefijo de la linea de N en el Quick Reference>"]   # solo con reemplaza:N
 ```
+
+`--decision reemplaza:N` es lo mismo que `--supersedes N`. Sin `--decision`, el emisor se niega
+(sale 1 y no escribe) cuando una regla del topic se parece mucho (0,5 o mas): lee su lista y
+decide. Tambien se niega si el texto no tiene la forma `**Titulo** — cuerpo`, si deja `**` o una
+comilla invertida sin cerrar, o si el titulo pasa de 200 caracteres. `corrige:N` no existe en
+`learning.add`: es `learning.update` (seccion siguiente).
 
 ### Corregir una regla YA escrita — `learning.update`, nunca un `learning.add` de correccion
 

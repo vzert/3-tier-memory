@@ -152,5 +152,23 @@ caso "fila antes de validar"   journal-compact.py m_learning_retire.py test-lear
 caso "indice viejo se sirve"   recall.sh m_learning_retire.py test-learning-retire.sh "el indice viejo se reconstruyo" indice-viejo-sirve
 
 echo
+echo "Dedup al emitir de learning.add (2.46.0): vecinos, bloqueo, forma y learnings.decision"
+caso "vecinos por stdout"      journal-emit.py m_learning_dedup.py test-learning-dedup.sh "stdout tiene una sola linea" vecinos-por-stdout
+caso "sin bloqueo"             journal-emit.py m_learning_dedup.py test-learning-dedup.sh "casi igual sin --decision: rc 1" sin-bloqueo
+caso "solo-vecinos escribe"    journal-emit.py m_learning_dedup.py test-learning-dedup.sh "solo-vecinos: ningun evento" solo-vecinos-escribe
+caso "sin identidad"           journal-emit.py m_learning_dedup.py test-learning-dedup.sh "mismo texto sin --decision: rc 0" sin-identidad
+caso "decision fuera"          journal-emit.py m_learning_dedup.py test-learning-dedup.sh "la decision viaja en el payload" decision-fuera-del-payload
+caso "reemplaza sin supersedes" journal-emit.py m_learning_dedup.py test-learning-dedup.sh "reemplaza:2 lleva supersedes 2" reemplaza-sin-supersedes
+caso "corrige aceptado"        journal-emit.py m_learning_dedup.py test-learning-dedup.sh "corrige:2: rc 1" corrige-aceptado
+caso "retirada es vecina"      learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "casi igual a una RETIRADA" retirada-es-vecina
+caso "medida sobre la nueva"   learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "la primera vecina es #2" medida-sobre-la-nueva
+caso "forma sin titulo"        learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "sin .*Titulo" forma-sin-titulo
+caso "negrita impar"           learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "\*\* impar: rc 1" negrita-impar
+caso "comilla impar"           learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "comilla invertida impar: rc 1" comilla-impar
+caso "titulo largo"            learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "titulo de 201: rc 1" titulo-largo
+caso "audit sin decision"      checkpoint-audit.py m_learning_dedup.py test-learning-dedup.sh "sin decision: SALTADO" audit-sin-decision
+caso "audit #N inexistente"    checkpoint-audit.py m_learning_dedup.py test-learning-dedup.sh "#99 que no existe: SALTADO" audit-numero-inexistente
+
+echo
 if [ "$PEND" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $TOTAL)"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi
 exit $(( PEND > 0 ))

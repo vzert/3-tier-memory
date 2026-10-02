@@ -59,6 +59,15 @@ Tipos de evento:
                     La regla nueva REEMPLAZA a la #N del mismo topic: en el mismo escrito, N
                     queda marcada `— ⊘ RETIRADA (FECHA, superada por #M)`. O las dos o ninguna.
                     --quickref-prefix quita la linea vieja de N del Quick Reference.
+                    [--decision nueva|reemplaza:N] [--solo-vecinos]                    (2.46.0)
+                    Dedup al emitir: con --text, imprime por STDERR las 8 reglas vivas del topic
+                    mas parecidas (Dice ponderado por IDF, bin/learning_vecinos.py); stdout sigue
+                    siendo solo el id. Si la mas parecida llega a 0,5 y no hay --decision, sale 1
+                    sin escribir. reemplaza:N = --supersedes N. corrige:N sale 1: es
+                    learning.update. --solo-vecinos imprime la lista y no escribe nada. Exige la
+                    forma `**Titulo** — cuerpo`, `**` y comillas invertidas en numero par y un
+                    titulo de 200 caracteres como mucho. El mismo texto exacto no se bloquea
+                    (el compactador no lo escribe dos veces).
   learning.retire   --topic T --match-prefix P --motivo obsoleta|duplicada|superada
                     [--por N] [--nota "<una linea>"] [--quickref-prefix QP]           (2.45.0)
                     Retira una regla SIN borrarla ni renumerarla: anade al final de su linea
@@ -447,6 +456,113 @@ def avisar_origen_colgante(origen, mem):
               f"Tier 2 queda roto.", file=sys.stderr)
 
 
+def prefijo_de_regla(memory_dir, topic, n):
+    """Las primeras palabras (hasta ~40 caracteres) de la regla #n viva de un topic, o None.
+
+    Es el --match-prefix con el que learning.update la encuentra: texto de HOY, sin marcador."""
+    import learning_marks
+    try:
+        with open(os.path.join(memory_dir, "learnings", topic + ".md"), encoding="utf-8") as f:
+            lineas = f.read().splitlines()
+    except OSError:
+        return None
+    hits = [m.group(2) for l in lineas for m in [re.match(r"^\s*(\d+)\.\s+(.*)$", l)]
+            if m and int(m.group(1)) == n]
+    if len(hits) != 1:
+        return None
+    t = normalize_text(learning_marks.sin_marca(hits[0]))
+    if len(t) <= 40:
+        return t
+    corte = t.rfind(" ", 0, 40)
+    return t[: corte if corte > 10 else 40]
+
+
+def decision_de(valor, supersedes_raw, sup, memory_dir="", topic=""):
+    """`--decision` de learning.add como `nueva` o `reemplaza:N`, o None si no se paso.
+
+    `--supersedes N` sin `--decision` cuenta como `reemplaza:N`: ya es una decision. `corrige:N`
+    no escribe una regla nueva: una regla que "corrige" a otra que sigue viva es el patron que
+    deja las dos en el recall (H11 del plan de ciclo de vida); la correccion es learning.update."""
+    v = (valor or "").strip().lower().replace(" ", "")
+    if not v:
+        return f"reemplaza:{sup}" if sup else None
+    if v == "nueva":
+        if sup:
+            sys.exit("journal-emit: --decision nueva con --supersedes se contradicen: la regla que "
+                     f"reemplaza a #{sup} es --decision reemplaza:{sup}")
+        return "nueva"
+    m = re.match(r"^(reemplaza|corrige):#?(\d+)$", v)
+    if not m or int(m.group(2)) < 1:
+        sys.exit(f"journal-emit: --decision debe ser nueva, reemplaza:N o corrige:N, no {valor!r}")
+    n = int(m.group(2))
+    if m.group(1) == "corrige":
+        pref = prefijo_de_regla(memory_dir, topic, n) if memory_dir and topic else None
+        cmd = (f"python3 \"{os.path.abspath(__file__)}\" --type learning.update --topic {topic} "
+               f"--match-prefix \"{pref}\" --text \"<texto corregido de la #{n}>\"") if pref else None
+        sys.exit(f"journal-emit: --decision corrige:{n} no se emite como learning.add: una regla "
+                 f"nueva que corrige a otra viva deja las dos en el recall. Corregir la #{n} es "
+                 f"learning.update, que conserva su numero:\n  "
+                 + (cmd or f"(learnings/{topic}.md no tiene una sola regla #{n} viva: mira el "
+                           f"numero; el comando es --type learning.update --topic {topic} "
+                           f"--match-prefix \"<principio de la regla>\" --text \"<texto>\")"))
+    if sup and sup != n:
+        sys.exit(f"journal-emit: --decision reemplaza:{n} y --supersedes {supersedes_raw} no "
+                 f"nombran la misma regla")
+    return f"reemplaza:{n}"
+
+
+def dedup_al_emitir(memory_dir, topic, text, decision, solo_vecinos):
+    """Dedup de learning.add (2.46.0): chequeo de forma y vecinos de la regla nueva, por STDERR.
+
+    stdout no cambia (sigue siendo solo el id: las plantillas lo capturan). Sale con error, antes
+    de escribir el evento, si la forma esta mal o si un vecino llega a UMBRAL sin --decision. Con
+    --solo-vecinos imprime lo mismo y no escribe nada (el paso 0 del Step 4 del checkpoint)."""
+    import learning_vecinos as lv
+
+    forma = lv.problemas_de_forma(text)
+    if forma and not solo_vecinos:
+        sys.exit("journal-emit: la regla nueva tiene problemas de forma:\n  - " + "\n  - ".join(forma)
+                 + "\nForma: --text \"**<Titulo>** — <cuerpo en una linea>\"")
+    for f in forma:
+        print(f"journal-emit: AVISO de forma — {f}", file=sys.stderr)
+    tpath = os.path.join(memory_dir, "learnings", topic + ".md")
+    try:
+        with open(tpath, encoding="utf-8") as fh:
+            contenido = fh.read()
+    except OSError:
+        print(f"journal-emit: learnings/{topic}.md no existe todavia: la regla no tiene vecinos.",
+              file=sys.stderr)
+        return
+    # La identidad es topic + texto exacto, la misma comparacion que el compactador
+    # (es_misma_regla, retirada o no): el mismo texto otra vez no se escribe dos veces, asi que no
+    # es un duplicado que decidir — y daria parecido 1,0.
+    jc = _compactador()
+    lineas = contenido.splitlines()
+    ini, fin = jc.body_region(lineas)
+    for l in lineas[ini:fin]:
+        n, t = jc.rule_text(l)
+        if t and jc.es_misma_regla(t, text):
+            print(f"journal-emit: learnings/{topic}.md ya tiene esta regla con el mismo texto"
+                  f"{f' (#{n})' if n else ''}: el compactador no la escribe otra vez.",
+                  file=sys.stderr)
+            return
+    cand = [(f"#{n}" if n else "-", t) for n, t in lv.reglas_de(contenido)]
+    vec = lv.vecinos(text, cand)
+    print(f"journal-emit: vecinos de la regla nueva en learnings/{topic}.md (parecido Dice-IDF "
+          f"0-1; con {lv.UMBRAL} o mas hace falta --decision):", file=sys.stderr)
+    if not vec:
+        print("  (ninguna regla viva en el topic)", file=sys.stderr)
+    for s, e, t in vec:
+        print(f"  {e:>5}  {s:.2f}  {lv.titulo(t)}", file=sys.stderr)
+    if vec and vec[0][0] >= lv.UMBRAL and not decision and not solo_vecinos:
+        sys.exit(f"journal-emit: la regla nueva se parece mucho a {vec[0][1]} ({vec[0][0]:.2f} >= "
+                 f"{lv.UMBRAL}). Lee los vecinos de arriba y decide:\n"
+                 f"  - es la misma leccion → no emitas nada (`ya existe {vec[0][1]}` en la ficha);\n"
+                 f"  - {vec[0][1]} quedo incompleta o falsa → learning.update de esa regla;\n"
+                 f"  - la nueva sustituye a {vec[0][1]} → --decision reemplaza:{vec[0][1][1:]};\n"
+                 f"  - es otra leccion → --decision nueva.")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Emite un evento al journal de memory/.")
     ap.add_argument("--type", required=True,
@@ -508,6 +624,9 @@ def main():
     ap.add_argument("--motivo", default="")
     ap.add_argument("--por", default="")
     ap.add_argument("--supersedes", default="")
+    # learning.add: dedup al emitir (2.46.0)
+    ap.add_argument("--decision", default="")
+    ap.add_argument("--solo-vecinos", dest="solo_vecinos", action="store_true")
     a = ap.parse_args()
 
     memory_dir = resolve_memory_dir(a.memory_dir)
@@ -623,6 +742,17 @@ def main():
         }
         base["payload"]["id"] = learning_id(topic, text) if text else f"l-topic-{topic}"
         sup = numero_regla(a.supersedes, "--supersedes")
+        if (a.decision or a.solo_vecinos) and not text:
+            sys.exit("journal-emit: --decision y --solo-vecinos necesitan --text (la regla nueva)")
+        decision = decision_de(a.decision, a.supersedes, sup, memory_dir, topic)
+        if decision and decision.startswith("reemplaza:"):
+            sup = int(decision.split(":")[1])     # reemplaza:N es --supersedes N (F2)
+        if text:
+            dedup_al_emitir(memory_dir, topic, text, decision, a.solo_vecinos)
+            if a.solo_vecinos:
+                return                            # no escribe nada: solo la lista para decidir
+            if decision:
+                base["payload"]["decision"] = decision
         qprefix = normalize_text(a.quickref_prefix or "")
         if sup:
             if not text:
