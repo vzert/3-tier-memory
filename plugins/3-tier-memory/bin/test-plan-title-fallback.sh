@@ -442,6 +442,28 @@ chk "ts no numerico: el compactador no se cae" "0" "$?"
 chk "ts no numerico: cuarentena malformed, sin fila" "0" "$(filas '[[plans/plan-tsraro\|')"
 chk "ts no numerico: nada atascado en pending" "0" "$(ls "$M/.journal/pending/" | wc -l | tr -d ' ')"
 
+echo "== 32. un enlace simbolico ROTO plans/plan-<slug>.md tambien bloquea el fallback por titulo =="
+fixture
+emit --type plan.upsert --slug ajeno32 --inline --title "Inline ajeno 32" --status completed --date 2026-09-01
+compact
+mkdir -p "$M/plans"; ln -s "$M/no-existe.md" "$M/plans/plan-roto32.md"
+emit --type plan.upsert --slug roto32 --title "Inline ajeno 32" --status active --date 2026-09-02
+emit --type plan.reopen --slug roto32 --title "Inline ajeno 32"
+compact
+chk "la fila inline ajena sigue completed" "completed" "$(status 'Inline ajeno 32 (inline)')"
+chk "los dos eventos en cuarentena" "2" "$(cuar)"
+
+echo "== 33. ts null o Infinity: cuarentena malformed, sin romper el compactador ni atascar pending =="
+fixture
+for v in None inf; do
+  emit --type plan.upsert --slug ts33$v --title "Ts $v" --status active --date 2026-09-02
+  f=$(ls "$M/.journal/pending/"*.json); python3 -c "import json,sys;d=json.load(open(sys.argv[1]));d['ts']=float('inf') if sys.argv[2]=='inf' else None;json.dump(d,open(sys.argv[1],'w'))" "$f" "$v"
+  python3 "$BIN/journal-compact.py" --memory-dir "$M" --log "$M/../compact.log" --quiet >/dev/null 2>&1
+  chk "ts $v: el compactador no se cae" "0" "$?"
+  chk "ts $v: nada atascado en pending" "0" "$(ls "$M/.journal/pending/" | wc -l | tr -d ' ')"
+done
+chk "los dos en cuarentena malformed" "2" "$(grep -l '^malformed: ts' "$M/.journal/quarantine/"*.reason 2>/dev/null | wc -l | tr -d ' ')"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

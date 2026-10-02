@@ -2779,8 +2779,10 @@ def plan_sin_archivo(mem, slug):
     """True si no existe NADA en plans/plan-<slug>.md: el plan es (o puede ser) un --inline y
     puede usar el fallback por titulo. Cualquier entrada con ese nombre (tambien un directorio)
     lo bloquea: con isfile, un directorio abria el fallback por titulo de upsert y reopen sobre la
-    fila (inline) de otro plan (ronda 2 de adversario de bd440b2). Ver plan_con_archivo."""
-    return not os.path.exists(os.path.join(mem, "plans", f"plan-{slug}.md"))
+    fila (inline) de otro plan (ronda 2 de adversario de bd440b2). lexists y no exists: un
+    enlace simbolico roto tambien es una entrada con ese nombre, y exists lo daba por ausente
+    (ronda 3). Ver plan_con_archivo."""
+    return not os.path.lexists(os.path.join(mem, "plans", f"plan-{slug}.md"))
 
 
 def plan_con_archivo(mem, slug):
@@ -3665,11 +3667,12 @@ def validate(ev):
     # Un ts que int() no acepta rompia compact() al archivar el evento (time.gmtime(int(ts))),
     # despues de aplicarlo: el evento se quedaba en pending/ y la pasada moria con traceback, para
     # cualquier tipo de evento (visto en la ronda 2 de adversario de bd440b2). Sin ts sigue valido
-    # (0), como siempre.
-    if ev.get("ts") is not None:
+    # (0), como siempre; un `ts` PRESENTE tiene que ser un numero entero finito: `null` y
+    # `Infinity` (json los acepta) tambien rompian el archivado (ronda 3 de adversario de bd440b2).
+    if "ts" in ev:
         try:
             int(ev["ts"])
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, OverflowError):
             raise Quarantine(f"malformed: ts '{ev['ts']}' no es un numero")
     if t == "pendiente.add":
         for k in ("id", "text", "prioridad", "origen", "creado"):
