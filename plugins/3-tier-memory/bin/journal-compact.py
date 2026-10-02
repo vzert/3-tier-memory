@@ -2805,8 +2805,9 @@ def inline_title_row(lines, rows, tplain):
     pueden ser de otro plan. Una fila asi ya no casa por titulo: apply_plan_upsert la manda a
     cuarentena (titulo-ambiguo).
 
-    Los llamantes solo lo usan si el plan puede ser inline: el evento trae --inline, o no existe
-    plans/plan-<slug>.md. Un plan con archivo que choca con una fila `(inline)` puede ser ese plan
+    Los llamantes solo lo usan si no existe nada llamado plans/plan-<slug>.md (plan_sin_archivo),
+    traiga el evento --inline o no: un --inline con archivo va a cuarentena inline-con-archivo
+    (ronda 4 de adversario de bd440b2). Un plan con archivo que choca con una fila `(inline)` puede ser ese plan
     ya promovido o uno ajeno con el mismo titulo; no se sabe (ronda 3 de adversario). Para
     promoverla, el evento lo afirma con --promote: ver promote_inline_row.
 
