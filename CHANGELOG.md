@@ -1,6 +1,43 @@
 # Changelog
 
 
+## [2.46.0] - 2026-10-01
+Origen: el fallback por titulo de `plan.upsert` (`p-e79c16c7e0`). Un plan sin fila propia buscaba
+una fila con su mismo titulo en toda la tabla, tambien entre las filas enlazadas a OTRO plan, y le
+cambiaba el enlace: ese plan perdia su fila en silencio. Al cerrarlo quedo un hueco: un plan creado
+`--inline` que despues recibe `plans/plan-<slug>.md` ya no podia encontrar su fila. Su indice es
+identico al de un plan con archivo que choca con la fila `(inline)` de otro plan del mismo titulo, y
+la fila inline no guarda el slug, asi que ninguna regla separa los dos casos: la identidad la pone
+el evento (`--promote`). Doce rondas del adversario externo entre las dos partes.
+
+### Added
+- **`plan.upsert --promote`** (`journal-emit.py` + `journal-compact.py`). Para un plan `--inline`
+  que ya tiene `plans/plan-<slug>.md` y aun no tiene fila propia: su UNICA fila `<titulo> (inline)`
+  pasa a `[[plans/plan-<slug>\|<titulo>]]`, conservando fecha, sesion y el resto de celdas. Va a
+  cuarentena si `plans/plan-<slug>.md` no es un archivo (`sin-archivo`), si no hay fila inline con
+  ese titulo (`sin-fila-inline`) o si hay dos o mas (`titulo-ambiguo`); nunca toma una fila con
+  enlace. La promocion se anota en `.journal/reabiertos.log` (clave `promote-<slug>`): el replay del
+  mismo evento cuando la poda ya se llevo la fila sigue como upsert normal. El emisor rechaza
+  `--promote` junto a `--inline`, y un `--promote` sin `ts` va a cuarentena. Si el plan inline esta
+  cerrado, el aviso del guardian de reversa da el orden: promover con el status cerrado y despues
+  `plan.reopen`. Limite declarado: con UNA sola fila inline del titulo, `--promote` es la palabra
+  del emisor; el indice no guarda con que comprobarla.
+
+### Fixed
+- **`plan.upsert` y `plan.reopen` ya no toman por titulo la fila de otro plan.** El fallback por
+  titulo solo casa filas `<titulo> (inline)` sin ningun wikilink, y solo para un plan sin nada
+  llamado `plans/plan-<slug>.md` (archivo, directorio o enlace roto). Una fila con ese titulo cuyo
+  dueno no se puede probar (legacy a mano, enlace en otra forma como `[[Plans/`, celda mixta)
+  manda el evento a cuarentena `titulo-ambiguo` en vez de robarla o duplicar el plan.
+- **`plan.upsert --inline` de un plan con archivo** va a cuarentena `inline-con-archivo`, con un
+  motivo que nombra `--promote`. Antes tomaba por titulo la fila inline de otro plan.
+- **Un `ts` invalido ya no rompe el compactador.** Un evento de cualquier tipo cuyo `ts` no sea un
+  instante que `time.gmtime` acepte (texto, `null`, `Infinity`, `10**30`) va a cuarentena
+  `malformed` antes de tocar el indice. Antes la pasada moria al archivarlo, despues de escribir, y
+  el evento se quedaba en `pending/`.
+- `templates/checkpoint-3t.md` y la ayuda de `journal-emit.py` describen el fallback limitado,
+  `--promote` y las cuarentenas nuevas.
+
 ## [2.45.2] - 2026-10-01
 ### Fixed
 - **`test-learning-retire.sh` caso 13 en Windows (CI de 2.45.0 roja solo en windows-latest).** Dos
