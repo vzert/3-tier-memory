@@ -194,8 +194,11 @@ caso "titulo largo"            learning_vecinos.py m_learning_dedup.py test-lear
 caso "audit sin decision"      checkpoint-audit.py m_learning_dedup.py test-learning-dedup.sh "sin decision: SALTADO" audit-sin-decision
 caso "audit #N inexistente"    checkpoint-audit.py m_learning_dedup.py test-learning-dedup.sh "#99 que no existe: SALTADO" audit-numero-inexistente
 
+echo
 echo "run-tests.sh (p-46153b135b): una suite que sale 0 sin su linea de resumen es FALLA"
-caso_tools "rc=0 sin resumen pasa"  run-tests.sh m_run_tests.py test-run-tests.sh "la del error de sintaxis con trap" sin-resumen-no-exigido
+# El aserto esperado de sin-resumen-no-exigido es "exit 0 a mitad", no el del trap: en bash 5
+# (ubuntu, Git Bash) la suite del trap sale rc=2 y da FALLA con o sin mutacion (CI 37006005796).
+caso_tools "rc=0 sin resumen pasa"  run-tests.sh m_run_tests.py test-run-tests.sh "la que sale con exit 0 a mitad" sin-resumen-no-exigido
 caso_tools "resumen en cualquier linea" run-tests.sh m_run_tests.py test-run-tests.sh "un resumen a mitad no la salva" resumen-cualquiera
 caso_tools "skip=N no es verde" run-tests.sh m_run_tests.py test-run-tests.sh "un skip=N>0 es salto parcial" skip-n-ignorado
 caso_tools "salto sin resumen verde" run-tests.sh m_run_tests.py test-run-tests.sh "FALLA, no salto: «RESULT pass=1 fail=1 skip=2»" parcial-sin-resumen
