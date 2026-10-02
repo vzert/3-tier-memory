@@ -19,6 +19,8 @@ M = {
         ("            if m and titulo_norm(m.group(1)) not in titulos:", "            if m:")],
     "qr-sin-numeradas": [
         ("            if m and titulo_norm(m.group(1)) not in titulos:", "            if False:")],
+    "sin-plegar": [
+        ("    for w in WORD_RE.findall(_plegar(text.lower())):", "    for w in WORD_RE.findall(text.lower()):")],
     "mostrar-comentario": [
         ("    texto = truncate(learning_marks.sin_disparadores(texto) if regla else texto)",
          "    texto = truncate(texto)")],

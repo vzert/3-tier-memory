@@ -209,6 +209,8 @@ primera=$(printf '%s\n' "$out" | sed -n 2p)
 has "con peso, la regla de las frases gana el empate" "$primera" "Regla de frases"
 out=$(recall "aaa bbb ccc")
 has "palabras solo de las frases encuentran la regla" "$out" "Regla de frases"
+out=$(recall "zapatílla nocturnó")
+has "acentos plegados: una consulta con acento encuentra la regla sin el" "$out" "Regla del cuerpo"
 
 echo "== 10. vecinos e identidad ignoran el comentario =="
 fixture

@@ -197,6 +197,7 @@ caso "marca detras"             learning_marks.py m_learning_disparadores.py tes
 caso "acepta guiones"           learning_marks.py m_learning_disparadores.py test-learning-disparadores.sh "commit ..amend" acepta-guiones
 caso "QR duplica la regla"      build-recall-index.py m_learning_disparadores.py test-learning-disparadores.sh "titulo de una regla: se salta" qr-duplica
 caso "QR sin numeradas"         build-recall-index.py m_learning_disparadores.py test-learning-disparadores.sh "titulo propio: entra" qr-sin-numeradas
+caso "sin plegar acentos"     recall_rank.py m_learning_disparadores.py test-learning-disparadores.sh "acentos plegados" sin-plegar
 caso "forma sin titulo"        learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "sin .*Titulo" forma-sin-titulo
 caso "negrita impar"           learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "\*\* impar: rc 1" negrita-impar
 caso "comilla impar"           learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "comilla invertida impar: rc 1" comilla-impar
