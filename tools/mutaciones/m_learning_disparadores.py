@@ -15,6 +15,10 @@ M = {
     # build-recall-index.py
     "frases-sin-indexar": [
         ('            u["kw_disparadores"] = extra', "            pass")],
+    "qr-duplica": [
+        ("            if m and titulo_norm(m.group(1)) not in titulos:", "            if m:")],
+    "qr-sin-numeradas": [
+        ("            if m and titulo_norm(m.group(1)) not in titulos:", "            if False:")],
     "mostrar-comentario": [
         ("    texto = truncate(learning_marks.sin_disparadores(texto) if regla else texto)",
          "    texto = truncate(texto)")],

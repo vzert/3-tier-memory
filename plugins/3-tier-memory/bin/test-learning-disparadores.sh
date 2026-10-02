@@ -226,5 +226,44 @@ print(f"{a[0][0]:.3f}")
 EOF
 chk "parecido 1.0 con y sin comentario" "1.000" "$(cat "$T/v.txt")"
 
+echo "== 11. indice: Quick Reference numerado (H5) =="
+fixture
+cat > "$M/learnings/gate.md" <<'TOP'
+---
+type: learnings
+topic: gate
+---
+# Gate
+
+## Rules
+
+1. **Regla numerada** — alfa
+- **Vineta de la region** — bravo charlie
+  - subvineta sangrada delta
+```
+- vineta dentro de codigo echo
+```
+- **Vineta retirada** — foxtrot — ⊘ RETIRADA (2026-01-01, obsoleta)
+
+## Related
+- [[_learnings|Learnings Index]] golf
+TOP
+cat > "$M/_learnings.md" <<'IDX'
+# Learnings Index
+
+## Quick Reference
+
+1. **Regla numerada** — version corta hotel
+2. **Solo en el Quick Reference** — india juliet
+- **Vineta del Quick Reference** — kilo
+
+## Related
+IDX
+indice
+textos=$(python3 -c "import json,sys;[print(json.loads(l)['texto']) for l in open(sys.argv[1],encoding='utf-8') if json.loads(l)['tipo']=='learning']" "$T/idx.jsonl")
+has "Quick Reference N. con titulo propio: entra" "$textos" "Solo en el Quick Reference"
+hasnt "Quick Reference N. con el titulo de una regla: se salta" "$textos" "version corta hotel"
+has "Quick Reference con vineta: entra (como antes)" "$textos" "Vineta del Quick Reference"
+
 echo "RESULT: pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
