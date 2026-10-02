@@ -187,6 +187,14 @@ caso "corrige sin citar"       journal-emit.py m_learning_dedup.py test-learning
 caso "corrige aceptado"        journal-emit.py m_learning_dedup.py test-learning-dedup.sh "corrige:2: rc 1" corrige-aceptado
 caso "retirada es vecina"      learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "casi igual a una RETIRADA" retirada-es-vecina
 caso "medida sobre la nueva"   learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "la primera vecina es #2" medida-sobre-la-nueva
+# Disparadores (2.48.0, F4 del plan de ciclo de vida de learnings): cada pieza tiene su aserto.
+caso "disparadores sin peso"    recall_rank.py m_learning_disparadores.py test-learning-disparadores.sh "con peso, la regla de las frases gana" sin-peso
+caso "frases sin indexar"       build-recall-index.py m_learning_disparadores.py test-learning-disparadores.sh "palabras solo de las frases encuentran" frases-sin-indexar
+caso "comentario a la vista"    build-recall-index.py m_learning_disparadores.py test-learning-disparadores.sh "el texto de la unidad no lleva el comentario" mostrar-comentario
+caso "update pierde frases"     journal-compact.py m_learning_disparadores.py test-learning-disparadores.sh "texto nuevo . mismo comentario" update-pierde-disparadores
+caso "compactador sin validar"  journal-compact.py m_learning_disparadores.py test-learning-disparadores.sh "invalido: cuarentena" compactador-sin-validar
+caso "marca detras"             learning_marks.py m_learning_disparadores.py test-learning-disparadores.sh "cuerpo . marcador . comentario" marca-detras
+caso "acepta guiones"           learning_marks.py m_learning_disparadores.py test-learning-disparadores.sh "commit ..amend" acepta-guiones
 caso "forma sin titulo"        learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "sin .*Titulo" forma-sin-titulo
 caso "negrita impar"           learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "\*\* impar: rc 1" negrita-impar
 caso "comilla impar"           learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "comilla invertida impar: rc 1" comilla-impar
