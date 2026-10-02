@@ -18,12 +18,13 @@ M = {
         ("            comprobar_por(lines, start, related, por, n, donde)", "            pass")],
     "ciclo-sin-detectar": [
         ("        if propio is not None and learning_marks.retirada_por(tp) == propio:", "        if False:")],
+    # Desde 2.48.0 (F4) la linea final de learning.update es cuerpo + marca + disparadores.
     "update-pierde-marca": [
-        ("            if learning_marks.regla_retirada(viejo) and not learning_marks.regla_retirada(text):",
-         "            if False:")],
+        ('        marca = "" if (text and learning_marks.regla_retirada(text)) else learning_marks.sufijo_marca(viejo)',
+         '        marca = ""')],
     "replay-update-retirada": [
-        ("        if pn and (normalize_text(t) == pn or (learning_marks.regla_retirada(t) and",
-         "        if pn and (normalize_text(t) == pn or (False and")],
+        ("        if pn and (normalize_text(t) == pn or normalize_text(learning_marks.sin_marca(t)) == pn):",
+         "        if pn and normalize_text(t) == pn:")],
     "retire-replay-sin-numero": [
         ("        if len(h) == 1 and learning_marks.regla_retirada(rule_text(lines[h[0]])[1]):", "        if False:")],
     "add-no-ve-retirada": [
