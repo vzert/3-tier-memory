@@ -17,7 +17,7 @@
 set -u
 BIN="$(cd "$(dirname "$0")" && pwd)"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-pass=0; fail=0
+pass=0; fail=0; skip=0
 chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: esperaba '$2', salio '$3'"; fi; }
 
 fixture() {
@@ -28,6 +28,14 @@ emit() { python3 "$BIN/journal-emit.py" --memory-dir "$M" "$@" >/dev/null; }
 compact() { python3 "$BIN/journal-compact.py" --memory-dir "$M" --log "$M/../compact.log" --quiet >/dev/null; }
 filas() { grep -cF -- "$1" "$M/_plans-index.md"; }
 status() { grep -F -- "$1" "$M/_plans-index.md" | awk -F' \\| ' '{print $2}'; }
+# Un enlace simbolico ROTO (casos 32 y 34). En Git Bash `ln -s` no crea enlaces por defecto: el
+# fixture no existia y los casos median otra cosa (CI de 2.46.0 rojo solo en windows-latest).
+# winsymlinks:nativestrict le pide un enlace nativo de Windows, o que falle si no puede (mismo patron
+# que test-compaction-recover.sh, 6611e64). Si aun asi no hay symlink real, esos asertos se saltan
+# y la ultima linea lo dice (`N saltados`): es la red, no el camino normal.
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) export MSYS="${MSYS:+$MSYS }winsymlinks:nativestrict";; esac
+enlace_roto() { ln -s "$M/no-existe.md" "$1" 2>/dev/null; [ -L "$1" ]; }
+saltar() { skip=$((skip+1)); echo "  SKIP $1"; }
 cuar() { ls "$M/.journal/quarantine/"*.json 2>/dev/null | wc -l | tr -d ' '; }
 
 echo "== 1. upsert sin --inline con el titulo de la fila de OTRO plan no la reescribe =="
@@ -446,12 +454,16 @@ echo "== 32. un enlace simbolico ROTO plans/plan-<slug>.md tambien bloquea el fa
 fixture
 emit --type plan.upsert --slug ajeno32 --inline --title "Inline ajeno 32" --status completed --date 2026-09-01
 compact
-mkdir -p "$M/plans"; ln -s "$M/no-existe.md" "$M/plans/plan-roto32.md"
-emit --type plan.upsert --slug roto32 --title "Inline ajeno 32" --status active --date 2026-09-02
-emit --type plan.reopen --slug roto32 --title "Inline ajeno 32"
-compact
-chk "la fila inline ajena sigue completed" "completed" "$(status 'Inline ajeno 32 (inline)')"
-chk "los dos eventos en cuarentena" "2" "$(cuar)"
+mkdir -p "$M/plans"
+if enlace_roto "$M/plans/plan-roto32.md"; then
+  emit --type plan.upsert --slug roto32 --title "Inline ajeno 32" --status active --date 2026-09-02
+  emit --type plan.reopen --slug roto32 --title "Inline ajeno 32"
+  compact
+  chk "la fila inline ajena sigue completed" "completed" "$(status 'Inline ajeno 32 (inline)')"
+  chk "los dos eventos en cuarentena" "2" "$(cuar)"
+else
+  saltar "caso 32: este sistema no crea enlaces simbolicos rotos"
+fi
 
 echo "== 33. ts null o Infinity: cuarentena malformed, sin romper el compactador ni atascar pending =="
 fixture
@@ -468,17 +480,23 @@ echo "== 34. --inline de un plan CON archivo (o enlace roto): cuarentena que nom
 fixture
 emit --type plan.upsert --slug ajeno34 --inline --title "Inline ajeno 34" --status active --date 2026-09-01
 compact
-mkdir -p "$M/plans"; printf '# x\n' > "$M/plans/plan-con34.md"; ln -s "$M/no-existe.md" "$M/plans/plan-roto34.md"
+mkdir -p "$M/plans"; printf '# x\n' > "$M/plans/plan-con34.md"
+esperadas=2
 emit --type plan.upsert --slug con34 --inline --title "Inline ajeno 34" --status completed --date 2026-09-02
-emit --type plan.upsert --slug roto34 --inline --title "Inline ajeno 34" --status completed --date 2026-09-02
+if enlace_roto "$M/plans/plan-roto34.md"; then
+  esperadas=3
+  emit --type plan.upsert --slug roto34 --inline --title "Inline ajeno 34" --status completed --date 2026-09-02
+else
+  saltar "caso 34, enlace roto: este sistema no crea enlaces simbolicos rotos"
+fi
 emit --type plan.upsert --slug con34b --inline --title "Titulo libre 34" --status active --date 2026-09-02
 printf '# x\n' > "$M/plans/plan-con34b.md"
 compact
 chk "la fila inline ajena sigue active" "active" "$(status 'Inline ajeno 34 (inline)')"
 chk "una sola fila con ese titulo" "1" "$(grep -c 'Inline ajeno 34' "$M/_plans-index.md")"
 chk "--inline con archivo y titulo libre: no inserta fila inline" "0" "$(filas 'Titulo libre 34')"
-chk "los tres en cuarentena" "3" "$(cuar)"
-chk "el motivo nombra --promote" "3" "$(grep -l '^inline-con-archivo.*--promote' "$M/.journal/quarantine/"*.reason 2>/dev/null | wc -l | tr -d ' ')"
+chk "todos en cuarentena" "$esperadas" "$(cuar)"
+chk "el motivo nombra --promote" "$esperadas" "$(grep -l '^inline-con-archivo.*--promote' "$M/.journal/quarantine/"*.reason 2>/dev/null | wc -l | tr -d ' ')"
 
 echo "== 35. ts que time.gmtime no acepta (10**30): cuarentena antes de tocar el indice =="
 fixture
@@ -491,5 +509,5 @@ chk "nada atascado en pending" "0" "$(ls "$M/.journal/pending/" | wc -l | tr -d 
 chk "cuarentena malformed" "1" "$(grep -l '^malformed: ts' "$M/.journal/quarantine/"*.reason 2>/dev/null | wc -l | tr -d ' ')"
 
 echo
-echo "pass=$pass fail=$fail"
+if [ "$skip" -gt 0 ]; then echo "pass=$pass fail=$fail, $skip saltados"; else echo "pass=$pass fail=$fail"; fi
 [ "$fail" -eq 0 ]

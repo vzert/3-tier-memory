@@ -1,6 +1,16 @@
 # Changelog
 
 
+## [2.46.1] - 2026-10-02
+### Fixed
+- **`test-plan-title-fallback.sh` casos 32 y 34 en Windows (CI de 2.46.0 roja solo en
+  windows-latest).** Era la prueba, no el producto: en Git Bash `ln -s` no crea enlaces por
+  defecto, asi que el enlace roto del fixture no existia y los casos median otra cosa. La prueba
+  exporta `MSYS=winsymlinks:nativestrict` en MINGW/MSYS/CYGWIN (el patron de
+  `test-compaction-recover.sh`) para que `ln -s` cree un enlace nativo. Si aun asi no hay symlink
+  real, los asertos del enlace roto se saltan y la ultima linea lo dice (`N saltados`), que
+  `tools/run-tests.sh` cuenta como skip y no como verde.
+
 ## [2.46.0] - 2026-10-01
 Origen: el fallback por titulo de `plan.upsert` (`p-e79c16c7e0`). Un plan sin fila propia buscaba
 una fila con su mismo titulo en toda la tabla, tambien entre las filas enlazadas a OTRO plan, y le
