@@ -70,6 +70,15 @@ correr() {   # $1 = etiqueta, $2... = comando
   local nom="$1"; shift
   local ini fin dur out rc
   ini=$(date +%s)
+  # Sintaxis primero, con el MISMO bash que va a correr la suite (p-5253bc2114): un error de
+  # sintaxis DESPUES del resumen, con set -e y trap EXIT, sale rc=0 en bash 3.2 con el resumen ya
+  # impreso, y ni el rc ni sin_resumen lo ven. Un `rc=$?` en el trap no sirve: ahi $? llega en 0.
+  if [ "$(basename "$1")" = bash ] && [ -f "${2:-}" ] && ! out=$("$1" -n "$2" 2>&1); then
+    TOTAL=$(( TOTAL + 1 )); FALLOS=$(( FALLOS + 1 ))
+    printf '  FALLA %-32s %3ss  bash -n: error de sintaxis\n' "$nom" 0
+    printf '%s\n' "$out" | sed 's/^/       /'
+    return 0
+  fi
   out=$("$@" 2>&1); rc=$?
   fin=$(date +%s); dur=$(( fin - ini ))
   TOTAL=$(( TOTAL + 1 ))

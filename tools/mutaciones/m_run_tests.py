@@ -26,6 +26,9 @@ M = {
     "dos-cuentas": [
         ('  [ "$(printf \'%s\\n\' "$ult" | grep -oE \'[0-9]+ saltad|(skip|SKIP)=[0-9]+\' | wc -l | tr -d \' \')" = 1 ] || return 1',
          '  :')],
+    "sin-bash-n": [
+        ('if [ "$(basename "$1")" = bash ] && [ -f "${2:-}" ] && ! out=$("$1" -n "$2" 2>&1); then',
+         'if false; then')],
     "resumen-prefijo": [
         ('RESUMEN="^[[:space:]]*($(IFS=\'|\'; echo \"${RESUMEN_FORMAS[*]}\"))[[:space:]]*\\$"',
          'RESUMEN="^[[:space:]]*($(IFS=\'|\'; echo \"${RESUMEN_FORMAS[*]}\"))"')],

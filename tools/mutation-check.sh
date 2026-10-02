@@ -206,6 +206,7 @@ caso_tools "saltados con cola" run-tests.sh m_run_tests.py test-run-tests.sh "FA
 caso_tools "skip=N a cero" run-tests.sh m_run_tests.py test-run-tests.sh "un skip=N>0 es salto parcial: «pass=1 fail=0 skip=2»" skip-a-cero
 caso_tools "dos cuentas de saltos" run-tests.sh m_run_tests.py test-run-tests.sh "FALLA, no salto: «RESULT pass=1 fail=0 skip=2, 3 saltados»" dos-cuentas
 caso_tools "resumen por prefijo" run-tests.sh m_run_tests.py test-run-tests.sh "FALLA con «TODO VERDE de la seccion 3»" resumen-prefijo
+caso_tools "sin bash -n previo" run-tests.sh m_run_tests.py test-run-tests.sh "y lo dice: bash -n" sin-bash-n
 
 echo
 if [ "$PEND" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $TOTAL)"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi

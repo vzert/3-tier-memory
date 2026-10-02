@@ -45,6 +45,22 @@ chk "un resumen a mitad no la salva" "FALLA" "$(veredicto "$T/resumen-a-mitad.sh
 chk "y lo dice: sin linea de resumen" "1" "$(bash "$RT" --una prueba bash "$T/exit-a-mitad.sh" 2>&1 | grep -c 'sin linea de resumen')"
 chk "y el rc de run-tests.sh es 1" "1" "$(bash "$RT" --una prueba bash "$T/exit-a-mitad.sh" >/dev/null 2>&1; echo $?)"
 
+# p-5253bc2114: el resumen YA impreso y despues un error de sintaxis, con stderr fuera de la salida.
+# En bash 3.2 sale rc=0 con el resumen como ultima linea (si stderr llega, el mensaje del error es la
+# ultima y sin_resumen ya lo ve); solo el `bash -n` previo de run-tests.sh lo caza.
+cat > "$T/rota-tras-resumen.sh" <<'EOF'
+set -e
+D=$(mktemp -d); trap 'rm -rf "$D"' EXIT
+exec 2>/dev/null
+echo "pass=1 fail=0"
+echo "== cola (> ```): sin cerrar =="
+EOF
+echo "== un error de sintaxis DESPUES del resumen =="
+chk "error de sintaxis tras el resumen sale FALLA" "FALLA" "$(veredicto "$T/rota-tras-resumen.sh")"
+chk "y lo dice: bash -n" "1" "$(bash "$RT" --una prueba bash "$T/rota-tras-resumen.sh" 2>&1 | grep -c 'bash -n: error de sintaxis')"
+chk "con el error de bash en la salida" "1" "$(bash "$RT" --una prueba bash "$T/rota-tras-resumen.sh" 2>&1 | grep -q 'rota-tras-resumen.sh: line' && echo 1)"
+chk "y el rc de run-tests.sh es 1" "1" "$(bash "$RT" --una prueba bash "$T/rota-tras-resumen.sh" >/dev/null 2>&1; echo $?)"
+
 echo "== las suites que terminan siguen en ok (un formato por familia) =="
 n=0
 while IFS= read -r ult; do
