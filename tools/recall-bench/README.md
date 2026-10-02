@@ -70,6 +70,11 @@ bash tools/recall-bench/test-bench.sh                                      # pru
 `--corpus-raiz` (por defecto `~/Projects`) es donde viven los proyectos cuyo `corpus` es un nombre.
 Un `corpus` también puede ser una ruta a un proyecto.
 
+Desde 2.48.0 (F4) el motor pliega acentos y puntua las frases de disparo de una regla, asi que
+`compare-motores.py` ya solo da iguales con prompts y memorias sin acentos ni disparadores: la
+igualdad con el bloque viejo de `recall.sh` era la prueba de la extraccion de F0, no un contrato
+del motor. `test-bench.sh` la sigue usando sobre su corpus sintetico (sin acentos).
+
 ## Lo que el banco no prueba
 
 `origen`, `canal`, `esperadas` y `prohibidas` los declara quien escribe el caso. El banco comprueba

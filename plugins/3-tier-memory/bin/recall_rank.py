@@ -20,6 +20,7 @@ import json
 import math
 import os
 import re
+import unicodedata
 import sys
 from datetime import date
 
@@ -59,9 +60,17 @@ LABEL = {"learning": "regla", "session": "sesión", "pendiente": "pendiente",
          "plan": "plan", "research": "research"}
 
 
+def _plegar(t):
+    """Sin acentos ni dieresis (`revisión` -> `revision`, `ñ` -> `n`), igual en el indice y en el
+    prompt (regla 49: builder y scorer tokenizan igual). F4: quien escribe un prompt pone acentos y
+    las reglas de este plugin se escriben a menudo sin ellos; sin plegar, `abortó` no casaba con
+    `aborto`. Medido sobre las guardas sin disparadores (neutro y local): prompt@4 y fuga iguales."""
+    return "".join(c for c in unicodedata.normalize("NFKD", t) if not unicodedata.combining(c))
+
+
 def tokenize(text):
     out, seen = [], set()
-    for w in WORD_RE.findall(text.lower()):
+    for w in WORD_RE.findall(_plegar(text.lower())):
         if w in seen or w in STOPWORDS:
             continue
         if len(w) < 3 and not any(c.isdigit() for c in w):
