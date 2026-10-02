@@ -1,5 +1,5 @@
 import io, sys
-# Dedup al emitir de learning.add (2.46.0, F3 del plan de ciclo de vida de learnings). Cada mutacion
+# Dedup al emitir de learning.add (2.47.0, F3 del plan de ciclo de vida de learnings). Cada mutacion
 # apaga una pieza y su aserto de test-learning-dedup.sh tiene que caer: stdout limpio, el bloqueo,
 # --solo-vecinos sin escribir, la exencion del mismo texto, las retiradas fuera de los vecinos, la
 # medida Dice (frente a "comunes / palabras de la nueva"), --decision en el payload, reemplaza:N como

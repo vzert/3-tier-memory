@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-3-tier-memory plugin: los vecinos de una regla nueva dentro de su topic (dedup al emitir, 2.46.0).
+3-tier-memory plugin: los vecinos de una regla nueva dentro de su topic (dedup al emitir, 2.47.0).
 
 Un duplicado escrito con otras palabras no se parece lo bastante a la regla vieja para que un
 umbral lo atrape (la medida mas alta de un duplicado real esta por debajo de la de muchas reglas

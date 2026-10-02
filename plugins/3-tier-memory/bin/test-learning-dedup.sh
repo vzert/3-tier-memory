@@ -1,8 +1,8 @@
 #!/bin/bash
-# Prueba del dedup al emitir de `learning.add` (2.46.0, F3 del plan de ciclo de vida de learnings).
+# Prueba del dedup al emitir de `learning.add` (2.47.0, F3 del plan de ciclo de vida de learnings).
 #
 # Por que existe: un duplicado escrito con otras palabras entraba sin que nadie lo viera (medido:
-# la 135 de un corpus real repetia la 99 y solo la encontro una persona). Desde 2.46.0
+# la 135 de un corpus real repetia la 99 y solo la encontro una persona). Desde 2.47.0
 # `journal-emit.py learning.add` imprime las 8 reglas vivas del topic mas parecidas y se niega a
 # escribir si una se parece mucho y el agente no decidio. Lo que este fichero vigila:
 #

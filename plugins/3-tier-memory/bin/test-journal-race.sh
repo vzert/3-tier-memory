@@ -3,7 +3,7 @@
 # sesiones, reglas, planes y research (Fase 2) a la vez y nada se pierde, nada se duplica,
 # ningun numero de regla se repite, ningun lock queda huerfano.
 #
-# (2.46.0: las 12 reglas solo se distinguen por un numero suelto, que el tokenizador descarta; para
+# (2.47.0: las 12 reglas solo se distinguen por un numero suelto, que el tokenizador descarta; para
 # el dedup al emitir son la misma regla, asi que cada learning.add pasa --decision nueva.)
 # Cuerpo tomado tal cual de memory/plans/plan-journal-concurrencia-v2.12.0.md. Cada corrida
 # lanza 2 workers (10 add + 5 resolve cada uno = 30 eventos concurrentes) contra 2

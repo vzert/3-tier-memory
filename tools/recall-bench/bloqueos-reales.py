@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cuantos de los ultimos N learning.add reales habria bloqueado el dedup al emitir (F3, 2.46.0).
+"""Cuantos de los ultimos N learning.add reales habria bloqueado el dedup al emitir (F3, 2.47.0).
 
 Reproduce cada evento `learning.add` con texto de `<memory>/.journal/applied/` contra el topic tal
 como estaba al emitirlo: las reglas del topic con numero MENOR que el que el compactador le dio
@@ -9,7 +9,7 @@ importada) y su UMBRAL. Imprime, por evento, sus 3 vecinos mas parecidos, y al f
 habrian llegado al umbral. Un bloqueo no es por si solo un bloqueo FALSO: cada uno se mira a mano
 (¿la regla nueva era la misma leccion que su vecino?) y el juicio va al resultado de la fase.
 
-Es tambien el lector del campo `decision` que `learning.add --decision` deja en el payload (2.46.0):
+Es tambien el lector del campo `decision` que `learning.add --decision` deja en el payload (2.47.0):
 por evento imprime la decision, y al final cuantos `learning.add` la traen (`con_decision`). Mide si
 el paso 0 del checkpoint se esta usando de verdad.
 

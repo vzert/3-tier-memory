@@ -16,7 +16,7 @@ Mide, sobre casos declarados con cita comprobable, tres cosas que el plan quiere
 - fuga: reglas "prohibidas" que el motor devuelve (por ejemplo el segundo miembro de un
   duplicado). En F0 es informativa: todavia no hay forma de retirar una regla (F2/F7).
 - dedup@8: fraccion de casos "dedup" cuya regla original sale entre los 8 vecinos mas parecidos
-  de la regla duplicada, con la funcion que imprime `journal-emit.py learning.add` (desde 2.46.0,
+  de la regla duplicada, con la funcion que imprime `journal-emit.py learning.add` (desde 2.47.0,
   bin/learning_vecinos.py: Dice-IDF sobre el texto completo, mismo topic, reglas anteriores).
 - accion@2: el canal "accion" (recall en PreToolUse) no existe todavia; su valor en F0 es 0 por
   construccion y queda anotado como no medido. La F5 lo implementa.

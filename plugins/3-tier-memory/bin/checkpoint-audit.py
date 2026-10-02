@@ -784,7 +784,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             h.append(Hallazgo(HECHO, "learnings.dualwrite",
                               f"los {len(topicos)} topico(s) existen y estan en _learnings.md"))
 
-    # 6b. Cada learning de la ficha lleva su decision de dedup (Step 4, paso 0; 2.46.0). El evento
+    # 6b. Cada learning de la ficha lleva su decision de dedup (Step 4, paso 0; 2.47.0). El evento
     # learning.add no registra la sesion (sin CLAUDE_SESSION_ID cada emision lleva un id aleatorio),
     # asi que no se pueden contar los learning.add de ESTA sesion: se mira la ficha. Toda linea con
     # [[learnings/<topic>]] dice `decision: nueva|ya existe #N|corrige #N|reemplaza #N|retira #N`,

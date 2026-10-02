@@ -59,7 +59,7 @@ Tipos de evento:
                     La regla nueva REEMPLAZA a la #N del mismo topic: en el mismo escrito, N
                     queda marcada `— ⊘ RETIRADA (FECHA, superada por #M)`. O las dos o ninguna.
                     --quickref-prefix quita la linea vieja de N del Quick Reference.
-                    [--decision nueva|reemplaza:N] [--solo-vecinos]                    (2.46.0)
+                    [--decision nueva|reemplaza:N] [--solo-vecinos]                    (2.47.0)
                     Dedup al emitir: con --text, imprime por STDERR las 8 reglas vivas del topic
                     mas parecidas (Dice ponderado por IDF, bin/learning_vecinos.py); stdout sigue
                     siendo solo el id. Si la mas parecida llega a 0,5 y no hay --decision, sale 1
@@ -519,7 +519,7 @@ def decision_de(valor, supersedes_raw, sup, memory_dir="", topic=""):
 
 
 def dedup_al_emitir(memory_dir, topic, text, decision, solo_vecinos):
-    """Dedup de learning.add (2.46.0): chequeo de forma y vecinos de la regla nueva, por STDERR.
+    """Dedup de learning.add (2.47.0): chequeo de forma y vecinos de la regla nueva, por STDERR.
 
     stdout no cambia (sigue siendo solo el id: las plantillas lo capturan). Sale con error, antes
     de escribir el evento, si la forma esta mal o si un vecino llega a UMBRAL sin --decision. Con
@@ -631,7 +631,7 @@ def main():
     ap.add_argument("--motivo", default="")
     ap.add_argument("--por", default="")
     ap.add_argument("--supersedes", default="")
-    # learning.add: dedup al emitir (2.46.0)
+    # learning.add: dedup al emitir (2.47.0)
     ap.add_argument("--decision", default="")
     ap.add_argument("--solo-vecinos", dest="solo_vecinos", action="store_true")
     a = ap.parse_args()

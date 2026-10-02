@@ -152,7 +152,7 @@ caso "fila antes de validar"   journal-compact.py m_learning_retire.py test-lear
 caso "indice viejo se sirve"   recall.sh m_learning_retire.py test-learning-retire.sh "el indice viejo se reconstruyo" indice-viejo-sirve
 
 echo
-echo "Dedup al emitir de learning.add (2.46.0): vecinos, bloqueo, forma y learnings.decision"
+echo "Dedup al emitir de learning.add (2.47.0): vecinos, bloqueo, forma y learnings.decision"
 caso "vecinos por stdout"      journal-emit.py m_learning_dedup.py test-learning-dedup.sh "stdout tiene una sola linea" vecinos-por-stdout
 caso "sin bloqueo"             journal-emit.py m_learning_dedup.py test-learning-dedup.sh "casi igual sin --decision: rc 1" sin-bloqueo
 caso "solo-vecinos escribe"    journal-emit.py m_learning_dedup.py test-learning-dedup.sh "solo-vecinos: ningun evento" solo-vecinos-escribe
