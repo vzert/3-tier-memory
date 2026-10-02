@@ -17,8 +17,10 @@ reglas nuevas del mismo topic llegan a 0,39), pero el duplicado si queda entre l
   topic, y en un topic real una regla de 51 KB salia primera para los 30 ultimos `learning.add`.
 - **`--decision nueva|reemplaza:N`**: si la vecina mas parecida llega a 0,5 y no hay decision, el
   emisor sale 1 sin escribir y dice como decidir. `reemplaza:N` es `--supersedes N` (2.45.0). La
-  decision viaja en el payload. `corrige:N` sale 1 y remite a `learning.update`: una regla nueva
-  que corrige a otra que sigue viva deja las dos en el recall.
+  decision viaja en el payload, y `bloqueos-reales.py` la lee (cuenta cuantos `learning.add` la
+  traen). `corrige:N` sale 1 e imprime el comando exacto de `learning.update` (valores citados
+  para el shell, `--memory-dir` explicito): una regla nueva que corrige a otra que sigue viva deja
+  las dos en el recall.
 - **`--solo-vecinos`**: imprime la lista y no escribe nada. Es lo que lee el paso 0 del Step 4 de
   `/checkpoint-3t` antes de decidir (sustituye al `grep` de titulos).
 - **Chequeo de forma** de la regla nueva: `**Titulo** — cuerpo`, `**` y comillas invertidas en
@@ -28,7 +30,8 @@ reglas nuevas del mismo topic llegan a 0,39), pero el duplicado si queda entre l
   `decision: nueva|ya existe #N|corrige #N|reemplaza #N|retira #N`, y la #N que cita existe en su
   topic. Se mira la ficha porque el evento no registra la sesion.
 - **`tools/recall-bench/bloqueos-reales.py`**: reproduce los ultimos N `learning.add` del journal
-  contra el topic tal como estaba y cuenta cuantos habria bloqueado.
+  contra el topic tal como estaba (una regla retirada despues del evento cuenta como viva) y cuenta
+  cuantos habria bloqueado y cuantos traen `decision`.
 
 ### Changed
 - El mismo texto exacto no bloquea: la identidad topic + texto se mantiene y el compactador no lo

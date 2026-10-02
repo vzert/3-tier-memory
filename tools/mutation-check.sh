@@ -159,6 +159,7 @@ caso "solo-vecinos escribe"    journal-emit.py m_learning_dedup.py test-learning
 caso "sin identidad"           journal-emit.py m_learning_dedup.py test-learning-dedup.sh "mismo texto sin --decision: rc 0" sin-identidad
 caso "decision fuera"          journal-emit.py m_learning_dedup.py test-learning-dedup.sh "la decision viaja en el payload" decision-fuera-del-payload
 caso "reemplaza sin supersedes" journal-emit.py m_learning_dedup.py test-learning-dedup.sh "reemplaza:2 lleva supersedes 2" reemplaza-sin-supersedes
+caso "corrige sin citar"       journal-emit.py m_learning_dedup.py test-learning-dedup.sh "corrige la #6 en su sitio" corrige-sin-citar
 caso "corrige aceptado"        journal-emit.py m_learning_dedup.py test-learning-dedup.sh "corrige:2: rc 1" corrige-aceptado
 caso "retirada es vecina"      learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "casi igual a una RETIRADA" retirada-es-vecina
 caso "medida sobre la nueva"   learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "la primera vecina es #2" medida-sobre-la-nueva

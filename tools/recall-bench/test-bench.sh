@@ -183,5 +183,23 @@ sed 's/(coincidencia exacta) era fragil a CRLF donde/(coincidencia exacta) una f
 OUT=$(python3 "$BENCH" --casos "$R2/casos.jsonl" --hoy 2026-09-30 2>&1); RC=$?
 [ "$RC" -eq 2 ] && printf '%s' "$OUT" | grep -q "cita de la procedencia" && ok "se niega: $OUT" || mal "rc=$RC: $OUT"
 
+echo "15. bloqueos-reales: una regla retirada DESPUES del evento era vecina al emitir; antes, no"
+bloq() {  # $1 = fecha de la retirada de la #1; el learning.add de la #2 es del 2026-10-01
+  rm -rf "$TMP/bm"; mkdir -p "$TMP/bm/learnings" "$TMP/bm/.journal/applied/2026-10"
+  printf -- '---\ntopic: t\n---\n# T\n\n## Rules\n\n1. **No usar git add -A en el clon** — se cuela todo lo de los hooks — ⊘ RETIRADA (%s, obsoleta): x\n2. **No usar git add -A en un clon** — se cuela todo lo de los hooks\n' "$1" > "$TMP/bm/learnings/t.md"
+  python3 - "$TMP/bm/.journal/applied/2026-10/e.json" <<'PY'
+import json, sys
+from datetime import datetime, timezone
+ts = int(datetime(2026, 10, 1, 12, tzinfo=timezone.utc).timestamp()) * 10**9
+json.dump({"type": "learning.add", "ts": ts, "payload": {"topic": "t", "decision": "nueva",
+           "text": "**No usar git add -A en un clon** — se cuela todo lo de los hooks"}}, open(sys.argv[1], "w"))
+PY
+  python3 tools/recall-bench/bloqueos-reales.py "$TMP/bm" 2>&1 | tr -d '\r' | tail -1
+}
+OUT=$(bloq 2026-10-05)
+printf '%s' "$OUT" | grep -q "bloquearian=1 .*con_decision=1 de 1" && ok "retirada despues: cuenta: $OUT" || mal "retirada despues: $OUT"
+OUT=$(bloq 2026-09-01)
+printf '%s' "$OUT" | grep -q "bloquearian=0 " && ok "retirada antes: no cuenta: $OUT" || mal "retirada antes: $OUT"
+
 echo
 if [ "$FALLOS" -eq 0 ]; then echo "test-bench: TODO VERDE"; else echo "test-bench: $FALLOS FALLOS"; exit 1; fi

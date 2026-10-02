@@ -25,6 +25,8 @@ M = {
     "reemplaza-sin-supersedes": [
         ('            sup = int(decision.split(":")[1])     # reemplaza:N es --supersedes N (F2)',
          "            pass")],
+    "corrige-sin-citar": [
+        ('f"--match-prefix {shlex.quote(pref)} --text "', 'f"--match-prefix \\"{pref}\\" --text "')],
     "corrige-aceptado": [
         ('    if m.group(1) == "corrige":', "    if False:")],
     # learning_vecinos.py

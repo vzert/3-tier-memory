@@ -75,6 +75,7 @@ updated: 2026-01-01
 3. $IMAN
 4. $R4 — ⊘ RETIRADA (2026-01-01, obsoleta): ya no se espera asi
 5. **Leer el CHANGELOG antes de publicar** — cada version lleva su entrada con lo que cambia
+6. **No usar "git add -A" en un clon** — los hooks escriben bajo .claude y se cuela todo
 
 ## Related
 - [[_learnings|Learnings Index]]
@@ -117,7 +118,7 @@ emit --type learning.add --topic gate --text "$CASI" --decision reemplaza:2
 chk "reemplaza:2: rc 0" "0" "$RC"
 has "reemplaza:2 lleva supersedes 2" "$(tr -d '\r' <"$(ultimo)")" '"supersedes": 2'
 compact
-has "la 2 queda retirada por la 6" "$(regla 2)" "⊘ RETIRADA (.*superada por #6)"
+has "la 2 queda retirada por la 7" "$(regla 2)" "⊘ RETIRADA (.*superada por #7)"
 emit --type learning.add --topic gate --text "$CASI" --decision reemplaza:1 --supersedes 2
 chk "reemplaza:1 con --supersedes 2: rc 1" "1" "$RC"
 fixture
@@ -125,11 +126,17 @@ emit --type learning.add --topic gate --text "$CASI" --decision corrige:2
 chk "corrige:2: rc 1" "1" "$RC"
 chk "corrige:2: ningun evento" "0" "$(eventos)"
 has "corrige remite a learning.update de la #2" "$ERR" "--type learning.update --topic gate --match-prefix"
-# El comando que imprime se corre TAL CUAL (con el texto corregido): corrige la 2 y conserva el numero.
-PREF=$(printf '%s\n' "$ERR" | sed -n 's/.*--match-prefix "\([^"]*\)".*/\1/p' | head -1)
-emit --type learning.update --topic gate --match-prefix "$PREF" --text "$CASI"
+# El comando que imprime se ejecuta TAL CUAL (eval de la linea impresa; solo se cambia el marcador
+# del texto). La #6 tiene comillas dobles en su principio: el prefijo tiene que ir bien citado.
+NUEVO6='**No usar git add -A en un clon** — los hooks escriben bajo .claude y se cuela todo lo suyo'
+emit --type learning.add --topic gate --text "$CASI" --decision corrige:6
+chk "corrige:6: rc 1" "1" "$RC"
+CMD=$(printf '%s\n' "$ERR" | grep -E '^ +python3 .* --type learning.update ' | head -1 | sed 's/^ *//')
+CMD=${CMD/<texto corregido de la #6>/$NUEVO6}
+set +e; eval "$CMD" >/dev/null 2>&1; RCU=$?; set -e
+chk "el comando impreso (eval) sale 0" "0" "$RCU"
 compact
-chk "el comando impreso corrige la #2 en su sitio" "2. $CASI" "$(regla 2)"
+chk "el comando impreso corrige la #6 en su sitio" "6. $NUEVO6" "$(regla 6)"
 
 echo "== 5. lo que no bloquea: el mismo texto y una retirada"
 fixture

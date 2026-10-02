@@ -63,8 +63,9 @@ Tipos de evento:
                     Dedup al emitir: con --text, imprime por STDERR las 8 reglas vivas del topic
                     mas parecidas (Dice ponderado por IDF, bin/learning_vecinos.py); stdout sigue
                     siendo solo el id. Si la mas parecida llega a 0,5 y no hay --decision, sale 1
-                    sin escribir. reemplaza:N = --supersedes N. corrige:N sale 1: es
-                    learning.update. --solo-vecinos imprime la lista y no escribe nada. Exige la
+                    sin escribir. reemplaza:N = --supersedes N. corrige:N sale 1 e imprime
+                    el comando exacto de learning.update. La decision va al payload; la lee
+                    tools/recall-bench/bloqueos-reales.py (cuantos learning.add la traen). --solo-vecinos imprime la lista y no escribe nada. Exige la
                     forma `**Titulo** — cuerpo`, `**` y comillas invertidas en numero par y un
                     titulo de 200 caracteres como mucho. El mismo texto exacto no se bloquea
                     (el compactador no lo escribe dos veces).
@@ -496,9 +497,15 @@ def decision_de(valor, supersedes_raw, sup, memory_dir="", topic=""):
         sys.exit(f"journal-emit: --decision debe ser nueva, reemplaza:N o corrige:N, no {valor!r}")
     n = int(m.group(2))
     if m.group(1) == "corrige":
+        import shlex
         pref = prefijo_de_regla(memory_dir, topic, n) if memory_dir and topic else None
-        cmd = (f"python3 \"{os.path.abspath(__file__)}\" --type learning.update --topic {topic} "
-               f"--match-prefix \"{pref}\" --text \"<texto corregido de la #{n}>\"") if pref else None
+        # Copiable tal cual: cada valor citado para el shell (un prefijo puede llevar comillas) y
+        # --memory-dir explicito, el directorio contra el que se calculo el prefijo (sin el, el
+        # comando resolveria memory/ desde el cwd de quien lo pegue).
+        cmd = (f"python3 {shlex.quote(os.path.abspath(__file__))} --memory-dir "
+               f"{shlex.quote(memory_dir)} --type learning.update --topic {shlex.quote(topic)} "
+               f"--match-prefix {shlex.quote(pref)} --text "
+               f"{shlex.quote(f'<texto corregido de la #{n}>')}") if pref else None
         sys.exit(f"journal-emit: --decision corrige:{n} no se emite como learning.add: una regla "
                  f"nueva que corrige a otra viva deja las dos en el recall. Corregir la #{n} es "
                  f"learning.update, que conserva su numero:\n  "
