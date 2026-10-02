@@ -411,6 +411,37 @@ chk "el inline sigue abierto" "active" "$(status 'Promocion tardia (inline)')"
 chk "el cierre viejo no promueve ni cierra" "0" "$(filas '[[plans/plan-tarde29\|')"
 chk "sin cuarentena" "0" "$(cuar)"
 
+echo "== 30. un DIRECTORIO plans/plan-<slug>.md tambien bloquea el fallback por titulo de upsert y reopen =="
+# Ronda 2 de adversario de bd440b2: con isfile, el directorio volvia "sin archivo" al plan y su
+# upsert o reopen sin --promote tomaba por titulo la fila (inline) de OTRO plan.
+fixture
+emit --type plan.upsert --slug ajeno30 --inline --title "Inline ajeno" --status completed --date 2026-09-01
+compact
+mkdir -p "$M/plans/plan-dir30.md"
+emit --type plan.upsert --slug dir30 --title "Inline ajeno" --status active --date 2026-09-02
+emit --type plan.reopen --slug dir30 --title "Inline ajeno"
+compact
+chk "la fila inline ajena sigue completed" "completed" "$(status 'Inline ajeno (inline)')"
+chk "plan-dir30 sin fila" "0" "$(filas '[[plans/plan-dir30\|')"
+chk "los dos eventos en cuarentena" "2" "$(cuar)"
+
+echo "== 31. ts del evento: --promote sin ts y cualquier ts no numerico van a cuarentena, sin romper el compactador =="
+fixture
+emit --type plan.upsert --slug sints --inline --title "Sin ts" --status active --date 2026-09-01
+compact
+mkdir -p "$M/plans"; printf '# x\n' > "$M/plans/plan-sints.md"
+emit --type plan.upsert --slug sints --promote --title "Sin ts" --status completed --date 2026-09-02
+f=$(ls "$M/.journal/pending/"*.json); python3 -c "import json,sys;d=json.load(open(sys.argv[1]));d.pop('ts',None);json.dump(d,open(sys.argv[1],'w'))" "$f"
+compact
+chk "--promote sin ts: la fila sigue (inline)" "active" "$(status 'Sin ts (inline)')"
+chk "--promote sin ts: cuarentena malformed" "1" "$(grep -l '^malformed' "$M/.journal/quarantine/"*.reason 2>/dev/null | wc -l | tr -d ' ')"
+emit --type plan.upsert --slug tsraro --title "Ts raro" --status active --date 2026-09-02
+f=$(ls "$M/.journal/pending/"*.json); python3 -c "import json,sys;d=json.load(open(sys.argv[1]));d['ts']='abc';json.dump(d,open(sys.argv[1],'w'))" "$f"
+python3 "$BIN/journal-compact.py" --memory-dir "$M" --log "$M/../compact.log" --quiet >/dev/null 2>&1
+chk "ts no numerico: el compactador no se cae" "0" "$?"
+chk "ts no numerico: cuarentena malformed, sin fila" "0" "$(filas '[[plans/plan-tsraro\|')"
+chk "ts no numerico: nada atascado en pending" "0" "$(ls "$M/.journal/pending/" | wc -l | tr -d ' ')"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

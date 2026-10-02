@@ -2776,10 +2776,19 @@ def celda_inline(cell):
 
 
 def plan_sin_archivo(mem, slug):
-    """True si no existe plans/plan-<slug>.md: el plan es (o puede ser) un --inline."""
-    # isfile, no exists: un directorio con ese nombre no es el archivo del plan (ronda 1 de
-    # adversario de bd440b2).
-    return not os.path.isfile(os.path.join(mem, "plans", f"plan-{slug}.md"))
+    """True si no existe NADA en plans/plan-<slug>.md: el plan es (o puede ser) un --inline y
+    puede usar el fallback por titulo. Cualquier entrada con ese nombre (tambien un directorio)
+    lo bloquea: con isfile, un directorio abria el fallback por titulo de upsert y reopen sobre la
+    fila (inline) de otro plan (ronda 2 de adversario de bd440b2). Ver plan_con_archivo."""
+    return not os.path.exists(os.path.join(mem, "plans", f"plan-{slug}.md"))
+
+
+def plan_con_archivo(mem, slug):
+    """True si plans/plan-<slug>.md es un archivo regular: lo que --promote exige. Un directorio
+    con ese nombre no es el archivo del plan (ronda 1 de adversario de bd440b2). No es el negado
+    de plan_sin_archivo: un directorio no cumple ninguna de las dos, y las dos salidas van a
+    cuarentena."""
+    return os.path.isfile(os.path.join(mem, "plans", f"plan-{slug}.md"))
 
 
 def inline_title_row(lines, rows, tplain):
@@ -2830,7 +2839,7 @@ def promote_inline_row(mem, slug, lines, rows, tplain, title, ts=0):
     Limite declarado, sin test a proposito: con UNA sola fila (inline) titulada T, nada en el
     indice prueba que sea de este plan y no de otro inline con el mismo titulo. Es la afirmacion
     del emisor, igual que el choque inline-inline de inline_title_row."""
-    if plan_sin_archivo(mem, slug):
+    if not plan_con_archivo(mem, slug):
         raise Quarantine(
             f"sin-archivo: --promote de plan-{slug}, pero no existe plans/plan-{slug}.md — crea el "
             f"archivo del plan antes de promover su fila (inline), o emite sin --promote.")
@@ -3653,6 +3662,15 @@ def validate(ev):
     p = ev.get("payload")
     if not isinstance(p, dict):
         raise Quarantine("malformed: payload ausente")
+    # Un ts que int() no acepta rompia compact() al archivar el evento (time.gmtime(int(ts))),
+    # despues de aplicarlo: el evento se quedaba en pending/ y la pasada moria con traceback, para
+    # cualquier tipo de evento (visto en la ronda 2 de adversario de bd440b2). Sin ts sigue valido
+    # (0), como siempre.
+    if ev.get("ts") is not None:
+        try:
+            int(ev["ts"])
+        except (TypeError, ValueError):
+            raise Quarantine(f"malformed: ts '{ev['ts']}' no es un numero")
     if t == "pendiente.add":
         for k in ("id", "text", "prioridad", "origen", "creado"):
             if not p.get(k):
@@ -3831,8 +3849,15 @@ def validate(ev):
             raise Quarantine(f"malformed: date '{p['date']}' invalida")
         check_slug(p["slug"], "slug")
         # El ts viaja al payload para el guardian de reversa (2.37.0): es lo que dice si este
-        # cierre es anterior o posterior a un `plan.reopen` del mismo plan.
-        p["_ts"] = ev.get("ts", 0)
+        # cierre es anterior o posterior a un `plan.reopen` del mismo plan. Se normaliza a int
+        # aqui: apply_plan_upsert lo compara y lo anota. Sin ts, 0 (el guardian ya lo trata como
+        # "orden desconocido").
+        p["_ts"] = max(0, int(ev.get("ts") or 0))   # validado arriba: int() lo acepta
+        if p.get("promote") and not p["_ts"]:
+            # Una promocion se anota por su ts (promote-<slug>); sin ts no hay registro y su
+            # replay tras la poda iria a cuarentena. Igual que plan.reopen: sin ts, no se aplica.
+            raise Quarantine("malformed: plan.upsert --promote sin 'ts' valido — sin el no se "
+                             "puede anotar la promocion ni distinguir su replay")
         return t, p
     elif t == "plan.reopen":
         if not p.get("slug"):
