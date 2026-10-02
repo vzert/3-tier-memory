@@ -999,6 +999,9 @@ def anotar_reabierto(mem, pid, ev, que="la reapertura"):
       `research-<slug>`. Por celda y no por sesion: con una sola clave, un amend de la Fecha con ts
       anterior a un amend del alias ya aplicado se descartaba como replay sin serlo. Las clases de
       clave no pueden chocar entre si (prefijos distintos; `p-` exige 10 hex).
+    - `promote-<slug>` (planes, `plan.upsert --promote`): el ts del evento que promovio la fila
+      (inline) del plan. `promote_inline_row` lo busca por igualdad: el replay de esa promocion,
+      cuando la fila ya no esta, sigue como upsert normal en vez de ir a cuarentena.
 
     Una linea `clave<TAB>-ts<TAB>fecha` ANULA una anotacion anterior de esa clave y ese ts (2.40.0,
     `desanotar`): se escribe cuando el indice no se pudo escribir despues de anotar. Un compactador
@@ -2756,17 +2759,27 @@ PLAN_OWNER_RE = re.compile(r"\[\[plans/plan-[A-Za-z0-9][A-Za-z0-9._-]{0,120}(?:\
 
 
 def celda_inline(cell):
-    """True si la celda Plan es de un plan inline: termina en `(inline)` y NO lleva wikilink
-    canonico. Una celda mixta (`[[plans/plan-x\\|T]] (inline)`, escrita a mano) es de plan-x. Un
-    solo criterio para tomar una fila por titulo, para el guardian de --parent y para reescribir el
-    titulo: con criterios distintos, la fila propia mixta perdia su enlace al cambiar de titulo
-    (ronda 6 de adversario)."""
-    return cell.rstrip().endswith("(inline)") and not PLAN_OWNER_RE.search(cell)
+    """True si la celda Plan es de un plan inline: termina en `(inline)` y NO lleva ningun
+    wikilink (`[[`). Es la forma exacta que escribe el journal (`<titulo> (inline)`). Una celda
+    mixta (`[[plans/plan-x\\|T]] (inline)`, escrita a mano) es de plan-x. Un solo criterio para
+    tomar una fila por titulo, para el guardian de --parent y para reescribir el titulo: con
+    criterios distintos, la fila propia mixta perdia su enlace al cambiar de titulo (ronda 6 de
+    adversario).
+
+    Cualquier `[[`, no solo el wikilink canonico (PLAN_OWNER_RE): una celda mixta con el enlace en
+    otra forma (`[[Plans/plan-x\\|T]] (inline)`) pasaba por inline sin dueno y --promote o un
+    upsert --inline se la quitaban a plan-x (ronda 1 de adversario de bd440b2). Esa celda no tiene
+    dueno demostrable y va a cuarentena titulo-ambiguo. Coste aceptado: un plan inline cuyo
+    titulo lleve `[[` ya no se encuentra por titulo (tambien cuarentena, nunca una escritura
+    ajena)."""
+    return cell.rstrip().endswith("(inline)") and "[[" not in cell
 
 
 def plan_sin_archivo(mem, slug):
     """True si no existe plans/plan-<slug>.md: el plan es (o puede ser) un --inline."""
-    return not os.path.exists(os.path.join(mem, "plans", f"plan-{slug}.md"))
+    # isfile, no exists: un directorio con ese nombre no es el archivo del plan (ronda 1 de
+    # adversario de bd440b2).
+    return not os.path.isfile(os.path.join(mem, "plans", f"plan-{slug}.md"))
 
 
 def inline_title_row(lines, rows, tplain):
@@ -2796,7 +2809,7 @@ def inline_title_row(lines, rows, tplain):
                  and plain(split_cells(lines[i])[0]) == tplain), None)
 
 
-def promote_inline_row(mem, slug, lines, rows, tplain, title):
+def promote_inline_row(mem, slug, lines, rows, tplain, title, ts=0):
     """La fila `(inline)` que `plan.upsert --promote` convierte en `[[plans/plan-<slug>\\|T]]`
     (p-236102b948). Sin --promote no hay promocion: el indice de un plan inline que despues recibe
     plans/plan-<slug>.md es IDENTICO al de un plan con archivo que choca con la fila (inline) de
@@ -2810,6 +2823,10 @@ def promote_inline_row(mem, slug, lines, rows, tplain, title):
       indistinguibles (limite de inline_title_row) y tomar la primera puede robar la de otro.
     Una fila enlazada a otro plan nunca es candidata: celda_inline la excluye.
 
+    Cada promocion aplicada se anota en `.journal/reabiertos.log` (clave `promote-<slug>`, ts del
+    evento) antes de escribir el indice. Si el plan no tiene fila y su titulo no casa ninguna fila
+    inline, un ts ya anotado es un replay: devuelve None y el evento sigue como upsert normal.
+
     Limite declarado, sin test a proposito: con UNA sola fila (inline) titulada T, nada en el
     indice prueba que sea de este plan y no de otro inline con el mismo titulo. Es la afirmacion
     del emisor, igual que el choque inline-inline de inline_title_row."""
@@ -2820,6 +2837,12 @@ def promote_inline_row(mem, slug, lines, rows, tplain, title):
     cands = [i for i in rows
              if celda_inline(split_cells(lines[i])[0])
              and plain(split_cells(lines[i])[0]) == tplain]
+    if not cands and ts and ts in ts_registrados(mem, "promote-" + slug):
+        # Replay de una promocion YA aplicada cuya fila se fue despues (la poda de cerrados, o a
+        # mano): no hay nada que promover. None = upsert normal del plan con archivo, que es lo que
+        # un replay de cualquier otro upsert hace (ronda 1 de adversario de bd440b2: iba a
+        # cuarentena sin-fila-inline, y un replay no puede ser cuarentena).
+        return None
     if not cands:
         raise Quarantine(
             f"sin-fila-inline: --promote de plan-{slug}, pero _plans-index.md no tiene una fila "
@@ -2963,7 +2986,9 @@ def apply_plan_upsert(mem, p):
     # evento es un upsert normal sobre su fila enlazada.
     promoting = hit is None and bool(p.get("promote"))
     if promoting:
-        hit = promote_inline_row(mem, slug, lines, rows, tplain, p["title"])
+        hit = promote_inline_row(mem, slug, lines, rows, tplain, p["title"],
+                                 int(p.get("_ts") or 0))
+        promoting = hit is not None
     if hit is None:
         # Fallback por titulo plano SOLO en la tabla canonica (no en todo el archivo): es para un
         # plan `--inline` (sin wikilink que buscar), y ampliarlo a cualquier tabla del mismo ancho
@@ -3151,7 +3176,13 @@ def apply_plan_upsert(mem, p):
     if lines == orig:
         return False
     bump_updated(lines)
-    atomic_write(path, lines)
+    ts = int(p.get("_ts") or 0)
+    if promoting and ts:
+        # Anotar ANTES de escribir: sin el registro, el replay de esta promocion despues de que la
+        # poda se lleve la fila iria a cuarentena sin-fila-inline (ver promote_inline_row).
+        escribir_anotado(mem, [(f"promote-{slug}", ts, "la promocion")], path, lines)
+    else:
+        atomic_write(path, lines)
     return True
 
 

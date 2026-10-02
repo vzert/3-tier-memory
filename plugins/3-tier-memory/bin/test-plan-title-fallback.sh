@@ -302,6 +302,115 @@ compact
 chk "promovido y reabierto" "active" "$(status '[[plans/plan-cerr\|')"
 chk "sin cuarentena" "0" "$(cuar)"
 
+# Ronda 1 de adversario de bd440b2. Un replay de verdad es el MISMO JSON: se devuelve de applied/
+# a pending/ (el caso 16 emitia un evento nuevo, que tiene otro ts).
+replay() { f=$(grep -l "$1" "$M/.journal/applied/"*/*.json | head -1); cp "$f" "$M/.journal/pending/"; }
+
+echo "== 23. celda mixta con el enlace en otra forma ([[Plans/...]] (inline)): no es inline, no se toma =="
+fixture
+emit --type plan.upsert --slug base23 --title "Base" --status active --date 2026-09-01
+compact
+printf '| [[Plans/plan-otro\\|Forma rara]] (inline) | active | 2026-08-01 |  |  |  |\n' >> "$M/_plans-index.md"
+mkdir -p "$M/plans"; printf '# x\n' > "$M/plans/plan-rara.md"
+emit --type plan.upsert --slug rara --promote --title "Forma rara" --status completed --date 2026-09-02
+emit --type plan.upsert --slug rarainl --inline --title "Forma rara" --status completed --date 2026-09-02
+compact
+chk "la fila de plan-otro intacta" "1" "$(grep -cxF '| [[Plans/plan-otro\|Forma rara]] (inline) | active | 2026-08-01 |  |  |  |' "$M/_plans-index.md")"
+chk "plan-rara sin fila" "0" "$(filas '[[plans/plan-rara\|')"
+chk "los dos eventos en cuarentena" "2" "$(cuar)"
+
+echo "== 24. un DIRECTORIO plans/plan-<slug>.md no es el archivo del plan: --promote va a cuarentena =="
+fixture
+emit --type plan.upsert --slug dir24 --inline --title "Con directorio" --status active --date 2026-09-01
+compact
+mkdir -p "$M/plans/plan-dir24.md"
+emit --type plan.upsert --slug dir24 --promote --title "Con directorio" --status completed --date 2026-09-02
+compact
+chk "la fila sigue (inline)" "active" "$(status 'Con directorio (inline)')"
+chk "cuarentena sin-archivo" "1" "$(grep -l '^sin-archivo' "$M/.journal/quarantine/"*.reason 2>/dev/null | wc -l | tr -d ' ')"
+
+echo "== 25. replay del MISMO evento --promote: con la fila presente y despues de que la poda se la lleva =="
+fixture
+emit --type plan.upsert --slug rep --inline --title "Promovido y podado" --status active --date 2026-08-01
+compact
+mkdir -p "$M/plans"; printf '# x\n' > "$M/plans/plan-rep.md"
+emit --type plan.upsert --slug rep --promote --title "Promovido y podado" --status completed --date 2026-08-01
+compact
+replay '"promote": true'
+compact
+chk "replay con la fila: una sola fila" "1" "$(grep -c 'Promovido y podado' "$M/_plans-index.md")"
+chk "replay con la fila: sin cuarentena" "0" "$(cuar)"
+for n in 1 2 3 4 5; do
+  emit --type plan.upsert --slug nuevo$n --title "Nuevo $n" --status completed --date 2026-09-0$n
+done
+compact
+chk "la poda se llevo la fila promovida" "0" "$(grep -c 'Promovido y podado' "$M/_plans-index.md")"
+replay '"promote": true'
+compact
+chk "replay tras la poda: sin cuarentena" "0" "$(cuar)"
+chk "replay tras la poda: no deja fila" "0" "$(grep -c 'Promovido y podado' "$M/_plans-index.md")"
+chk "replay tras la poda: nada pendiente" "0" "$(ls "$M/.journal/pending/" | wc -l | tr -d ' ')"
+# Sin el registro (un --promote nuevo, otro ts) la misma situacion sigue siendo cuarentena.
+emit --type plan.upsert --slug rep --promote --title "Promovido y podado" --status completed --date 2026-08-01
+compact
+chk "un --promote NUEVO sin fila inline sigue en cuarentena" "1" "$(cuar)"
+
+echo "== 26. --promote no toma una celda mixta CANONICA de otro plan con el mismo titulo =="
+fixture
+emit --type plan.upsert --slug base26 --title "Base" --status active --date 2026-09-01
+compact
+printf '| [[plans/plan-owner\\|Mixta26]] (inline) | active | 2026-08-01 |  |  |  |\n' >> "$M/_plans-index.md"
+mkdir -p "$M/plans"; printf '# x\n' > "$M/plans/plan-intr26.md"
+emit --type plan.upsert --slug intr26 --promote --title "Mixta26" --status completed --date 2026-09-02
+compact
+chk "la fila mixta de plan-owner intacta" "1" "$(grep -cxF '| [[plans/plan-owner\|Mixta26]] (inline) | active | 2026-08-01 |  |  |  |' "$M/_plans-index.md")"
+chk "plan-intr26 sin fila" "0" "$(filas '[[plans/plan-intr26\|')"
+chk "el evento va a cuarentena" "1" "$(cuar)"
+
+echo "== 27. --promote con --parent: la fila promovida ya lleva enlace y acepta el padre =="
+fixture
+emit --type plan.upsert --slug padre27 --title "Padre" --status active --date 2026-09-01
+emit --type plan.upsert --slug hijo27 --inline --title "Hijo inline" --status active --date 2026-09-01
+compact
+mkdir -p "$M/plans"; printf '# x\n' > "$M/plans/plan-hijo27.md"
+emit --type plan.upsert --slug hijo27 --promote --parent padre27 --title "Hijo inline" --status active --date 2026-09-02
+compact
+chk "promovida con su padre" "active (fase de plan-padre27)" "$(status '[[plans/plan-hijo27\|')"
+chk "sin cuarentena" "0" "$(cuar)"
+
+echo "== 28. replay de una promocion que CERRO el plan, despues de un plan.reopen: no lo vuelve a cerrar =="
+fixture
+emit --type plan.upsert --slug cierre28 --inline --title "Cerrar y reabrir" --status active --date 2026-09-01
+compact
+mkdir -p "$M/plans"; printf '# x\n' > "$M/plans/plan-cierre28.md"
+emit --type plan.upsert --slug cierre28 --promote --title "Cerrar y reabrir" --status completed --date 2026-09-01
+compact
+emit --type plan.reopen --slug cierre28
+compact
+replay '"promote": true'
+compact
+chk "sigue abierto tras el replay" "active" "$(status '[[plans/plan-cierre28\|')"
+chk "sin cuarentena" "0" "$(cuar)"
+
+echo "== 29. una promocion VIEJA que cierra, aplicada despues de un plan.reopen del inline: noop =="
+# El evento --promote (ts viejo) llega tarde: el plan inline ya se reabrio con plan.reopen --title.
+# El guardian de reversa tiene que frenarlo aunque este evento sea el que promueve.
+fixture
+emit --type plan.upsert --slug tarde29 --inline --title "Promocion tardia" --status completed --date 2026-09-01
+compact
+mkdir -p "$M/plans" "$M/../hold"; printf '# x\n' > "$M/plans/plan-tarde29.md"
+emit --type plan.upsert --slug tarde29 --promote --title "Promocion tardia" --status completed --date 2026-09-01
+mv "$M/.journal/pending/"*.json "$M/../hold/"
+rm "$M/plans/plan-tarde29.md"
+emit --type plan.reopen --slug tarde29 --title "Promocion tardia"
+compact
+printf '# x\n' > "$M/plans/plan-tarde29.md"
+mv "$M/../hold/"*.json "$M/.journal/pending/"
+compact
+chk "el inline sigue abierto" "active" "$(status 'Promocion tardia (inline)')"
+chk "el cierre viejo no promueve ni cierra" "0" "$(filas '[[plans/plan-tarde29\|')"
+chk "sin cuarentena" "0" "$(cuar)"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
