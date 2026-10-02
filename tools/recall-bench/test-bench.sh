@@ -145,6 +145,13 @@ echo "8. corpus neutro publicado: corre y reproduce sus lineas base fijadas"
 OUT=$(python3 "$BENCH" --casos "$NEUTRO" --hoy 2026-09-30 --comprobar-linea-base 2>&1); RC=$?
 [ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -q "procedencia_verificada=4/21" && printf '%s' "$OUT" | grep -q "linea base reproducida: 5 casos" && ok "$(printf '%s' "$OUT" | tr '\n' ' ')" || mal "rc=$RC: $OUT"
 
+echo "8b. corpus neutro ENRIQUECIDO (F4): las mismas 68 reglas con disparadores; su linea base"
+# Las frases las escribio un subagente que no veia los casos (2.a ronda de F4). Linea base propia:
+# prompt@4 14/14 y fuga 0 (el neutro sin disparadores, caso 8, sigue siendo la guarda de las
+# instalaciones sin disparadores). Si baja, el formato o el motor perdio algo.
+OUT=$(python3 "$BENCH" --casos tools/recall-bench/corpus-neutro-enriquecido/casos.jsonl --hoy 2026-09-30 --comprobar-linea-base 2>&1); RC=$?
+[ "$RC" -eq 0 ] && printf '%s' "$OUT" | grep -q "prompt@4=14/14" && printf '%s' "$OUT" | grep -q "fuga=0" && ok "$(printf '%s' "$OUT" | head -1)" || mal "rc=$RC: $OUT"
+
 echo "9. una linea base que no se reproduce sale 1"
 # copia del corpus en el temporal con la misma forma que el repo: las rutas de los casos son
 # relativas a su fichero, y la procedencia apunta al CHANGELOG de la raiz

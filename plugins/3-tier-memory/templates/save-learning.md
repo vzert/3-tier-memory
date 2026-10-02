@@ -62,7 +62,7 @@ emit one event:
 ```bash
 python3 "$JBIN/journal-emit.py" --type learning.add --topic <topic-slug> \
   --text "**<Rule name>** — <one-line description, no newlines>" \
-  --disparadores "frases=<3-6 frases separadas por |>; cmd=<prefijos>; path=<globs>; tool=<herramientas>" \
+  [--disparadores "frases=<3-6 frases separadas por |>; cmd=<prefijos>; path=<globs>; tool=<herramientas>"] \
   [--quickref "**<Rule name>** — <short form>"]   # only if critical (correctness/safety)
   [--title "<Topic Title>" --when "<when to consult>" --importance <0-10>]   # when the topic is new
 ```
@@ -72,11 +72,9 @@ sin escribir) si una se parece mucho y no pasas `--decision nueva` o `--decision
 si el texto no tiene la forma `**Titulo** — cuerpo`. Lee la lista: si una regla ya dice lo mismo,
 no emitas; si quedo incompleta, `learning.update`. `--solo-vecinos` muestra la lista sin escribir.
 
-Desde 2.48.0, cada `learning.add` lleva `--disparadores "frases=a | b | c; cmd=...; path=...;
-tool=..."`: 3-6 frases como describiria el momento del error quien NO conoce la regla (la intencion
-justo antes, el sintoma, la pregunta), con acentos y variando la forma del verbo clave; una frase
-que repite el titulo no sirve. Sin ellas el emisor avisa por stderr (el recall es lexico y una
-parafrasis no encontraria la regla). Detalle y ejemplos: Step 4 de /checkpoint-3t.
+Opcional desde 2.48.0: `--disparadores "frases=a | b | c; cmd=...; path=...; tool=..."`, frases de
+como describiria el momento quien NO conoce la regla. El recall las indexa, pero en la F4 no
+subieron el recall de prompt al criterio: no las exijas. Detalle: Step 4 de /checkpoint-3t.
 
 - MALA: "UTMs are session-level" — repite el titulo.
 - BUENA: "las conversiones salen sin utm_source en PostHog" — el sintoma.

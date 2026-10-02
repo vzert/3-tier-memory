@@ -70,10 +70,10 @@ Tipos de evento:
                     titulo de 200 caracteres como mucho. El mismo texto exacto no se bloquea
                     (el compactador no lo escribe dos veces).
                     [--disparadores "frases=a | b | c; cmd=x, y; path=g/*; tool=Bash"] (2.48.0)
-                    Como describiria el momento alguien que NO conoce la regla (3-6 frases),
-                    mas los comandos, rutas y herramientas de ese momento. Van al final de la
-                    linea como comentario HTML: el recall indexa las frases y no las muestra.
-                    Sin ellos, aviso por stderr (sera error cuando la F7 migre los corpus).
+                    OPCIONAL. Como describiria el momento alguien que NO conoce la regla (3-6
+                    frases), mas los comandos, rutas y herramientas de ese momento (para la F5).
+                    Van al final de la linea como comentario HTML: el recall indexa las frases y
+                    no las muestra. Medido en F4: no subieron el recall de prompt al criterio.
   learning.retire   --topic T --match-prefix P --motivo obsoleta|duplicada|superada
                     [--por N] [--nota "<una linea>"] [--quickref-prefix QP]           (2.45.0)
                     Retira una regla SIN borrarla ni renumerarla: anade al final de su linea
@@ -788,12 +788,9 @@ def main():
         if disp and not text:
             sys.exit("journal-emit: --disparadores necesita --text (la regla que los lleva)")
         if disp:
+            # Opcionales (cierre de F4, 2026-10-02): en el banco no llevaron el recall de prompt al
+            # criterio, asi que no se exigen ni se avisa si faltan. cmd/path/tool son para la F5.
             base["payload"]["disparadores"] = disp
-        elif text and not a.solo_vecinos:
-            # F4, paso 6: aviso, no error, hasta que la F7 migre los corpus existentes.
-            print("journal-emit: AVISO — learning.add sin --disparadores: sin ellos, una parafrasis "
-                  "del momento del error no encuentra esta regla en el recall. Forma: "
-                  + EJEMPLO_DISPARADORES, file=sys.stderr)
         sup = numero_regla(a.supersedes, "--supersedes")
         if (a.decision or a.solo_vecinos) and not text:
             sys.exit("journal-emit: --decision y --solo-vecinos necesitan --text (la regla nueva)")

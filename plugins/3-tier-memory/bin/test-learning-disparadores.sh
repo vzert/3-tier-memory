@@ -94,17 +94,17 @@ fixture
 out=$(emit --type learning.add --topic gate --text "**No borres un worktree con cambios sin publicar** — remove --force tira commits" \
   --disparadores "frases=ya termine la rama y limpio el worktree|git worktree remove se queja de cambios |  cleanup de carpetas viejas antes de seguir ;cmd=git worktree remove;tool=Bash" --decision nueva 2>"$T/err")
 has "stdout es el id" "$out" "^l-"
-hasnt "sin aviso de disparadores" "$(cat "$T/err")" "sin --disparadores"
+hasnt "sin aviso de disparadores" "$(cat "$T/err")" "AVISO"
 compact
 chk "regla 3 = texto + comentario canonico" "3. **No borres un worktree con cambios sin publicar** — remove --force tira commits$C1" "$(regla 3)"
 h=$(huella); replay; compact
 chk "replay del add: no escribe" "$h" "$(huella)"
 chk "replay del add: sin cuarentena" "0" "$(cuar)"
 
-echo "== 2. add sin --disparadores: escribe y avisa por stderr (aviso, no error, hasta la F7) =="
+echo "== 2. add sin --disparadores: escribe y no avisa (opcionales desde el cierre de F4) =="
 out=$(emit --type learning.add --topic gate --text "**Otra leccion sin frases** — cuerpo" --decision nueva 2>"$T/err")
 has "stdout es el id" "$out" "^l-"
-has "aviso por stderr" "$(cat "$T/err")" "sin --disparadores"
+hasnt "sin aviso por stderr" "$(cat "$T/err")" "disparadores"
 compact
 chk "regla 4 sin comentario" "4. **Otra leccion sin frases** — cuerpo" "$(regla 4)"
 
