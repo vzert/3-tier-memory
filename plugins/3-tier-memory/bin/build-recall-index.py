@@ -206,7 +206,7 @@ def parse_learnings(memory_dir, units):
 
     # Quick Reference de _learnings.md (critical rules, may overlap). Acepta `- ` y, desde F4 (H5),
     # `N. `: el Quick Reference se escribe numerado (learning.add --quickref) y hasta 2.47 no entraba
-    # (claude-vzert: 0 unidades frente a 234 entradas). Una entrada `N. ` cuyo titulo normalizado
+    # (en una instalacion real: 0 unidades frente a 234 entradas). Una entrada `N. ` cuyo titulo normalizado
     # es el de una regla de un topic se salta: es la version corta de una regla que ya esta en el
     # indice, y devolver las dos gastaria uno de los 4 puestos del recall en la misma regla.
     qref = read(os.path.join(memory_dir, "_learnings.md"))

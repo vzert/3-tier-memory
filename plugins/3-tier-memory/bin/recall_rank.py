@@ -110,7 +110,7 @@ def rank(units, prompt, today=None, k=4):
     # document frequency for IDF (rare terms in the corpus carry more signal). Solo hace falta la de
     # los terminos del prompt: idf() solo se llama sobre `matched`, que es un subconjunto. Contar
     # todas las palabras del indice en cada prompt era el grueso del tiempo con muchas unidades
-    # (F4: las vinetas como unidades llevan paperclip de 2.222 a 5.450). Mismo resultado.
+    # (F4: con las vinetas como unidades, el corpus mas grande medido pasaba de 2.222 a 5.450). Mismo resultado.
     conjuntos = []
     df = dict.fromkeys(q_terms, 0)
     for u in units:
