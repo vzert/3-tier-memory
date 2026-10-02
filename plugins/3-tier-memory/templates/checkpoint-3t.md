@@ -664,11 +664,30 @@ event with its decision; the compactor writes both tiers in Step 5a:
 python3 "$JBIN/journal-emit.py" --type learning.add --topic <topic-slug> \
   --text "**<Rule name>** — <one-line explanation, no newlines>" \
   --decision <nueva|reemplaza:N> \
+  --disparadores "frases=<3-6 frases separadas por |>; cmd=<prefijos>; path=<globs>; tool=<herramientas>" \
   [--section "<## header to append under, existing or new>"] \
   [--quickref "**<Rule name>** — <short form for the Quick Reference>"] \
   [--title "<Topic Title>" --when "<when to consult>" --importance <0-10>] \
   [--quickref-prefix "<prefijo de la linea de N en el Quick Reference>"]   # solo con reemplaza:N
 ```
+
+**`--disparadores` (2.48.0): como encontrara la regla quien NO la conoce.** El recall es lexico:
+una regla solo sale si el prompt comparte palabras con ella, y quien va a cometer el error no usa
+las palabras de la leccion, usa las del momento. Escribe 3-6 `frases` como las diria ese agente
+justo antes del error (la intencion), al ver el sintoma, o como pregunta. Con la ortografia normal
+(acentos incluidos), variando la forma del verbo clave ("hacer", "hago", "voy a hacer", "estoy
+haciendo", "hice") y, si la accion tiene nombre ingles de uso comun, en ingles, espanolizado y en
+espanol. `cmd`, `path` y `tool` solo si la regla los nombra (cmd es un prefijo: sin flags `--`).
+Van al final de la linea como comentario HTML; no se ven al renderizar y el recall no los muestra.
+
+- MALA: "no borrar un worktree con cambios sin publicar" — repite el titulo.
+- MALA: "gestion de worktrees" — abstracta, sin el momento.
+- BUENA: "ya termine la rama, limpio la carpeta del worktree" — la intencion.
+- BUENA: "removi el worktree con force y desaparecieron los commits" — el sintoma.
+
+Sin `--disparadores` el emisor escribe la regla y avisa por stderr (sera error cuando la F7 migre
+los corpus). Para enriquecer una regla YA escrita: `learning.update --match-prefix P
+--disparadores "..."` (sin `--text`); corregir el texto con `learning.update --text` los conserva.
 
 `--decision reemplaza:N` es lo mismo que `--supersedes N`. Sin `--decision`, el emisor se niega
 (sale 1 y no escribe) cuando una regla del topic se parece mucho (0,5 o mas): lee su lista y

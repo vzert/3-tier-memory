@@ -62,6 +62,7 @@ emit one event:
 ```bash
 python3 "$JBIN/journal-emit.py" --type learning.add --topic <topic-slug> \
   --text "**<Rule name>** — <one-line description, no newlines>" \
+  --disparadores "frases=<3-6 frases separadas por |>; cmd=<prefijos>; path=<globs>; tool=<herramientas>" \
   [--quickref "**<Rule name>** — <short form>"]   # only if critical (correctness/safety)
   [--title "<Topic Title>" --when "<when to consult>" --importance <0-10>]   # when the topic is new
 ```
@@ -70,6 +71,16 @@ Desde 2.47.0 el emisor imprime por stderr las 8 reglas del topic mas parecidas, 
 sin escribir) si una se parece mucho y no pasas `--decision nueva` o `--decision reemplaza:N`, o
 si el texto no tiene la forma `**Titulo** — cuerpo`. Lee la lista: si una regla ya dice lo mismo,
 no emitas; si quedo incompleta, `learning.update`. `--solo-vecinos` muestra la lista sin escribir.
+
+Desde 2.48.0, cada `learning.add` lleva `--disparadores "frases=a | b | c; cmd=...; path=...;
+tool=..."`: 3-6 frases como describiria el momento del error quien NO conoce la regla (la intencion
+justo antes, el sintoma, la pregunta), con acentos y variando la forma del verbo clave; una frase
+que repite el titulo no sirve. Sin ellas el emisor avisa por stderr (el recall es lexico y una
+parafrasis no encontraria la regla). Detalle y ejemplos: Step 4 de /checkpoint-3t.
+
+- MALA: "UTMs are session-level" — repite el titulo.
+- BUENA: "las conversiones salen sin utm_source en PostHog" — el sintoma.
+- BUENA: "voy a filtrar eventos por utm_source para atribuir la campaña" — la intencion.
 
 **Si la regla YA EXISTE y quedo falsa, corrigela — no anadas otra que la contradiga.** Emitir un
 `learning.add` que diga "la regla N esta vencida" deja el indice mal Y anotado: la falsa sigue
@@ -183,7 +194,8 @@ User discovers that PostHog has a bug with UTM parameters:
    python3 "$JBIN/journal-emit.py" --type learning.add --topic posthog-utm-bug \
      --title "PostHog UTM Bug" --when "Before attributing conversions in PostHog" --importance 7 \
      --text "**UTMs are session-level** — PostHog stores UTMs at session level (\$session_entry_utm_source), not event level. Event-level properties (utm_source, \$utm_source) are no longer populated as of 2026-01-30." \
-     --quickref "**UTMs are session-level** — use \$session_entry_utm_source for attribution, not event properties"
+     --quickref "**UTMs are session-level** — use \$session_entry_utm_source for attribution, not event properties" \
+     --disparadores "frases=las conversiones salen sin utm_source en PostHog | voy a filtrar eventos por utm_source para atribuir la campaña | por qué el breakdown por campaña sale vacío | estoy armando el dashboard de atribución; tool=Bash"
    python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"
    ```
    The compactor creates `memory/learnings/posthog-utm-bug.md` (frontmatter + `## Rules` + `1. **UTMs are session-level** — ...`),
