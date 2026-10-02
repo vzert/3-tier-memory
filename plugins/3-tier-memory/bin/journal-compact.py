@@ -2117,19 +2117,9 @@ def rule_text(line):
 
 
 def body_region(lines):
-    """(inicio del cuerpo tras el frontmatter, indice de '## Related' o len)."""
-    start = 0
-    if lines and lines[0].strip() == "---":
-        for i in range(1, len(lines)):
-            if lines[i].strip() == "---":
-                start = i + 1
-                break
-    related = len(lines)
-    for i in range(start, len(lines)):
-        if lines[i].strip().lower().startswith("## related"):
-            related = i
-            break
-    return start, related
+    """(inicio del cuerpo tras el frontmatter, indice de '## Related' o len). Vive en
+    learning_marks.body_region: el recall indexa la misma region (F4, H6)."""
+    return learning_marks.body_region(lines)
 
 
 def insert_at_section_end(lines, start, end, new_line):

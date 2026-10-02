@@ -94,11 +94,18 @@ def rank(units, prompt, today=None, k=4):
         today = date.today()
 
     N = len(units)
-    # document frequency for IDF (rare terms in the corpus carry more signal)
-    df = {}
+    # document frequency for IDF (rare terms in the corpus carry more signal). Solo hace falta la de
+    # los terminos del prompt: idf() solo se llama sobre `matched`, que es un subconjunto. Contar
+    # todas las palabras del indice en cada prompt era el grueso del tiempo con muchas unidades
+    # (F4: las vinetas como unidades llevan paperclip de 2.222 a 5.450). Mismo resultado.
+    conjuntos = []
+    df = dict.fromkeys(q_terms, 0)
     for u in units:
-        for kw in set(u.get("keywords", [])) | set(u.get("kw_disparadores", [])):
-            df[kw] = df.get(kw, 0) + 1
+        kws = set(u.get("keywords", []))
+        kwd = set(u.get("kw_disparadores", [])) - kws
+        conjuntos.append((kws, kwd))
+        for t in q_terms & (kws | kwd):
+            df[t] += 1
 
     def idf(term):
         n = df.get(term, 0)
@@ -120,9 +127,7 @@ def rank(units, prompt, today=None, k=4):
         return 0.5 ** (days / hl)
 
     scored = []
-    for u in units:
-        kws = set(u.get("keywords", []))
-        kwd = set(u.get("kw_disparadores", [])) - kws
+    for u, (kws, kwd) in zip(units, conjuntos):
         matched = q_terms & (kws | kwd)
         if not matched:
             continue

@@ -242,6 +242,25 @@ def topic_retirado(contenido):
     return False
 
 
+def body_region(lines):
+    """(inicio del cuerpo tras el frontmatter, indice de '## Related' o len) de un topic file.
+
+    La region de reglas: lo que journal-compact puede reescribir y lo que el recall indexa como
+    reglas o vinetas (F4, H6). Una sola implementacion; journal-compact.body_region delega aqui."""
+    start = 0
+    if lines and lines[0].strip() == "---":
+        for i in range(1, len(lines)):
+            if lines[i].strip() == "---":
+                start = i + 1
+                break
+    related = len(lines)
+    for i in range(start, len(lines)):
+        if lines[i].strip().lower().startswith("## related"):
+            related = i
+            break
+    return start, related
+
+
 def con_marca(texto, marca):
     """El texto de la regla con `marca` (ver marca_canonica) puesta DELANTE de su comentario de
     disparadores: el comentario va siempre al final de la linea."""
