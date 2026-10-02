@@ -67,9 +67,10 @@ correr() {   # $1 = etiqueta, $2... = comando
     # que acepta no-evidencia (regla 12). Se lista aparte y el resumen deja de decir TODO VERDE.
     SALTADAS="$SALTADAS $nom"
     printf '  skip %-32s %3ss  %s\n' "$nom" "$dur" "$(printf '%s' "$out" | tail -1 | cut -c1-46)"
-  elif [ "$rc" -eq 0 ] && printf '%s' "$out" | tail -1 | grep -qE '[1-9][0-9]* saltad'; then
+  elif [ "$rc" -eq 0 ] && printf '%s' "$out" | tail -1 | grep -qE '[1-9][0-9]* saltad|(skip|SKIP)=[0-9]*[1-9]'; then
     # Salto PARCIAL: la suite corrio pero dejo casos sin correr (p. ej. el caso 29 de
-    # test-session-amend.sh sin chflags). Tampoco es TODO VERDE.
+    # test-session-amend.sh sin chflags), o `skip=N`/`SKIP=N` con N>0 en el resumen (adversario,
+    # ronda 2: RESULT pass=1 fail=0 skip=3 salia ok). Tampoco es TODO VERDE.
     PARCIALES="$PARCIALES $nom"
     printf '  skip %-32s %3ss  %s\n' "$nom" "$dur" "$(printf '%s' "$out" | tail -1 | cut -c1-46)"
   elif [ "$rc" -eq 0 ] && sin_resumen "$out"; then

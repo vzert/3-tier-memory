@@ -88,6 +88,10 @@ chk "ok con el resumen en CRLF (Windows)" "ok" "$(veredicto "$T/crlf.sh")"
 printf 'echo "SKIP: sin la herramienta"\n' > "$T/skip.sh"
 chk "un SKIP sigue siendo skip" "skip" "$(veredicto "$T/skip.sh")"
 printf 'echo "pass=1 fail=1"\nexit 1\n' > "$T/roja.sh"
+for ult in "RESULT pass=1 fail=0 skip=3" "RESULT: pass=1 fail=0 skip=10" "PASS=5 FAIL=0 SKIP=2"; do
+  n=$((n+1)); printf 'printf "%%s\\n" %q\n' "$ult" > "$T/salto$n.sh"
+  chk "un skip=N>0 es salto parcial: «${ult}»" "skip" "$(veredicto "$T/salto$n.sh")"
+done
 chk "una suite roja sigue siendo FALLA" "FALLA" "$(veredicto "$T/roja.sh")"
 
 echo "pass=$pass fail=$fail"

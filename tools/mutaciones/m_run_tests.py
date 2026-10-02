@@ -11,6 +11,8 @@ M = {
     "resumen-cualquiera": [
         ("sin_resumen() { ! printf '%s' \"$1\" | tail -1 | tr -d '\\r' | grep -qE \"$RESUMEN\"; }",
          "sin_resumen() { ! printf '%s' \"$1\" | grep -qE \"$RESUMEN\"; }")],
+    "skip-n-ignorado": [
+        ("grep -qE '[1-9][0-9]* saltad|(skip|SKIP)=[0-9]*[1-9]'", "grep -qE '[1-9][0-9]* saltad'")],
     "resumen-prefijo": [
         ('RESUMEN="^[[:space:]]*($(IFS=\'|\'; echo \"${RESUMEN_FORMAS[*]}\"))[[:space:]]*\\$"',
          'RESUMEN="^[[:space:]]*($(IFS=\'|\'; echo \"${RESUMEN_FORMAS[*]}\"))"')],
