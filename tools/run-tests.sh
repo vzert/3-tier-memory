@@ -61,6 +61,8 @@ sin_resumen() { ! printf '%s' "$1" | tail -1 | tr -d '\r' | grep -qE "$RESUMEN";
 es_parcial() {
   local ult; ult=$(printf '%s' "$1" | tail -1 | tr -d '\r')
   printf '%s' "$ult" | grep -qE '[1-9][0-9]* saltad|(skip|SKIP)=[0-9]*[1-9]' || return 1
+  # Una sola cuenta: con dos (`skip=2, 3 saltados`) quitar ambas fabricaba un verde (ronda 5).
+  [ "$(printf '%s\n' "$ult" | grep -oE '[0-9]+ saltad|(skip|SKIP)=[0-9]+' | wc -l | tr -d ' ')" = 1 ] || return 1
   printf '%s' "$ult" | sed -E 's/, [0-9]+ saltados( \(sin enlaces reales\))?$//; s/ (skip|SKIP)=[0-9]+//' | grep -qE "$RESUMEN"
 }
 

@@ -23,6 +23,9 @@ M = {
     "skip-a-cero": [
         ('s/ (skip|SKIP)=[0-9]+//',
          's/(skip|SKIP)=[0-9]+/\\1=0/')],
+    "dos-cuentas": [
+        ('  [ "$(printf \'%s\\n\' "$ult" | grep -oE \'[0-9]+ saltad|(skip|SKIP)=[0-9]+\' | wc -l | tr -d \' \')" = 1 ] || return 1',
+         '  :')],
     "resumen-prefijo": [
         ('RESUMEN="^[[:space:]]*($(IFS=\'|\'; echo \"${RESUMEN_FORMAS[*]}\"))[[:space:]]*\\$"',
          'RESUMEN="^[[:space:]]*($(IFS=\'|\'; echo \"${RESUMEN_FORMAS[*]}\"))"')],

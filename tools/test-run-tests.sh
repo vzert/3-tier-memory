@@ -87,7 +87,8 @@ printf 'printf "pass=1 fail=0\\r\\n"\n' > "$T/crlf.sh"
 chk "ok con el resumen en CRLF (Windows)" "ok" "$(veredicto "$T/crlf.sh")"
 echo "== un salto solo cuenta sobre un resumen verde (adversario, ronda 3) =="
 for ult in "RESULT pass=1 fail=1 skip=2" "not-a-summary skip=2" "SKIP=2" "RESULTADO: 5 ok, 1 fallas, 2 saltados" "texto con 3 saltados" \
-           "RESULTADO: 5 ok, 0 fallas, 2 saltados, 1 fallas" "TODO VERDE, 2 saltados y murio"; do
+           "RESULTADO: 5 ok, 0 fallas, 2 saltados, 1 fallas" "TODO VERDE, 2 saltados y murio" \
+           "RESULT pass=1 fail=0 skip=2, 3 saltados"; do
   n=$((n+1)); printf 'printf "%%s\\n" %q\n' "$ult" > "$T/noparcial$n.sh"
   chk "FALLA, no salto: «${ult}»" "FALLA" "$(veredicto "$T/noparcial$n.sh")"
 done

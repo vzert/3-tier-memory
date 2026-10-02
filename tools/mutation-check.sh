@@ -201,6 +201,7 @@ caso_tools "skip=N no es verde" run-tests.sh m_run_tests.py test-run-tests.sh "u
 caso_tools "salto sin resumen verde" run-tests.sh m_run_tests.py test-run-tests.sh "FALLA, no salto: «RESULT pass=1 fail=1 skip=2»" parcial-sin-resumen
 caso_tools "saltados con cola" run-tests.sh m_run_tests.py test-run-tests.sh "FALLA, no salto: «RESULTADO: 5 ok, 0 fallas, 2 saltados, 1 fallas»" saltados-con-cola
 caso_tools "skip=N a cero" run-tests.sh m_run_tests.py test-run-tests.sh "un skip=N>0 es salto parcial: «pass=1 fail=0 skip=2»" skip-a-cero
+caso_tools "dos cuentas de saltos" run-tests.sh m_run_tests.py test-run-tests.sh "FALLA, no salto: «RESULT pass=1 fail=0 skip=2, 3 saltados»" dos-cuentas
 caso_tools "resumen por prefijo" run-tests.sh m_run_tests.py test-run-tests.sh "FALLA con «TODO VERDE de la seccion 3»" resumen-prefijo
 
 echo
