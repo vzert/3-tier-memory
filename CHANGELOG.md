@@ -1,6 +1,20 @@
 # Changelog
 
 
+## [2.47.1] - 2026-10-02
+Origen: `p-18d22df6e9`. 2.46.0 limito el enlace por titulo de `plan.upsert` y agrego `--promote`,
+pero `/migrate` (5c) seguia ensenando la regla vieja: "un slug del titulo" y `--inline` siempre que
+la fila no tuviera archivo, sin decir que una fila legacy con ese titulo va a cuarentena.
+
+### Changed
+- **`commands/migrate.md` 5c dice lo mismo que `templates/checkpoint-3t.md`** para las filas de
+  `_plans-index.md`: `--inline` solo si el proyecto no tiene `plans/plan-<slug>.md` (con el archivo:
+  cuarentena `inline-con-archivo`); el titulo solo enlaza la fila `(inline)` de un plan sin
+  archivo, y una fila con ese titulo que el compactador no puede atribuir va a cuarentena
+  `titulo-ambiguo`; si la fila del proyecto es `(inline)` y el plan ya tiene archivo, `--promote`.
+  El paso 4 dice como salir de esas dos cuarentenas, y la frase de idempotencia ya no dice "plan
+  slug/title" sin limite. Solo prosa: ningun script cambia.
+
 ## [2.47.0] - 2026-10-02
 Origen: F3 del plan de ciclo de vida de los learnings. Un duplicado escrito con otras palabras
 entraba sin que nadie lo viera: el paso 0 de 2.43.2 pedia leer los titulos del topic con `grep`, y

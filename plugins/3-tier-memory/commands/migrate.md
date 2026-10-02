@@ -239,14 +239,25 @@ For each index file found in `AUTO_MEMORY_DIR` (`_pendientes.md`, `_session-inde
 
 The project index is never written by hand here: each row or item becomes a journal event and the
 compactor merges it under its lock, so a checkpoint running in parallel loses nothing. The compactor
-is idempotent by identifier (session slug, topic, plan slug/title, research slug/tema, pendiente
-text+date+origin), so a row that already exists in the project index is a no-op.
+is idempotent by identifier (session slug, topic, plan slug — or title, only for the `(inline)` row
+of a plan without a file —, research slug/tema, pendiente text+date+origin), so a row that already
+exists in the project index is a no-op.
 
 1. Read the auto-memory index (the project index is read by the compactor itself)
 2. For table-based indexes, emit one event per row of the auto-memory version:
    - `_session-index.md` row → `session.add --slug <slug> --date <Fecha> --status "<Status>" --summary "<Resumen>" --commit "<Commit>"`
    - `_learnings.md` Topic Files row → `learning.add --topic <slug from the wikilink> --title "<Topic>" --when "<When to consult>"` (no `--text`); Quick Reference entries → `learning.add --topic <topic that holds the rule> --quickref "<entry text>"` (no `--text`)
    - `_plans-index.md` row → `plan.upsert --slug <slug from the wikilink, or a slug from the title> --title "<Plan>" --status "<Status>" --date <Fecha> --sesion "<Sesion>" --pendientes "<Pendientes>" --learnings "<Learnings>"` (add `--inline` when the row has no plan file)
+     - `--inline` only when the PROJECT has no `memory/plans/plan-<slug>.md` right now (5d copies the
+       auto-memory plan files later); with that file present `--inline` goes to quarantine
+       (`inline-con-archivo`).
+     - An existing project row is matched by `plans/plan-<slug>`, or, only for a plan without that
+       file, by the title of its `(inline)` row. A project row with that title that the compactor
+       cannot prove is this plan's (a legacy row written by hand, a link in another form such as
+       `[[Plans/`, or an `(inline)` row when the plan has its file) goes to quarantine
+       (`titulo-ambiguo`), never taken.
+     - If the project row is `<Plan> (inline)` and the project already has `plans/plan-<slug>.md`,
+       emit `--promote` instead of `--inline`: it turns that only `(inline)` row into the link.
    - `_research-index.md` Active row → `research.upsert --slug <slug> --tema "<Tema>" --status active --next-step "<Next step>" --origen "<Origen>"`; Completed row → `research.upsert --slug <slug> --tema "<Tema>" --status completed --resultado "<Resultado>" --date <the _completado: date in the source row, else the source index's frontmatter `updated` date, YYYY-MM-DD>` (`--inline` when Archivo is "(inline)"; never today: the date decides pruning)
 3. For `_pendientes.md`: for each open item (`- [ ]`) emit
    `pendiente.add --text "<texto without the _origen/_creado/_id suffixes>" --prioridad <section> --origen "<_origen value>" --creado <_creado value, or the file's date if missing>`
@@ -259,7 +270,10 @@ text+date+origin), so a row that already exists in the project index is a no-op.
    creates the header and applies the event, and a `rescued=N` in that line means events an older version
    had quarantined for that reason were applied now. If an event IS still quarantined (an anchor deleted by
    hand, an id collision, a broken JSON, an impossible date), read `memory/.journal/quarantine/*.reason`,
-   apply that change by hand, delete the `.json`/`.reason` pair, and report it.
+   apply that change by hand, delete the `.json`/`.reason` pair, and report it. For a plan row:
+   `inline-con-archivo` → re-emit without `--inline` (or with `--promote` if the `(inline)` row is
+   this plan's); `titulo-ambiguo` → fix the project row's Plan cell as its `.reason` says, or re-emit
+   with `--promote` if it is this plan's `(inline)` row.
 
    **Fallback (no JBIN)**: re-read the project index right before writing, append the missing rows/items
    by hand (match on the identifiers above), and let the next checkpoint's Step 3-pre assign `_id`s.
