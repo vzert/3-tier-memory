@@ -129,7 +129,9 @@ _DISP = re.compile(r"[ \t]*<!--[ \t]*disparadores:(.*?)-->[ \t]*$")
 def _inicio_disparadores(texto):
     """(posicion del comentario con su espacio previo, contenido) o (None, None). Solo un
     comentario al FINAL de la linea y fuera de code span cuenta."""
-    m = _DISP.search(texto or "")
+    if "<!--" not in (texto or ""):   # atajo: casi ninguna linea lleva comentario
+        return None, None
+    m = _DISP.search(texto)
     if not m or any(a <= m.start() < b for a, b in code_spans(texto)):
         return None, None
     return m.start(), m.group(1)

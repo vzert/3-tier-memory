@@ -19,7 +19,6 @@ Zero third-party dependencies. Tolerant of legacy files missing new fields.
 import json
 import os
 import re
-import unicodedata
 import sys
 
 # UTF-8 en stdout Y EN STDERR. La guarda anterior solo cubria stdout, asi que un mensaje de error
@@ -73,12 +72,17 @@ def is_excluded(path):
     return bool(EXCLUDE_NAME_RE.search(os.path.basename(path)))
 
 
+# Tabla y no unicodedata.normalize: el texto ya va en minusculas y WORD_RE solo junta letras a-z,
+# acentuadas y n; normalize() sobre todo el indice subia la reconstruccion en frio mas de un 20 %.
+_PLIEGUE = str.maketrans("áàâäéèêëíìîïóòôöúùûüñç", "aaaaeeeeiiiioooouuuunc")
+
+
 def _plegar(t):
     """Sin acentos ni dieresis (`revisión` -> `revision`, `ñ` -> `n`), igual en el indice y en el
     prompt (regla 49: builder y scorer tokenizan igual). F4: quien escribe un prompt pone acentos y
     las reglas de este plugin se escriben a menudo sin ellos; sin plegar, `abortó` no casaba con
     `aborto`. Medido sobre las guardas sin disparadores (neutro y local): prompt@4 y fuga iguales."""
-    return "".join(c for c in unicodedata.normalize("NFKD", t) if not unicodedata.combining(c))
+    return t.translate(_PLIEGUE)
 
 
 def tokenize(text):
