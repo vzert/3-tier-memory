@@ -13,6 +13,12 @@ si subieron (0 -> 2 de 3). La causa medida es la morfologia (commit / comitear /
 reglas vecinas, tambien enriquecidas, que ocupan los primeros puestos. Se publica el formato y el
 codigo, sin la afirmacion de recall: los disparadores son opcionales.
 
+**Enriquecer cambia que reglas salen, no cuantas.** Con frases en todas las reglas, los casos
+locales ganaron 2 aciertos y perdieron otros 2 que antes salian. Por eso no se recomienda anadir
+disparadores en masa a una memoria que ya existe (eso lo decide la F7). Sin disparadores, los
+aciertos del banco son los mismos que en 2.47.0 en los tres corpus medidos, pero el plegado de
+acentos y el Quick Reference numerado reordenan el top 4 en 6-7 de los 14 casos locales.
+
 ### Added
 - **Disparadores de una regla**, opcionales: `learning.add --disparadores "frases=a | b | c;
   cmd=git commit; path=docs/*; tool=Bash"`. Van al final de la linea de la regla como comentario

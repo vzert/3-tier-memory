@@ -675,7 +675,9 @@ python3 "$JBIN/journal-emit.py" --type learning.add --topic <topic-slug> \
 conoce la regla (3-6: la intencion justo antes, el sintoma, la pregunta), mas `cmd`, `path` y
 `tool` si la regla los nombra (para la F5; cmd es un prefijo, sin flags `--`). Van al final de la
 linea como comentario HTML; no se ven al renderizar y el recall indexa las frases sin mostrarlas.
-Medido en la F4: no subieron el recall de prompt al criterio, asi que no se exigen. Si las
+Medido en la F4: no subieron el recall de prompt al criterio, asi que no se exigen; y con frases
+en todas las reglas cambiaron QUE reglas salian (2 casos ganados, 2 perdidos). No enriquezcas en
+masa una memoria existente: eso lo decide la F7. Si las
 escribes: con acentos, variando la forma del verbo clave, y sin repetir el titulo (MALA: "no
 borrar un worktree con cambios sin publicar"; BUENA: "ya termine la rama, limpio la carpeta del
 worktree"). Para enriquecer una regla YA escrita: `learning.update --match-prefix P
