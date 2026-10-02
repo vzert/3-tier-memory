@@ -147,6 +147,14 @@ def add_unit(units, tipo, texto, path, fecha, importance, regla=False):
     units.append(u)
 
 
+def titulo_norm(texto):
+    """El `**titulo**` de una regla (o su texto si no lo tiene), sin enfasis ni mayusculas."""
+    t = learning_marks.sin_marca(texto or "")
+    m = re.match(r"^\*\*(.+?)\*\*", t)
+    t = m.group(1) if m else t
+    return " ".join(re.sub(r"[*_`]", "", t).lower().split())
+
+
 def parse_learnings(memory_dir, units):
     """Each numbered rule in learnings/*.md is a unit (high-signal, atomic).
     Falls back to Quick Reference bullets in _learnings.md.
@@ -155,6 +163,7 @@ def parse_learnings(memory_dir, units):
     entra, y un topic file cuya cabecera `# ` lo retira no entra entero. Se mira la LINEA completa,
     antes de truncar: el marcador va al final y `truncate` lo cortaria en una regla larga."""
     ldir = os.path.join(memory_dir, "learnings")
+    titulos = set()        # titulos de las reglas numeradas de los topics (ver el Quick Reference)
     rule_re = re.compile(r"^\s*\d+\.\s+(.*)")
     bullet_re = re.compile(r"^\s*[-*]\s+(.*)")
     vineta_re = re.compile(r"^[-*][ \t]+(?![-*][ \t]*[-*])(\S.*)")
@@ -173,6 +182,7 @@ def parse_learnings(memory_dir, units):
                 m = rule_re.match(line)
                 if m:
                     found = True       # aunque este retirada: el fichero SI tiene reglas numeradas
+                    titulos.add(titulo_norm(m.group(1)))
                     if not learning_marks.regla_retirada(m.group(1)):
                         add_unit(units, "learning", m.group(1), rel, "", imp, regla=True)
             # Vinetas de la region de reglas como unidades propias (F4, H6): antes una regla en
@@ -199,14 +209,24 @@ def parse_learnings(memory_dir, units):
                                  if not (bullet_re.match(l) and learning_marks.regla_retirada(l)))
                 add_unit(units, "learning", body, rel, "", imp)
 
-    # Quick Reference bullets in _learnings.md (critical rules, may overlap)
+    # Quick Reference de _learnings.md (critical rules, may overlap). Acepta `- ` y, desde F4 (H5),
+    # `N. `: el Quick Reference se escribe numerado (learning.add --quickref) y hasta 2.47 no entraba
+    # (claude-vzert: 0 unidades frente a 234 entradas). Una entrada `N. ` cuyo titulo normalizado
+    # es el de una regla de un topic se salta: es la version corta de una regla que ya esta en el
+    # indice, y devolver las dos gastaria uno de los 4 puestos del recall en la misma regla.
     qref = read(os.path.join(memory_dir, "_learnings.md"))
     section = re.search(r"## Quick Reference(.*?)(\n## |\Z)", qref, re.DOTALL)
     if section:
         for line in section.group(1).splitlines():
             s = line.strip()
-            if s.startswith("- ") and not learning_marks.regla_retirada(s):
+            if learning_marks.regla_retirada(s):
+                continue
+            if s.startswith("- "):
                 add_unit(units, "learning", s[2:], "memory/_learnings.md", "", 8)
+                continue
+            m = re.match(r"^\d+\.\s+(.*)$", s)
+            if m and titulo_norm(m.group(1)) not in titulos:
+                add_unit(units, "learning", m.group(1), "memory/_learnings.md", "", 8)
 
 
 def parse_sessions(memory_dir, units):
