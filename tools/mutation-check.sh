@@ -198,6 +198,7 @@ echo "run-tests.sh (p-46153b135b): una suite que sale 0 sin su linea de resumen 
 caso_tools "rc=0 sin resumen pasa"  run-tests.sh m_run_tests.py test-run-tests.sh "la del error de sintaxis con trap" sin-resumen-no-exigido
 caso_tools "resumen en cualquier linea" run-tests.sh m_run_tests.py test-run-tests.sh "un resumen a mitad no la salva" resumen-cualquiera
 caso_tools "skip=N no es verde" run-tests.sh m_run_tests.py test-run-tests.sh "un skip=N>0 es salto parcial" skip-n-ignorado
+caso_tools "salto sin resumen verde" run-tests.sh m_run_tests.py test-run-tests.sh "FALLA, no salto: «RESULT pass=1 fail=1 skip=2»" parcial-sin-resumen
 caso_tools "resumen por prefijo" run-tests.sh m_run_tests.py test-run-tests.sh "FALLA con «TODO VERDE de la seccion 3»" resumen-prefijo
 
 echo

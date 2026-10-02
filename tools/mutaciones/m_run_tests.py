@@ -12,7 +12,11 @@ M = {
         ("sin_resumen() { ! printf '%s' \"$1\" | tail -1 | tr -d '\\r' | grep -qE \"$RESUMEN\"; }",
          "sin_resumen() { ! printf '%s' \"$1\" | grep -qE \"$RESUMEN\"; }")],
     "skip-n-ignorado": [
-        ("grep -qE '[1-9][0-9]* saltad|(skip|SKIP)=[0-9]*[1-9]'", "grep -qE '[1-9][0-9]* saltad'")],
+        ("grep -qE '[1-9][0-9]* saltad|(skip|SKIP)=[0-9]*[1-9]' || return 1",
+         "grep -qE '[1-9][0-9]* saltad' || return 1")],
+    "parcial-sin-resumen": [
+        ('sed -E \'s/, [0-9]+ saltad.*$//; s/(skip|SKIP)=[0-9]+/\\1=0/\' | grep -qE "$RESUMEN"',
+         'grep -q .')],
     "resumen-prefijo": [
         ('RESUMEN="^[[:space:]]*($(IFS=\'|\'; echo \"${RESUMEN_FORMAS[*]}\"))[[:space:]]*\\$"',
          'RESUMEN="^[[:space:]]*($(IFS=\'|\'; echo \"${RESUMEN_FORMAS[*]}\"))"')],

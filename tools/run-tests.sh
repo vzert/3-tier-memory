@@ -54,6 +54,15 @@ RESUMEN="^[[:space:]]*($(IFS='|'; echo "${RESUMEN_FORMAS[*]}"))[[:space:]]*\$"
 # tapa el 2 del error (p-46153b135b, test-checkpoint-close-guard.sh, 2026-10-01).
 sin_resumen() { ! printf '%s' "$1" | tail -1 | tr -d '\r' | grep -qE "$RESUMEN"; }
 
+# Salto PARCIAL: la ultima linea cuenta casos saltados ("N saltados", skip=N/SKIP=N con N>0) Y, sin
+# esa cuenta, es un resumen de RESUMEN (con cero fallos). `pass=1 fail=1 skip=2` o una linea
+# cualquiera con `skip=2` no son un salto: caen en sin_resumen (adversario, ronda 3).
+es_parcial() {
+  local ult; ult=$(printf '%s' "$1" | tail -1 | tr -d '\r')
+  printf '%s' "$ult" | grep -qE '[1-9][0-9]* saltad|(skip|SKIP)=[0-9]*[1-9]' || return 1
+  printf '%s' "$ult" | sed -E 's/, [0-9]+ saltad.*$//; s/(skip|SKIP)=[0-9]+/\1=0/' | grep -qE "$RESUMEN"
+}
+
 correr() {   # $1 = etiqueta, $2... = comando
   local nom="$1"; shift
   local ini fin dur out rc
@@ -62,12 +71,12 @@ correr() {   # $1 = etiqueta, $2... = comando
   fin=$(date +%s); dur=$(( fin - ini ))
   TOTAL=$(( TOTAL + 1 ))
   [ "$dur" -ge 5 ] && LENTAS="$LENTAS $nom(${dur}s)"
-  if [ "$rc" -eq 0 ] && printf '%s' "$out" | tail -1 | grep -q '^SKIP'; then
+  if [ "$rc" -eq 0 ] && printf '%s' "$out" | tail -1 | grep -q '^SKIP:'; then
     # Un SKIP sale 0 pero NO es verde: no corrio nada. Contarlo como ok es exactamente el arnes
     # que acepta no-evidencia (regla 12). Se lista aparte y el resumen deja de decir TODO VERDE.
     SALTADAS="$SALTADAS $nom"
     printf '  skip %-32s %3ss  %s\n' "$nom" "$dur" "$(printf '%s' "$out" | tail -1 | cut -c1-46)"
-  elif [ "$rc" -eq 0 ] && printf '%s' "$out" | tail -1 | grep -qE '[1-9][0-9]* saltad|(skip|SKIP)=[0-9]*[1-9]'; then
+  elif [ "$rc" -eq 0 ] && es_parcial "$out"; then
     # Salto PARCIAL: la suite corrio pero dejo casos sin correr (p. ej. el caso 29 de
     # test-session-amend.sh sin chflags), o `skip=N`/`SKIP=N` con N>0 en el resumen (adversario,
     # ronda 2: RESULT pass=1 fail=0 skip=3 salia ok). Tampoco es TODO VERDE.
