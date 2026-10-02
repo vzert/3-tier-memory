@@ -201,5 +201,30 @@ printf '%s' "$OUT" | grep -q "bloquearian=1 .*con_decision=1 de 1" && ok "retira
 OUT=$(bloq 2026-09-01)
 printf '%s' "$OUT" | grep -q "bloquearian=0 " && ok "retirada antes: no cuenta: $OUT" || mal "retirada antes: $OUT"
 
+echo "16. bloqueos-reales: un learning.update DESPUES del evento se deshace; uno de ANTES, no"
+bloqu() {  # $1 = dia del update de la #1 (el add de la #2 es del 2026-10-05)
+  rm -rf "$TMP/bu"; mkdir -p "$TMP/bu/learnings" "$TMP/bu/.journal/applied/2026-10"
+  printf -- '---\ntopic: t\n---\n# T\n\n## Rules\n\n1. **Otra cosa distinta** — nada que ver con nada\n2. **No usar git add -A en un clon** — se cuela todo lo de los hooks\n' > "$TMP/bu/learnings/t.md"
+  python3 - "$TMP/bu/.journal/applied/2026-10" "$1" <<'PY'
+import json, sys
+from datetime import datetime, timezone
+d, dia = sys.argv[1], int(sys.argv[2])
+ns = lambda day: int(datetime(2026, 10, day, 12, tzinfo=timezone.utc).timestamp()) * 10**9
+ev = [("a1", {"type": "learning.add", "ts": ns(1), "payload": {"topic": "t",
+         "text": "**No usar git add -A en el clon** — se cuela todo lo de los hooks"}}),
+      ("a2", {"type": "learning.add", "ts": ns(5), "payload": {"topic": "t",
+         "text": "**No usar git add -A en un clon** — se cuela todo lo de los hooks"}}),
+      ("u1", {"type": "learning.update", "ts": ns(dia), "payload": {"topic": "t",
+         "match_prefix": "No usar git add -A en el clon", "text": "**Otra cosa distinta** — nada que ver con nada"}})]
+for n, e in ev:
+    json.dump(e, open(f"{d}/{n}.json", "w"))
+PY
+  python3 tools/recall-bench/bloqueos-reales.py "$TMP/bu" 2>&1 | tr -d '\r' | tail -1
+}
+OUT=$(bloqu 9)
+printf '%s' "$OUT" | grep -q "medidos=2 de 2 bloquearian=1 .*texto_incierto=0" && ok "update despues: se deshace y bloquea: $OUT" || mal "update despues: $OUT"
+OUT=$(bloqu 3)
+printf '%s' "$OUT" | grep -q "medidos=2 de 2 bloquearian=0 " && ok "update antes: no se deshace: $OUT" || mal "update antes: $OUT"
+
 echo
 if [ "$FALLOS" -eq 0 ]; then echo "test-bench: TODO VERDE"; else echo "test-bench: $FALLOS FALLOS"; exit 1; fi

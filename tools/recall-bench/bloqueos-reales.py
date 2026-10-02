@@ -13,9 +13,11 @@ Es tambien el lector del campo `decision` que `learning.add --decision` deja en 
 por evento imprime la decision, y al final cuantos `learning.add` la traen (`con_decision`). Mide si
 el paso 0 del checkpoint se esta usando de verdad.
 
-Solo LEE el memory/. Limites: un learning.update posterior cambia el texto de hoy de una regla, y
-entonces el evento ya no se encuentra en su topic (sale como `no-encontrada`, no se cuenta); y las
-candidatas llevan su texto de HOY, no el que tenian al emitir.
+Cada regla entra con el texto que tenia al emitir: se deshacen hacia atras los learning.update
+posteriores al evento con el texto escrito antes (ver texto_en). Solo LEE el memory/. Limites: si
+el evento que escribio el texto anterior ya no esta en applied/, la regla entra con su texto de hoy
+y el evento lleva `texto_incierto` (se cuenta y se imprime); un evento cuya regla ya no se encuentra
+sale `no-encontrada` y no se cuenta.
 
 Uso: bloqueos-reales.py <memory_dir> [--ultimos 30] [--salida F.json]
 """
@@ -61,6 +63,31 @@ def retirada_despues(texto, dia):
     return not (m and dia) or m.group(1) >= dia
 
 
+def cmp(t):
+    """Forma de comparar un prefijo de learning.update con un texto, la del emisor y el compactador
+    (sin `*`, `_`, comillas invertidas ni mayusculas)."""
+    return plano(re.sub(r"[*_`]", "", t or "")).lower()
+
+
+def texto_en(topic, actual, ts, escritos, updates):
+    """(texto que tenia la regla en el instante ts, seguro) a partir de su texto de HOY.
+
+    Deshace hacia atras cada learning.update del topic posterior a ts que dejo el texto actual: el
+    texto anterior es el del ultimo evento (add o update) del topic, anterior al update, que empieza
+    por su --match-prefix. Si no lo encuentra (el evento ya no esta en applied/), devuelve el texto
+    que tiene y seguro=False: el resultado de ese evento lleva la marca `texto_incierto`."""
+    t = plano(learning_marks.sin_marca(actual))
+    for u in sorted((u for u in updates.get(topic, []) if u["ts"] > ts), key=lambda u: -u["ts"]):
+        if plano(u["text"]) != t:
+            continue
+        previos = [w for w in escritos.get(topic, []) if w["ts"] < u["ts"]
+                   and cmp(w["text"]).startswith(cmp(u["prefix"]))]
+        if not previos:
+            return t, False
+        t = plano(max(previos, key=lambda w: w["ts"])["text"])
+    return t, True
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("memory_dir")
@@ -68,14 +95,21 @@ def main():
     ap.add_argument("--salida", default="")
     a = ap.parse_args()
     eventos = []
+    escritos, updates = {}, {}   # por topic: todo texto escrito (add/update) y los updates
     for p in glob.glob(os.path.join(a.memory_dir, ".journal", "applied", "*", "*.json")):
         try:
             with open(p, encoding="utf-8") as f:
                 e = json.load(f)
         except (OSError, ValueError):
             continue
-        if e.get("type") == "learning.add" and (e.get("payload") or {}).get("text"):
+        pl, ts = e.get("payload") or {}, e.get("ts", 0)
+        if e.get("type") == "learning.add" and pl.get("text"):
             eventos.append(e)
+            escritos.setdefault(pl.get("topic"), []).append({"ts": ts, "text": pl["text"]})
+        elif e.get("type") == "learning.update" and pl.get("text") and pl.get("match_prefix"):
+            escritos.setdefault(pl.get("topic"), []).append({"ts": ts, "text": pl["text"]})
+            updates.setdefault(pl.get("topic"), []).append(
+                {"ts": ts, "text": pl["text"], "prefix": pl["match_prefix"]})
     eventos.sort(key=lambda e: e.get("ts", 0))
     filas = []
     for e in eventos[-a.ultimos:]:
@@ -85,7 +119,14 @@ def main():
                 reglas = lv.reglas_de(f.read())
         except OSError:
             reglas = []
-        ns = [n for n, t in reglas if n and plano(learning_marks.sin_marca(t)) == texto]
+        # Cada regla con el texto que tenia justo despues del evento (deshaciendo los updates
+        # posteriores); la del evento es la que entonces decia su texto.
+        ts = e.get("ts", 0)
+        # Un topic de vinetas no tiene numeros: el orden es el del fichero (el compactador anade
+        # cada vineta detras), y la etiqueta es su posicion (`-P`).
+        orden = [(k if k else i, t) for i, (k, t) in enumerate(reglas, 1)]
+        hist = [(k, t, texto_en(topic, t, ts, escritos, updates)) for k, t in orden]
+        ns = [k for k, t, (h, _) in hist if h == texto]
         if len(ns) != 1:
             filas.append({"topic": topic, "regla": None, "estado": "no-encontrada",
                           "titulo": lv.titulo(texto),
@@ -93,18 +134,20 @@ def main():
             continue
         n = ns[0]
         dia = fecha_evento(e)
-        cand = []
-        for k, t in reglas:
-            if not k or k >= n:
+        cand, incierto = [], False
+        for k, t, (h, seguro) in hist:
+            if k >= n:
                 continue
-            if learning_marks.regla_retirada(t) and retirada_despues(t, dia):
-                # Al emitir, esta regla seguia viva: entra como candidata, sin el marcador.
-                t = learning_marks.sin_marca(t)
-            cand.append((f"#{k}", t))
+            if learning_marks.regla_retirada(t) and not retirada_despues(t, dia):
+                continue                           # ya estaba retirada al emitir
+            # Viva al emitir (o retirada despues): entra con el texto que tenia entonces.
+            cand.append((f"#{k}" if reglas[0][0] else f"-{k}", h))
+            incierto = incierto or not seguro
         top = lv.vecinos(texto, cand, k=3)
         filas.append({"topic": topic, "regla": n, "titulo": lv.titulo(texto),
                       "decision": (e.get("payload") or {}).get("decision") or None,
                       "estado": "bloquearia" if top and top[0][0] >= lv.UMBRAL else "pasa",
+                      "texto_incierto": incierto,
                       "vecinos": [{"regla": et, "parecido": round(s, 3), "titulo": lv.titulo(t)}
                                   for s, et, t in top]})
     for r in filas:
@@ -113,12 +156,14 @@ def main():
     medidos = [r for r in filas if r["estado"] != "no-encontrada"]
     bloq = [r for r in medidos if r["estado"] == "bloquearia"]
     con_dec = sum(1 for r in filas if r.get("decision"))
+    inc = sum(1 for r in medidos if r.get("texto_incierto"))
     print(f"learning.add medidos={len(medidos)} de {len(filas)} bloquearian={len(bloq)} "
-          f"(umbral {lv.UMBRAL}) con_decision={con_dec} de {len(filas)}")
+          f"(umbral {lv.UMBRAL}) con_decision={con_dec} de {len(filas)} texto_incierto={inc}")
     if a.salida:
         with open(a.salida, "w", encoding="utf-8") as f:
             f.write(json.dumps({"umbral": lv.UMBRAL, "medidos": len(medidos),
-                                "bloquearian": len(bloq), "con_decision": con_dec, "eventos": filas},
+                                "bloquearian": len(bloq), "con_decision": con_dec,
+                                "texto_incierto": inc, "eventos": filas},
                                ensure_ascii=False, indent=2) + "\n")
     return 0
 

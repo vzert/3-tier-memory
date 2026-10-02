@@ -30,8 +30,10 @@ reglas nuevas del mismo topic llegan a 0,39), pero el duplicado si queda entre l
   `decision: nueva|ya existe #N|corrige #N|reemplaza #N|retira #N`, y la #N que cita existe en su
   topic. Se mira la ficha porque el evento no registra la sesion.
 - **`tools/recall-bench/bloqueos-reales.py`**: reproduce los ultimos N `learning.add` del journal
-  contra el topic tal como estaba (una regla retirada despues del evento cuenta como viva) y cuenta
-  cuantos habria bloqueado y cuantos traen `decision`.
+  contra el topic tal como estaba al emitir: deshace hacia atras los `learning.update` posteriores
+  (el texto anterior es el del evento que lo escribio), cuenta como viva una regla retirada despues
+  del evento, y en un topic de vinetas usa el orden del fichero. Cuenta cuantos habria bloqueado,
+  cuantos traen `decision` y cuantos tienen un texto que no pudo reconstruir (`texto_incierto`).
 
 ### Changed
 - El mismo texto exacto no bloquea: la identidad topic + texto se mantiene y el compactador no lo
