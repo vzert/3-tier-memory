@@ -1,6 +1,59 @@
 # Changelog
 
 
+## [2.48.0] - 2026-10-02
+Origen: F4 del plan de ciclo de vida de los learnings. El recall es lexico y sin dependencias:
+una regla solo sale si el prompt comparte palabras con ella, y quien va a cometer el error describe
+el momento, no la leccion. F4 probo la expansion del documento al escribir (doc2query): frases de
+como diria el momento alguien que no conoce la regla, en la misma linea de la regla. **El criterio
+de recall no se cumplio**: con frases escritas por 12 subagentes que no veian los casos (dos
+rondas, la guia de la segunda y 3 frases de reserva congeladas antes de medir), los casos locales
+quedaron en 7 de 14 (la base es 7) y las parafrasis de referencia en 1 de 3. Las frases de reserva
+si subieron (0 -> 2 de 3). La causa medida es la morfologia (commit / comitear / commitear) y las
+reglas vecinas, tambien enriquecidas, que ocupan los primeros puestos. Se publica el formato y el
+codigo, sin la afirmacion de recall: los disparadores son opcionales.
+
+### Added
+- **Disparadores de una regla**, opcionales: `learning.add --disparadores "frases=a | b | c;
+  cmd=git commit; path=docs/*; tool=Bash"`. Van al final de la linea de la regla como comentario
+  HTML (`<!-- disparadores: ... -->`), detras del marcador de retirada si lo hay: no se ven al
+  renderizar el markdown. Validado con markdown-it-py sobre 1953 reglas reescribibles de 4 corpus:
+  0 cambios de estructura (I2). `cmd`, `path` y `tool` son para la F5 (recall en la accion).
+  El emisor rechaza lo que cortaria el comentario (`--`, `<`, `>`), frases fuera de 3-6 y un
+  comentario pegado a `--text`; el compactador manda a cuarentena el mismo payload escrito a mano.
+- **`learning.update --disparadores` sin `--text`**: enriquece una regla vieja sin tocar su texto.
+  `learning.update --text` conserva los disparadores que la regla tenia (y su marcador de retirada).
+- **El recall indexa las frases** (`kw_disparadores` en el indice, peso 1,5 fijado antes de medir)
+  y no muestra el comentario. El parecido de `learning.add` (vecinos) y la identidad del journal
+  ("es la misma regla") ignoran el comentario.
+- **El Quick Reference numerado entra en el recall** (`N. ` ademas de `- `). Se salta una entrada
+  cuyo titulo es el de una regla de un topic: es su version corta y ya esta en el indice.
+- `tools/recall-bench/corpus-neutro-enriquecido/`: las 68 reglas del neutro con las frases del
+  escritor ciego; `test-bench.sh` caso 8b fija su linea base (14/14, fuga 0). El neutro sin
+  disparadores sigue como guarda de las instalaciones sin ellos (12/14).
+
+### Changed
+- **El recall pliega acentos** en el indice y en el prompt (`revisión` = `revision`): sin plegar,
+  `abortó` no casaba con `aborto`. Medido aparte: guardas sin disparadores y fuga iguales, dedup
+  8/8 y 4/4, bloqueos reales iguales en 4 instalaciones. `compare-motores.py` ya solo iguala el
+  motor viejo de F0 con textos sin acentos (README del banco).
+- `recall_rank.py` calcula la frecuencia documental solo de los terminos del prompt (mismo
+  resultado: `compare-motores` 50/50 iguales). Tiempo de `recall.sh` frente a 2.47.0 (5 A/B
+  intercalados): caliente +1/+2/-4 %, frio +13/+16/+14 % (tres corpus reales).
+- `body_region` vive en `learning_marks.py`; `journal-compact.py` delega.
+- Plantillas (`/checkpoint-3t` Step 4, `/save-learning`, `/consolidate-3t`, `/backfill-3t`):
+  ofrecen `--disparadores` como opcional, con una frase buena y una mala.
+
+### Not included
+- Las vinetas de la region de reglas como unidades propias del recall (H6): no movieron el banco y
+  la reconstruccion en frio subia +94 % en un corpus de 6.400 unidades (limite +20 %).
+
+### Tests
+- `bin/test-learning-disparadores.sh` (54 asertos): ida y vuelta add -> update -> retire, replays,
+  rechazos y cuarentenas, indice, Quick Reference, plegado, vecinos. 10 mutaciones en
+  `tools/mutation-check.sh` (`m_learning_disparadores.py`); las 2 de F2 sobre `learning.update`
+  siguen al codigo nuevo. Mutaciones de learning (F2+F3+F4): 41/41 discriminan.
+
 ## [2.47.1] - 2026-10-02
 Origen: `p-18d22df6e9`. 2.46.0 limito el enlace por titulo de `plan.upsert` y agrego `--promote`,
 pero `/migrate` (5c) seguia ensenando la regla vieja: "un slug del titulo" y `--inline` siempre que
