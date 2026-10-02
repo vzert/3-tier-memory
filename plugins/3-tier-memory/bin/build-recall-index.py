@@ -157,6 +157,7 @@ def parse_learnings(memory_dir, units):
     ldir = os.path.join(memory_dir, "learnings")
     rule_re = re.compile(r"^\s*\d+\.\s+(.*)")
     bullet_re = re.compile(r"^\s*[-*]\s+(.*)")
+    vineta_re = re.compile(r"^[-*][ \t]+(?![-*][ \t]*[-*])(\S.*)")
     if os.path.isdir(ldir):
         for fn in sorted(os.listdir(ldir)):
             if not fn.endswith(".md") or is_excluded(fn):
@@ -174,6 +175,23 @@ def parse_learnings(memory_dir, units):
                     found = True       # aunque este retirada: el fichero SI tiene reglas numeradas
                     if not learning_marks.regla_retirada(m.group(1)):
                         add_unit(units, "learning", m.group(1), rel, "", imp, regla=True)
+            # Vinetas de la region de reglas como unidades propias (F4, H6): antes una regla en
+            # vineta solo entraba si el fichero no tenia ninguna numerada, y entonces entraba el
+            # fichero ENTERO como una unidad (paperclip: 1.808 numeradas y 4.619 vinetas). Solo
+            # vinetas de columna 0 (una sangrada es continuacion de otra cosa), fuera de bloques
+            # de codigo, y no las retiradas. No llevan regla=True: el journal no las ancla.
+            lineas = content.splitlines()
+            ini, fin = learning_marks.body_region(lineas)
+            en_codigo = False
+            for line in lineas[ini:fin]:
+                if line.lstrip().startswith(("```", "~~~")):
+                    en_codigo = not en_codigo
+                    continue
+                m = vineta_re.match(line)
+                if m and not en_codigo:
+                    found = True
+                    if not learning_marks.regla_retirada(m.group(1)):
+                        add_unit(units, "learning", m.group(1), rel, "", imp)
             if not found:
                 # whole-file fallback (strip frontmatter + headers), sin las vinetas retiradas
                 body = re.sub(r"^---.*?---", "", content, count=1, flags=re.DOTALL)
