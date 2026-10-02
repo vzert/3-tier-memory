@@ -15,8 +15,14 @@ M = {
         ("grep -qE '[1-9][0-9]* saltad|(skip|SKIP)=[0-9]*[1-9]' || return 1",
          "grep -qE '[1-9][0-9]* saltad' || return 1")],
     "parcial-sin-resumen": [
-        ('sed -E \'s/, [0-9]+ saltad.*$//; s/(skip|SKIP)=[0-9]+/\\1=0/\' | grep -qE "$RESUMEN"',
+        ('sed -E \'s/, [0-9]+ saltados( \\(sin enlaces reales\\))?$//; s/ (skip|SKIP)=[0-9]+//\' | grep -qE "$RESUMEN"',
          'grep -q .')],
+    "saltados-con-cola": [
+        ('s/, [0-9]+ saltados( \\(sin enlaces reales\\))?$//',
+         's/, [0-9]+ saltad.*$//')],
+    "skip-a-cero": [
+        ('s/ (skip|SKIP)=[0-9]+//',
+         's/(skip|SKIP)=[0-9]+/\\1=0/')],
     "resumen-prefijo": [
         ('RESUMEN="^[[:space:]]*($(IFS=\'|\'; echo \"${RESUMEN_FORMAS[*]}\"))[[:space:]]*\\$"',
          'RESUMEN="^[[:space:]]*($(IFS=\'|\'; echo \"${RESUMEN_FORMAS[*]}\"))"')],

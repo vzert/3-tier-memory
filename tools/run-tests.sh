@@ -33,9 +33,9 @@ PARCIALES=""
 # resumen a mitad y luego muere con rc=0 sigue pasando; eso solo lo ve la suite.
 RESUMEN_FORMAS=(
   'pass=[0-9]+ fail=0'                                  # la mayoria
-  'RESULT:? pass=[0-9]+ fail=0( skip=[0-9]+)?'          # test-bash-nudge, test-journal-guard...
+  'RESULT:? pass=[0-9]+ fail=0( skip=0)?'               # test-bash-nudge, test-journal-guard...
   'RESULT: PASS'                                        # test-anchor-heal, test-journal-race
-  'PASS=[0-9]+ FAIL=0 SKIP=[0-9]+'                      # test-backfill-dedup
+  'PASS=[0-9]+ FAIL=0( SKIP=0)?'                        # test-backfill-dedup
   'PASS [0-9]+/[0-9]+'                                  # test-project-dir-fallback
   'PASS test-[a-z-]+'                                   # test-research-row-lookup, -session-index-heal
   'TODO VERDE( \(enlaces reales: si\))?'              # varias; test-compaction-recover
@@ -55,12 +55,13 @@ RESUMEN="^[[:space:]]*($(IFS='|'; echo "${RESUMEN_FORMAS[*]}"))[[:space:]]*\$"
 sin_resumen() { ! printf '%s' "$1" | tail -1 | tr -d '\r' | grep -qE "$RESUMEN"; }
 
 # Salto PARCIAL: la ultima linea cuenta casos saltados ("N saltados", skip=N/SKIP=N con N>0) Y, sin
-# esa cuenta, es un resumen de RESUMEN (con cero fallos). `pass=1 fail=1 skip=2` o una linea
+# esa cuenta, es un resumen de RESUMEN (con cero fallos). Se quita solo la cuenta: ", N saltados" al
+# FINAL de la linea (ronda 4: borrar todo lo de detras tapaba un ", 1 fallas") y " skip=N"/" SKIP=N". `pass=1 fail=1 skip=2` o una linea
 # cualquiera con `skip=2` no son un salto: caen en sin_resumen (adversario, ronda 3).
 es_parcial() {
   local ult; ult=$(printf '%s' "$1" | tail -1 | tr -d '\r')
   printf '%s' "$ult" | grep -qE '[1-9][0-9]* saltad|(skip|SKIP)=[0-9]*[1-9]' || return 1
-  printf '%s' "$ult" | sed -E 's/, [0-9]+ saltad.*$//; s/(skip|SKIP)=[0-9]+/\1=0/' | grep -qE "$RESUMEN"
+  printf '%s' "$ult" | sed -E 's/, [0-9]+ saltados( \(sin enlaces reales\))?$//; s/ (skip|SKIP)=[0-9]+//' | grep -qE "$RESUMEN"
 }
 
 correr() {   # $1 = etiqueta, $2... = comando
