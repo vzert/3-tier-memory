@@ -44,6 +44,10 @@ export PYTHONUTF8=1 PYTHONIOENCODING=utf-8
 # bin/recall.sh) comparando el hash del archivo contra la ultima huella sellada. Ese mecanismo es
 # tool-agnostico: pilla igual una escritura por Bash, Edit, Write o MultiEdit, sin necesitar saber
 # cual de los dos la causo.
+# Lo que SI llega desde PreToolUse/PostToolUse es el JSON hookSpecificOutput.additionalContext, y en
+# PreToolUse llega DESPUES de emitida la llamada, junto a su resultado; para frenar antes solo
+# sirve el deny de abajo (regla 298; verify-hook-delivery.sh lo mide desde F5, y action-recall.sh
+# usa ese canal). Este aviso sigue en texto plano porque su entrega real ya es la del drift-nudge.
 #
 # El deny NO es el mecanismo principal de seguridad del journal — es un recordatorio con dientes
 # para quien lo pida. Claude Code ha tenido bugs en los que un deny de PreToolUse se ignora

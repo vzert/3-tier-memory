@@ -198,6 +198,20 @@ caso "acepta guiones"           learning_marks.py m_learning_disparadores.py tes
 caso "QR duplica la regla"      build-recall-index.py m_learning_disparadores.py test-learning-disparadores.sh "titulo de una regla: se salta" qr-duplica
 caso "QR sin numeradas"         build-recall-index.py m_learning_disparadores.py test-learning-disparadores.sh "titulo propio: entra" qr-sin-numeradas
 caso "sin plegar acentos"     recall_rank.py m_learning_disparadores.py test-learning-disparadores.sh "acentos plegados" sin-plegar
+# Recall en el momento de la accion (F5 del plan de ciclo de vida de learnings).
+caso "accion sin especificidad" action_match.py m_action_recall.py test-action-recall.sh "orden esperado git#1" sin-especificidad
+caso "accion sin ventana"       action_match.py m_action_recall.py test-action-recall.sh "2.a llamada" sin-ventana
+caso "freno siempre"            action_match.py m_action_recall.py test-action-recall.sh "con regla-vista sigue frenando" freno-siempre
+caso "sin regla-vista"          action_match.py m_action_recall.py test-action-recall.sh "regla-vista en la primera llamada frena" sin-regla-vista
+caso "accion sin sudo"          action_match.py m_action_recall.py test-action-recall.sh "sudo git push. deberia casar" sin-sudo
+caso "accion sin rtk"           action_match.py m_action_recall.py test-action-recall.sh "rtk git push. deberia casar" sin-rtk
+caso "accion sin separadores"   action_match.py m_action_recall.py test-action-recall.sh "cd x && git push" sin-separadores
+caso "accion sin palabras shell" action_match.py m_action_recall.py test-action-recall.sh "do git push; done" sin-palabras-shell
+caso "accion sin tope chars"    action_match.py m_action_recall.py test-action-recall.sh "tope de 1.500 caracteres" sin-tope-chars
+caso "edit frena"               action_match.py m_action_recall.py test-action-recall.sh "aviso, no deny" edit-frena
+caso "path sin sufijo"          action_match.py m_action_recall.py test-action-recall.sh "fragmento bin/test" path-sin-sufijo
+caso "estado roto habla"        action_match.py m_action_recall.py test-action-recall.sh "estado sin permiso de escritura" estado-sin-guardar-habla
+caso "indice con retiradas"     build-recall-index.py m_action_recall.py test-action-recall.sh "el indice incluye la retirada" indice-con-retiradas
 caso "forma sin titulo"        learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "sin .*Titulo" forma-sin-titulo
 caso "negrita impar"           learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "\*\* impar: rc 1" negrita-impar
 caso "comilla impar"           learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "comilla invertida impar: rc 1" comilla-impar

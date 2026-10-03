@@ -298,7 +298,7 @@ def main():
             return
         if salida:
             sys.stdout.write(json.dumps(salida, ensure_ascii=False) + "\n")
-    except Exception:
+    except Exception:  # falla en abierto (I6)
         return
 
 

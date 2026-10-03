@@ -26,6 +26,9 @@ ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
 STATE_DIR="$HOME/.claude/projects/$ENCODED"
 INDEX="$STATE_DIR/.action-index.json"
 [ -f "$INDEX" ] || exit 0
+# Via rapida: hoy casi ninguna regla lleva cmd/path, y el indice sin reglas es exactamente
+# `{"reglas": []}`. Sin arrancar python en cada Bash/Edit/Write (la latencia de cada herramienta, I6).
+[ "$(head -c 16 "$INDEX" 2>/dev/null)" = '{"reglas": []}' ] && exit 0
 
 # Mismo memory/ que recall.sh (Model B, luego Model A), solo para el pie de retirada.
 MEMORY_DIR=""
