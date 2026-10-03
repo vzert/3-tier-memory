@@ -63,7 +63,7 @@ generar() {  # $1 fichero, $2 n_prompt, $3 n_accion, $4 fuente del ultimo caso
   done
   caso "d1" dedup '"deploy#6"' '["deploy#1"]' "$4" >> "$1"
 }
-correr() { python3 "$BENCH" --corpus-raiz "$TMP/raiz" --hoy 2026-09-30 --casos "$1" 2>&1; }
+correr() { python3 "$BENCH" --corpus-raiz "$TMP/raiz" --hoy 2026-09-30 --casos "$1" "${@:2}" 2>&1; }
 
 echo "0. control: 20 casos validos (14 prompt, 5 accion, 1 dedup) corren"
 generar "$TMP/bueno.jsonl" 14 5 "$FN"
@@ -232,6 +232,32 @@ OUT=$(bloqu 9)
 printf '%s' "$OUT" | grep -q "medidos=2 de 2 bloquearian=1 .*texto_incierto=0" && ok "update despues: se deshace y bloquea: $OUT" || mal "update despues: $OUT"
 OUT=$(bloqu 3)
 printf '%s' "$OUT" | grep -q "medidos=2 de 2 bloquearian=0 " && ok "update antes: no se deshace: $OUT" || mal "update antes: $OUT"
+
+echo "17. la --salida guarda la huella de cada corpus: sha256 siempre, commit solo si esta limpio en git"
+huella() {  # $1 = fichero de salida; imprime "sha commit motivo" del corpus demo
+  python3 -c "import json,sys;h=json.load(open(sys.argv[1]))['corpus']['demo'];print(h['sha256'][:12],h['commit'],h.get('motivo'))" "$1"
+}
+H1=$(huella "$TMP/r.json")
+printf '%s' "$H1" | grep -q " None no esta en un repo git$" && ok "sin git: $H1" || mal "sin git: $H1"
+# la huella cambia si cambia una regla (y vuelve si se deshace el cambio)
+cp "$M/learnings/deploy.md" "$TMP/deploy.bak"
+printf '13. **Una regla mas** — cambia la huella.\n' >> "$M/learnings/deploy.md"
+correr "$TMP/bueno.jsonl" --salida "$TMP/r17.json" >/dev/null
+H2=$(huella "$TMP/r17.json")
+cp "$TMP/deploy.bak" "$M/learnings/deploy.md"
+[ "${H1%% *}" != "${H2%% *}" ] && ok "otra regla, otra huella" || mal "la huella no cambio: $H1 / $H2"
+# en git: commit si learnings/ esta limpio, None con motivo si tiene cambios
+git -C "$TMP/raiz/demo" init -q && git -C "$TMP/raiz/demo" add -A \
+  && git -C "$TMP/raiz/demo" -c user.name=t -c user.email=t@t commit -qm x
+SHA=$(git -C "$TMP/raiz/demo" rev-parse HEAD)
+correr "$TMP/bueno.jsonl" --salida "$TMP/r17.json" >/dev/null
+H3=$(huella "$TMP/r17.json")
+[ "$H3" = "${H1%% *} $SHA None" ] && ok "en git limpio: commit $SHA" || mal "en git limpio: $H3"
+printf '13. **Sin commitear** — x.\n' >> "$M/learnings/deploy.md"
+correr "$TMP/bueno.jsonl" --salida "$TMP/r17.json" >/dev/null
+H4=$(huella "$TMP/r17.json")
+cp "$TMP/deploy.bak" "$M/learnings/deploy.md"
+printf '%s' "$H4" | grep -q " None learnings/ tiene cambios sin commitear$" && ok "con cambios: $H4" || mal "con cambios: $H4"
 
 echo
 if [ "$FALLOS" -eq 0 ]; then echo "test-bench: TODO VERDE"; else echo "test-bench: $FALLOS FALLOS"; exit 1; fi

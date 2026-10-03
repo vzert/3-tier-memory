@@ -60,6 +60,8 @@ Uso:
                   [--comprobar-linea-base]
   --casos: por defecto tools/recall-bench/casos.jsonl (el de tu instalacion).
   --corpus-raiz: donde viven los proyectos cuyo `corpus` es un nombre. Por defecto ~/Projects.
+  La --salida guarda en `corpus` la huella de cada corpus medido (sha256 de learnings/*.md y, si
+  learnings/ esta en git y limpio, el commit): un resultado solo se reproduce sobre esa version.
 """
 import argparse
 import importlib.util
@@ -117,6 +119,41 @@ def cargar_builder():
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     return m
+
+
+def huella_corpus(memory_dir):
+    """Que version de un corpus se midio, para poder reproducir el resultado despues.
+
+    `sha256`: sobre los nombres y el contenido de learnings/*.md en orden (lo unico que el banco
+    lee). Sirve siempre, tambien para un memory/ que no esta en git o una raiz congelada con git
+    archive. `commit`: el HEAD del repo que contiene el memory/, solo si learnings/ esta en git y
+    sin cambios respecto a ese HEAD; si no, None y `motivo` dice por que."""
+    import hashlib
+    h = hashlib.sha256()
+    ldir = os.path.join(memory_dir, "learnings")
+    n = 0
+    for fn in sorted(os.listdir(ldir)) if os.path.isdir(ldir) else []:
+        if fn.endswith(".md"):
+            n += 1
+            h.update(fn.encode("utf-8") + b"\0")
+            with open(os.path.join(ldir, fn), "rb") as f:
+                h.update(f.read() + b"\0")
+    out = {"memory": memory_dir, "ficheros": n, "sha256": h.hexdigest(), "commit": None}
+
+    def git(*args):
+        return subprocess.run(["git", "-C", memory_dir, *args], capture_output=True, text=True)
+    r = git("rev-parse", "HEAD")
+    if r.returncode != 0:
+        out["motivo"] = "no esta en un repo git"
+        return out
+    if not git("ls-files", "--", "learnings").stdout.strip():
+        out["motivo"] = "learnings/ no esta versionado en su repo"
+        return out
+    if git("status", "--porcelain", "--untracked-files=all", "--", "learnings").stdout.strip():
+        out["motivo"] = "learnings/ tiene cambios sin commitear"
+        return out
+    out["commit"] = r.stdout.strip()
+    return out
 
 
 def negarse(msg):
@@ -408,6 +445,8 @@ def main():
         "casos_con_cita": sum(1 for c in casos if c.get("origen", "incidente") in CON_CITA),
         # cuantos traen una procedencia comprobada fuera del corpus; el resto es declarada
         "procedencia_verificada": sum(1 for c in casos if c.get("procedencia")),
+        # que version de cada corpus se midio (el resultado solo se reproduce sobre la misma)
+        "corpus": {c["corpus"]: huella_corpus(c["_mem"]) for c in casos},
         "metricas": {
             "prompt@4": frac("prompt"),
             "accion@2": dict(frac("accion"), nota="no medido: canal inexistente en F0"),
