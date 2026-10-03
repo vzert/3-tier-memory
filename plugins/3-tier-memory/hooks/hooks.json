@@ -59,6 +59,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Bash|Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/bin/action-recall.sh\"",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "PostToolUse": [

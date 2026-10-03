@@ -296,10 +296,48 @@ def parse_index_rows(memory_dir, fname, tipo, units):
             add_unit(units, tipo, text, rel, d, 5)
 
 
+def indice_accion(memory_dir):
+    """Reglas vivas con `cmd` o `path` en sus disparadores, para el hook PreToolUse
+    action-recall.sh (F5): un fichero pequeno, asi el hook no carga el indice completo en cada
+    llamada a una herramienta. Mismo criterio de vivas que parse_learnings (ni retiradas ni topics
+    retirados); `texto` es el que muestra el recall de prompt (sin el comentario, truncado)."""
+    import recall_rank  # bin/recall_rank.py: el prefijo del pie de retirada (ancla_retiro)
+    reglas = []
+    ldir = os.path.join(memory_dir, "learnings")
+    num_re = re.compile(r"^\s*(\d+)\.\s+(.*)")
+    if not os.path.isdir(ldir):
+        return reglas
+    for fn in sorted(os.listdir(ldir)):
+        if not fn.endswith(".md") or is_excluded(fn):
+            continue
+        content = read(os.path.join(ldir, fn))
+        if learning_marks.topic_retirado(content):
+            continue
+        topic = fn[:-3]
+        for line in content.splitlines():
+            m = num_re.match(line)
+            if not m or learning_marks.regla_retirada(m.group(2)):
+                continue
+            d = learning_marks.disparadores_de(m.group(2))
+            if not d or not (d["cmd"] or d["path"]):
+                continue
+            texto = truncate(learning_marks.sin_disparadores(m.group(2)))
+            u = {"regla": True, "texto": texto, "path": os.path.join("memory", "learnings", fn)}
+            ancla = recall_rank.ancla_retiro(u)
+            reglas.append({"id": f"{topic}#{m.group(1)}", "topic": topic, "n": int(m.group(1)),
+                           "texto": texto, "cmd": d["cmd"], "path": d["path"],
+                           "freno": bool(d["freno"]), "ancla": ancla[1] if ancla else ""})
+    return reglas
+
+
 def main():
     if len(sys.argv) < 3:
-        sys.exit("usage: build-recall-index.py <MEMORY_DIR> <OUTPUT_PATH>")
+        sys.exit("usage: build-recall-index.py <MEMORY_DIR> <OUTPUT_PATH> [<ACTION_INDEX_PATH>]")
     memory_dir, out_path = sys.argv[1], sys.argv[2]
+    # F5: el indice de accion va junto al de recall (`.action-index.json` en el mismo directorio de
+    # estado), salvo que se pida otra ruta (el banco construye varios en un mismo temporal).
+    action_path = sys.argv[3] if len(sys.argv) > 3 else \
+        os.path.join(os.path.dirname(os.path.abspath(out_path)), ".action-index.json")
     if not os.path.isdir(memory_dir):
         sys.exit(0)
 
@@ -319,6 +357,10 @@ def main():
         for u in units:
             f.write(json.dumps(u, ensure_ascii=False) + "\n")
     os.replace(tmp, out_path)
+    acc = indice_accion(memory_dir)
+    with open(action_path + ".tmp", "w", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps({"reglas": acc}, ensure_ascii=False) + "\n")
+    os.replace(action_path + ".tmp", action_path)
     print(len(units))
 
 

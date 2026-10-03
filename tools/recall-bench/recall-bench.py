@@ -18,8 +18,11 @@ Mide, sobre casos declarados con cita comprobable, tres cosas que el plan quiere
 - dedup@8: fraccion de casos "dedup" cuya regla original sale entre los 8 vecinos mas parecidos
   de la regla duplicada, con la funcion que imprime `journal-emit.py learning.add` (desde 2.47.0,
   bin/learning_vecinos.py: Dice-IDF sobre el texto completo, mismo topic, reglas anteriores).
-- accion@2: el canal "accion" (recall en PreToolUse) no existe todavia; su valor en F0 es 0 por
-  construccion y queda anotado como no medido. La F5 lo implementa.
+- accion@2: fraccion de casos del canal "accion" con alguna regla esperada entre las 2 primeras que
+  devuelve bin/action_match.py (importado: el mismo codigo que el hook PreToolUse action-recall.sh)
+  sobre el indice de accion que escribe build-recall-index.py. Desde F5. Se reporta tambien sobre
+  el subconjunto `con_disparador`: casos cuya regla esperada lleva un disparador del tipo de la
+  herramienta (`cmd` para Bash, `path` para Edit/Write); sin el, el canal no puede acertar.
 
 Los indices se construyen con build-recall-index.py en un directorio temporal. Los memory/ de los
 corpus solo se LEEN. Nunca se corre recall.sh, que compacta el journal y reescribe el indice del
@@ -111,6 +114,12 @@ def cargar_marks():
     sys.path.insert(0, BIN)
     import learning_marks
     return learning_marks
+
+
+def cargar_accion():
+    sys.path.insert(0, BIN)
+    import action_match
+    return action_match
 
 
 def cargar_builder():
@@ -313,8 +322,8 @@ def validar(casos, raiz, base):
 def indice_con_ids(memory_dir, reglas, builder, tmp, nombre):
     """Construye el indice en tmp y anota en cada unidad de learning su id topic#N."""
     out = os.path.join(tmp, f"{nombre}.jsonl")
-    subprocess.run([sys.executable, os.path.join(BIN, "build-recall-index.py"), memory_dir, out],
-                   capture_output=True, check=True)
+    subprocess.run([sys.executable, os.path.join(BIN, "build-recall-index.py"), memory_dir, out,
+                    os.path.join(tmp, f"{nombre}.action.json")], capture_output=True, check=True)
     units = [json.loads(l) for l in open(out, encoding="utf-8") if l.strip()]
     # (path, texto truncado) -> [N...] en orden de aparicion, como los emite el builder: sin el
     # comentario de disparadores (F4), que el builder quita antes de truncar con la MISMA funcion.
@@ -352,14 +361,18 @@ def cargar_casos(ruta):
     return casos
 
 
-def medir(casos, reglas_por_mem, hoy):
+def medir(casos, reglas_por_mem, hoy, reciente=True):
     motor, builder, vecinos_mod = cargar_motor(), cargar_builder(), cargar_vecinos()
+    accion = cargar_accion()
     detalle = []
     with tempfile.TemporaryDirectory() as tmp:
-        indices = {}
+        indices, ind_accion = {}, {}
         marks = cargar_marks()
         for i, (mem, reglas) in enumerate(reglas_por_mem.items()):
             indices[mem] = indice_con_ids(mem, reglas, builder, tmp, f"idx-{i}")
+            # el indice de accion lo escribe el MISMO constructor, como en produccion
+            with open(os.path.join(tmp, f"idx-{i}.action.json"), encoding="utf-8") as f:
+                ind_accion[mem] = json.load(f)["reglas"]
             # Una regla esperada viva que no casa con ninguna unidad del indice daria 0 aciertos
             # en silencio (el mapeo es por texto truncado): se niega, no mide. Las retiradas no
             # estan en el indice a proposito (2.45.0).
@@ -383,10 +396,19 @@ def medir(casos, reglas_por_mem, hoy):
                 r["acierto"] = bool(esperadas & set(top))
                 r["fuga"] = sorted(prohibidas & set(top))
             elif c["canal"] == "accion":
-                r["devueltas"] = []
-                r["acierto"] = False
-                r["fuga"] = []
-                r["nota"] = "canal inexistente en F0: 0 por construccion (lo implementa F5)"
+                e = c["entrada"]
+                hits = accion.candidatos(ind_accion[c["_mem"]], e["tool_name"],
+                                         e.get("tool_input") or {}, raiz=e.get("cwd"),
+                                         reciente=reciente)
+                top = [h[0]["id"] for h in hits[:K["accion"]]]
+                r["devueltas"] = top
+                r["casan"] = len(hits)
+                r["acierto"] = bool(esperadas & set(top))
+                r["fuga"] = sorted(prohibidas & set(top))
+                # la regla esperada lleva un disparador que esta herramienta puede casar?
+                clave = "cmd" if e["tool_name"] == "Bash" else "path"
+                por_id = {x["id"]: x for x in ind_accion[c["_mem"]]}
+                r["con_disparador"] = any(por_id.get(x, {}).get(clave) for x in esperadas)
             else:
                 # Los vecinos los calcula la MISMA funcion que imprime journal-emit.py learning.add
                 # (bin/learning_vecinos.py, importada): Dice ponderado por IDF sobre el texto
@@ -425,16 +447,19 @@ def main():
     ap.add_argument("--hoy", default="")
     ap.add_argument("--corpus-raiz", default=os.path.expanduser("~/Projects"))
     ap.add_argument("--comprobar-linea-base", action="store_true")
+    ap.add_argument("--desempate-antiguo", action="store_true",
+                    help="canal accion: ultimo desempate por numero de regla mas BAJO (sensibilidad)")
     a = ap.parse_args()
 
     casos = cargar_casos(a.casos)
     base = os.path.dirname(os.path.abspath(a.casos))
     reglas_por_mem = validar(casos, a.corpus_raiz, base)
     hoy = date.fromisoformat(a.hoy) if a.hoy else date.today()
-    detalle = medir(casos, reglas_por_mem, hoy)
+    detalle = medir(casos, reglas_por_mem, hoy, reciente=not a.desempate_antiguo)
 
-    def frac(canal):
-        cs = [d for d in detalle if d["canal"] == canal]
+    def frac(canal, con_disparador=False):
+        cs = [d for d in detalle if d["canal"] == canal
+              and (not con_disparador or d.get("con_disparador"))]
         return {"aciertos": sum(d["acierto"] for d in cs), "casos": len(cs),
                 "valor": round(sum(d["acierto"] for d in cs) / len(cs), 3) if cs else None}
 
@@ -449,7 +474,8 @@ def main():
         "corpus": {c["corpus"]: huella_corpus(c["_mem"]) for c in casos},
         "metricas": {
             "prompt@4": frac("prompt"),
-            "accion@2": dict(frac("accion"), nota="no medido: canal inexistente en F0"),
+            "accion@2": dict(frac("accion"), desempate="antiguo" if a.desempate_antiguo else "reciente",
+                             con_disparador=frac("accion", con_disparador=True)),
             "dedup@8": dict(frac("dedup"), fuente_palabras="bin/learning_vecinos.py (la de journal-emit learning.add): Dice ponderado por IDF, tokenize() del texto completo de cada regla, mismo topic, reglas con numero menor que la del caso, retiradas fuera"),
             "fuga": {"valor": sum(len(d["fuga"]) for d in detalle),
                      "nota": "reglas prohibidas devueltas; desde 2.45.0 (F2) una regla retirada no se sirve"},
@@ -461,7 +487,9 @@ def main():
             f.write(json.dumps(res, ensure_ascii=False, indent=2) + "\n")
     m = res["metricas"]
     print(f"casos={len(casos)} prompt@4={m['prompt@4']['aciertos']}/{m['prompt@4']['casos']} "
-          f"accion@2=0/{m['accion@2']['casos']} (no medido) "
+          f"accion@2={m['accion@2']['aciertos']}/{m['accion@2']['casos']} "
+          f"(con disparador {m['accion@2']['con_disparador']['aciertos']}/"
+          f"{m['accion@2']['con_disparador']['casos']}) "
           f"dedup@8={m['dedup@8']['aciertos']}/{m['dedup@8']['casos']} fuga={m['fuga']['valor']} "
           f"procedencia_verificada={res['procedencia_verificada']}/{res['casos_con_cita']}")
 
