@@ -14,7 +14,7 @@ export PYTHONUTF8=1 PYTHONIOENCODING=utf-8
 #   - freno: permissionDecision deny, solo para una regla con `freno=si` que casa por `cmd` y no se
 #     ha visto en la sesion. Salida: repetir el comando con `# regla-vista:<topic>#<N>` al final.
 # Por defecto SOLO frena. El aviso es opt-in (`action_recall_aviso=1` en memory/.memory-config):
-# en F5 no paso su criterio (accion@2 0,69 < 0,8; 8,95 inyecciones cada 20 llamadas con los
+# en F5 no paso su criterio (accion@2 0,69 < 0,8; unas 9 inyecciones cada 20 llamadas con los
 # disparadores de F4, cuyos cmd de una palabra -grep, rm, bash- casan con casi todo).
 # Nunca devuelve allow ni ask. Falla en abierto (I6): sin indice, entrada rota, estado sin permiso
 # de escritura o un action_match.py que revienta, sale 0 y en silencio (la llamada pasa).

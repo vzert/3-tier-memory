@@ -39,6 +39,16 @@ M = {
         ("        if not _tomar_lock(estado_ruta):", "        if False:")],
     "lock-viejo-se-queda": [
         ("                if time.time() - os.stat(lock).st_mtime > LOCK_VIEJO:", "                if False:")],
+    # ronda 2 del adversario
+    "heredoc-solo-letras": [
+        ("""_HEREDOC = re.compile(r"<<-?[ \\t]*(['\\"]?)([A-Za-z0-9_][\\w.-]*)\\1")""",
+         """_HEREDOC = re.compile(r"<<-?[ \\t]*(['\\"]?)([A-Za-z_][\\w-]*)\\1")""")],
+    "sin-sustitucion-de-proceso": [
+        ('                (q is None and (c.startswith("<(", i) or c.startswith(">(", i))):',
+         "                False:")],
+    "estado-forma-laxa": [
+        ("              and all(isinstance(x, str) for x in e[\"frenos\"]))",
+         "              and True)")],
     "windows-sin-minusculas": [
         ("        b = b.lower()", "        pass")],
     "sin-especificidad": [

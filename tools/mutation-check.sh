@@ -232,6 +232,9 @@ caso "sin session compartida"   action_match.py m_action_recall.py test-action-r
 caso "sin lock"                 action_match.py m_action_recall.py test-action-recall.sh "lock de la sesion tomado" sin-lock
 caso "lock viejo se queda"      action_match.py m_action_recall.py test-action-recall.sh "lock de hace 60 s" lock-viejo-se-queda
 caso "windows sin minusculas"   action_match.py m_action_recall.py test-action-recall.sh "no normaliza Git.exe" windows-sin-minusculas
+caso "heredoc solo letras"      action_match.py m_action_recall.py test-action-recall.sh "heredoc con delimitador numerico" heredoc-solo-letras
+caso "sin sustitucion proceso"  action_match.py m_action_recall.py test-action-recall.sh "deberia frenar .sustitucion de proceso" sin-sustitucion-de-proceso
+caso "estado forma laxa"        action_match.py m_action_recall.py test-action-recall.sh "estado con tipos raros" estado-forma-laxa
 caso "forma sin titulo"        learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "sin .*Titulo" forma-sin-titulo
 caso "negrita impar"           learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "\*\* impar: rc 1" negrita-impar
 caso "comilla impar"           learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "comilla invertida impar: rc 1" comilla-impar

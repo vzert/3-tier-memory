@@ -8,8 +8,8 @@ medio de un turno, en una llamada a `git commit`. F5 pone la regla delante en es
 hook PreToolUse. **El criterio del aviso no se cumplio**: con los disparadores `cmd`/`path` que
 escribieron los escritores de F4, la regla esperada salio entre las 2 primeras en 9 de 13 casos
 de accion (0,69; el criterio era 0,8) y, reproduciendo 5 sesiones reales contra esa memoria, el
-aviso saltaba en unas 9 de cada 20 llamadas (criterio: menos de 1; 8,95 con el primer parser, 9,28
-con el final sobre las mismas sesiones). La causa: `cmd` de una palabra (`grep`, `rm`, `bash`: 467
+aviso saltaba en unas 9 de cada 20 llamadas (criterio: menos de 1; 8,94 con el primer parser y
+9,28 con el final, sobre las mismas 5 sesiones congeladas, 832 llamadas). La causa: `cmd` de una palabra (`grep`, `rm`, `bash`: 467
 de las 672 reglas que mostraron los avisos en la primera medicion) y 16 reglas que casan a la vez con
 `git commit` o con `CHANGELOG.md`. Se publica solo el **freno**, que el autor marca regla a regla, y
 el aviso queda apagado salvo opt-in. `cmd`/`path` siguen opcionales.
@@ -25,12 +25,12 @@ el aviso queda apagado salvo opt-in. `cmd`/`path` siguen opcionales.
     principio de un segmento. No cuentan como comando: comentarios, cuerpos de heredoc, lo que va
     tras una redireccion (`cat < git push`), argumentos (`echo git commit`, `grep 'git push'`) ni
     `bash git push` (solo una ruta tras el interprete es un script). Si cuentan: `bash|sh|zsh -c
-    "<cadena>"`, `$(...)` y comillas invertidas. En Windows, `Git.exe` es `git`. `path` casa con
+    "<cadena>"`, `$(...)`, comillas invertidas y `<(...)`/`>(...)`. En Windows, `Git.exe` es `git`. `path` casa con
     fnmatch desde la raiz o como fragmento.
   - La salida del freno solo cuenta al FINAL de la ultima linea del comando: un `# regla-vista:`
     dentro de un heredoc, entre comillas o en una linea intermedia no desactiva el freno.
   - Falla en abierto: sin indice, indice roto o con otra forma (`freno: "no"` no frena), entrada
-    rota, sin `session_id`, estado de la sesion ilegible (no lo pisa: volver a frenar seria
+    rota, sin `session_id`, estado de la sesion ilegible o con otra forma (no lo pisa: volver a frenar seria
     quitar la salida), estado sin permiso de escritura, lock de la sesion tomado por otra llamada
     (espera 0,1 s; un lock de mas de 10 s se da por muerto), o un `action_match.py` que revienta o
     deja la salida a medias: sale 0 y en silencio. El estado se escribe con un temporal unico bajo
@@ -42,8 +42,8 @@ el aviso queda apagado salvo opt-in. `cmd`/`path` siguen opcionales.
 - `build-recall-index.py` escribe `.action-index.json` junto al indice de recall: solo las reglas
   vivas con `cmd` o `path`, y `frenos` delante. Sin frenos ni opt-in el hook sale sin arrancar
   python. p95 de 200 llamadas por variante, intercaladas, con el indice de una instalacion de 358
-  reglas con `cmd`/`path`: 61,7 ms si python corre (una regla con freno), 21,8 ms por la via rapida
-  (sin frenos) y 21,8 ms con el indice vacio.
+  reglas con `cmd`/`path`, en tres corridas: 60-71 ms si python corre (una regla con freno) y 20-28 ms
+  por la via rapida (sin frenos) o con el indice vacio.
 - `tools/recall-bench`: el canal `accion@2` existe (importa `action_match.py`) y se reporta tambien
   sobre los casos cuya regla esperada tiene un disparador de su tipo; `--desempate-antiguo` mide
   la sensibilidad al ultimo desempate. La `--salida` guarda la huella de cada corpus (sha256 de
@@ -55,7 +55,8 @@ el aviso queda apagado salvo opt-in. `cmd`/`path` siguen opcionales.
   PostToolUse si; `deny` con motivo llega y la herramienta no corre (con control de permisos); un
   hook lento o roto no bloquea; y los dos hooks reales juntos en Write (`journal-guard.sh` con
   `journal_strict=1` y `action-recall.sh` con aviso): el fichero no se escribe, el modelo ve el
-  motivo del guard y el aviso. Todo confirmado el 2026-10-03/05 en Claude Code 2.1.288.
+  motivo del guard y el aviso. Los centinelas no van en el prompt: el modelo copia lo que vio y el
+  script decide. Todo confirmado el 2026-10-03/05 en Claude Code 2.1.288.
 - Plantilla `/checkpoint-3t` (Step 4): cuando usar `freno=si` y por que el `cmd` de una palabra no.
 
 ### Not included
@@ -67,11 +68,11 @@ el aviso queda apagado salvo opt-in. `cmd`/`path` siguen opcionales.
   mas de 4 niveles.
 
 ### Tests
-- `bin/test-action-recall.sh` (116 asertos): fallos en abierto, aviso, freno y su salida, ventana,
+- `bin/test-action-recall.sh` (120 asertos): fallos en abierto, aviso, freno y su salida, ventana,
   topes, partido del comando, Edit/Write, indice, convivencia con `journal-guard.sh` (su deny no
   cambia), defecto sin opt-in, `action_match.py` roto y el camino del deny (falsos frenos, salida
   solo al final, indice raro, estado ilegible, sin session_id, lock, 8 llamadas en paralelo, nombres
-  de Windows). 32 mutaciones en `tools/mutation-check.sh` (`m_action_recall.py`); `test-bench.sh`
+  de Windows). 35 mutaciones en `tools/mutation-check.sh` (`m_action_recall.py`); `test-bench.sh`
   caso 17 (huella del corpus).
 - Prueba real (`claude -p`, Sonnet, copia de una memoria real con la regla 99 en `freno=si`, repo
   de prueba con un proceso de review vivo): el primer `git commit` no corrio (el contador de commits

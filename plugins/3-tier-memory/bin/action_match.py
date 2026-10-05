@@ -49,7 +49,7 @@ _SHELL = {"while", "until", "if", "then", "do", "else", "elif", "!", "time", "no
 _INTERPRETES = {"python", "python3", "bash", "sh", "zsh", "node", "ruby", "perl"}
 _SHELLS_C = {"bash", "sh", "zsh"}          # `bash -c "<cadena>"`: la cadena es otro comando
 _ASIGNACION = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-_HEREDOC = re.compile(r"<<-?[ \t]*(['\"]?)([A-Za-z_][\w-]*)\1")
+_HEREDOC = re.compile(r"<<-?[ \t]*(['\"]?)([A-Za-z0-9_][\w.-]*)\1")
 # La salida del freno: el comentario va AL FINAL de la ultima linea del comando (fuera de comillas
 # y fuera de un heredoc). En otro sitio no cuenta: un marcador dentro del cuerpo de un heredoc o en
 # una linea intermedia no es el agente diciendo que ya vio la regla.
@@ -72,7 +72,8 @@ def _nombre(p, win=None):
 def _limpiar(c):
     """(texto, sustituciones). Quita lo que el shell no ejecuta como comando: continuaciones de
     linea, comentarios (`#` al principio de una palabra, fuera de comillas) y cuerpos de heredoc; y
-    saca aparte el texto de cada `$(...)` y `...` (fuera de comillas simples), que si se ejecuta.
+    saca aparte el texto de cada `$(...)`, `...` (fuera de comillas simples) y `<(...)`/`>(...)`
+    (fuera de comillas), que si se ejecuta.
     En el texto, cada sustitucion queda como una palabra neutra."""
     c = c.replace("\\\r\n", "").replace("\\\n", "")
     out, subs, pend = [], [], []
@@ -122,7 +123,8 @@ def _limpiar(c):
             out.append(ch)
             i += 1
             continue
-        if c.startswith("$(", i) and not c.startswith("$((", i):
+        if (c.startswith("$(", i) and not c.startswith("$((", i)) or \
+                (q is None and (c.startswith("<(", i) or c.startswith(">(", i))):
             prof, j = 1, i + 2
             while j < n and prof:
                 prof += {"(": 1, ")": -1}.get(c[j], 0)
@@ -331,7 +333,9 @@ def _leer_estado(ruta):
         with f:
             e = json.load(f)
         ok = (isinstance(e, dict) and isinstance(e.get("llamadas"), int)
-              and isinstance(e.get("vistas"), dict) and isinstance(e.get("frenos"), list))
+              and isinstance(e.get("vistas"), dict) and isinstance(e.get("frenos"), list)
+              and all(isinstance(k, str) and isinstance(v, int) for k, v in e["vistas"].items())
+              and all(isinstance(x, str) for x in e["frenos"]))
     except Exception:
         ok = False
     if not ok:
@@ -410,7 +414,7 @@ def decidir(datos, reglas, estado, raiz=None, emit="", mem="", aviso=True):
     """(salida JSON o None, estado nuevo). Puro: no lee ni escribe ficheros.
 
     `aviso=False` (lo que hace el hook salvo opt-in, ver action-recall.sh): solo el freno. El aviso
-    no paso el criterio de F5 (accion@2 0,69 < 0,8 y 8,95 inyecciones cada 20 llamadas con los
+    no paso el criterio de F5 (accion@2 0,69 < 0,8 y unas 9 inyecciones cada 20 llamadas con los
     disparadores de F4), asi que no se sirve por defecto."""
     tool = datos.get("tool_name", "")
     ti = datos.get("tool_input") or {}

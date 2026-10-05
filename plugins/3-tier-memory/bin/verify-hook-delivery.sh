@@ -32,7 +32,10 @@
 #     "journal_strict=1") y action-recall avisa (additionalContext con un centinela). memory/_prueba.md
 #     NO debe existir y el modelo debe ver el motivo del guard (GUARD); ACC dice si el aviso de
 #     action-recall llego junto al rechazo.
-# Compara lo que dice el modelo con lo que paso en el disco.
+# Compara lo que dice el modelo con lo que paso en el disco. Los centinelas NO van en el prompt
+# (ronda 2 del adversario de F5: si van, el modelo puede repetirlos sin haberlos recibido): se le
+# pide copiar toda cadena SENTINEL_... que haya visto y el motivo de cada rechazo, y el script
+# decide SI/NO buscando cada centinela (con una parte aleatoria) y el texto del guard en la respuesta.
 #
 # Uso: bash bin/verify-hook-delivery.sh   (necesita `claude` en el PATH y autenticado; usa un
 # modelo barato por defecto, exportar VERIFY_MODEL para cambiarlo)
@@ -47,7 +50,7 @@
 set -u
 MODEL="${VERIFY_MODEL:-sonnet}"
 D=$(mktemp -d) || { echo "mktemp fallo"; exit 1; }
-T=$(date +%s)
+T="$(date +%s)${RANDOM}${RANDOM}"
 SENT_ACC="SENTINEL_ACC_${T}_g"
 BIN="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$D/.claude" "$D/memory"
@@ -118,7 +121,7 @@ EOF
 printf 'linea original\n' > "$D/note.txt"
 
 RESP=$(cd "$D" && claude -p \
-  "Haz estas cinco cosas, en orden y una sola vez cada una, sin reintentar ninguna: (1) edita note.txt agregando una linea 'hello'; (2) crea json.txt con el contenido 'x'; (3) corre por Bash exactamente 'touch control.txt' y despues, en otra llamada, exactamente 'touch witness.txt'; (4) corre por Bash 'touch lento.txt' y despues 'touch roto.txt'; (5) con la herramienta Write crea el fichero nuevo memory/_prueba.md con el contenido 'x'. Luego, en tu respuesta final de texto (nada mas), dime EXACTAMENTE cuales de estos textos viste en algun resultado de herramienta, salida de hook, motivo de rechazo o system-reminder: '$SENT_PRE', '$SENT_POST', '$SENT_PROMPT', '$SENT_JPRE', '$SENT_JPOST', '$SENT_DENY', 'journal_strict=1', '$SENT_ACC'. Responde con ocho lineas en este formato literal: 'PRE: SI' o 'PRE: NO', y lo mismo para POST, PROMPT, JPRE, JPOST, DENY, GUARD (el texto journal_strict=1) y ACC." \
+  "Haz estas cinco cosas, en orden y una sola vez cada una, sin reintentar ninguna: (1) edita note.txt agregando una linea 'hello'; (2) crea json.txt con el contenido 'x'; (3) corre por Bash exactamente 'touch control.txt' y despues, en otra llamada, exactamente 'touch witness.txt'; (4) corre por Bash 'touch lento.txt' y despues 'touch roto.txt'; (5) con la herramienta Write crea el fichero nuevo memory/_prueba.md con el contenido 'x'. Luego, en tu respuesta final de texto (nada mas): (a) copia literal, una por linea, CADA cadena que empiece por SENTINEL_ que hayas visto en algun resultado de herramienta, salida de hook, motivo de rechazo o system-reminder; (b) por cada llamada que un hook te haya rechazado, una linea que empiece por 'MOTIVO: ' con las primeras 100 letras del motivo copiadas literal." \
   --permission-mode acceptEdits --allowedTools "Bash(touch:*)" --settings "$D/.claude/settings.json" \
   --model "$MODEL" < /dev/null 2>&1)
 
@@ -137,7 +140,17 @@ echo "=== lo que paso en el disco ==="
 [ -f "$D/memory/_prueba.md" ] && echo "FALLO: memory/_prueba.md EXISTE — el deny de journal-guard se perdio junto a action-recall" \
   || echo "OK: memory/_prueba.md no existe — el deny de journal-guard se mantiene con action-recall en el mismo matcher"
 echo
-echo "=== lo que el modelo dice haber visto ==="
-echo "$RESP" | grep -E '^(PRE|POST|PROMPT|JPRE|JPOST|DENY|GUARD|ACC):' || echo "$RESP"
+echo "=== lo que el modelo copio (el script decide; ningun centinela iba en el prompt) ==="
+visto() { printf '%s' "$RESP" | grep -qF -- "$1" && echo SI || echo NO; }
+echo "PRE: $(visto "$SENT_PRE")"
+echo "POST: $(visto "$SENT_POST")"
+echo "PROMPT: $(visto "$SENT_PROMPT")"
+echo "JPRE: $(visto "$SENT_JPRE")"
+echo "JPOST: $(visto "$SENT_JPOST")"
+echo "DENY: $(visto "$SENT_DENY")"
+echo "GUARD: $(visto "_prueba.md lo escribe solo el compactador")"
+echo "ACC: $(visto "$SENT_ACC")"
+echo "--- respuesta literal ---"
+printf '%s\n' "$RESP"
 echo
 echo "=== esperado: PRE NO / POST NO / PROMPT SI / JPRE SI / JPOST SI / DENY SI (witness ausente, control presente), lento y roto presentes / GUARD SI con _prueba.md ausente ==="
