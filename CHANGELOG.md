@@ -73,7 +73,7 @@ el aviso queda apagado salvo opt-in. `cmd`/`path` siguen opcionales.
   esos casos el hook calla.
 
 ### Tests
-- `bin/test-action-recall.sh` (137 asertos): fallos en abierto, aviso, freno y su salida, ventana,
+- `bin/test-action-recall.sh` (138 asertos): fallos en abierto, aviso, freno y su salida, ventana,
   topes, partido del comando, Edit/Write, indice, convivencia con `journal-guard.sh` (su deny no
   cambia), defecto sin opt-in, `action_match.py` roto y el camino del deny (falsos frenos, salida
   solo al final, indice raro, estado ilegible, sin session_id, lock, 8 llamadas en paralelo, nombres

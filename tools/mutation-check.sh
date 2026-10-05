@@ -219,7 +219,7 @@ caso "reenvia salida rota"      action-recall.sh m_action_recall.py test-action-
 caso "frenos sin contar"        build-recall-index.py m_action_recall.py test-action-recall.sh "el indice real no cuenta 2 frenos" frenos-sin-contar
 # Camino del deny (ronda 1 del adversario de F5): cada arreglo con su aserto.
 caso "redireccion separa"       action_match.py m_action_recall.py test-action-recall.sh "falso freno .redireccion de entrada" redireccion-separa
-caso "sin heredoc"              action_match.py m_action_recall.py test-action-recall.sh "falso freno .cuerpo del heredoc" sin-heredoc
+caso "sin heredoc"              action_match.py m_action_recall.py test-action-recall.sh "deberia frenar .heredoc y despues el comando" sin-heredoc
 caso "comentario no corta"      action_match.py m_action_recall.py test-action-recall.sh "falso freno .comentario con separadores dentro" comentario-no-corta
 caso "interprete sin ruta"      action_match.py m_action_recall.py test-action-recall.sh "falso freno .interprete sin ruta" interprete-sin-ruta
 caso "sin bash -c"              action_match.py m_action_recall.py test-action-recall.sh "deberia frenar .bash -c" sin-bash-c
@@ -232,7 +232,7 @@ caso "sin session compartida"   action_match.py m_action_recall.py test-action-r
 caso "sin lock"                 action_match.py m_action_recall.py test-action-recall.sh "lock de la sesion tomado" sin-lock
 caso "lock viejo se queda"      action_match.py m_action_recall.py test-action-recall.sh "lock de hace 60 s" lock-viejo-se-queda
 caso "windows sin minusculas"   action_match.py m_action_recall.py test-action-recall.sh "no normaliza Git.exe" windows-sin-minusculas
-caso "heredoc solo letras"      action_match.py m_action_recall.py test-action-recall.sh "heredoc con delimitador numerico" heredoc-solo-letras
+caso "heredoc solo letras"      action_match.py m_action_recall.py test-action-recall.sh "deberia frenar .heredoc numerico y despues" heredoc-solo-letras
 caso "sin sustitucion proceso"  action_match.py m_action_recall.py test-action-recall.sh "deberia frenar .sustitucion de proceso" sin-sustitucion-de-proceso
 caso "estado forma laxa"        action_match.py m_action_recall.py test-action-recall.sh "estado con tipos raros" estado-forma-laxa
 caso "incierto adivina"         action_match.py m_action_recall.py test-action-recall.sh "heredoc con delimitador raro" incierto-adivina

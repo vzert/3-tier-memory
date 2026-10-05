@@ -41,8 +41,7 @@ M = {
         ("                if time.time() - os.stat(lock).st_mtime > LOCK_VIEJO:", "                if False:")],
     # ronda 2 del adversario
     "heredoc-solo-letras": [
-        ("""_HEREDOC = re.compile(r"<<-?[ \\t]*(['\\"]?)([A-Za-z0-9_][\\w.-]*)\\1")""",
-         """_HEREDOC = re.compile(r"<<-?[ \\t]*(['\\"]?)([A-Za-z_][\\w-]*)\\1")""")],
+        ("""(['\\"]?)([A-Za-z0-9_][\\w.-]*)\\1(?=""", """(['\\"]?)([A-Za-z_][\\w-]*)\\1(?=""")],
     "sin-sustitucion-de-proceso": [
         ('                (q is None and (c.startswith("<(", i) or c.startswith(">(", i))):',
          "                False:")],
