@@ -15,7 +15,12 @@
 #   5. el comando se parte bien: sudo/env/X=Y/rtk/palabras de shell fuera, `&&` y `|` separan;
 #   6. Edit/Write casan por `path` (fragmento o desde la raiz) y nunca frenan;
 #   7. via rapida con el indice vacio, el indice excluye las retiradas, y journal-guard.sh conserva
-#      su deny cuando los dos hooks corren sobre la misma llamada.
+#      su deny cuando los dos hooks corren sobre la misma llamada;
+#   8. por defecto (sin `action_recall_aviso=1` en memory/.memory-config) el hook SOLO frena: no
+#      inyecta ningun aviso, y sin reglas con freno=si ni arranca python (indice `{"frenos": 0,`);
+#   9. un action_match.py que revienta (error de sintaxis, excepcion al importar, salida a medias)
+#      deja pasar la llamada: salida 0, vacia, sin stderr. El hook nunca bloquea por un fallo propio.
+# Las secciones 2-7 corren con el aviso encendido (opt-in) para probar su logica.
 #
 # Uso: bash bin/test-action-recall.sh   (sin dependencias; sale != 0 si algo falla)
 # Alcance: prueba el HOOK, no que Claude Code honre el deny ni que el aviso llegue al modelo. Eso lo
@@ -46,6 +51,9 @@ SD="$H/.claude/projects/$ENC"
 mkdir -p "$SD"
 build() { HOME="$H" python3 "$BIN/build-recall-index.py" "$P/memory" "$SD/.recall-index.jsonl" >/dev/null; }
 build
+# Secciones 1-7: aviso encendido (opt-in). La 8 prueba el defecto, sin opt-in.
+AVISO_ON='action_recall_aviso=1'
+printf '%s\n' "$AVISO_ON" > "$P/memory/.memory-config"
 
 PASS=0; FAIL=0; ERR="$TMP/stderr"; SID=s1
 ok()   { PASS=$((PASS + 1)); }
@@ -156,16 +164,16 @@ nueva s6e; edit_ MultiEdit "$P/docs/b.md" && [ "$(ids)" = "git#3 " ] && ok || fa
 
 echo "7. indice: via rapida, retiradas fuera, convivencia con journal-guard"
 python3 -c "import json,sys;d=json.load(open(sys.argv[1]));ids=[r['id'] for r in d['reglas']];sys.exit(0 if 'git#6' not in ids and 'git#7' not in ids and 'git#1' in ids else 1)" "$SD/.action-index.json" && ok || fail "el indice incluye la retirada o la regla sin cmd/path"
-cp "$SD/.action-index.json" "$TMP/idx.bak"; printf '{"reglas": []}\n' > "$SD/.action-index.json"
+cp "$SD/.action-index.json" "$TMP/idx.bak"; printf '{"frenos": 0, "reglas": []}\n' > "$SD/.action-index.json"
 nueva s7; bash_ "git push" && [ -z "$OUT" ] && ok || fail "indice vacio: '$OUT'"
 cp "$TMP/idx.bak" "$SD/.action-index.json"
-printf 'journal_strict=1\n' > "$P/memory/.memory-config"
+printf 'journal_strict=1\n%s\n' "$AVISO_ON" > "$P/memory/.memory-config"
 J='{"session_id":"g","cwd":"'"$P"'","hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"file_path":"'"$P"'/memory/_pendientes.md","content":"x"}}'
 SOLO=$(printf '%s' "$J" | HOME="$H" CLAUDE_PROJECT_DIR="$P" bash "$BIN/journal-guard.sh" 2>/dev/null)
 raw "$J"; JUNTOS=$(printf '%s' "$J" | HOME="$H" CLAUDE_PROJECT_DIR="$P" bash "$BIN/journal-guard.sh" 2>/dev/null)
 printf '%s' "$SOLO" | grep -q '"permissionDecision": "deny"' && [ "$SOLO" = "$JUNTOS" ] && ! printf '%s' "$OUT" | grep -q deny && ok \
   || fail "journal-guard pierde o cambia su deny junto a action-recall: guard='$SOLO' action='$OUT'"
-rm -f "$P/memory/.memory-config"
+printf '%s\n' "$AVISO_ON" > "$P/memory/.memory-config"
 # hooks.json no esta en la copia de bin/ que usa tools/mutation-check.sh: ahi no es evaluable.
 if [ ! -f "$BIN/../hooks/hooks.json" ]; then
   echo "  SKIP hooks.json registra action-recall.sh (no hay hooks/ junto a bin/)"
@@ -175,6 +183,51 @@ d=json.load(open(sys.argv[1]))
 hs=[h['command'] for e in d['hooks']['PreToolUse'] if e['matcher']=='Bash|Edit|Write|MultiEdit' for h in e['hooks']]
 sys.exit(0 if any('action-recall.sh' in c for c in hs) else 1)" "$BIN/../hooks/hooks.json" && ok || fail "hooks.json no registra action-recall.sh en PreToolUse Bash|Edit|Write|MultiEdit"
 fi
+
+echo "8. por defecto (sin opt-in) solo frena"
+for cfg in "" "journal_strict=1" "action_recall_aviso=0" "# action_recall_aviso=1"; do
+  printf '%s\n' "$cfg" > "$P/memory/.memory-config"
+  nueva "s8-$cfg"; bash_ "git commit" && [ -z "$OUT" ] && ok || fail "config '$cfg': git commit avisa sin opt-in: '$OUT'"
+  edit_ Write "$P/docs/x.md" && [ -z "$OUT" ] && ok || fail "config '$cfg': Write avisa sin opt-in: '$OUT'"
+  bash_ "git push" && forma freno && ok || fail "config '$cfg': el freno no salta sin opt-in: '$OUT'"
+done
+rm -f "$P/memory/.memory-config"
+nueva s8b; bash_ "git pull origin main" && [ -z "$OUT" ] && ok || fail "git pull no casa con cmd=git push y frena: '$OUT'"
+bash_ "git push --dry-run" && forma freno && ok || fail "git push --dry-run (casa) deberia frenar: '$OUT'"
+# indice sin frenos: la via rapida sale antes de python. Se prueba con un action_match.py roto en
+# una copia de bin/: si python llegara a correr, el aviso apagado no se veria igual, pero el
+# indice no se toca, asi que basta con que salga vacio y sin traza.
+python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1]))
+for r in d['reglas']: r['freno'] = False
+d['frenos'] = 0
+json.dump({'frenos': 0, 'reglas': d['reglas']}, open(sys.argv[1], 'w'))" "$SD/.action-index.json"
+[ "$(head -c 13 "$SD/.action-index.json")" = '{"frenos": 0,' ] && ok || fail "el indice sin frenos no empieza por {\"frenos\": 0,"
+B2="$TMP/bin2"; cp -R "$BIN" "$B2"; printf 'import sys\nsys.stderr.write("no deberia correr\\n"); print("{}")\n' > "$B2/action_match.py"
+OUT=$(printf '{"session_id":"r","cwd":"%s","tool_name":"Bash","tool_input":{"command":"git commit"}}' "$P" \
+      | HOME="$H" CLAUDE_PROJECT_DIR="$P" bash "$B2/action-recall.sh" 2>"$ERR")
+[ -z "$OUT" ] && ok || fail "sin frenos ni opt-in, la via rapida no corto antes de python: '$OUT'"
+printf '%s\n' "$AVISO_ON" > "$P/memory/.memory-config"
+nueva s8c; bash_ "git commit" && forma aviso && ok || fail "con opt-in y sin frenos, la via rapida no debe cortar el aviso: '$OUT'"
+rm -f "$P/memory/.memory-config"
+build   # vuelve el indice real (con frenos)
+[ "$(head -c 13 "$SD/.action-index.json")" = '{"frenos": 2,' ] && ok || fail "el indice real no cuenta 2 frenos: $(head -c 20 "$SD/.action-index.json")"
+
+echo "9. un action_match.py que revienta deja pasar la llamada"
+roto() {  # $1 = etiqueta, $2 = contenido de action_match.py
+  printf '%s' "$2" > "$B2/action_match.py"
+  : > "$ERR"
+  OUT=$(printf '{"session_id":"r9","cwd":"%s","tool_name":"Bash","tool_input":{"command":"git push"}}' "$P" \
+        | HOME="$H" CLAUDE_PROJECT_DIR="$P" bash "$B2/action-recall.sh" 2>"$ERR"); RC=$?
+  if [ "$RC" -eq 0 ] && [ ! -s "$ERR" ] && [ -z "$OUT" ]; then ok
+  else fail "action_match roto ($1): rc=$RC out='$OUT' err='$(head -c 200 "$ERR")'"; fi
+}
+roto "error de sintaxis" 'def ('
+roto "excepcion al importar" 'raise RuntimeError("roto")'
+roto "sale 1" 'import sys; sys.exit(1)'
+roto "JSON a medias" 'import sys; sys.stdout.write("{\"hookSpecificOutput\": {\"permissionDecision\": \"de"); sys.exit(1)'
+rm -rf "$B2"
 
 echo
 echo "RESULT: pass=$PASS fail=$FAIL"

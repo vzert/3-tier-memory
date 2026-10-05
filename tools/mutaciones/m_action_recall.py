@@ -35,7 +35,20 @@ M = {
          "    return any(fnmatch.fnmatchcase(ruta, p) for p in pats)")],
     "estado-sin-guardar-habla": [
         ("        if not _guardar_estado(estado_ruta, nuevo):", "        if not _guardar_estado(estado_ruta, nuevo) and False:")],
+    "aviso-por-defecto": [
+        ('                                aviso=os.environ.get("ACTION_AVISO") == "1")',
+         '                                aviso=True)')],
+    # action-recall.sh
+    "via-rapida-ignora-optin": [
+        ("""  '{"frenos": 0,'*) [ "$AVISO" = 1 ] || exit 0 ;;""", """  '{"frenos": 0,'*) exit 0 ;;""")],
+    "stderr-del-hook": [
+        ('python3 "$(dirname "$0")/action_match.py" 2>/dev/null)', 'python3 "$(dirname "$0")/action_match.py"; true)')],
+    "reenvia-salida-rota": [
+        ('python3 "$(dirname "$0")/action_match.py" 2>/dev/null)', 'python3 "$(dirname "$0")/action_match.py" 2>/dev/null; true)')],
     # build-recall-index.py
+    "frenos-sin-contar": [
+        ('        f.write(json.dumps({"frenos": sum(1 for r in acc if r["freno"]), "reglas": acc},',
+         '        f.write(json.dumps({"frenos": 0, "reglas": acc},')],
     "indice-con-retiradas": [
         ("            if not m or learning_marks.regla_retirada(m.group(2)):", "            if not m:")],
 }

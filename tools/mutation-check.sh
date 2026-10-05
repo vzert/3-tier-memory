@@ -212,6 +212,11 @@ caso "edit frena"               action_match.py m_action_recall.py test-action-r
 caso "path sin sufijo"          action_match.py m_action_recall.py test-action-recall.sh "fragmento bin/test" path-sin-sufijo
 caso "estado roto habla"        action_match.py m_action_recall.py test-action-recall.sh "estado sin permiso de escritura" estado-sin-guardar-habla
 caso "indice con retiradas"     build-recall-index.py m_action_recall.py test-action-recall.sh "el indice incluye la retirada" indice-con-retiradas
+caso "aviso por defecto"        action_match.py m_action_recall.py test-action-recall.sh "git commit avisa sin opt-in" aviso-por-defecto
+caso "via rapida ignora opt-in" action-recall.sh m_action_recall.py test-action-recall.sh "con opt-in y sin frenos" via-rapida-ignora-optin
+caso "stderr del hook"          action-recall.sh m_action_recall.py test-action-recall.sh "action_match roto .error de sintaxis" stderr-del-hook
+caso "reenvia salida rota"      action-recall.sh m_action_recall.py test-action-recall.sh "action_match roto .JSON a medias" reenvia-salida-rota
+caso "frenos sin contar"        build-recall-index.py m_action_recall.py test-action-recall.sh "el indice real no cuenta 2 frenos" frenos-sin-contar
 caso "forma sin titulo"        learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "sin .*Titulo" forma-sin-titulo
 caso "negrita impar"           learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "\*\* impar: rc 1" negrita-impar
 caso "comilla impar"           learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "comilla invertida impar: rc 1" comilla-impar

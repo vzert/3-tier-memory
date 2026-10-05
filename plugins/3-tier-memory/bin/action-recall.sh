@@ -13,8 +13,11 @@ export PYTHONUTF8=1 PYTHONIOENCODING=utf-8
 #   - aviso: JSON additionalContext. Sirve para lo que viene despues (verificar, no repetir).
 #   - freno: permissionDecision deny, solo para una regla con `freno=si` que casa por `cmd` y no se
 #     ha visto en la sesion. Salida: repetir el comando con `# regla-vista:<topic>#<N>` al final.
-# Nunca devuelve allow ni ask. Falla en abierto (I6): sin indice, entrada rota o estado sin
-# permiso de escritura, sale 0 y en silencio.
+# Por defecto SOLO frena. El aviso es opt-in (`action_recall_aviso=1` en memory/.memory-config):
+# en F5 no paso su criterio (accion@2 0,69 < 0,8; 8,95 inyecciones cada 20 llamadas con los
+# disparadores de F4, cuyos cmd de una palabra -grep, rm, bash- casan con casi todo).
+# Nunca devuelve allow ni ask. Falla en abierto (I6): sin indice, entrada rota, estado sin permiso
+# de escritura o un action_match.py que revienta, sale 0 y en silencio (la llamada pasa).
 #
 # El indice `.action-index.json` lo escribe build-recall-index.py cuando recall.sh reconstruye el
 # de recall (en cada prompt, si memory/ cambio). Este hook no lo reconstruye: una regla retirada a
@@ -26,9 +29,6 @@ ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
 STATE_DIR="$HOME/.claude/projects/$ENCODED"
 INDEX="$STATE_DIR/.action-index.json"
 [ -f "$INDEX" ] || exit 0
-# Via rapida: hoy casi ninguna regla lleva cmd/path, y el indice sin reglas es exactamente
-# `{"reglas": []}`. Sin arrancar python en cada Bash/Edit/Write (la latencia de cada herramienta, I6).
-[ "$(head -c 16 "$INDEX" 2>/dev/null)" = '{"reglas": []}' ] && exit 0
 
 # Mismo memory/ que recall.sh (Model B, luego Model A), solo para el pie de retirada.
 MEMORY_DIR=""
@@ -37,8 +37,24 @@ if [ -f "$CLAUDE_PROJECT_DIR/memory/_pendientes.md" ]; then
 elif [ -f "$STATE_DIR/memory/_pendientes.md" ]; then
   MEMORY_DIR="$STATE_DIR/memory"
 fi
+AVISO=0
+if [ -n "$MEMORY_DIR" ] && [ -f "$MEMORY_DIR/.memory-config" ] \
+   && grep -Eq '^[[:space:]]*action_recall_aviso[[:space:]]*=[[:space:]]*1[[:space:]]*$' "$MEMORY_DIR/.memory-config"; then
+  AVISO=1
+fi
+# Via rapida sin arrancar python (la latencia de cada Bash/Edit/Write, I6): con el aviso apagado
+# solo importan las reglas con freno=si, y el indice empieza por `{"frenos": 0,` si no hay ninguna.
+# Con el aviso encendido, solo un indice sin reglas sale por aqui.
+case "$(head -c 32 "$INDEX" 2>/dev/null)" in
+  '{"frenos": 0, "reglas": []}'*) exit 0 ;;
+  '{"frenos": 0,'*) [ "$AVISO" = 1 ] || exit 0 ;;
+esac
 
-ACTION_INPUT="$_HOOK_INPUT" ACTION_INDEX="$INDEX" ACTION_STATE_DIR="$STATE_DIR" \
+# La salida solo se reenvia si python termino bien: uno que muere a mitad de escribir (o con una
+# traza) no deja un JSON a medias que Claude Code tendria que interpretar. Nunca bloquea por un
+# fallo propio: sin salida, la llamada pasa.
+SALIDA=$(ACTION_INPUT="$_HOOK_INPUT" ACTION_INDEX="$INDEX" ACTION_STATE_DIR="$STATE_DIR" \
   ACTION_RAIZ="$CLAUDE_PROJECT_DIR" ACTION_PIE="$(dirname "$0")/journal-emit.py" \
-  ACTION_MEMORY_DIR="$MEMORY_DIR" python3 "$(dirname "$0")/action_match.py" 2>/dev/null
+  ACTION_MEMORY_DIR="$MEMORY_DIR" ACTION_AVISO="$AVISO" python3 "$(dirname "$0")/action_match.py" 2>/dev/null) \
+  && [ -n "$SALIDA" ] && printf '%s\n' "$SALIDA"
 exit 0

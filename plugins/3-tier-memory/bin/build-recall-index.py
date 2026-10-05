@@ -359,7 +359,10 @@ def main():
     os.replace(tmp, out_path)
     acc = indice_accion(memory_dir)
     with open(action_path + ".tmp", "w", encoding="utf-8", newline="\n") as f:
-        f.write(json.dumps({"reglas": acc}, ensure_ascii=False) + "\n")
+        # `frenos` va PRIMERO: action-recall.sh lo lee con head para no arrancar python cuando no
+        # hay ninguna regla con freno=si y el aviso esta apagado (el caso comun).
+        f.write(json.dumps({"frenos": sum(1 for r in acc if r["freno"]), "reglas": acc},
+                           ensure_ascii=False) + "\n")
     os.replace(action_path + ".tmp", action_path)
     print(len(units))
 

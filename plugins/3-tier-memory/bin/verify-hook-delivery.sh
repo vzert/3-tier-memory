@@ -23,13 +23,16 @@
 #     sobre `touch witness.txt` por Bash (DENY). La herramienta NO debe correr: witness.txt no
 #     puede existir. Control (regla 81: un deny por permisos se ve igual): el mismo hook deja pasar
 #     `touch control.txt`, que SI debe existir; si no existe, el resultado no vale.
+#   - Un hook que FALLA no debe bloquear (F5: action-recall.sh no frena nunca por un fallo propio):
+#     `touch lento.txt` lo ve un hook que tarda 8 s con timeout de 2 s, y `touch roto.txt` uno que
+#     imprime un JSON a medias con "deny" dentro y sale 1. Los dos ficheros SI deben existir.
 # Compara lo que dice el modelo con lo que paso en el disco.
 #
 # Uso: bash bin/verify-hook-delivery.sh   (necesita `claude` en el PATH y autenticado; usa un
 # modelo barato por defecto, exportar VERIFY_MODEL para cambiarlo)
 # Salida esperada: PRE NO, POST NO, PROMPT SI (confirmada el 2026-09-14 y en 2.1.283); JPRE SI,
 # JPOST SI y DENY SI con witness.txt ausente y control.txt presente (los seis confirmados el
-# 2026-10-03 en 2.1.288). Este script mide QUE llega, no CUANDO: que el JPRE llega despues de
+# 2026-10-03 en 2.1.288); lento.txt y roto.txt presentes. Este script mide QUE llega, no CUANDO: que el JPRE llega despues de
 # emitida la llamada, junto a su resultado, se midio a mano el 2026-09-30 (2.1.285, regla 298), y
 # por eso el freno de F5 usa deny. Cualquier otra combinacion es una senal de que el harness cambio: revisa
 # los comentarios de journal-guard.sh, journal-drift-nudge.sh y action-recall.sh, y la regla 298.
@@ -64,6 +67,15 @@ case "\$IN" in
 esac
 exit 0
 EOF
+cat > "$D/hook-falla.sh" <<'EOF'
+#!/bin/bash
+IN=$(cat)
+case "$IN" in
+  *lento.txt*) sleep 8 ;;
+  *roto.txt*) printf '%s' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"de'; exit 1 ;;
+esac
+exit 0
+EOF
 chmod +x "$D"/hook-*.sh
 
 cat > "$D/.claude/settings.json" <<EOF
@@ -71,7 +83,8 @@ cat > "$D/.claude/settings.json" <<EOF
   "hooks": {
     "PreToolUse": [{"matcher": "Edit", "hooks": [{"type": "command", "command": "bash $D/hook-pre.sh"}]},
                    {"matcher": "Write", "hooks": [{"type": "command", "command": "bash $D/hook-jpre.sh"}]},
-                   {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash $D/hook-deny.sh"}]}],
+                   {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash $D/hook-deny.sh"}]},
+                   {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash $D/hook-falla.sh", "timeout": 2}]}],
     "PostToolUse": [{"matcher": "Edit", "hooks": [{"type": "command", "command": "bash $D/hook-post.sh"}]},
                     {"matcher": "Write", "hooks": [{"type": "command", "command": "bash $D/hook-jpost.sh"}]}],
     "UserPromptSubmit": [{"matcher": "", "hooks": [{"type": "command", "command": "bash $D/hook-prompt.sh"}]}]
@@ -81,7 +94,7 @@ EOF
 printf 'linea original\n' > "$D/note.txt"
 
 RESP=$(cd "$D" && claude -p \
-  "Haz estas tres cosas, en orden y una sola vez cada una, sin reintentar ninguna: (1) edita note.txt agregando una linea 'hello'; (2) crea json.txt con el contenido 'x'; (3) corre por Bash exactamente 'touch control.txt' y despues, en otra llamada, exactamente 'touch witness.txt'. Luego, en tu respuesta final de texto (nada mas), dime EXACTAMENTE cuales de estos textos viste en algun resultado de herramienta, salida de hook, motivo de rechazo o system-reminder: '$SENT_PRE', '$SENT_POST', '$SENT_PROMPT', '$SENT_JPRE', '$SENT_JPOST', '$SENT_DENY'. Responde con seis lineas en este formato literal: 'PRE: SI' o 'PRE: NO', y lo mismo para POST, PROMPT, JPRE, JPOST y DENY." \
+  "Haz estas cuatro cosas, en orden y una sola vez cada una, sin reintentar ninguna: (1) edita note.txt agregando una linea 'hello'; (2) crea json.txt con el contenido 'x'; (3) corre por Bash exactamente 'touch control.txt' y despues, en otra llamada, exactamente 'touch witness.txt'; (4) corre por Bash 'touch lento.txt' y despues 'touch roto.txt'. Luego, en tu respuesta final de texto (nada mas), dime EXACTAMENTE cuales de estos textos viste en algun resultado de herramienta, salida de hook, motivo de rechazo o system-reminder: '$SENT_PRE', '$SENT_POST', '$SENT_PROMPT', '$SENT_JPRE', '$SENT_JPOST', '$SENT_DENY'. Responde con seis lineas en este formato literal: 'PRE: SI' o 'PRE: NO', y lo mismo para POST, PROMPT, JPRE, JPOST y DENY." \
   --permission-mode acceptEdits --allowedTools "Bash(touch:*)" --settings "$D/.claude/settings.json" \
   --model "$MODEL" < /dev/null 2>&1)
 
@@ -93,8 +106,12 @@ echo "=== lo que paso en el disco ==="
   || echo "AVISO: control.txt no existe — el rechazo de witness puede ser de permisos (regla 81): DENY no vale"
 [ -f "$D/witness.txt" ] && echo "FALLO: witness.txt EXISTE — el deny del hook NO impidio la llamada" \
   || echo "OK: witness.txt no existe — el deny impidio la llamada"
+[ -f "$D/lento.txt" ] && echo "OK: lento.txt existe — un hook que se pasa de su timeout no bloquea" \
+  || echo "FALLO: lento.txt no existe — un hook lento BLOQUEO la llamada"
+[ -f "$D/roto.txt" ] && echo "OK: roto.txt existe — un hook con JSON a medias y exit 1 no bloquea" \
+  || echo "FALLO: roto.txt no existe — un hook roto BLOQUEO la llamada"
 echo
 echo "=== lo que el modelo dice haber visto ==="
 echo "$RESP" | grep -E '^(PRE|POST|PROMPT|JPRE|JPOST|DENY):' || echo "$RESP"
 echo
-echo "=== esperado: PRE NO / POST NO / PROMPT SI / JPRE SI / JPOST SI / DENY SI (witness ausente, control presente) ==="
+echo "=== esperado: PRE NO / POST NO / PROMPT SI / JPRE SI / JPOST SI / DENY SI (witness ausente, control presente), lento y roto presentes ==="

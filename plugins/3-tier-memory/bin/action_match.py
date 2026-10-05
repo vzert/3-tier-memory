@@ -209,8 +209,12 @@ def _linea_retiro(emit, mem):
             " Si solo cambio su texto: --type learning.update <↳> --text \"<nuevo>\".)")
 
 
-def decidir(datos, reglas, estado, raiz=None, emit="", mem=""):
-    """(salida JSON o None, estado nuevo). Puro: no lee ni escribe ficheros."""
+def decidir(datos, reglas, estado, raiz=None, emit="", mem="", aviso=True):
+    """(salida JSON o None, estado nuevo). Puro: no lee ni escribe ficheros.
+
+    `aviso=False` (lo que hace el hook salvo opt-in, ver action-recall.sh): solo el freno. El aviso
+    no paso el criterio de F5 (accion@2 0,69 < 0,8 y 8,95 inyecciones cada 20 llamadas con los
+    disparadores de F4), asi que no se sirve por defecto."""
     tool = datos.get("tool_name", "")
     ti = datos.get("tool_input") or {}
     estado = {"llamadas": estado["llamadas"] + 1, "vistas": dict(estado["vistas"]),
@@ -241,6 +245,8 @@ def decidir(datos, reglas, estado, raiz=None, emit="", mem=""):
                 return {"hookSpecificOutput": {"hookEventName": "PreToolUse",
                                                "permissionDecision": "deny",
                                                "permissionDecisionReason": motivo}}, estado
+    if not aviso:
+        return None, estado
     # Aviso: hasta 2 reglas que no se hayan servido en las ultimas VENTANA llamadas
     elegidas = []
     for r, _ in hits:
@@ -291,7 +297,8 @@ def main():
         estado = _leer_estado(estado_ruta)
         salida, nuevo = decidir(datos, reglas, estado, raiz=os.environ.get("ACTION_RAIZ") or None,
                                 emit=os.environ.get("ACTION_PIE", ""),
-                                mem=os.environ.get("ACTION_MEMORY_DIR", ""))
+                                mem=os.environ.get("ACTION_MEMORY_DIR", ""),
+                                aviso=os.environ.get("ACTION_AVISO") == "1")
         if not _guardar_estado(estado_ruta, nuevo):
             # Sin estado no hay deduplicacion ni salida del freno: un deny que no se puede anotar
             # se repetiria siempre. Se calla (fail-open), no frena ni avisa.
