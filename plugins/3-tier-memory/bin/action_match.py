@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# sella-huellas: no (solo lee el indice de accion; escribe su estado por sesion fuera de memory/)
 """Recall en el momento de la accion (F5 del plan de ciclo de vida de learnings).
 
 Un modulo, dos usos: el hook PreToolUse bin/action-recall.sh lo corre (main) y el banco
@@ -188,7 +189,7 @@ def _leer_estado(ruta):
 def _guardar_estado(ruta, e):
     try:
         tmp = ruta + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
             json.dump(e, f)
         os.replace(tmp, ruta)
         return True
