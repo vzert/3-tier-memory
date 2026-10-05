@@ -70,7 +70,9 @@ el aviso queda apagado salvo opt-in. `cmd`/`path` siguen opcionales.
   shell, comandos dentro de variables (`$CMD`), `eval`, `git -C dir commit` (el `cmd` es un
   prefijo de palabras), sustituciones anidadas de mas de 4 niveles, `let x=1<<2` (se lee como
   heredoc y oculta lo que sigue), y todo comando de los de "ante la duda" (ver arriba): en todos
-  esos casos el hook calla.
+  esos casos el hook calla. Y en la otra direccion: el hook lee el comando, no lo ejecuta, asi que
+  frena `a && <cmd>` aunque `a` vaya a fallar y bash no llegue a correr `<cmd>` (una vez por
+  sesion, con la salida de siempre).
 
 ### Tests
 - `bin/test-action-recall.sh` (138 asertos): fallos en abierto, aviso, freno y su salida, ventana,
