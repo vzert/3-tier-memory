@@ -55,7 +55,7 @@ M = {
     "sin-rtk": [
         ('        elif p == "rtk":', '        elif p == "rtk-no":')],
     "sin-separadores": [
-        ('        if t in _SEPARADORES or (t and set(t) <= set("&|;()<>")):', '        if t == ";":')],
+        ("        elif es_op:", "        elif False:")],
     "sin-palabras-shell": [
         ('_SHELL = {"while", "until", "if", "then", "do", "else", "elif", "!", "time", "nohup", "exec",',
          '_SHELL = {"while", "until", "if", "then", "else", "elif", "!", "nohup", "exec",')],
@@ -67,7 +67,10 @@ M = {
         ('    return any(fnmatch.fnmatchcase(ruta, p) or fnmatch.fnmatchcase(ruta, "*/" + p) for p in pats)',
          "    return any(fnmatch.fnmatchcase(ruta, p) for p in pats)")],
     "estado-sin-guardar-habla": [
-        ("        if not _guardar_estado(estado_ruta, nuevo):", "        if not _guardar_estado(estado_ruta, nuevo) and False:")],
+        # el lock (mkdir) falla antes en un directorio sin escritura: se apaga tambien para llegar
+        # al camino que este aserto vigila (guardar el estado y callarse si no se puede)
+        ("        if not _tomar_lock(estado_ruta):", "        if False:"),
+        ("            if not _guardar_estado(estado_ruta, nuevo):", "            if not _guardar_estado(estado_ruta, nuevo) and False:")],
     "aviso-por-defecto": [
         ('                                aviso=os.environ.get("ACTION_AVISO") == "1")',
          '                                aviso=True)')],
