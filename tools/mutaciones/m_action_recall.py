@@ -55,6 +55,13 @@ M = {
          "                pass")],
     "comillas-adivina": [
         ('        raise Incierto("comillas sin cerrar")', "        return texto.split()")],
+    # ronda 4 del adversario
+    "heredoc-sin-frontera": [
+        ("""(?=[\\s;&|<>()]|$)")""", """")""")],
+    "heredoc-en-sustitucion": [
+        ('                raise Incierto("heredoc dentro de una sustitucion")', "                pass")],
+    "aritmetica-como-heredoc": [
+        ('        if c.startswith("$((", i) or (q is None and c.startswith("((", i)):', "        if False:")],
     "windows-sin-minusculas": [
         ("        b = b.lower()", "        pass")],
     "sin-especificidad": [

@@ -49,7 +49,7 @@ _SHELL = {"while", "until", "if", "then", "do", "else", "elif", "!", "time", "no
 _INTERPRETES = {"python", "python3", "bash", "sh", "zsh", "node", "ruby", "perl"}
 _SHELLS_C = {"bash", "sh", "zsh"}          # `bash -c "<cadena>"`: la cadena es otro comando
 _ASIGNACION = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-_HEREDOC = re.compile(r"<<-?[ \t]*(['\"]?)([A-Za-z0-9_][\w.-]*)\1")
+_HEREDOC = re.compile(r"<<-?[ \t]*(['\"]?)([A-Za-z0-9_][\w.-]*)\1(?=[\s;&|<>()]|$)")
 # La salida del freno: el comentario va AL FINAL de la ultima linea del comando (fuera de comillas
 # y fuera de un heredoc). En otro sitio no cuenta: un marcador dentro del cuerpo de un heredoc o en
 # una linea intermedia no es el agente diciendo que ya vio la regla.
@@ -131,12 +131,24 @@ def _limpiar(c):
             out.append(ch)
             i += 1
             continue
+        if c.startswith("$((", i) or (q is None and c.startswith("((", i)):
+            prof, j = 0, i + (1 if c[i] == "$" else 0)
+            while j < n:
+                prof += {"(": 1, ")": -1}.get(c[j], 0)
+                j += 1
+                if not prof:
+                    break
+            out.append(" ARIT ")
+            i = j
+            continue
         if (c.startswith("$(", i) and not c.startswith("$((", i)) or \
                 (q is None and (c.startswith("<(", i) or c.startswith(">(", i))):
             prof, j = 1, i + 2
             while j < n and prof:
                 prof += {"(": 1, ")": -1}.get(c[j], 0)
                 j += 1
+            if "<<" in c[i + 2:j].replace("<<<", ""):
+                raise Incierto("heredoc dentro de una sustitucion")
             subs.append(c[i + 2:j - 1] if not prof else c[i + 2:j])
             out.append(" SUBST ")
             i = j
@@ -144,6 +156,8 @@ def _limpiar(c):
         if ch == "`":
             j = c.find("`", i + 1)
             j = n if j < 0 else j
+            if "<<" in c[i + 1:j].replace("<<<", ""):
+                raise Incierto("heredoc dentro de comillas invertidas")
             subs.append(c[i + 1:j])
             out.append(" SUBST ")
             i = j + 1

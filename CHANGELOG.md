@@ -26,8 +26,10 @@ el aviso queda apagado salvo opt-in. `cmd`/`path` siguen opcionales.
     tras una redireccion (`cat < git push`), argumentos (`echo git commit`, `grep 'git push'`) ni
     `bash git push` (solo una ruta tras el interprete es un script). Si cuentan: `bash|sh|zsh -c
     "<cadena>"`, `$(...)`, comillas invertidas y `<(...)`/`>(...)`. En Windows, `Git.exe` es `git`.
-    Ante la duda no adivina: un heredoc cuyo delimitador no reconoce (`<<'a b'`, `<<\EOF`, `<<.`)
-    o comillas sin cerrar hacen que el comando entero no se evalue (no frena ni avisa). `path` casa con
+    Ante la duda no adivina: un heredoc cuyo delimitador no es una palabra limpia (`<<'a b'`,
+    `<<\EOF`, `<<.`, `<<'EOF'x`), un heredoc dentro de `$(...)`, comillas invertidas o `<(...)`, o
+    comillas sin cerrar hacen que el comando entero no se evalue (no frena ni avisa). La
+    aritmetica `$((...))` y `((...))` se salta: `1<<2` no es un heredoc. `path` casa con
     fnmatch desde la raiz o como fragmento.
   - La salida del freno solo cuenta al FINAL de la ultima linea del comando: un `# regla-vista:`
     dentro de un heredoc, entre comillas o en una linea intermedia no desactiva el freno.
@@ -66,15 +68,16 @@ el aviso queda apagado salvo opt-in. `cmd`/`path` siguen opcionales.
   Bash (paso 5 del plan, opcional) no se hizo: dependia de que el aviso pasara.
 - Limites del parser (precision antes que cobertura: lo que no ve, no frena): alias y funciones del
   shell, comandos dentro de variables (`$CMD`), `eval`, `git -C dir commit` (el `cmd` es un
-  prefijo de palabras), sustituciones anidadas de mas de 4 niveles, y todo comando con un heredoc
-  de delimitador raro o comillas sin cerrar (ver arriba): en todos esos casos el hook calla.
+  prefijo de palabras), sustituciones anidadas de mas de 4 niveles, `let x=1<<2` (se lee como
+  heredoc y oculta lo que sigue), y todo comando de los de "ante la duda" (ver arriba): en todos
+  esos casos el hook calla.
 
 ### Tests
-- `bin/test-action-recall.sh` (129 asertos): fallos en abierto, aviso, freno y su salida, ventana,
+- `bin/test-action-recall.sh` (137 asertos): fallos en abierto, aviso, freno y su salida, ventana,
   topes, partido del comando, Edit/Write, indice, convivencia con `journal-guard.sh` (su deny no
   cambia), defecto sin opt-in, `action_match.py` roto y el camino del deny (falsos frenos, salida
   solo al final, indice raro, estado ilegible, sin session_id, lock, 8 llamadas en paralelo, nombres
-  de Windows). 37 mutaciones en `tools/mutation-check.sh` (`m_action_recall.py`); `test-bench.sh`
+  de Windows). 40 mutaciones en `tools/mutation-check.sh` (`m_action_recall.py`); `test-bench.sh`
   caso 17 (huella del corpus).
 - Prueba real (`claude -p`, Sonnet, copia de una memoria real con la regla 99 en `freno=si`, repo
   de prueba con un proceso de review vivo): el primer `git commit` no corrio (el contador de commits

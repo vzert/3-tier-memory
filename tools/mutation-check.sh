@@ -237,6 +237,9 @@ caso "sin sustitucion proceso"  action_match.py m_action_recall.py test-action-r
 caso "estado forma laxa"        action_match.py m_action_recall.py test-action-recall.sh "estado con tipos raros" estado-forma-laxa
 caso "incierto adivina"         action_match.py m_action_recall.py test-action-recall.sh "heredoc con delimitador raro" incierto-adivina
 caso "comillas adivina"         action_match.py m_action_recall.py test-action-recall.sh "comillas sin cerrar" comillas-adivina
+caso "heredoc sin frontera"     action_match.py m_action_recall.py test-action-recall.sh "delimitador con comillas pegadas" heredoc-sin-frontera
+caso "heredoc en sustitucion"   action_match.py m_action_recall.py test-action-recall.sh "heredoc dentro de una sustitucion" heredoc-en-sustitucion
+caso "aritmetica como heredoc"  action_match.py m_action_recall.py test-action-recall.sh "aritmetica con << y despues" aritmetica-como-heredoc
 caso "forma sin titulo"        learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "sin .*Titulo" forma-sin-titulo
 caso "negrita impar"           learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "\*\* impar: rc 1" negrita-impar
 caso "comilla impar"           learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "comilla invertida impar: rc 1" comilla-impar

@@ -253,6 +253,13 @@ no_frena "cuerpo del heredoc" "$(printf 'cat <<EOF\ngit push\nEOF')"
 for d in "'a b'" "." '\\EOF' "~" "%" '$X' "é"; do
   no_frena "heredoc con delimitador raro $d" "$(printf 'cat <<%s\ngit push\nfin' "$d")"
 done
+for d in "'EOF'x" '"EOF"x' 'EOF"x"' "EOF'a'"; do
+  no_frena "delimitador con comillas pegadas $d" "$(printf 'cat <<%s\nEOF\ngit push\nfin' "$d")"
+done
+no_frena "heredoc dentro de una sustitucion" "$(printf 'echo $(cat <<EOF\n)\ngit push\nEOF\n)')"
+no_frena "heredoc dentro de comillas invertidas" "$(printf 'echo `cat <<EOF\n`\ngit push\nEOF\n`')"
+frena "aritmetica con << y despues el comando" "$(printf 'echo $((1<<2))\ngit push')"
+frena "(( )) con << y despues el comando" "(( x<<1 )) ; git push"
 no_frena "comillas sin cerrar" "echo 'abierta && git push"
 no_frena "incierto dentro de bash -c" "bash -c \"cat <<. ; git push\""
 no_frena "heredoc con delimitador numerico" "$(printf 'cat <<1\ngit push\n1')"
