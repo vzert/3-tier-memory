@@ -250,6 +250,11 @@ no_frena "redireccion de entrada" "cat < git push"
 no_frena "redireccion de salida" "echo hola > git push"
 no_frena "delimitador del heredoc" "$(printf 'cat <<git\npush\ngit')"
 no_frena "cuerpo del heredoc" "$(printf 'cat <<EOF\ngit push\nEOF')"
+for d in "'a b'" "." '\\EOF' "~" "%" '$X' "é"; do
+  no_frena "heredoc con delimitador raro $d" "$(printf 'cat <<%s\ngit push\nfin' "$d")"
+done
+no_frena "comillas sin cerrar" "echo 'abierta && git push"
+no_frena "incierto dentro de bash -c" "bash -c \"cat <<. ; git push\""
 no_frena "heredoc con delimitador numerico" "$(printf 'cat <<1\ngit push\n1')"
 no_frena "cuerpo de heredoc <<-" "$(printf 'cat <<-\x27FIN\x27\n\tgit push\n\tFIN')"
 no_frena "interprete sin ruta" "bash git push"

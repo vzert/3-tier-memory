@@ -49,6 +49,12 @@ M = {
     "estado-forma-laxa": [
         ("              and all(isinstance(x, str) for x in e[\"frenos\"]))",
          "              and True)")],
+    # ronda 3 del adversario: ante la duda no se evalua
+    "incierto-adivina": [
+        ('                raise Incierto("heredoc con un delimitador que no se reconoce")',
+         "                pass")],
+    "comillas-adivina": [
+        ('        raise Incierto("comillas sin cerrar")', "        return texto.split()")],
     "windows-sin-minusculas": [
         ("        b = b.lower()", "        pass")],
     "sin-especificidad": [

@@ -57,6 +57,13 @@ _VISTA_FIN = re.compile(r"(?:^|\s)#\s*regla-vista:([A-Za-z0-9][A-Za-z0-9._-]*#\d
 _PROFUNDIDAD = 4                        # `bash -c` / `$(...)` anidados: hasta aqui
 
 
+class Incierto(Exception):
+    """El comando tiene algo que el parser no sabe leer con seguridad (un heredoc cuyo delimitador
+    no reconoce, comillas sin cerrar). Ronda 3 del adversario: adivinar ahi convertia el cuerpo de
+    un heredoc en comandos y frenaba en falso. Regla de diseno: ante la duda, el comando entero no
+    se evalua (no frena ni avisa). Solo cuesta cobertura, nunca un bloqueo."""
+
+
 def _nombre(p, win=None):
     """El nombre del programa como lo compara el hook: sin ruta y, en Windows, sin `.exe` y en
     minusculas (`C:\\Program Files\\Git\\cmd\\Git.exe` = `git`)."""
@@ -106,6 +113,7 @@ def _limpiar(c):
                     out.append(" << H ")
                     i = m.end()
                     continue
+                raise Incierto("heredoc con un delimitador que no se reconoce")
             if ch == "\n" and pend:
                 out.append("\n")
                 i += 1
@@ -154,17 +162,27 @@ def _palabras(texto):
         lx.whitespace = " \t\r"
         lx.commenters = ""      # los comentarios ya los quito _limpiar (solo a principio de palabra)
         return list(lx)
-    except ValueError:          # comillas sin cerrar: mejor algo que nada
-        return texto.split()
+    except ValueError:          # comillas sin cerrar: no se adivina
+        raise Incierto("comillas sin cerrar")
 
 
 def segmentos(comando, _prof=0):
     """Lista de segmentos (listas de palabras) del comando, cada uno empezando por el programa.
+    Vacia si el comando, o cualquier parte que se ejecute dentro de el, es Incierto.
 
     Separan `&&`, `||`, `;`, `|`, `&`, parentesis y el salto de linea. Una redireccion (`<`, `>`,
     `>>`, `<<`, `<<<`, `&>`, `>&`...) NO separa: se come la palabra siguiente (el fichero o el
     delimitador) y el comando sigue (`cat < git push` es `cat push`, no `git push`). Ademas, los
     comandos de `bash|sh|zsh -c "<cadena>"`, `$(...)` y `...` se parten igual, por recursion."""
+    try:
+        return _segmentos(comando, _prof)
+    except Incierto:
+        if _prof:
+            raise               # una parte incierta hace incierto el comando entero
+        return []
+
+
+def _segmentos(comando, _prof):
     texto, subs = _limpiar(comando or "")
     out, cur, saltar = [], [], False
     for t in _palabras(texto):
