@@ -67,10 +67,12 @@ el aviso queda apagado salvo opt-in. `cmd`/`path` siguen opcionales.
   mas de 4 niveles.
 
 ### Tests
-- `bin/test-action-recall.sh` (76 asertos): fallos en abierto, aviso, freno y su salida, ventana,
+- `bin/test-action-recall.sh` (116 asertos): fallos en abierto, aviso, freno y su salida, ventana,
   topes, partido del comando, Edit/Write, indice, convivencia con `journal-guard.sh` (su deny no
-  cambia), defecto sin opt-in y `action_match.py` roto. 18 mutaciones en `tools/mutation-check.sh`
-  (`m_action_recall.py`); `test-bench.sh` caso 17 (huella del corpus).
+  cambia), defecto sin opt-in, `action_match.py` roto y el camino del deny (falsos frenos, salida
+  solo al final, indice raro, estado ilegible, sin session_id, lock, 8 llamadas en paralelo, nombres
+  de Windows). 32 mutaciones en `tools/mutation-check.sh` (`m_action_recall.py`); `test-bench.sh`
+  caso 17 (huella del corpus).
 - Prueba real (`claude -p`, Sonnet, copia de una memoria real con la regla 99 en `freno=si`, repo
   de prueba con un proceso de review vivo): el primer `git commit` no corrio (el contador de commits
   siguio en 1), el modelo repitio `# regla-vista:...#99` y explico la regla al usuario.
