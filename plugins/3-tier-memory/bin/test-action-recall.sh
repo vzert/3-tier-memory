@@ -20,6 +20,11 @@
 #      inyecta ningun aviso, y sin reglas con freno=si ni arranca python (indice `{"frenos": 0,`);
 #   9. un action_match.py que revienta (error de sintaxis, excepcion al importar, salida a medias)
 #      deja pasar la llamada: salida 0, vacia, sin stderr. El hook nunca bloquea por un fallo propio.
+#  10. el camino del deny (ronda 1 del adversario, 2026-10-05): comentarios, redirecciones,
+#      heredocs e interpretes no frenan en falso; `bash -c`, `$(...)`, multilinea si frenan; la
+#      salida `# regla-vista:` solo cuenta al final de la ultima linea; un indice de forma rara, un
+#      estado ilegible, la falta de session_id o el lock tomado callan el hook; en paralelo, un
+#      freno como mucho; `Git.exe` es `git` en Windows.
 # Las secciones 2-7 corren con el aviso encendido (opt-in) para probar su logica.
 #
 # Uso: bash bin/test-action-recall.sh   (sin dependencias; sale != 0 si algo falla)
@@ -228,6 +233,93 @@ roto "excepcion al importar" 'raise RuntimeError("roto")'
 roto "sale 1" 'import sys; sys.exit(1)'
 roto "JSON a medias" 'import sys; sys.stdout.write("{\"hookSpecificOutput\": {\"permissionDecision\": \"de"); sys.exit(1)'
 rm -rf "$B2"
+
+echo "10. camino del deny (ronda 1 del adversario): sin falsos frenos, sin quedar bloqueado"
+# git#2 es la regla con cmd=git push y freno=si. Cada caso en una sesion nueva.
+no_frena() {  # $1 etiqueta, $2 comando
+  nueva "s10-$1"; bash_ "$2" && ! printf '%s' "$OUT" | grep -q deny && ok || fail "falso freno ($1): '$OUT'"
+}
+frena() {     # $1 etiqueta, $2 comando
+  nueva "s10-$1"; bash_ "$2" && forma freno && ok || fail "deberia frenar ($1): '$OUT'"
+}
+no_frena "comentario" "# git push"
+no_frena "comentario tras ;" "ls; # git push"
+no_frena "comentario con separadores dentro" "# x; git push && y"
+no_frena "entre comillas" "echo 'x # git push'"
+no_frena "redireccion de entrada" "cat < git push"
+no_frena "redireccion de salida" "echo hola > git push"
+no_frena "delimitador del heredoc" "$(printf 'cat <<git\npush\ngit')"
+no_frena "cuerpo del heredoc" "$(printf 'cat <<EOF\ngit push\nEOF')"
+no_frena "cuerpo de heredoc <<-" "$(printf 'cat <<-\x27FIN\x27\n\tgit push\n\tFIN')"
+no_frena "interprete sin ruta" "bash git push"
+no_frena "argumento de grep" "git log --grep='git push'"
+no_frena "sustitucion entre comillas simples" "echo '\$(git push)'"
+no_frena "aritmetica" "echo \$((1 + 2))"
+frena "bash -c" "bash -c 'git push origin main'"
+frena "sh -lc" "sh -lc \"git push\""
+frena "sustitucion" "echo \"\$(git push)\""
+frena "comillas invertidas" "x=\`git push\`"
+frena "heredoc y despues el comando" "$(printf 'cat <<EOF && git push\ncuerpo\nEOF')"
+frena "multilinea" "$(printf 'echo a\ngit push')"
+frena "palabra con # y despues" "echo a#b && git push"
+frena "continuacion de linea" "$(printf 'git \\\npush')"
+frena "redireccion delante" "2>/dev/null git push"
+
+echo "   la salida del freno solo cuenta AL FINAL de la ultima linea"
+nueva s10v1; bash_ "$(printf 'cat <<EOF\n# regla-vista:git#2\nEOF\ngit push')" && forma freno && ok || fail "marcador dentro de un heredoc desactivo el freno: '$OUT'"
+nueva s10v2; bash_ "$(printf 'git push # regla-vista:git#2\necho fin')" && forma freno && ok || fail "marcador en una linea intermedia desactivo el freno: '$OUT'"
+nueva s10v3; bash_ "$(printf 'echo a\ngit push # regla-vista:git#2')" && ! printf '%s' "$OUT" | grep -q deny && ok || fail "marcador al final de la ultima linea no dejo pasar: '$OUT'"
+nueva s10v4; bash_ "echo '# regla-vista:git#2' && git push" && forma freno && ok || fail "marcador entre comillas desactivo el freno: '$OUT'"
+
+echo "   indice de forma rara, estado ilegible, sin session_id, lock: se calla, nunca frena"
+cp "$SD/.action-index.json" "$TMP/idx.bak"
+python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1]))
+for r in d['reglas']:
+    if r['freno']: r['freno'] = 'no'
+json.dump(d, open(sys.argv[1], 'w'))" "$SD/.action-index.json"
+nueva s10i1; bash_ "git push" && [ -z "$OUT" ] && ok || fail "freno:\"no\" en el indice frena: '$OUT'"
+python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1]))
+d['reglas'][0]['cmd'] = 'git push'
+json.dump(d, open(sys.argv[1], 'w'))" "$TMP/idx.bak"
+cp "$TMP/idx.bak" "$SD/.action-index.json"
+nueva s10i2; bash_ "git push" && [ -z "$OUT" ] && ok || fail "cmd como cadena (no lista): '$OUT'"
+build
+nueva s10e; bash_ "git push" >/dev/null
+EST="$SD/.action-recall-s10e.json"
+printf '{"llamadas": 1, "vistas": {}, "frenos": [' > "$EST"
+bash_ "git push" && [ -z "$OUT" ] && ok || fail "estado ilegible: volvio a frenar o hablo: '$OUT'"
+[ "$(cat "$EST")" = '{"llamadas": 1, "vistas": {}, "frenos": [' ] && ok || fail "el hook piso el estado ilegible: '$(cat "$EST")'"
+raw '{"cwd":"'"$P"'","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git push"}}' && [ -z "$OUT" ] && ok || fail "sin session_id frena: '$OUT'"
+raw '{"session_id":"","cwd":"'"$P"'","tool_name":"Bash","tool_input":{"command":"git push"}}' && [ -z "$OUT" ] && ok || fail "session_id vacio frena: '$OUT'"
+nueva s10l; mkdir "$SD/.action-recall-s10l.json.lock"
+bash_ "git push" && [ -z "$OUT" ] && ok || fail "con el lock de la sesion tomado por otra llamada, frena: '$OUT'"
+python3 -c "import os, sys, time; t = time.time() - 60; os.utime(sys.argv[1], (t, t))" "$SD/.action-recall-s10l.json.lock"
+bash_ "git push" && forma freno && ok || fail "un lock de hace 60 s (proceso muerto) no se quito: '$OUT'"
+[ ! -d "$SD/.action-recall-s10l.json.lock" ] && ok || fail "el lock quedo tomado despues de la llamada"
+
+echo "   llamadas en paralelo de la misma sesion: un freno como mucho, estado legible, sin restos"
+J='{"session_id":"s10p","cwd":"'"$P"'","hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"git push"}}'
+for i in 1 2 3 4 5 6 7 8; do
+  ( printf '%s' "$J" | HOME="$H" CLAUDE_PROJECT_DIR="$P" bash "$HOOK" > "$TMP/par-$i.out" 2>"$TMP/par-$i.err" ) &
+done
+wait
+N=$(cat "$TMP"/par-*.out | grep -c '"deny"')
+[ "$N" -le 1 ] && ok || fail "en paralelo salieron $N denies (como mucho 1)"
+cat "$TMP"/par-*.err | grep -q . && fail "en paralelo: stderr '$(cat "$TMP"/par-*.err | head -c 200)'" || ok
+python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$SD/.action-recall-s10p.json" 2>/dev/null && ok || fail "en paralelo el estado quedo ilegible"
+ls -a "$SD" | grep -E '\.tmp$|\.lock$' && fail "en paralelo quedaron temporales o locks" || ok
+
+echo "   nombres de programa en Windows (.exe, mayusculas)"
+python3 -c "
+import sys; sys.path.insert(0, sys.argv[1]); import action_match as a
+assert a._nombre('C:\\\\Program Files\\\\Git\\\\cmd\\\\Git.exe', win=True) == 'git'
+assert a._nombre('/usr/bin/git', win=False) == 'git'
+assert a._nombre('Git', win=False) == 'Git'
+" "$BIN" && ok || fail "_nombre no normaliza Git.exe en Windows"
 
 echo
 echo "RESULT: pass=$PASS fail=$FAIL"

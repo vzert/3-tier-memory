@@ -8,8 +8,9 @@ medio de un turno, en una llamada a `git commit`. F5 pone la regla delante en es
 hook PreToolUse. **El criterio del aviso no se cumplio**: con los disparadores `cmd`/`path` que
 escribieron los escritores de F4, la regla esperada salio entre las 2 primeras en 9 de 13 casos
 de accion (0,69; el criterio era 0,8) y, reproduciendo 5 sesiones reales contra esa memoria, el
-aviso saltaba en 8,95 de cada 20 llamadas (criterio: menos de 1). La causa: `cmd` de una palabra
-(`grep`, `rm`, `bash`: 467 de las 672 reglas que mostraron los avisos) y 16 reglas que casan a la vez con
+aviso saltaba en unas 9 de cada 20 llamadas (criterio: menos de 1; 8,95 con el primer parser, 9,28
+con el final sobre las mismas sesiones). La causa: `cmd` de una palabra (`grep`, `rm`, `bash`: 467
+de las 672 reglas que mostraron los avisos en la primera medicion) y 16 reglas que casan a la vez con
 `git commit` o con `CHANGELOG.md`. Se publica solo el **freno**, que el autor marca regla a regla, y
 el aviso queda apagado salvo opt-in. `cmd`/`path` siguen opcionales.
 
@@ -19,19 +20,30 @@ el aviso queda apagado salvo opt-in. `cmd`/`path` siguen opcionales.
   llamada (`permissionDecision: deny`) con la regla, su pie de retirada y la salida: repetir el
   comando con `# regla-vista:<topic>#<N>` al final. Frena una vez por regla y sesion. Nunca devuelve
   `allow` ni `ask`; Edit/Write nunca frenan.
-  - El comando se parte por `&&`, `||`, `;`, `|`, `&` y parentesis, sin `sudo`, `env`, `X=Y`,
-    `rtk` ni palabras de shell delante; `cmd` casa como principio de un segmento (`echo git commit`
-    y `grep 'git push'` no casan). `path` casa con fnmatch desde la raiz o como fragmento.
-  - Falla en abierto: sin indice, indice o entrada rotos, estado sin permiso de escritura, o un
-    `action_match.py` que revienta o deja la salida a medias, sale 0 y en silencio. Medido con
-    `claude -p` (2.1.288): un hook que pasa su timeout o sale 1 con JSON a medias no bloquea.
+  - El comando se parte por `&&`, `||`, `;`, `|`, `&`, parentesis y salto de linea, sin `sudo`,
+    `env`, `X=Y`, `rtk`, palabras de shell ni un descriptor (`2>/dev/null`) delante; `cmd` casa como
+    principio de un segmento. No cuentan como comando: comentarios, cuerpos de heredoc, lo que va
+    tras una redireccion (`cat < git push`), argumentos (`echo git commit`, `grep 'git push'`) ni
+    `bash git push` (solo una ruta tras el interprete es un script). Si cuentan: `bash|sh|zsh -c
+    "<cadena>"`, `$(...)` y comillas invertidas. En Windows, `Git.exe` es `git`. `path` casa con
+    fnmatch desde la raiz o como fragmento.
+  - La salida del freno solo cuenta al FINAL de la ultima linea del comando: un `# regla-vista:`
+    dentro de un heredoc, entre comillas o en una linea intermedia no desactiva el freno.
+  - Falla en abierto: sin indice, indice roto o con otra forma (`freno: "no"` no frena), entrada
+    rota, sin `session_id`, estado de la sesion ilegible (no lo pisa: volver a frenar seria
+    quitar la salida), estado sin permiso de escritura, lock de la sesion tomado por otra llamada
+    (espera 0,1 s; un lock de mas de 10 s se da por muerto), o un `action_match.py` que revienta o
+    deja la salida a medias: sale 0 y en silencio. El estado se escribe con un temporal unico bajo
+    ese lock: 8 llamadas a la vez dan un freno como mucho. Medido con `claude -p` (2.1.288): un hook
+    que pasa su timeout o sale 1 con JSON a medias no bloquea.
   - **Aviso opt-in** (`action_recall_aviso=1` en `memory/.memory-config`): hasta 2 reglas que casan
     por `cmd`/`path`, en el orden fijado antes de medir (prefijo de `cmd` mas largo, menos valores
     `cmd`+`path`, numero mas alto), 1.500 caracteres, sin repetir una regla en 30 llamadas.
 - `build-recall-index.py` escribe `.action-index.json` junto al indice de recall: solo las reglas
   vivas con `cmd` o `path`, y `frenos` delante. Sin frenos ni opt-in el hook sale sin arrancar
-  python (p95 de 200 llamadas intercaladas: 15,8 ms con el indice vacio, 43,9 ms con el de una
-  instalacion de 358 reglas con `cmd`/`path`).
+  python. p95 de 200 llamadas por variante, intercaladas, con el indice de una instalacion de 358
+  reglas con `cmd`/`path`: 61,7 ms si python corre (una regla con freno), 21,8 ms por la via rapida
+  (sin frenos) y 21,8 ms con el indice vacio.
 - `tools/recall-bench`: el canal `accion@2` existe (importa `action_match.py`) y se reporta tambien
   sobre los casos cuya regla esperada tiene un disparador de su tipo; `--desempate-antiguo` mide
   la sensibilidad al ultimo desempate. La `--salida` guarda la huella de cada corpus (sha256 de
@@ -41,12 +53,18 @@ el aviso queda apagado salvo opt-in. `cmd`/`path` siguen opcionales.
 - `bin/verify-hook-delivery.sh` mide seis canales y dos fallos: texto plano en PreToolUse y
   PostToolUse no llega (control), UserPromptSubmit si; JSON `additionalContext` en PreToolUse y
   PostToolUse si; `deny` con motivo llega y la herramienta no corre (con control de permisos); un
-  hook lento o roto no bloquea. Todo confirmado el 2026-10-03/05 en Claude Code 2.1.288.
+  hook lento o roto no bloquea; y los dos hooks reales juntos en Write (`journal-guard.sh` con
+  `journal_strict=1` y `action-recall.sh` con aviso): el fichero no se escribe, el modelo ve el
+  motivo del guard y el aviso. Todo confirmado el 2026-10-03/05 en Claude Code 2.1.288.
 - Plantilla `/checkpoint-3t` (Step 4): cuando usar `freno=si` y por que el `cmd` de una palabra no.
 
 ### Not included
 - El aviso por defecto y `cmd`/`path` obligatorios (ver arriba). El PostToolUse tras un error de
   Bash (paso 5 del plan, opcional) no se hizo: dependia de que el aviso pasara.
+- Limites del parser (precision antes que cobertura: lo que no ve, no frena): alias y funciones del
+  shell, comandos dentro de variables (`$CMD`), `eval`, `git -C dir commit` (el `cmd` es un
+  prefijo de palabras), heredocs con delimitador entre comillas raras y sustituciones anidadas de
+  mas de 4 niveles.
 
 ### Tests
 - `bin/test-action-recall.sh` (76 asertos): fallos en abierto, aviso, freno y su salida, ventana,

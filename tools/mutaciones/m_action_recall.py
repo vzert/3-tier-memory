@@ -8,15 +8,48 @@ import io, sys
 # Cada sustitucion tiene que calzar EXACTAMENTE una vez; si no, imprime 0 -> SIN PROBAR.
 M = {
     # action_match.py
+    # camino del deny (ronda 1 del adversario)
+    "redireccion-separa": [
+        ('        if es_op and ("<" in t or ">" in t):', "        if False:")],
+    "sin-heredoc": [
+        ("                m = _HEREDOC.match(c, i)", "                m = None")],
+    "comentario-no-corta": [
+        ('            if ch == "#" and (i == 0 or c[i - 1] in " \\t\\n;&|()"):', "            if False:")],
+    "interprete-sin-ruta": [
+        ('                if "/" in t or "\\\\" in t or t.startswith("."):', "                if True:")],
+    "sin-bash-c": [
+        ("                        extra += segmentos(s[k + 1], _prof + 1)", "                        pass")],
+    "sin-sustituciones": [
+        ("            extra += segmentos(sub, _prof + 1)", "            pass")],
+    "descriptor-es-programa": [
+        ("            if len(cur) == 1 and cur[0].isdigit():", "            if False:")],
+    "vista-en-cualquier-parte": [
+        ("    m = _VISTA_FIN.search(lineas[-1]) if lineas else None",
+         '    m = re.search(r"regla-vista:([A-Za-z0-9][A-Za-z0-9._-]*#[0-9]+)", comando or "")')],
+    "freno-truthy": [
+        ('            if r.get("freno") is True and r["id"] not in estado["frenos"]:',
+         '            if r.get("freno") and r["id"] not in estado["frenos"]:'),
+        ('                and isinstance(r.get("freno"), bool) and isinstance(r.get("n", 0), int)',
+         '                and isinstance(r.get("n", 0), int)')],
+    "estado-ilegible-vacio": [
+        ("        raise EstadoIlegible(ruta)", '        return {"llamadas": 0, "vistas": {}, "frenos": []}')],
+    "sin-session-compartida": [
+        ('        sid = datos.get("session_id")', '        sid = datos.get("session_id") or "sin-sesion"')],
+    "sin-lock": [
+        ("        if not _tomar_lock(estado_ruta):", "        if False:")],
+    "lock-viejo-se-queda": [
+        ("                if time.time() - os.stat(lock).st_mtime > LOCK_VIEJO:", "                if False:")],
+    "windows-sin-minusculas": [
+        ("        b = b.lower()", "        pass")],
     "sin-especificidad": [
         ('    hits.sort(key=lambda h: (-h[1], len(h[0].get("cmd") or []) + len(h[0].get("path") or []),',
          '    hits.sort(key=lambda h: (-h[1], 0,')],
     "sin-ventana": [
         ("VENTANA = 30 ", "VENTANA = 0 ")],
     "freno-siempre": [
-        ('            if r.get("freno") and r["id"] not in estado["frenos"]:', '            if r.get("freno"):')],
+        ('            if r.get("freno") is True and r["id"] not in estado["frenos"]:', '            if r.get("freno") is True:')],
     "sin-regla-vista": [
-        ('    return set(_VISTA.findall(comando or ""))', "    return set()")],
+        ("    return {m.group(1)} if m else set()", "    return set()")],
     "sin-sudo": [
         ('        elif p == "sudo":', '        elif p == "sudo-no":')],
     "sin-rtk": [

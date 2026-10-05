@@ -26,13 +26,20 @@
 #   - Un hook que FALLA no debe bloquear (F5: action-recall.sh no frena nunca por un fallo propio):
 #     `touch lento.txt` lo ve un hook que tarda 8 s con timeout de 2 s, y `touch roto.txt` uno que
 #     imprime un JSON a medias con "deny" dentro y sale 1. Los dos ficheros SI deben existir.
+#   - Los dos hooks REALES del plugin juntos en PreToolUse de Write (F5, hallazgo de la ronda 1 del
+#     adversario): journal-guard.sh con journal_strict=1 y action-recall.sh con el aviso encendido
+#     y una regla cuyo `path` es memory/_prueba.md. Escribir ese fichero: el guard niega (deny con
+#     "journal_strict=1") y action-recall avisa (additionalContext con un centinela). memory/_prueba.md
+#     NO debe existir y el modelo debe ver el motivo del guard (GUARD); ACC dice si el aviso de
+#     action-recall llego junto al rechazo.
 # Compara lo que dice el modelo con lo que paso en el disco.
 #
 # Uso: bash bin/verify-hook-delivery.sh   (necesita `claude` en el PATH y autenticado; usa un
 # modelo barato por defecto, exportar VERIFY_MODEL para cambiarlo)
 # Salida esperada: PRE NO, POST NO, PROMPT SI (confirmada el 2026-09-14 y en 2.1.283); JPRE SI,
 # JPOST SI y DENY SI con witness.txt ausente y control.txt presente (los seis confirmados el
-# 2026-10-03 en 2.1.288); lento.txt y roto.txt presentes. Este script mide QUE llega, no CUANDO: que el JPRE llega despues de
+# 2026-10-03 en 2.1.288); lento.txt y roto.txt presentes; GUARD SI y ACC SI con memory/_prueba.md
+# ausente (2026-10-05, 2.1.288). Este script mide QUE llega, no CUANDO: que el JPRE llega despues de
 # emitida la llamada, junto a su resultado, se midio a mano el 2026-09-30 (2.1.285, regla 298), y
 # por eso el freno de F5 usa deny. Cualquier otra combinacion es una senal de que el harness cambio: revisa
 # los comentarios de journal-guard.sh, journal-drift-nudge.sh y action-recall.sh, y la regla 298.
@@ -40,10 +47,25 @@
 set -u
 MODEL="${VERIFY_MODEL:-sonnet}"
 D=$(mktemp -d) || { echo "mktemp fallo"; exit 1; }
-trap 'rm -rf "$D"' EXIT
-mkdir -p "$D/.claude"
-
 T=$(date +%s)
+SENT_ACC="SENTINEL_ACC_${T}_g"
+BIN="$(cd "$(dirname "$0")" && pwd)"
+mkdir -p "$D/.claude" "$D/memory"
+# Estado de los hooks reales: el directorio por proyecto de Claude Code, bajo las dos formas de la
+# ruta (macOS da /var/... y su realpath /private/var/...). Se borran al salir.
+SDS=""
+for R in "$D" "$(cd "$D" && pwd -P)"; do
+  SDS="$SDS $HOME/.claude/projects/$(printf '%s' "$R" | sed 's/[^A-Za-z0-9]/-/g')"
+done
+trap 'rm -rf "$D" $SDS' EXIT
+printf -- '---\ntype: index\n---\n# Pendientes\n' > "$D/memory/_pendientes.md"
+printf 'journal_strict=1\naction_recall_aviso=1\n' > "$D/memory/.memory-config"
+for SD in $SDS; do
+  mkdir -p "$SD"
+  printf '{"frenos": 0, "reglas": [{"id": "prueba#1", "topic": "prueba", "n": 1, "texto": "%s", "cmd": [], "path": ["memory/_prueba.md"], "freno": false, "ancla": ""}]}\n' \
+    "$SENT_ACC" > "$SD/.action-index.json"
+done
+
 SENT_PRE="SENTINEL_PRE_${T}_a"
 SENT_POST="SENTINEL_POST_${T}_b"
 SENT_PROMPT="SENTINEL_PROMPT_${T}_c"
@@ -83,6 +105,8 @@ cat > "$D/.claude/settings.json" <<EOF
   "hooks": {
     "PreToolUse": [{"matcher": "Edit", "hooks": [{"type": "command", "command": "bash $D/hook-pre.sh"}]},
                    {"matcher": "Write", "hooks": [{"type": "command", "command": "bash $D/hook-jpre.sh"}]},
+                   {"matcher": "Edit|Write|MultiEdit", "hooks": [{"type": "command", "command": "bash $BIN/journal-guard.sh"}]},
+                   {"matcher": "Bash|Edit|Write|MultiEdit", "hooks": [{"type": "command", "command": "bash $BIN/action-recall.sh"}]},
                    {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash $D/hook-deny.sh"}]},
                    {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash $D/hook-falla.sh", "timeout": 2}]}],
     "PostToolUse": [{"matcher": "Edit", "hooks": [{"type": "command", "command": "bash $D/hook-post.sh"}]},
@@ -94,7 +118,7 @@ EOF
 printf 'linea original\n' > "$D/note.txt"
 
 RESP=$(cd "$D" && claude -p \
-  "Haz estas cuatro cosas, en orden y una sola vez cada una, sin reintentar ninguna: (1) edita note.txt agregando una linea 'hello'; (2) crea json.txt con el contenido 'x'; (3) corre por Bash exactamente 'touch control.txt' y despues, en otra llamada, exactamente 'touch witness.txt'; (4) corre por Bash 'touch lento.txt' y despues 'touch roto.txt'. Luego, en tu respuesta final de texto (nada mas), dime EXACTAMENTE cuales de estos textos viste en algun resultado de herramienta, salida de hook, motivo de rechazo o system-reminder: '$SENT_PRE', '$SENT_POST', '$SENT_PROMPT', '$SENT_JPRE', '$SENT_JPOST', '$SENT_DENY'. Responde con seis lineas en este formato literal: 'PRE: SI' o 'PRE: NO', y lo mismo para POST, PROMPT, JPRE, JPOST y DENY." \
+  "Haz estas cinco cosas, en orden y una sola vez cada una, sin reintentar ninguna: (1) edita note.txt agregando una linea 'hello'; (2) crea json.txt con el contenido 'x'; (3) corre por Bash exactamente 'touch control.txt' y despues, en otra llamada, exactamente 'touch witness.txt'; (4) corre por Bash 'touch lento.txt' y despues 'touch roto.txt'; (5) con la herramienta Write crea el fichero nuevo memory/_prueba.md con el contenido 'x'. Luego, en tu respuesta final de texto (nada mas), dime EXACTAMENTE cuales de estos textos viste en algun resultado de herramienta, salida de hook, motivo de rechazo o system-reminder: '$SENT_PRE', '$SENT_POST', '$SENT_PROMPT', '$SENT_JPRE', '$SENT_JPOST', '$SENT_DENY', 'journal_strict=1', '$SENT_ACC'. Responde con ocho lineas en este formato literal: 'PRE: SI' o 'PRE: NO', y lo mismo para POST, PROMPT, JPRE, JPOST, DENY, GUARD (el texto journal_strict=1) y ACC." \
   --permission-mode acceptEdits --allowedTools "Bash(touch:*)" --settings "$D/.claude/settings.json" \
   --model "$MODEL" < /dev/null 2>&1)
 
@@ -110,8 +134,10 @@ echo "=== lo que paso en el disco ==="
   || echo "FALLO: lento.txt no existe — un hook lento BLOQUEO la llamada"
 [ -f "$D/roto.txt" ] && echo "OK: roto.txt existe — un hook con JSON a medias y exit 1 no bloquea" \
   || echo "FALLO: roto.txt no existe — un hook roto BLOQUEO la llamada"
+[ -f "$D/memory/_prueba.md" ] && echo "FALLO: memory/_prueba.md EXISTE — el deny de journal-guard se perdio junto a action-recall" \
+  || echo "OK: memory/_prueba.md no existe — el deny de journal-guard se mantiene con action-recall en el mismo matcher"
 echo
 echo "=== lo que el modelo dice haber visto ==="
-echo "$RESP" | grep -E '^(PRE|POST|PROMPT|JPRE|JPOST|DENY):' || echo "$RESP"
+echo "$RESP" | grep -E '^(PRE|POST|PROMPT|JPRE|JPOST|DENY|GUARD|ACC):' || echo "$RESP"
 echo
-echo "=== esperado: PRE NO / POST NO / PROMPT SI / JPRE SI / JPOST SI / DENY SI (witness ausente, control presente), lento y roto presentes ==="
+echo "=== esperado: PRE NO / POST NO / PROMPT SI / JPRE SI / JPOST SI / DENY SI (witness ausente, control presente), lento y roto presentes / GUARD SI con _prueba.md ausente ==="

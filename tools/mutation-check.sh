@@ -217,6 +217,21 @@ caso "via rapida ignora opt-in" action-recall.sh m_action_recall.py test-action-
 caso "stderr del hook"          action-recall.sh m_action_recall.py test-action-recall.sh "action_match roto .error de sintaxis" stderr-del-hook
 caso "reenvia salida rota"      action-recall.sh m_action_recall.py test-action-recall.sh "action_match roto .JSON a medias" reenvia-salida-rota
 caso "frenos sin contar"        build-recall-index.py m_action_recall.py test-action-recall.sh "el indice real no cuenta 2 frenos" frenos-sin-contar
+# Camino del deny (ronda 1 del adversario de F5): cada arreglo con su aserto.
+caso "redireccion separa"       action_match.py m_action_recall.py test-action-recall.sh "falso freno .redireccion de entrada" redireccion-separa
+caso "sin heredoc"              action_match.py m_action_recall.py test-action-recall.sh "falso freno .cuerpo del heredoc" sin-heredoc
+caso "comentario no corta"      action_match.py m_action_recall.py test-action-recall.sh "falso freno .comentario con separadores dentro" comentario-no-corta
+caso "interprete sin ruta"      action_match.py m_action_recall.py test-action-recall.sh "falso freno .interprete sin ruta" interprete-sin-ruta
+caso "sin bash -c"              action_match.py m_action_recall.py test-action-recall.sh "deberia frenar .bash -c" sin-bash-c
+caso "sin sustituciones"        action_match.py m_action_recall.py test-action-recall.sh "deberia frenar .sustitucion" sin-sustituciones
+caso "descriptor es programa"   action_match.py m_action_recall.py test-action-recall.sh "deberia frenar .redireccion delante" descriptor-es-programa
+caso "vista en cualquier parte" action_match.py m_action_recall.py test-action-recall.sh "marcador dentro de un heredoc" vista-en-cualquier-parte
+caso "freno truthy"             action_match.py m_action_recall.py test-action-recall.sh "freno:.no. en el indice frena" freno-truthy
+caso "estado ilegible vacio"    action_match.py m_action_recall.py test-action-recall.sh "estado ilegible: volvio a frenar" estado-ilegible-vacio
+caso "sin session compartida"   action_match.py m_action_recall.py test-action-recall.sh "sin session_id frena" sin-session-compartida
+caso "sin lock"                 action_match.py m_action_recall.py test-action-recall.sh "lock de la sesion tomado" sin-lock
+caso "lock viejo se queda"      action_match.py m_action_recall.py test-action-recall.sh "lock de hace 60 s" lock-viejo-se-queda
+caso "windows sin minusculas"   action_match.py m_action_recall.py test-action-recall.sh "no normaliza Git.exe" windows-sin-minusculas
 caso "forma sin titulo"        learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "sin .*Titulo" forma-sin-titulo
 caso "negrita impar"           learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "\*\* impar: rc 1" negrita-impar
 caso "comilla impar"           learning_vecinos.py m_learning_dedup.py test-learning-dedup.sh "comilla invertida impar: rc 1" comilla-impar
