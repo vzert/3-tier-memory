@@ -673,7 +673,13 @@ python3 "$JBIN/journal-emit.py" --type learning.add --topic <topic-slug> \
 
 **`--disparadores` (2.48.0, opcional).** Frases de como describiria el momento del error quien NO
 conoce la regla (3-6: la intencion justo antes, el sintoma, la pregunta), mas `cmd`, `path` y
-`tool` si la regla los nombra (para la F5; cmd es un prefijo, sin flags `--`). Van al final de la
+`tool` si la regla los nombra (cmd es un prefijo, sin flags `--`). **`freno=si` (2.49.0)**: solo
+para una regla cuyo error ocurre AL correr ese `cmd` y no se arregla despues (commitear con el
+review vivo, pushear sin veredicto). El hook PreToolUse niega ese comando una vez por sesion con la
+regla delante; para seguir, el agente lo repite con `# regla-vista:<topic>#<N>` al final. Usa un
+`cmd` de dos palabras o mas (`git commit`, no `git`): uno de una palabra frena demasiado. El aviso
+por `cmd`/`path` sin freno es opt-in (`action_recall_aviso=1` en memory/.memory-config): en la F5
+no paso su criterio. Van al final de la
 linea como comentario HTML; no se ven al renderizar y el recall indexa las frases sin mostrarlas.
 Medido en la F4: no subieron el recall de prompt al criterio, asi que no se exigen; y con frases
 en todas las reglas cambiaron QUE reglas salian (2 casos ganados, 2 perdidos). No enriquezcas en
