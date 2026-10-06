@@ -55,7 +55,7 @@ regla nueva "Corrige regla 217: …" que deja viva la 217) seguia en tres corpus
 - Banco (raices congeladas de F5 con los mismos 2 eventos): un caso nuevo, fijado antes de aplicar
   con su cita literal, devolvia la 218 (fuga 1); despues, fuga 0. Los 34 casos de F5 dan lo mismo
   salvo el orden de los puestos 3-4 de un caso de dedup.
-- `bin/test-consolidate-aviso.sh` (nuevo) y la seccion 23 de `bin/test-learning-update.sh`, con 16
+- `bin/test-consolidate-aviso.sh` (nuevo) y la seccion 23 de `bin/test-learning-update.sh`, con 18
   mutaciones en `tools/mutation-check.sh` (`tools/mutaciones/m_consolidate.py`).
 
 ## [2.49.0] - 2026-10-05
