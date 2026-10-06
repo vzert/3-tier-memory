@@ -69,7 +69,10 @@ raw() {
   OUT=$(printf '%s' "$1" | HOME="$H" CLAUDE_PROJECT_DIR="$P" bash "$HOOK" 2>"$ERR"); RC=$?
   [ "$RC" -eq 0 ] && [ ! -s "$ERR" ]
 }
-bash_() { raw "$(python3 -c 'import json,sys;print(json.dumps({"session_id":sys.argv[2],"cwd":sys.argv[3],"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":sys.argv[1]}}))' "$1" "$SID" "$P")"; }
+# El comando va por stdin y en UTF-8, no como argumento: en Git Bash (Windows), MSYS convierte a
+# ruta de Windows un argumento que parece ruta POSIX (`/usr/bin/git push` llegaba como
+# `C:/Program Files/Git/usr/bin/git push`; CI 37391377782) y la prueba no le daba al hook el comando.
+bash_() { raw "$(printf '%s' "$1" | python3 -c 'import json,sys;c=sys.stdin.buffer.read().decode("utf-8");print(json.dumps({"session_id":sys.argv[1],"cwd":sys.argv[2],"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":c}}))' "$SID" "$P")"; }
 edit_() { raw "$(python3 -c 'import json,sys;print(json.dumps({"session_id":sys.argv[3],"cwd":sys.argv[4],"hook_event_name":"PreToolUse","tool_name":sys.argv[1],"tool_input":{"file_path":sys.argv[2],"content":"x"}}))' "$1" "$2" "$SID" "$P")"; }
 # forma: aviso = JSON valido con SOLO hookEventName + additionalContext; freno = deny + motivo, sin aviso
 forma() { printf '%s' "$OUT" | python3 -c '
@@ -145,7 +148,10 @@ t = 'x' * 1000
 json.dump({'reglas': [{'id': 'l#1', 'topic': 'l', 'n': 1, 'texto': t, 'cmd': ['git log'], 'path': [], 'freno': False, 'ancla': 'x'},
                       {'id': 'l#2', 'topic': 'l', 'n': 2, 'texto': t, 'cmd': ['git log'], 'path': [], 'freno': False, 'ancla': 'x'}]},
           open(sys.argv[1], 'w'))" "$SD/.action-index.json"
-nueva s4b; bash_ "git log" && N=$(printf '%s' "$OUT" | python3 -c 'import json,sys;print(len(json.load(sys.stdin)["hookSpecificOutput"]["additionalContext"]))') && [ "$N" -le 1500 ] && [ "$N" -gt 1000 ] && ok || fail "tope de 1.500 caracteres: $N"
+# Se cuenta en caracteres sobre la salida leida como UTF-8 (en Windows, stdin de python sigue la
+# pagina de codigos y contaba de mas). Si falla, se imprime el texto para diagnosticarlo.
+nueva s4b; bash_ "git log" && N=$(printf '%s' "$OUT" | python3 -c 'import json,sys;print(len(json.loads(sys.stdin.buffer.read().decode("utf-8"))["hookSpecificOutput"]["additionalContext"]))') && [ "$N" -le 1500 ] && [ "$N" -gt 1000 ] && ok \
+  || fail "tope de 1.500 caracteres: $N" "$(printf '%s' "$OUT" | python3 -c 'import json,sys;t=json.loads(sys.stdin.buffer.read().decode("utf-8"))["hookSpecificOutput"]["additionalContext"];print(repr(t[:200]));print(repr(t[-700:]))' 2>&1)"
 cp "$TMP/idx.bak" "$SD/.action-index.json"
 nueva s4c; bash_ "git commit" && [ "$(ids | wc -w | tr -d ' ')" -le 2 ] && ok || fail "mas de 2 reglas: '$(ids)'"
 
