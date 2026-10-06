@@ -131,7 +131,7 @@ regla uno '8. **Corregido a medias** — minusculas: no es la forma'
 regla uno '9. **Corrige regla 1: retirada ya** — x — ⊘ RETIRADA (2026-10-06, superada por #1): ya'
 # La lista completa sale del --json: la linea del aviso recorta a 3 ("…"), y un "no avisa X"
 # mirado sobre una lista recortada pasaria sin mirar nada (lo destapo mutation-check).
-H=$(python3 "$BIN/consolidate-aviso.py" --memory-dir "$M" --json | python3 -c 'import json,sys; print(" ".join(f"{x["topic"]}#{x["regla"]}" for x in json.load(sys.stdin)["h11"]))')
+H=$(python3 "$BIN/consolidate-aviso.py" --memory-dir "$M" --json | python3 -c 'import json,sys; print(" ".join("%s#%s" % (x["topic"], x["regla"]) for x in json.load(sys.stdin)["h11"]))')
 chk "h11 exactamente 4, 6 y 7" "uno#4 uno#6 uno#7" "$H"
 has "titulo 'Corrige regla N' avisa" " $H " " uno#4 "
 has "titulo 'CORREGIDO el' avisa" " $H " " uno#6 "

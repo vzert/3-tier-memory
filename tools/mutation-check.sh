@@ -262,6 +262,7 @@ caso "archivados cuentan"      consolidate-aviso.py m_consolidate.py test-consol
 caso "aviso sin guarda"        consolidate-aviso.py m_consolidate.py test-consolidate-aviso.sh "aviso con un topic ilegible" aviso-sin-guarda
 caso "guardar no escribe"      consolidate-aviso.py m_consolidate.py test-consolidate-aviso.sh "estado guardado" guardar-no-escribe
 caso "aviso solo al agente"    session-start.sh   m_consolidate.py test-consolidate-aviso.sh "persona: la linea" aviso-solo-agente
+caso "paperclip recibe aviso"  session-start.sh   m_consolidate.py test-consolidate-aviso.sh "Paperclip: no hay linea" paperclip-no-detectado
 caso "lv retrocede"            journal-compact.py m_consolidate.py test-learning-update.sh "23b una fecha anterior no retrocede" lv-retrocede
 caso "lv fecha sin validar"    journal-compact.py m_consolidate.py test-learning-update.sh "23f fecha mala a mano" lv-fecha-sin-validar
 caso "lv inventa frontmatter"  journal-compact.py m_consolidate.py test-learning-update.sh "23g sin frontmatter" lv-inventa-frontmatter

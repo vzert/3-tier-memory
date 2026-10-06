@@ -164,7 +164,8 @@ It prints JSON: `candidates` (strong pairs ≥ threshold) and `borderline` (top-
 **EARLY-EXIT:** if `candidates`, `borderline`, `pares` AND `h11` are all empty, print:
 > Corpus limpio: 0 pares duplicados sobre el umbral y 0 reglas que corrigen a otra (N unidades evaluadas). No se requiere consolidación de dedup.
 
-…and **skip Steps 1 and 2b entirely** — do NOT spawn any judging agent. Proceed to Step 2/3 only if the user asked for contradictions/reflection. This is the whole point: when there is nothing to merge, consolidation costs milliseconds, not a multi-agent fan-out.
+…and **skip Steps 1 and 2b entirely** — do NOT spawn any judging agent. Still run Step 4c: a
+clean corpus counts as reviewed, and without it the session-start notice never goes quiet. Proceed to Step 2/3 only if the user asked for contradictions/reflection. This is the whole point: when there is nothing to merge, consolidation costs milliseconds, not a multi-agent fan-out.
 
 ## Step 1: Dedup — judge ONLY the candidate pairs
 
@@ -325,8 +326,8 @@ notice ("CONSOLIDAR: learnings/<topic>.md crecio N reglas …") counts from here
 ```
 It writes `memory/.consolidate-state.json` (the highest rule number of each topic; growth is
 counted by number, so retiring rules never hides it). Run it once Steps 0.5, 1 and 2b ran
-(every candidate pair and every `h11` entry was judged), even if the user declined every
-proposal. Do not run it if you skipped them: the notice would go quiet over a corpus nobody looked
+(every candidate pair and every `h11` entry was judged, or Step 0.5 took the EARLY-EXIT), even if
+the user declined every proposal. Do not run it if you skipped them: the notice would go quiet over a corpus nobody looked
 at.
 
 ## Step 5: Git commit (best-effort)

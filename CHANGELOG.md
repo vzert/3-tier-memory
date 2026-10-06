@@ -22,8 +22,8 @@ regla nueva "Corrige regla 217: …" que deja viva la 217) seguia en tres corpus
   Modos: `--aviso` (una linea o nada; sale 0 siempre), `--json` y `--pares` (para `/audit-3t` y
   `/consolidate-3t`) y `--guardar-estado`. Los pares son O(n^2) por topic y no corren al arrancar.
 - **`session-start.sh`**: una linea "CONSOLIDAR: …" al agente y a la persona cuando hay crecimiento
-  o una correccion por adicion viva. No en agentes de Paperclip. Medido: 0,1 s sobre un corpus de
-  6.400 reglas.
+  o una correccion por adicion viva. No en agentes de Paperclip. Medido: 0,08 s (3 corridas) sobre
+  la memoria mas grande a mano, 551 topics y 3.213 reglas.
 - **`learning.update --last-verified YYYY-MM-DD`**: pone `last_verified:` en el frontmatter del
   topic file. Solo avanza (una fecha igual o anterior no escribe, asi que un replay no la hace
   retroceder). Sin frontmatter, cuarentena: no inventa uno.
@@ -55,7 +55,7 @@ regla nueva "Corrige regla 217: …" que deja viva la 217) seguia en tres corpus
 - Banco (raices congeladas de F5 con los mismos 2 eventos): un caso nuevo, fijado antes de aplicar
   con su cita literal, devolvia la 218 (fuga 1); despues, fuga 0. Los 34 casos de F5 dan lo mismo
   salvo el orden de los puestos 3-4 de un caso de dedup.
-- `bin/test-consolidate-aviso.sh` (nuevo) y la seccion 23 de `bin/test-learning-update.sh`, con 18
+- `bin/test-consolidate-aviso.sh` (nuevo) y la seccion 23 de `bin/test-learning-update.sh`, con 19
   mutaciones en `tools/mutation-check.sh` (`tools/mutaciones/m_consolidate.py`).
 
 ## [2.49.0] - 2026-10-05

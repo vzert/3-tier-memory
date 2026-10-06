@@ -37,6 +37,8 @@ M = {
         ("        os.replace(tmp, os.path.join(mem, ESTADO))", "        os.unlink(tmp)")],
     # session-start.sh
     "aviso-solo-agente": [('      human "$CONSOL_AVISO"', "      :")],
+    # si los agentes de Paperclip no se detectan, la linea les llega: el aserto de Paperclip cae
+    "paperclip-no-detectado": [('[ -n "$PAPERCLIP_RUN_ID" ] && IS_PAPERCLIP_AGENT=true', ':')],
     # journal-compact.py
     "lv-retrocede": [
         ('            if re.fullmatch(r"\\d{4}-\\d{2}-\\d{2}", viejo) and viejo >= lv:', "            if False:")],
