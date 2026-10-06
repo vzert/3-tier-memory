@@ -2687,7 +2687,45 @@ def apply_learning_update(mem, p):
             atomic_write(ipath, ilines)
             changed = True
 
+    lv = p.get("last_verified") or ""
+    if lv:
+        if set_last_verified(mem, topic, lv):
+            changed = True
+
     return changed
+
+
+def set_last_verified(mem, topic, lv):
+    """`last_verified: <lv>` en el frontmatter de learnings/<topic>.md (F6, 2.50.0).
+
+    Es lo que /audit-3t lee para la frescura y lo que /consolidate-3t Step 4 refresca. Hasta 2.49.0
+    era una edicion directa, la unica de /consolidate-3t fuera del journal. Solo AVANZA: una fecha
+    igual o anterior a la que ya tiene no escribe, asi que un replay (o un evento viejo que llega
+    tarde) no la hace retroceder. Sin frontmatter no se inventa uno: cuarentena con motivo.
+    La fecha llega validada (forma y calendario) por el validador de learning.update: una sola
+    capa, para que su mutacion no quede tapada por una segunda."""
+    tpath = os.path.join(mem, "learnings", topic + ".md")
+    if not os.path.isfile(tpath):
+        raise Quarantine(f"no-anchor: learnings/{topic}.md no existe")
+    lines = read_lines(tpath)
+    if not lines or lines[0].strip() != "---":
+        raise Quarantine(f"no-anchor: learnings/{topic}.md no tiene frontmatter (--- en la linea 1)")
+    fin = next((i for i in range(1, min(len(lines), 40)) if lines[i].strip() == "---"), None)
+    if fin is None:
+        raise Quarantine(f"no-anchor: el frontmatter de learnings/{topic}.md no se cierra")
+    for i in range(1, fin):
+        m = re.match(r"^last_verified:\s*(.*?)\s*$", lines[i])
+        if m:
+            viejo = m.group(1).strip().strip("'\"")
+            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", viejo) and viejo >= lv:
+                return False
+            lines[i] = f"last_verified: {lv}"
+            break
+    else:
+        lines.insert(fin, f"last_verified: {lv}")
+    bump_updated(lines)
+    atomic_write(tpath, lines)
+    return True
 
 
 def apply_learning_retire(mem, p):
@@ -3866,8 +3904,17 @@ def validate(ev):
         if not p.get("topic"):
             raise Quarantine("malformed: learning.update sin 'topic'")
         if not (p.get("text") or p.get("quickref") or p.get("title") or p.get("when")
-                or p.get("disparadores")):
+                or p.get("disparadores") or p.get("last_verified")):
             raise Quarantine("malformed: learning.update sin nada que corregir")
+        lv = p.get("last_verified")
+        if lv:
+            if not (isinstance(lv, str) and DATE_RE.match(lv)):
+                raise Quarantine(f"malformed: learning.update last_verified {lv!r} no es YYYY-MM-DD")
+            try:
+                date.fromisoformat(lv)
+            except ValueError:
+                raise Quarantine(f"malformed: learning.update last_verified {lv!r} no es una fecha "
+                                 f"del calendario")
         if (p.get("text") or p.get("disparadores")) and not p.get("match_prefix"):
             raise Quarantine("malformed: learning.update con 'text' o 'disparadores' sin "
                              "'match_prefix' — sin ancla no se sabe que regla reescribir")

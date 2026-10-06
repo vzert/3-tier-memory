@@ -84,6 +84,10 @@ Tipos de evento:
   learning.update   --topic T [--match-prefix P --text "<nuevo>"]
                     [--quickref-prefix QP --quickref "<nuevo>"] [--title TT] [--when W]
                     [--match-prefix P --disparadores "<frases=...>"]                     (2.48.0)
+                    [--last-verified YYYY-MM-DD]                                          (2.50.0)
+                    --last-verified pone `last_verified:` en el frontmatter del topic file (lo
+                    que /audit-3t mira para la frescura). Solo avanza: una fecha anterior a la
+                    que ya tiene no la cambia, asi que un replay viejo no la hace retroceder.
                     --disparadores sin --text enriquece la regla sin cambiar su texto; con
                     --text sin --disparadores, la regla conserva los que tenia.
                     Corrige una regla YA escrita, CONSERVANDO su numero. Un learning no tiene id
@@ -670,6 +674,8 @@ def main():
     ap.add_argument("--solo-vecinos", dest="solo_vecinos", action="store_true")
     # learning.add / learning.update: disparadores (F4, 2.48.0)
     ap.add_argument("--disparadores", default=None)
+    # learning.update: fecha de la ultima revision del topic (F6, 2.50.0)
+    ap.add_argument("--last-verified", dest="last_verified", default="")
     a = ap.parse_args()
 
     memory_dir = resolve_memory_dir(a.memory_dir)
@@ -872,9 +878,13 @@ def main():
             sys.exit("journal-emit: --match-prefix sin --text ni --disparadores no corrige nada")
         if qprefix and not quickref:
             sys.exit("journal-emit: --quickref-prefix sin --quickref no corrige nada")
-        if not (text or quickref or title or when or disp):
+        last_verified = (a.last_verified or "").strip()
+        if last_verified and not (re.fullmatch(r"\d{4}-\d{2}-\d{2}", last_verified)
+                                  and fecha_real(last_verified)):
+            sys.exit(f"journal-emit: --last-verified {last_verified!r} no es una fecha YYYY-MM-DD")
+        if not (text or quickref or title or when or disp or last_verified):
             sys.exit("journal-emit: learning.update necesita al menos uno de --text, --quickref, "
-                     "--title, --when o --disparadores")
+                     "--title, --when, --disparadores o --last-verified")
         base["payload"] = {
             "topic": topic,
             "match_prefix": mprefix,
@@ -884,6 +894,7 @@ def main():
             "quickref": quickref,
             "title": title,
             "when": when,
+            "last_verified": last_verified,
         }
         write_event(memory_dir, base)
         print(f"l-topic-{topic}")

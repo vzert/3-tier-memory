@@ -765,6 +765,20 @@ PYEOF
       out ""
     fi
   fi
+
+  # Cuando toca consolidar (F6, 2.50.0): un topic que crecio 15 reglas o mas desde la ultima
+  # /consolidate-3t, o una regla viva que "corrige" a otra (H11). Una linea, solo si hay algo, a
+  # los dos canales: consolidar pide aprobar fusiones, y eso lo decide la persona. Los pares
+  # parecidos NO van aqui (son O(n^2) por topic): los saca /audit-3t y /consolidate-3t. Fuera de
+  # la rama de Paperclip a proposito: sus agentes no consolidan (F7 lo decide Victor).
+  if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/consolidate-aviso.py" ] && [ -d "$MEMORY_DIR/learnings" ]; then
+    CONSOL_AVISO=$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/consolidate-aviso.py" --memory-dir "$MEMORY_DIR" --aviso 2>/dev/null | tr -d '\r' | head -1)
+    if [ -n "$CONSOL_AVISO" ]; then
+      out "$CONSOL_AVISO"
+      human "$CONSOL_AVISO"
+      out ""
+    fi
+  fi
 fi
 
 # Migrate old command names to -3t suffix (one-time, for existing installs)

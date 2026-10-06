@@ -1,6 +1,56 @@
 # Changelog
 
 
+## [2.50.0] - 2026-10-06
+Origen: F6 del plan de ciclo de vida de los learnings. Fusionar, superar o corregir una regla seguia
+siendo en parte una edicion a mano (traer el detalle de una regla a otra, `last_verified`, el Quick
+Reference con `journal_strict=0`), y `/consolidate-3t` solo corria si alguien se acordaba: un
+corpus de 400 reglas no tenia un solo marcador de retirada. El patron "corregir anadiendo" (una
+regla nueva "Corrige regla 217: …" que deja viva la 217) seguia en tres corpus reales.
+
+### Added
+- **`bin/consolidate-aviso.py`**. Tres senales de que toca consolidar:
+  - crecimiento: un topic tiene 15 reglas o mas desde la ultima `/consolidate-3t`, contado por el
+    numero de regla mas alto (retirar reglas no lo esconde; un topic sin numeradas cuenta vinetas).
+    El punto de partida lo guarda `memory/.consolidate-state.json`; sin ese fichero, o con uno
+    roto, cuenta desde 0;
+  - correcciones por adicion: una regla viva cuyo TITULO empieza por "Corrige regla N",
+    "Correccion de la regla N" o "CORREGIDO". Solo el titulo y solo esas formas: el cuerpo no se
+    juzga (ante la duda no avisa);
+  - pares: dos reglas vivas del mismo topic con parecido >= 0,5, la medida y el umbral con que
+    `learning.add` se niega sin `--decision` (`learning_vecinos.pares()`, IDF calculado una vez).
+  Modos: `--aviso` (una linea o nada; sale 0 siempre), `--json` y `--pares` (para `/audit-3t` y
+  `/consolidate-3t`) y `--guardar-estado`. Los pares son O(n^2) por topic y no corren al arrancar.
+- **`session-start.sh`**: una linea "CONSOLIDAR: …" al agente y a la persona cuando hay crecimiento
+  o una correccion por adicion viva. No en agentes de Paperclip. Medido: 0,1 s sobre un corpus de
+  6.400 reglas.
+- **`learning.update --last-verified YYYY-MM-DD`**: pone `last_verified:` en el frontmatter del
+  topic file. Solo avanza (una fecha igual o anterior no escribe, asi que un replay no la hace
+  retroceder). Sin frontmatter, cuarentena: no inventa uno.
+
+### Changed
+- **`/consolidate-3t`**: todo cambio es un evento del journal. El detalle de B que se trae a A es
+  `learning.update` de A; el Quick Reference, `learning.update --quickref-prefix/--quickref`;
+  `last_verified`, `--last-verified`. Se quita la excepcion de `journal_strict=0`. El paso 0.5 suma
+  los pares por topic y las correcciones por adicion; el paso nuevo 2b las resuelve:
+  `learning.update` de la original con la correccion dentro y `learning.retire` de la correctora
+  `--motivo superada --por <original>`. Una cuarentena se resuelve volviendo a emitir con el ancla
+  de hoy, no a mano. El paso 4c guarda el estado, solo si se juzgaron los pasos 0.5, 1 y 2b.
+- **`/audit-3t`**: el chequeo de frescura cuenta tambien las correcciones por adicion vivas, los
+  pares fuertes y los topics que crecieron 15 reglas o mas.
+
+### Verificacion
+- Corrida real de `/consolidate-3t` en este repo: 0 pares (Jaccard y Dice-IDF), una correccion por
+  adicion (la 218). La 217 lleva la correccion y la 218 queda `⊘ RETIRADA (…, superada por #217)`
+  por dos eventos: `applied=2 quarantined=0 pending_left=0`. La memoria de este repo no esta en
+  git, asi que el "git diff" del plan se sustituye por esto: la copia previa mas solo esos 2
+  eventos, compactados, da ficheros identicos a la memoria real.
+- Banco (raices congeladas de F5 con los mismos 2 eventos): un caso nuevo, fijado antes de aplicar
+  con su cita literal, devolvia la 218 (fuga 1); despues, fuga 0. Los 34 casos de F5 dan lo mismo
+  salvo el orden de los puestos 3-4 de un caso de dedup.
+- `bin/test-consolidate-aviso.sh` (nuevo) y la seccion 23 de `bin/test-learning-update.sh`, con 16
+  mutaciones en `tools/mutation-check.sh` (`tools/mutaciones/m_consolidate.py`).
+
 ## [2.49.0] - 2026-10-05
 Origen: F5 del plan de ciclo de vida de los learnings. El recall de prompt solo actua cuando hay un
 prompt; el error de la regla 99 de una instalacion (commitear mientras corre el review) pasa en

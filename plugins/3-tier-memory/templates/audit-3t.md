@@ -45,6 +45,7 @@ CONTENT CHECKS — read each index and verify it contains required markers:
 STALENESS CHECKS (warning-only — these never fail the audit, they surface decay):
 1. In _pendientes.md, count open `- [ ]` items whose `_creado: YYYY-MM-DD` is more than 30 days before today. These are stale candidates for reconciliation (/triage-3t; since 2.28.0 checkpoint Step 3a only covers what the session touched plus items due today).
 2. In each learnings/*.md, read frontmatter `last_verified:` (if present). Flag any file whose last_verified is more than 180 days before today (or has no last_verified at all) as "needs review". Suggest running /consolidate-3t.
+   Since 2.50.0 the freshness check also counts what dates cannot show. Run `python3 <plugin bin>/consolidate-aviso.py --memory-dir <memory dir> --json` (the plugin bin is located the same way /consolidate-3t Step 0 finds JBIN) and report three counts: `h11` (live rules whose title says they correct another one — "Corrige regla N", "Correccion de la regla N", "CORREGIDO" — which leave the wrong rule live next to its correction), `pares` (pairs of live rules of the same topic with parecido ≥ 0.5, the threshold at which `learning.add` refuses without a `--decision`), and `crecimiento` (topics that grew 15 rules or more since the last /consolidate-3t, or since 0 if it never ran). Name the rules (`topic#N`) for the first two. If the script is missing or fails, say so instead of reporting 0.
 3. Recall index: check whether `$HOME/.claude/projects/<ENCODED_PATH>/.recall-index.jsonl` exists. If absent, note it will build lazily on the next prompt (not an error).
 
 SCALE CHECKS (warning-only — Tier 2 should COORDINATE, not STORE; design budget is "<60 lines"):
@@ -96,6 +97,9 @@ Return a JSON object with results:
   "staleness": [
     {"check": "Stale pendientes (>30d)", "count": N, "details": "list of stale item texts"},
     {"check": "Learnings needing review (>180d or no last_verified)", "count": N, "details": "list of file names"},
+    {"check": "Corrections by adding still live (H11)", "count": N, "details": "topic#N list, or 'consolidate-aviso.py unavailable'"},
+    {"check": "Strong duplicate pairs (same topic, parecido >= 0.5)", "count": N, "details": "topic#A / topic#B list"},
+    {"check": "Topics grown 15+ rules since last /consolidate-3t", "count": N, "details": "topic (+N)"},
     {"check": "Recall index present", "passed": true/false}
   ],
   "scale": [
@@ -230,7 +234,7 @@ Bridge:      X/X passed (or N/A if Model A)
 Wikilinks:   structural X/X passed — N broken links (warning)
 CLAUDE.md:   X/X passed
 Hooks:       X/X passed (warning-only: orphaned entries in settings*.json)
-Staleness:   N stale pendientes (>30d), M learnings need review — recall index: present/lazy
+Staleness:   N stale pendientes (>30d), M learnings need review, H corrections-by-adding live, P strong pairs, G topics to consolidate — recall index: present/lazy
 Scale:       N indexes over budget, P open pendientes (backlog if >50), F files missing frontmatter, MEMORY.md volatile-data: yes/no
 Security:    S plaintext secrets in memory files (run /checkpoint-3t to redact + ROTATE pushed keys)
 Journal:     P pending, Q quarantine, A applied | lock: none | strict: off (warning-only; "not present" if memory/.journal/ does not exist)

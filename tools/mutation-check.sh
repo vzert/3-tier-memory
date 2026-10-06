@@ -248,6 +248,25 @@ caso "audit sin decision"      checkpoint-audit.py m_learning_dedup.py test-lear
 caso "audit #N inexistente"    checkpoint-audit.py m_learning_dedup.py test-learning-dedup.sh "#99 que no existe: SALTADO" audit-numero-inexistente
 
 echo
+echo "F6 (2.50.0): aviso de consolidar y learning.update --last-verified"
+caso "umbral 16"               consolidate-aviso.py m_consolidate.py test-consolidate-aviso.sh "15 reglas sin estado: avisa" umbral-16
+caso "cuenta vivas"            consolidate-aviso.py m_consolidate.py test-consolidate-aviso.sh "6 retiradas, sigue avisando" cuenta-vivas
+caso "estado negativo vale"    consolidate-aviso.py m_consolidate.py test-consolidate-aviso.sh "-3}}': avisa desde 0" negativo-valido
+caso "estado bool vale"        consolidate-aviso.py m_consolidate.py test-consolidate-aviso.sh "true}}': avisa desde 0" bool-valido
+caso "h11 en el cuerpo"        consolidate-aviso.py m_consolidate.py test-consolidate-aviso.sh "la frase en el cuerpo no avisa" h11-en-cuerpo
+caso "h11 sin mayusculas"      consolidate-aviso.py m_consolidate.py test-consolidate-aviso.sh "'Corregido' en minusculas no avisa" h11-insensible
+caso "h11 cuenta retiradas"    consolidate-aviso.py m_consolidate.py test-consolidate-aviso.sh "una correctora ya retirada no avisa" h11-cuenta-retiradas
+caso "archivados cuentan"      consolidate-aviso.py m_consolidate.py test-consolidate-aviso.sh "un .archived.md no cuenta" archivados-cuentan
+caso "aviso sin guarda"        consolidate-aviso.py m_consolidate.py test-consolidate-aviso.sh "aviso con un topic ilegible" aviso-sin-guarda
+caso "guardar no escribe"      consolidate-aviso.py m_consolidate.py test-consolidate-aviso.sh "estado guardado" guardar-no-escribe
+caso "aviso solo al agente"    session-start.sh   m_consolidate.py test-consolidate-aviso.sh "persona: la linea" aviso-solo-agente
+caso "lv retrocede"            journal-compact.py m_consolidate.py test-learning-update.sh "23b una fecha anterior no retrocede" lv-retrocede
+caso "lv fecha sin validar"    journal-compact.py m_consolidate.py test-learning-update.sh "23f fecha mala a mano" lv-fecha-sin-validar
+caso "lv inventa frontmatter"  journal-compact.py m_consolidate.py test-learning-update.sh "23g sin frontmatter" lv-inventa-frontmatter
+caso "lv ignorado"             journal-compact.py m_consolidate.py test-learning-update.sh "23a sin el campo" lv-ignorado-validador
+caso "lv emisor sin validar"   journal-emit.py    m_consolidate.py test-learning-update.sh "23d fecha imposible" lv-emisor-sin-validar
+
+echo
 echo "run-tests.sh (p-46153b135b): una suite que sale 0 sin su linea de resumen es FALLA"
 # El aserto esperado de sin-resumen-no-exigido es "exit 0 a mitad", no el del trap: en bash 5
 # (ubuntu, Git Bash) la suite del trap sale rc=2 y da FALLA con o sin mutacion (CI 37006005796).

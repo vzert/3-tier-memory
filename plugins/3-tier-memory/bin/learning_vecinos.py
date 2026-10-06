@@ -108,6 +108,38 @@ def vecinos(texto, candidatas, k=K):
     return res[:k]
 
 
+def pares(candidatas, umbral=UMBRAL):
+    """Pares de reglas vivas de UN topic con parecido >= umbral, de mas a menos (F6, 2.50.0):
+    [(parecido, etiqueta_a, etiqueta_b)], con a antes que b en el fichero.
+
+    La misma medida que vecinos() (Dice ponderado por IDF, tokenize() del recall, retiradas fuera),
+    con el IDF calculado una vez sobre las reglas vivas del topic, y cada regla tokenizada una sola
+    vez: llamar a vecinos() por regla tokeniza el topic entero n veces. Lo usan /consolidate-3t
+    (paso 0.5) y /audit-3t por consolidate-aviso.py; NO el arranque de sesion (es O(n^2)).
+    (La linea del filtro no repite la de vecinos(): tools/mutaciones/m_learning_dedup.py la muta
+    y exige que su patron aparezca una sola vez.)"""
+    vivas = [c for c in candidatas if not learning_marks.regla_retirada(c[1])]
+    docs = [set(_tokenize(learning_marks.sin_marca(t))) for _, t in vivas]
+    df = {}
+    for d in docs:
+        for w in d:
+            df[w] = df.get(w, 0) + 1
+    n = len(docs)
+    idf = {w: math.log((n + 1) / (c + 1)) + 1 for w, c in df.items()}
+    peso = [sum(idf[w] for w in d) for d in docs]
+    res = []
+    for i in range(n):
+        for j in range(i + 1, n):
+            den = peso[i] + peso[j]
+            if not den:
+                continue
+            s = 2 * sum(idf[w] for w in docs[i] & docs[j]) / den
+            if s >= umbral:
+                res.append((s, vivas[i][0], vivas[j][0]))
+    res.sort(key=lambda x: -x[0])
+    return res
+
+
 def problemas_de_forma(texto):
     """Lista de problemas de forma de una regla nueva ([] si esta bien).
 

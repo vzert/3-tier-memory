@@ -365,6 +365,39 @@ caso22 "2. tras un parrafo es el parrafo" 'Un parrafo\n2. **Vieja** - regla' "an
 caso22 "#t no es cabecera" '- **Vieja** - regla\n#etiqueta' "bloque-multilinea"
 caso22 "continuacion tras linea en blanco" '- **Vieja** - regla\n\n  sigue siendo del item' "bloque-multilinea"
 
+echo "== 23. --last-verified (F6, 2.50.0): lo anade, solo avanza, el replay es noop =="
+fixture
+lv() { sed -n '1,/^# /p' "$M/learnings/gate-review.md" | grep '^last_verified:' | tr -d '\r'; }
+emit --type learning.update --topic gate-review --last-verified 2026-10-06 >/dev/null; compact >/dev/null
+chk "23a sin el campo: se anade en el frontmatter" "last_verified: 2026-10-06" "$(lv)"
+chk "23a el cuerpo no cambia" "2. **El harness de post-merge vive en .gitignore:134** — comprobarlo antes de empujar" "$(grep '^2\. ' "$M/learnings/gate-review.md")"
+chk "23a sin cuarentena" "0" "$(cuar)"
+emit --type learning.update --topic gate-review --last-verified 2026-10-01 >/dev/null; compact >/dev/null
+chk "23b una fecha anterior no retrocede" "last_verified: 2026-10-06" "$(lv)"
+chk "23b y no es cuarentena" "0" "$(cuar)"
+emit --type learning.update --topic gate-review --last-verified 2026-11-02 >/dev/null; compact >/dev/null
+chk "23c una posterior avanza" "last_verified: 2026-11-02" "$(lv)"
+chk "23c una sola linea last_verified" "1" "$(grep -c '^last_verified:' "$M/learnings/gate-review.md" | tr -d ' ')"
+set +e
+E=$(emit --type learning.update --topic gate-review --last-verified 2026-02-30 2>&1); rc=$?
+chk "23d fecha imposible: el emisor se niega" "1" "$rc"
+has "23d dice por que" "$E" "no es una fecha"
+E=$(emit --type learning.update --topic gate-review --last-verified 20261106 2>&1); rc=$?
+chk "23e forma sin guiones: se niega" "1" "$rc"
+set -e
+fixture
+# Un evento escrito a mano (el compactador es su propia frontera, learning 106): fecha mala -> cuarentena
+mkdir -p "$M/.journal/pending"
+printf '{"v":1,"type":"learning.update","ts":1791298430433833000,"session_id":"s","agent_id":"a","payload":{"topic":"gate-review","last_verified":"2026-13-01"}}\n' > "$M/.journal/pending/1791298430433833000-e-lv-malo.json"
+compact >/dev/null 2>&1 || true
+chk "23f fecha mala a mano: cuarentena" "1" "$(cuar)"
+has "23f motivo" "$(motivo)" "no es una fecha del calendario"
+fixture
+printf -- '# Sin frontmatter\n\n## Rules\n\n1. **Una** — x\n\n## Related\n' > "$M/learnings/gate-review.md"
+emit --type learning.update --topic gate-review --last-verified 2026-10-06 >/dev/null; compact >/dev/null 2>&1 || true
+chk "23g sin frontmatter: cuarentena, no lo inventa" "1" "$(cuar)"
+has "23g motivo" "$(motivo)" "no tiene frontmatter"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" = 0 ]
