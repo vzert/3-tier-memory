@@ -11,8 +11,11 @@ M = {
     # consolidate-aviso.py
     "umbral-16": [("CRECIMIENTO = 15", "CRECIMIENTO = 16")],
     "cuenta-vivas": [
-        ("    return max(nums) if nums else len(reglas)",
-         "    return len([t for _, t in reglas if not learning_marks.regla_retirada(t)])")],
+        ("    return max(nums) if nums else len(reglas_)",
+         "    return len([t for _, _, t in reglas_ if not learning_marks.regla_retirada(t)])")],
+    "cuenta-related": [
+        ("    return \"\\n\".join(lineas[:fin])", "    return \"\\n\".join(lineas)")],
+    "vinetas-sin-orden": [('            out.append((f"v{k}", None, t))', '            out.append(("-", None, t))')],
     "negativo-valido": [
         ("            if isinstance(k, str) and isinstance(v, int) and not isinstance(v, bool) and v >= 0}",
          "            if isinstance(k, str) and isinstance(v, int) and not isinstance(v, bool)}")],

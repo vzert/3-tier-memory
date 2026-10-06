@@ -111,6 +111,15 @@ cp "$M/learnings/uno.md" "$M/learnings/viejo.archived.md"; topic viejo.archived 
 A=$(aviso)
 hasnt "un .archived.md no cuenta" "$A" "viejo"
 has "16 vinetas sin numerar avisan" "$A" "learnings/vinetas.md crecio 16"
+# Las vinetas de '## Related' son enlaces, no reglas (adversario, ronda 1: 15 reglas contaban 16)
+{ printf -- '---\ntype: learnings\n---\n# Vinetas\n\n## Rules\n\n'; for i in $(seq 1 15); do printf -- '- **Vineta %s** — cosa%s\n' "$i" "$i"; done
+  printf -- '\n## Related\n- [[_learnings|Learnings Index]]\n'; } > "$M/learnings/vinetas.md"
+has "15 vinetas + 1 de Related: cuenta 15" "$(aviso)" "learnings/vinetas.md crecio 15"
+regla vinetas '- **Compactar antes de leer los indices** — corre journal-compact antes de leer _pendientes'
+regla vinetas '- **Compactar antes de leer los indices** — corre journal-compact antes de leer _learnings'
+P=$(python3 "$BIN/consolidate-aviso.py" --memory-dir "$M" --pares)
+has "un par de vinetas se nombra por su orden" "$P" '"a": "vinetas#v16"'
+has "y la otra con el suyo" "$P" '"b": "vinetas#v17"'
 
 echo "== 6. H11: titulo avisa, cuerpo no, retirada no =="
 fixture; topic uno 3

@@ -73,11 +73,32 @@ def topics(mem):
     return out
 
 
+def cuerpo(contenido):
+    """El topic hasta su `## Related`: lo de despues son enlaces, no reglas. reglas_de() lee el
+    fichero entero (como el recall), y en un topic de vinetas contaba las de `## Related`."""
+    lineas = (contenido or "").splitlines()
+    fin = next((i for i, l in enumerate(lineas) if l.strip().startswith("## Related")), len(lineas))
+    return "\n".join(lineas[:fin])
+
+
+def reglas(contenido):
+    """[(etiqueta, numero|None, texto)] del cuerpo. Una vineta no tiene numero: su etiqueta es
+    `v<k>`, su orden entre las vinetas del cuerpo, para que dos vinetas de un par se distingan."""
+    out, k = [], 0
+    for num, t in learning_vecinos.reglas_de(cuerpo(contenido)):
+        if num is None:
+            k += 1
+            out.append((f"v{k}", None, t))
+        else:
+            out.append((str(num), num, t))
+    return out
+
+
 def tamano(contenido):
     """El numero mas alto del topic; sin numeradas, cuantas vinetas. Retiradas incluidas."""
-    reglas = learning_vecinos.reglas_de(contenido)
-    nums = [n for n, _ in reglas if n is not None]
-    return max(nums) if nums else len(reglas)
+    reglas_ = reglas(contenido)
+    nums = [n for _, n, _ in reglas_ if n is not None]
+    return max(nums) if nums else len(reglas_)
 
 
 def es_h11(texto):
@@ -110,13 +131,13 @@ def senales(mem, con_pares):
         delta = n - estado.get(topic, 0)
         if delta >= CRECIMIENTO:
             crec.append({"topic": topic, "reglas": n, "desde": estado.get(topic, 0), "crecio": delta})
-        vivas = [(num, t) for num, t in learning_vecinos.reglas_de(contenido)
+        vivas = [(e, t) for e, _n, t in reglas(contenido)
                  if not learning_marks.regla_retirada(t)]
-        for num, t in vivas:
+        for e, t in vivas:
             if es_h11(t):
-                h11.append({"topic": topic, "regla": num, "titulo": learning_vecinos.titulo(t)})
+                h11.append({"topic": topic, "regla": e, "titulo": learning_vecinos.titulo(t)})
         if con_pares:
-            cand = [(f"{topic}#{num}" if num is not None else f"{topic}#-", t) for num, t in vivas]
+            cand = [(f"{topic}#{e}", t) for e, t in vivas]
             for s, a, b in learning_vecinos.pares(cand):
                 pares.append({"topic": topic, "a": a, "b": b, "parecido": round(s, 3)})
     crec.sort(key=lambda x: -x["crecio"])

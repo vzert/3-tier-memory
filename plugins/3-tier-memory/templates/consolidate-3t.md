@@ -47,8 +47,13 @@ else
   JEMIT=${_B:+$_B/journal-emit.py}
   JBIN=${JEMIT:+$(dirname "$JEMIT")}   # empty when find found nothing (dirname "" would give ".")
 fi
-[ -n "$JBIN" ] && [ -f "$JBIN/journal-compact.py" ] && echo "JBIN=$JBIN" || echo "JBIN=NONE"
+{ [ -n "$JBIN" ] && [ -f "$JBIN/journal-compact.py" ]; } || JBIN=NONE   # dirname "" da "." sin plugin: la variable, no solo el eco
+echo "JBIN=$JBIN"
 ```
+
+**`JBIN=NONE`: stop here** and tell the user the plugin scripts were not found. Since 2.50.0 this
+command has no hand-edit path: every change it makes is a journal event, so the result is
+reproducible from `.journal/applied/`.
 
 ```bash
 [ "$JBIN" != NONE ] && python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"
@@ -68,7 +73,7 @@ Since 2.50.0 **every** edit below goes through the journal; none is a direct edi
 - `last_verified` (Step 4) → `learning.update --last-verified DATE`.
 
 So the result of a run is reproducible from `memory/.journal/applied/`, and `journal_strict=1`
-never has to be switched off. The only hand edit left is the fallback when JBIN is not found.
+never has to be switched off. Without JBIN there is no fallback: the command stops in Step 0.
 
 ## Step 0.5: Generate duplicate candidates from the recall index (pre-filter)
 
@@ -287,9 +292,6 @@ no emitas; si quedo incompleta, `learning.update`. `--solo-vecinos` muestra la l
 
 The topic file's `last_verified: DATE` is refreshed in Step 4 (a `learning.update` event).
 
-**Fallback (no JBIN)**: append the rule with the next number to `learnings/<topic>.md` and the Quick
-Reference entry to `_learnings.md` by hand (denied while `journal_strict=1`: the guard requires JBIN).
-
 ## Step 4: Refresh last_verified
 
 For every `learnings/<topic>.md` you reviewed and confirmed still accurate this run, refresh its
@@ -341,5 +343,5 @@ The recall index rebuilds automatically on the next prompt (memory files are now
 
 Tell the user: N duplicate clusters merged, M contradictions superseded, H corrections folded
 into their original (Step 2b), K reflections added
-(journal `applied=K`, or "Fallback: hand edit"), L topic files re-verified, quarantined events
+(journal `applied=K`), L topic files re-verified, quarantined events
 if any, whether Step 4c recorded the state, git result (hash or skip reason).

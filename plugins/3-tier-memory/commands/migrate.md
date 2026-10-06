@@ -187,7 +187,8 @@ else
   JEMIT=${_B:+$_B/journal-emit.py}
   JBIN=${JEMIT:+$(dirname "$JEMIT")}
 fi
-[ -n "$JBIN" ] && [ -f "$JBIN/journal-compact.py" ] && echo "JBIN=$JBIN" || echo "JBIN=NONE"
+{ [ -n "$JBIN" ] && [ -f "$JBIN/journal-compact.py" ]; } || JBIN=NONE   # dirname "" da "." sin plugin: la variable, no solo el eco
+echo "JBIN=$JBIN"
 ```
 
 If it prints `JBIN=NONE` (plugin older than 2.12.0), use the **Fallback** in 5b/5c and say so in the report.

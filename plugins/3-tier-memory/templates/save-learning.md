@@ -38,7 +38,8 @@ else
   JEMIT=${_B:+$_B/journal-emit.py}
   JBIN=${JEMIT:+$(dirname "$JEMIT")}   # empty when find found nothing (dirname "" would give ".")
 fi
-[ -n "$JBIN" ] && [ -f "$JBIN/journal-compact.py" ] && echo "JBIN=$JBIN" || echo "JBIN=NONE"
+{ [ -n "$JBIN" ] && [ -f "$JBIN/journal-compact.py" ]; } || JBIN=NONE   # dirname "" da "." sin plugin: la variable, no solo el eco
+echo "JBIN=$JBIN"
 ```
 
 If it prints `JBIN=NONE` (plugin older than 2.12.0), use the **Fallback** in Step 3 and say so in Step 5.

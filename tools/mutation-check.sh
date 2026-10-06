@@ -256,6 +256,8 @@ caso "estado bool vale"        consolidate-aviso.py m_consolidate.py test-consol
 caso "h11 en el cuerpo"        consolidate-aviso.py m_consolidate.py test-consolidate-aviso.sh "la frase en el cuerpo no avisa" h11-en-cuerpo
 caso "h11 sin mayusculas"      consolidate-aviso.py m_consolidate.py test-consolidate-aviso.sh "'Corregido' en minusculas no avisa" h11-insensible
 caso "h11 cuenta retiradas"    consolidate-aviso.py m_consolidate.py test-consolidate-aviso.sh "una correctora ya retirada no avisa" h11-cuenta-retiradas
+caso "cuenta Related"          consolidate-aviso.py m_consolidate.py test-consolidate-aviso.sh "1 de Related: cuenta 15" cuenta-related
+caso "vinetas sin orden"       consolidate-aviso.py m_consolidate.py test-consolidate-aviso.sh "un par de vinetas se nombra" vinetas-sin-orden
 caso "archivados cuentan"      consolidate-aviso.py m_consolidate.py test-consolidate-aviso.sh "un .archived.md no cuenta" archivados-cuentan
 caso "aviso sin guarda"        consolidate-aviso.py m_consolidate.py test-consolidate-aviso.sh "aviso con un topic ilegible" aviso-sin-guarda
 caso "guardar no escribe"      consolidate-aviso.py m_consolidate.py test-consolidate-aviso.sh "estado guardado" guardar-no-escribe

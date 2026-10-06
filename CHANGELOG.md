@@ -38,6 +38,13 @@ regla nueva "Corrige regla 217: …" que deja viva la 217) seguia en tres corpus
   de hoy, no a mano. El paso 4c guarda el estado, solo si se juzgaron los pasos 0.5, 1 y 2b.
 - **`/audit-3t`**: el chequeo de frescura cuenta tambien las correcciones por adicion vivas, los
   pares fuertes y los topics que crecieron 15 reglas o mas.
+- **`/consolidate-3t` sin JBIN se para en el Step 0**: ya no tiene camino de edicion a mano.
+
+### Fixed
+- **Resolucion de JBIN sin plugin** (`/checkpoint-3t`, `/backfill-3t`, `/save-learning`,
+  `/consolidate-3t`, `/migrate`): con el plugin sin encontrar, `dirname ""` dejaba `JBIN=.`; se
+  imprimia `JBIN=NONE` pero la variable no lo era, y las guardas `[ "$JBIN" != NONE ]` dejaban
+  pasar `python3 ./journal-compact.py`. Ahora la variable vale `NONE`.
 
 ### Verificacion
 - Corrida real de `/consolidate-3t` en este repo: 0 pares (Jaccard y Dice-IDF), una correccion por
