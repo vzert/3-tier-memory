@@ -32,7 +32,7 @@ Modos (uno por llamada):
                lotes de 25 y compacta antes y despues de cada lote.
 
 Medido al escribirlo (2026-10-06): en el corpus de este repo el candidato 1 era la regla correcta
-en 154 de 161 lineas y la correcta estaba entre las 6 en 158; en otra instalacion, con 27 topics,
+en 156 de 161 lineas y la correcta estaba entre las 6 en 160; en otra instalacion, con 27 topics,
 en 18 de 21 y 21 de 21. Por eso el comando no enlaza solo con el candidato 1: lo confirma un juez.
 
 Sin dependencias (I4).
