@@ -30,7 +30,8 @@ del Quick Reference compartian titulo con su regla.
   banco de recall vive en este repo, no en la instalacion.
 - **`session-start.sh`**: una linea "MIGRAR-LEARNINGS: …" al agente y a la persona cuando hay lineas
   del Quick Reference sin enlace o menos del 90 % de las enlazadas con disparadores. No avisa por lo
-  que el journal no puede arreglar (una linea tras un bloque de codigo o un comentario HTML). No en
+  que el journal no puede arreglar (una linea o una regla tras un bloque de codigo o un comentario
+  HTML, una marca rota en una linea asi). No en
   agentes de Paperclip.
 
 ### Fixed
@@ -45,9 +46,9 @@ del Quick Reference compartian titulo con su regla.
   file sale identico al real salvo las dos reglas con el numero 63 repetido (fuera por diseno) y
   tres reglas posteriores; el Quick Reference identico; 95,0 % de lineas enlazadas con
   disparadores, igual que la F7; 0 cuarentenas; `--check-drift` rc=0.
-- Candidatos: la regla correcta estaba entre las 6 en 160 de 161 lineas de este repo y en 21 de 21
-  de una muestra etiquetada a ciegas en otra instalacion (27 topics); el candidato 1 acerto en 154
-  de 161 y en 18 de 21. Por eso el comando no enlaza con el candidato 1 solo.
+- Candidatos (`--candidatos`, medido con la tabla de la F7 como verdad): la regla correcta estaba
+  entre las 6 en 160 de 161 lineas de este repo y en 21 de 21 de una muestra etiquetada a ciegas en
+  otra instalacion (27 topics); el candidato 1 acerto en 156 de 161 y en 18 de 21. Por eso el comando no enlaza con el candidato 1 solo.
 - Banco de recall sobre copias de tres instalaciones, sin marca y con todo el Quick Reference
   marcado: los 32 casos dan el mismo detalle.
 - `bin/test-learnings-migracion.sh` (nuevo, 60 asertos) y 14 mutaciones en

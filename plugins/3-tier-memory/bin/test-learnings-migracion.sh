@@ -258,6 +258,24 @@ open(p, "w").write(s)
 EOF
 chk "QR tras un comentario HTML: el aviso calla" "" "$(mig --aviso)"
 has "  y el estado las cuenta como bloqueadas" "$(mig --estado)" '"c3_lineas_que_el_journal_no_puede_marcar": 2'
+# Regla enlazada que el journal no puede reescribir, y marca rota en una linea bloqueada: el aviso
+# no pide lo que el comando no puede hacer (adversario, ronda 1 de 2.51.0).
+fixture
+printf '%s\n' '{"prefijo":"**Push con review","regla":"gate#1"}' > "$T/enl.jsonl"
+mig --aplicar-enlaces "$T/enl.jsonl" >/dev/null
+python3 - "$M/learnings/gate.md" "$M/_learnings.md" <<'EOF2'
+import sys
+p = sys.argv[1]; s = open(p).read()
+open(p, "w").write(s.replace("## Rules\n", "## Rules\n\n```\nbloque\n```\n"))
+p = sys.argv[2]; s = open(p).read()
+s = s.replace("2. **Contar con grep** — el exit 1 de grep -c no es error",
+              "<!-- nota -->\n2. **Contar con grep** — el exit 1 de grep -c no es error <!-- regla: nada#9 -->")
+open(p, "w").write(s)
+EOF2
+chk "regla enlazada no reescribible + marca rota bloqueada: el aviso calla" "" "$(mig --aviso)"
+E=$(mig --estado)
+has "  el estado lista la regla no reescribible" "$E" '"motivo": "codigo-antes"'
+has "  y la marca rota" "$E" '"regla": "nada#9"' 
 # --decidir silencia lo decidido
 fixture
 printf '%s\n' '{"prefijo":"**Push con review","regla":"gate#1"}' '{"prefijo":"**Contar con grep","regla":"shell#1"}' > "$T/enl.jsonl"

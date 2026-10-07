@@ -281,6 +281,8 @@ caso "valor sin validar"       journal-compact.py $L $S "compactador: valor malo
 caso "indice con la marca"     build-recall-index.py $L $S "el indice no lleva la marca" indice-con-marca
 caso "recordatorio con marca"  rule-reinject-nudge.sh $L $S "el recordatorio no trae la marca" recordatorio-con-marca
 caso "aviso cuenta bloqueadas" learnings-migracion.py $L $S "QR tras un comentario HTML: el aviso calla" aviso-cuenta-bloqueadas
+caso "aviso no reescribibles"  learnings-migracion.py $L $S "no reescribible . marca rota bloqueada: el aviso calla" aviso-cuenta-no-reescribibles
+caso "aviso rotas bloqueadas"  learnings-migracion.py $L $S "no reescribible . marca rota bloqueada: el aviso calla" aviso-cuenta-rotas-bloqueadas
 caso "aplicar sin comprobar"   learnings-migracion.py $L $S "regla tras un bloque de codigo: exit 1" aplicar-sin-comprobar
 caso "prefijo no unico"        learnings-migracion.py $L $S "y se aplican sin cuarentena" prefijo-no-unico
 caso "candidato repetido"      learnings-migracion.py $L $S "el numero repetido no sale como topic#N" candidatos-con-repetidos

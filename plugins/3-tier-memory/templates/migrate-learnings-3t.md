@@ -91,8 +91,8 @@ wc -l < "$W/candidatos.jsonl"
 
 Each row is one unlinked line: `qr`, `linea`, `prefijo` (its anchor) and `candidatas` — the 6 live
 rules of ALL topics that look most like it (`regla` is `<topic>#<N>`, or `<topic>` for a topic
-of bullets or a repeated number). Measured: the right rule was candidate 1 in 154 of 161 lines in
-one corpus and 18 of 21 in another; it was among the 6 in 158/161 and 21/21. So candidate 1 alone
+of bullets or a repeated number). Measured: the right rule was candidate 1 in 156 of 161 lines in
+one corpus and 18 of 21 in another; it was among the 6 in 160/161 and 21/21. So candidate 1 alone
 is not enough, and sometimes the right rule is not in the list.
 
 **Judge.** Split `candidatos.jsonl` in files of 25 rows and spawn one subagent per file, in

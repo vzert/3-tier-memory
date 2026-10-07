@@ -36,6 +36,12 @@ M = {
     "aviso-cuenta-bloqueadas": [
         ('    sin_marca = [x["qr"] for x in qr if x["marca"] is None and not x["rota"] and not x["bloqueo"]]',
          '    sin_marca = [x["qr"] for x in qr if x["marca"] is None and not x["rota"]]')],
+    "aviso-cuenta-no-reescribibles": [
+        ('    accionables = [v for v in c3["sin_disparadores"] if v not in bloq]',
+         '    accionables = c3["sin_disparadores"]')],
+    "aviso-cuenta-rotas-bloqueadas": [
+        ('    rotas = [r for r in e["enlace_roto"] if not r.get("bloqueo")]',
+         '    rotas = e["enlace_roto"]')],
     "aplicar-sin-comprobar": [
         ("            bloqueo = _no_reescribible(compactador(), mem, rid)", '            bloqueo = ""')],
     "prefijo-no-unico": [

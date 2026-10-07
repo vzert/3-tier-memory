@@ -170,8 +170,9 @@ def repetidos(cor):
 
 
 def estado(mem, rapido=False):
-    """Los criterios de la F7 sobre memory/. `rapido` (el aviso) no calcula pares ni mira si una
-    regla es reescribible (eso carga el compactador)."""
+    """Los criterios de la F7 sobre memory/. `rapido` (el aviso) no calcula pares (O(n^2)) ni
+    cuenta retiros. Lo que el journal no puede arreglar (una linea o una regla que no puede
+    reescribir) se calcula siempre: el aviso no puede pedir lo que el comando no puede hacer."""
     cor = corpus(mem)
     qr = quick_reference(mem)
     decididas = leer_decididas(mem)
@@ -182,14 +183,16 @@ def estado(mem, rapido=False):
     enlazadas = []
     for x in qr:
         n, v = x["qr"], x["marca"]
+        # Una marca rota en una linea que el journal no puede reescribir no tiene arreglo por el
+        # comando: se lista (con `bloqueo`), pero el aviso no la cuenta.
         if x["rota"]:
-            rotas.append({"qr": n, "motivo": "marca ilegible"})
+            rotas.append({"qr": n, "motivo": "marca ilegible", "bloqueo": x["bloqueo"]})
             continue
         if v is None:
             continue
         ok, motivo = destino(cor, v)
         if not ok:
-            rotas.append({"qr": n, "regla": v, "motivo": motivo})
+            rotas.append({"qr": n, "regla": v, "motivo": motivo, "bloqueo": x["bloqueo"]})
             continue
         por_tipo["ninguna" if v == "ninguna" else ("numerada" if "#" in v else "topic")] += 1
         if "#" in v:
@@ -200,6 +203,9 @@ def estado(mem, rapido=False):
         t = cor[topic]["numeradas"][int(num)][0]
         (con_disp if learning_marks.disparadores_de(t) else sin_disp).append(v)
     sin_disp_vivas = sorted(set(sin_disp) - decididas)
+    jc = compactador()
+    no_reesc = [{"regla": v, "motivo": m} for v in sin_disp_vivas
+                for m in [_no_reescribible(jc, mem, v)] if m]
     pct = round(100.0 * len(con_disp) / len(enlazadas), 1) if enlazadas else None
     s = consolidate().senales(mem, con_pares=not rapido)
     e = {
@@ -214,18 +220,12 @@ def estado(mem, rapido=False):
         "c3": {"enlazadas_a_regla_numerada": len(enlazadas), "con_disparadores": len(con_disp),
                "porcentaje": pct, "minimo": C3_MINIMO,
                "sin_disparadores": sin_disp_vivas,
+               "no_reescribibles": no_reesc,
                "sin_disparadores_por_decision": sorted(set(sin_disp) & decididas)},
         "c4_banco": "fuera del plugin: el banco de recall vive en el repo del plugin "
                     "(tools/recall-bench), no en la instalacion",
     }
     if not rapido:
-        jc = compactador()
-        bloq = []
-        for v in sin_disp_vivas:
-            motivo = _no_reescribible(jc, mem, v)
-            if motivo:
-                bloq.append({"regla": v, "motivo": motivo})
-        e["c3"]["no_reescribibles"] = bloq
         e["c5_retiros"] = retiros(mem)
     e["criterios"] = {
         "c1": not e["c1_h11"],
@@ -271,11 +271,14 @@ def linea_aviso(e):
     partes = []
     if e["sin_enlace"]:
         partes.append(f"{len(e['sin_enlace'])} lineas del Quick Reference sin enlace a su regla")
-    if e["enlace_roto"]:
-        partes.append(f"{len(e['enlace_roto'])} con el enlace roto")
+    rotas = [r for r in e["enlace_roto"] if not r.get("bloqueo")]
+    if rotas:
+        partes.append(f"{len(rotas)} con el enlace roto")
     c3 = e["c3"]
-    if c3["porcentaje"] is not None and c3["porcentaje"] < C3_MINIMO and c3["sin_disparadores"]:
-        partes.append(f"{len(c3['sin_disparadores'])} reglas del Quick Reference sin disparadores "
+    bloq = {r["regla"] for r in c3["no_reescribibles"]}
+    accionables = [v for v in c3["sin_disparadores"] if v not in bloq]
+    if c3["porcentaje"] is not None and c3["porcentaje"] < C3_MINIMO and accionables:
+        partes.append(f"{len(accionables)} reglas del Quick Reference sin disparadores "
                       f"({c3['porcentaje']} % con ellos)")
     if not partes:
         return ""
