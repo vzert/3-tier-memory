@@ -738,7 +738,8 @@ REVISION_ITEMS = (
     "El `Proximo paso` del snippet sigue siendo el siguiente paso real",
 )
 POR_DISENO = ("no publicar los commits (el checkpoint no sube nada); el hash del commit de memoria "
-              "como referencia adelantada; el alcance acotado de 3a con su linea RECONCILIACION; "
+              "como referencia adelantada (lo commitea Step 8f); archivos de otras sesiones sin commitear "
+              "(cada sesion commitea lo suyo); el alcance acotado de 3a con su linea RECONCILIACION; "
               "avisos que vienen de otra sesion (`ids_invented`, pendientes ajenos vencidos que no "
               "te toca cerrar); un candidato a learning decidido `ya existe #N` en el paso 0 de "
               "Step 4 (no se emite a proposito)")

@@ -4,6 +4,19 @@ description: Quick memory health overview — action items, sessions, learnings,
 
 # Memory Status
 
+<!-- worktree-memoria (2.52.0) -->
+**Git worktrees.** Si esta sesion corre dentro de un worktree enlazado de git, la memoria es la del
+worktree PRINCIPAL del repo, no un `memory/` junto a ti (con `memory/` ignorada ni siquiera existe; con
+`memory/` versionada es una copia que nadie mas lee). Corre este bloque una vez y, en TODO este
+archivo, lee cada `memory/...` como `<MEMORY_DIR impreso>/...`: lecturas, Write/Edit y argumentos de
+scripts. Fuera de un worktree imprime `MEMORY_DIR=memory` y nada cambia.
+
+```bash
+MEMORY_DIR="memory"
+_MH=""; for _c in "${CLAUDE_PLUGIN_ROOT:-}/bin/memory-home.sh" "$PWD/plugins/3-tier-memory/bin/memory-home.sh" "$(find "$HOME/.claude/plugins" -name memory-home.sh -path '*/3-tier-memory/*' 2>/dev/null | sort -V | tail -1)"; do [ -f "$_c" ] && { _MH="$_c"; break; }; done; [ -n "$_MH" ] && _M=$(bash "$_MH" --memory-dir "$PWD") && [ "$_M" != "$PWD/memory" ] && [ -d "$_M" ] && MEMORY_DIR="$_M"   # worktree de git: la memoria del principal (2.52.0)
+echo "MEMORY_DIR=$MEMORY_DIR"
+```
+
 Read and report the current state of the 3-tier memory system. Execute ALL steps, then present a compact summary.
 
 ## Step 1: Locate memory directory
@@ -41,12 +54,14 @@ Read each file and collect:
 Run this exactly (do not `find`: under some shell proxies it fails silently) and report the numbers:
 
 ```bash
-J="memory/.journal"   # Model A: "<auto-memory path>/.journal"
+MEMORY_DIR="memory"
+_MH=""; for _c in "${CLAUDE_PLUGIN_ROOT:-}/bin/memory-home.sh" "$PWD/plugins/3-tier-memory/bin/memory-home.sh" "$(find "$HOME/.claude/plugins" -name memory-home.sh -path '*/3-tier-memory/*' 2>/dev/null | sort -V | tail -1)"; do [ -f "$_c" ] && { _MH="$_c"; break; }; done; [ -n "$_MH" ] && _M=$(bash "$_MH" --memory-dir "$PWD") && [ "$_M" != "$PWD/memory" ] && [ -d "$_M" ] && MEMORY_DIR="$_M"   # worktree de git: la memoria del principal (2.52.0)
+J="$MEMORY_DIR/.journal"   # Model A: "<auto-memory path>/.journal"
 P=$(ls "$J/pending" 2>/dev/null | grep -c '\.json$')
 Q=$(ls "$J/quarantine" 2>/dev/null | grep -c '\.json$')
 A=$(ls -R "$J/applied" 2>/dev/null | grep -c '\.json$')
 L="none"; if [ -d "$J/.lock" ]; then AT=$(cat "$J/.lock/acquired_at" 2>/dev/null); [ -n "$AT" ] || AT=$(python3 -c 'import os,sys;print(int(os.stat(sys.argv[1]).st_mtime))' "$J/.lock" 2>/dev/null || date +%s); AGE=$(( $(date +%s) - AT )); [ "$AGE" -gt 60 ] && L="orphaned ${AGE}s" || L="held ${AGE}s"; fi
-S="off"; grep -Eq '^[[:space:]]*journal_strict[[:space:]]*=[[:space:]]*1' memory/.memory-config 2>/dev/null && S="on"
+S="off"; grep -Eq '^[[:space:]]*journal_strict[[:space:]]*=[[:space:]]*1' "$J/../.memory-config" 2>/dev/null && S="on"
 echo "pending=$P quarantine=$Q applied=$A lock=$L strict=$S"
 ```
 

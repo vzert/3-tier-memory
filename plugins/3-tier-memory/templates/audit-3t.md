@@ -4,12 +4,25 @@ description: Run verification checklists on the 3-tier memory system — structu
 
 # Memory Audit
 
+<!-- worktree-memoria (2.52.0) -->
+**Git worktrees.** Si esta sesion corre dentro de un worktree enlazado de git, la memoria es la del
+worktree PRINCIPAL del repo, no un `memory/` junto a ti (con `memory/` ignorada ni siquiera existe; con
+`memory/` versionada es una copia que nadie mas lee). Corre este bloque una vez y, en TODO este
+archivo, lee cada `memory/...` como `<MEMORY_DIR impreso>/...`: lecturas, Write/Edit y argumentos de
+scripts. Fuera de un worktree imprime `MEMORY_DIR=memory` y nada cambia.
+
+```bash
+MEMORY_DIR="memory"
+_MH=""; for _c in "${CLAUDE_PLUGIN_ROOT:-}/bin/memory-home.sh" "$PWD/plugins/3-tier-memory/bin/memory-home.sh" "$(find "$HOME/.claude/plugins" -name memory-home.sh -path '*/3-tier-memory/*' 2>/dev/null | sort -V | tail -1)"; do [ -f "$_c" ] && { _MH="$_c"; break; }; done; [ -n "$_MH" ] && _M=$(bash "$_MH" --memory-dir "$PWD") && [ "$_M" != "$PWD/memory" ] && [ -d "$_M" ] && MEMORY_DIR="$_M"   # worktree de git: la memoria del principal (2.52.0)
+echo "MEMORY_DIR=$MEMORY_DIR"
+```
+
 Run ALL verification checklists using parallel Haiku subagents, then compile results into a single report.
 
 ## Step 0: Determine paths
 
 - `PROJECT_DIR`: la carpeta donde se lanzo la sesion — en bash, la variable `RAIZ` que calcula el bloque `raiz-del-proyecto` de `/backfill-3t` Step 0b (no la linea `PROJECT_DIR=` de ese bloque, que es solo el respaldo). `CLAUDE_PROJECT_DIR` llega VACIA a las llamadas Bash del agente (medido 2026-09-24) y `$PWD` cambia si el agente hizo cd; usa `PROJECT_DIR` donde abajo dice `$CLAUDE_PROJECT_DIR`
-- `MEMORY_DIR`: `$PROJECT_DIR/memory` (Model B) or auto-memory path (Model A)
+- `MEMORY_DIR`: el que imprime el bloque de worktree de arriba (en un worktree enlazado de git, la memoria del principal; si no, `$PROJECT_DIR/memory`) (Model B) or auto-memory path (Model A)
 - `ENCODED_PATH`: `echo "$PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g'`
 - `AUTO_MEMORY`: `$HOME/.claude/projects/$ENCODED_PATH/memory/MEMORY.md`
 

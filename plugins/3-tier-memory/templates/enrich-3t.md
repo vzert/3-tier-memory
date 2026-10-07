@@ -4,6 +4,19 @@ description: One-time enrichment of existing memory — backfill importance + _c
 
 # Memory Enrichment (one-time migration)
 
+<!-- worktree-memoria (2.52.0) -->
+**Git worktrees.** Si esta sesion corre dentro de un worktree enlazado de git, la memoria es la del
+worktree PRINCIPAL del repo, no un `memory/` junto a ti (con `memory/` ignorada ni siquiera existe; con
+`memory/` versionada es una copia que nadie mas lee). Corre este bloque una vez y, en TODO este
+archivo, lee cada `memory/...` como `<MEMORY_DIR impreso>/...`: lecturas, Write/Edit y argumentos de
+scripts. Fuera de un worktree imprime `MEMORY_DIR=memory` y nada cambia.
+
+```bash
+MEMORY_DIR="memory"
+_MH=""; for _c in "${CLAUDE_PLUGIN_ROOT:-}/bin/memory-home.sh" "$PWD/plugins/3-tier-memory/bin/memory-home.sh" "$(find "$HOME/.claude/plugins" -name memory-home.sh -path '*/3-tier-memory/*' 2>/dev/null | sort -V | tail -1)"; do [ -f "$_c" ] && { _MH="$_c"; break; }; done; [ -n "$_MH" ] && _M=$(bash "$_MH" --memory-dir "$PWD") && [ "$_M" != "$PWD/memory" ] && [ -d "$_M" ] && MEMORY_DIR="$_M"   # worktree de git: la memoria del principal (2.52.0)
+echo "MEMORY_DIR=$MEMORY_DIR"
+```
+
 v2.8.0 added two signals that only get written to NEWLY created files:
 - `importance: 0-10` on learnings/sessions → drives recall **salience**.
 - `_creado: YYYY-MM-DD` on pendientes → drives Fase C **staleness/decay**.
@@ -25,6 +38,7 @@ CORE RULES:
 If `memory/` exists in the project root, use it (Model B); else use the auto-memory path (Model A).
 ```bash
 MEMORY_DIR="memory"   # or the Model A path if that's what you found
+_MH=""; for _c in "${CLAUDE_PLUGIN_ROOT:-}/bin/memory-home.sh" "$PWD/plugins/3-tier-memory/bin/memory-home.sh" "$(find "$HOME/.claude/plugins" -name memory-home.sh -path '*/3-tier-memory/*' 2>/dev/null | sort -V | tail -1)"; do [ -f "$_c" ] && { _MH="$_c"; break; }; done; [ -n "$_MH" ] && _M=$(bash "$_MH" --memory-dir "$PWD") && [ "$_M" != "$PWD/memory" ] && [ -d "$_M" ] && MEMORY_DIR="$_M"   # worktree de git: la memoria del principal (2.52.0)
 BIN="${CLAUDE_PLUGIN_ROOT}/bin"
 if [ ! -f "$BIN/enrich-memory.py" ]; then
   # Ruta del plugin INSTALADO: la version mas alta de `installed_plugins.json`

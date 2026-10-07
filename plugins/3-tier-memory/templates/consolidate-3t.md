@@ -4,6 +4,19 @@ description: Consolidate learnings — dedup, resolve contradictions (supersedes
 
 # Memory Consolidation
 
+<!-- worktree-memoria (2.52.0) -->
+**Git worktrees.** Si esta sesion corre dentro de un worktree enlazado de git, la memoria es la del
+worktree PRINCIPAL del repo, no un `memory/` junto a ti (con `memory/` ignorada ni siquiera existe; con
+`memory/` versionada es una copia que nadie mas lee). Corre este bloque una vez y, en TODO este
+archivo, lee cada `memory/...` como `<MEMORY_DIR impreso>/...`: lecturas, Write/Edit y argumentos de
+scripts. Fuera de un worktree imprime `MEMORY_DIR=memory` y nada cambia.
+
+```bash
+MEMORY_DIR="memory"
+_MH=""; for _c in "${CLAUDE_PLUGIN_ROOT:-}/bin/memory-home.sh" "$PWD/plugins/3-tier-memory/bin/memory-home.sh" "$(find "$HOME/.claude/plugins" -name memory-home.sh -path '*/3-tier-memory/*' 2>/dev/null | sort -V | tail -1)"; do [ -f "$_c" ] && { _MH="$_c"; break; }; done; [ -n "$_MH" ] && _M=$(bash "$_MH" --memory-dir "$PWD") && [ "$_M" != "$PWD/memory" ] && [ -d "$_M" ] && MEMORY_DIR="$_M"   # worktree de git: la memoria del principal (2.52.0)
+echo "MEMORY_DIR=$MEMORY_DIR"
+```
+
 Periodic memory hygiene for the 3-tier system: merge duplicate learnings, surface
 contradictions WITHOUT silently overwriting, and reflect recent sessions into a few
 higher-level semantic rules. Inspired by Generative-Agents "reflection" and the
@@ -31,6 +44,7 @@ against a copy that is missing rules still sitting in `memory/.journal/pending/`
 
 ```bash
 MEMORY_DIR="memory"   # the directory located above (Model B); use the Model A path otherwise
+_MH=""; for _c in "${CLAUDE_PLUGIN_ROOT:-}/bin/memory-home.sh" "$PWD/plugins/3-tier-memory/bin/memory-home.sh" "$(find "$HOME/.claude/plugins" -name memory-home.sh -path '*/3-tier-memory/*' 2>/dev/null | sort -V | tail -1)"; do [ -f "$_c" ] && { _MH="$_c"; break; }; done; [ -n "$_MH" ] && _M=$(bash "$_MH" --memory-dir "$PWD") && [ "$_M" != "$PWD/memory" ] && [ -d "$_M" ] && MEMORY_DIR="$_M"   # worktree de git: la memoria del principal (2.52.0)
 if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-emit.py" ]; then
   JBIN="${CLAUDE_PLUGIN_ROOT}/bin"
 elif [ -f "plugins/3-tier-memory/bin/journal-emit.py" ]; then
@@ -120,6 +134,7 @@ if d == w and s:
 print(d)' "${CLAUDE_PROJECT_DIR:-$PWD}" "${CLAUDE_CODE_SESSION_ID:-}" "$PWD" 2>/dev/null) || RAIZ="${CLAUDE_PROJECT_DIR:-$PWD}"
 [ -n "$RAIZ" ] || RAIZ="${CLAUDE_PROJECT_DIR:-$PWD}"
 MEMORY_DIR="memory"   # Model B; use the auto-memory path if Step 0 found Model A
+_MH=""; for _c in "${CLAUDE_PLUGIN_ROOT:-}/bin/memory-home.sh" "$PWD/plugins/3-tier-memory/bin/memory-home.sh" "$(find "$HOME/.claude/plugins" -name memory-home.sh -path '*/3-tier-memory/*' 2>/dev/null | sort -V | tail -1)"; do [ -f "$_c" ] && { _MH="$_c"; break; }; done; [ -n "$_MH" ] && _M=$(bash "$_MH" --memory-dir "$PWD") && [ "$_M" != "$PWD/memory" ] && [ -d "$_M" ] && MEMORY_DIR="$_M"   # worktree de git: la memoria del principal (2.52.0)
 ENCODED=$(printf '%s\n' "$RAIZ" | sed 's/[^A-Za-z0-9]/-/g')
 INDEX="$HOME/.claude/projects/$ENCODED/.recall-index.jsonl"
 ```
@@ -334,7 +349,9 @@ at.
 
 Same best-effort pattern as /checkpoint-3t Step 6:
 - `command -v git && git rev-parse --is-inside-work-tree` — if it fails, skip gracefully.
-- `git add memory/` then `git commit -m "consolidate: dedup + supersede + reflect — DATE"`.
+- `python3 "$JBIN/checkpoint-commit.py" --memory-dir "$MEMORY_DIR" --solo-compartidos --mensaje "consolidate: dedup + supersede + reflect — DATE"`
+  (2.52.0: commitea solo lo compartido — indices, `learnings/`, `pendientes/` — con `git commit --only`;
+  nunca `git add memory/`, que barre fichas y planes a medias de otras sesiones del mismo checkout).
 - If git is unavailable or nothing staged, report the skip reason and continue. The file edits
   are the valuable part; the commit is a convenience.
 

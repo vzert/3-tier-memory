@@ -22,7 +22,7 @@ Frecuencia medida de los huecos (sobre 9 respuestas completas):
 
 Y un hallazgo que cambia el diseno: al preguntarle, el agente tambien confiesa cosas que el skill
 PERMITE (no hacer `git push`, dejar el hash del commit como referencia adelantada — Step 6c lo
-ordena asi). Sin una referencia fija de que cuenta como omision, la confesion libre produce falsos
+ordenaba asi; desde 2.52.0 ese hash lo commitea Step 8f). Sin una referencia fija de que cuenta como omision, la confesion libre produce falsos
 positivos y el usuario pierde la senal igual. Por eso hay cuatro estados y no dos, y por eso
 `POR-DISENO` es un estado de primera clase.
 
@@ -453,6 +453,95 @@ def corre_git(repo_root, *args):
     if r.returncode != 0:
         return None
     return r.stdout.strip()
+
+
+def _commit_mod():
+    """checkpoint-commit.py como modulo: la MISMA definicion de que es propio (ficha + plans/research
+    que enlaza) que usa Step 6, para que el audit no mida otra cosa que la que se commitea."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "_cc", os.path.join(os.path.dirname(os.path.abspath(__file__)), "checkpoint-commit.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def git_memoria(h, memory_dir, session_file):
+    """14b/15 (2.52.0). El repo que se mide es el que CONTIENE memory/ (en un worktree enlazado, el
+    principal: memory-home.sh), no el cwd de la sesion.
+      git.commit_solo_propio  el ultimo commit que toca la ficha no trae fichas/planes/research de
+                              otra sesion (Step 6 con checkpoint-commit.py). Hasta 2.51.0 Step 6 hacia
+                              `git add memory/` y barria lo ajeno: en una instalacion real, 19 archivos en un commit.
+      git.ficha_sin_commitear lo PROPIO sin commitear al llegar aqui es un Step 6 que no corrio. Lo
+                              compartido sucio es el hash de 6c (lo commitea Step 8f). Lo de otras
+                              sesiones es suyo: se cuenta y no se toca."""
+    try:
+        import memhome
+        mem = os.path.realpath(memhome.normaliza(memory_dir))
+    except Exception:
+        mem = os.path.realpath(memory_dir)
+    repo = corre_git(mem, "rev-parse", "--show-toplevel")
+    if repo is None:
+        return
+    repo = os.path.realpath(repo)
+    if subprocess.run(["git", "-C", mem, "check-ignore", "-q", mem], capture_output=True).returncode == 0:
+        h.append(Hallazgo(DISENO, "git.ficha_sin_commitear",
+                          "memory/ esta en .gitignore: el checkpoint no commitea memoria"))
+        return
+    try:
+        cc = _commit_mod()
+        ficha = os.path.realpath(session_file)
+        propias = {os.path.relpath(p, repo).replace(os.sep, "/") for p in [ficha] + cc.enlazados(mem, ficha)}
+        por_sesion = tuple(os.path.relpath(os.path.join(mem, d), repo).replace(os.sep, "/") + "/"
+                           for d in cc.POR_SESION)
+    except Exception:
+        return
+    rel_ficha = os.path.relpath(ficha, repo).replace(os.sep, "/")
+
+    ultimo = corre_git(repo, "-c", "core.quotePath=false", "log", "-1", "--format=%h", "--", rel_ficha)
+    if ultimo:
+        nombres = (corre_git(repo, "-c", "core.quotePath=false", "show", "--name-only", "--format=", ultimo) or "").splitlines()
+        ajenos = [n for n in nombres if n.startswith(por_sesion) and n not in propias]
+        if ajenos:
+            h.append(Hallazgo(SALTADO, "git.commit_solo_propio",
+                              f"el commit {ultimo} trae {len(ajenos)} archivo(s) de otras sesiones "
+                              "(fichas/planes/research que esta ficha no enlaza)", lineas=ajenos[:10],
+                              corrige="no lo deshagas sin hablar con el usuario: avisale que commit "
+                                      "y que archivos; desde 2.52.0 Step 6 usa checkpoint-commit.py"))
+        else:
+            h.append(Hallazgo(HECHO, "git.commit_solo_propio",
+                              f"el commit {ultimo} solo trae lo de esta sesion y lo compartido"))
+
+    # Sin corre_git: su .strip() se come el espacio de la primera linea (" M ruta") y l[3:] corta mal.
+    try:
+        st = subprocess.run(["git", "-c", "core.quotePath=false", "-C", repo, "status", "--porcelain", "--untracked-files=all", "--", mem],
+                            capture_output=True, text=True, timeout=20)
+    except Exception:
+        return
+    if st.returncode != 0:
+        return
+    rutas = [l[3:].strip().strip('"') for l in st.stdout.splitlines() if len(l) > 3]
+    rutas = [r.split(" -> ")[-1] for r in rutas]
+    mias = [r for r in rutas if r in propias]
+    ajenas = [r for r in rutas if r.startswith(por_sesion) and r not in propias]
+    comp = [r for r in rutas if not r.startswith(por_sesion)]
+    if not ultimo:
+        h.append(Hallazgo(SALTADO, "git.ficha_sin_commitear",
+                          "la ficha no esta en ningun commit: Step 6 no corrio o fallo",
+                          corrige="corre Step 6 (checkpoint-commit.py) y vuelve a correr el audit"))
+        return
+    partes = []
+    if mias:
+        partes.append(f"{len(mias)} propio(s) con cambios posteriores al commit (el hash de 6c en "
+                      "la ficha: entra en Step 8f)")
+    if comp:
+        partes.append(f"{len(comp)} compartido(s) sin commitear (el hash de 6c: entra en Step 8f)")
+    if ajenas:
+        partes.append(f"{len(ajenas)} de otras sesiones (los commitea su sesion; no los barras)")
+    if partes:
+        h.append(Hallazgo(DISENO, "git.ficha_sin_commitear", "; ".join(partes)))
+    else:
+        h.append(Hallazgo(HECHO, "git.ficha_sin_commitear", "memory/ sin cambios sin commitear"))
 
 
 def avisos_script_en_seco(h, memory_dir, nombre_script, claves_problema):
@@ -1414,15 +1503,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             else:
                 h.append(Hallazgo(HECHO, "git.sin_subir", f"{rama} al dia con su remoto"))
 
-        sucio = corre_git(repo_root, "status", "--porcelain", "--", "memory")
-        if sucio:
-            n = len([l for l in sucio.splitlines() if l.strip()])
-            h.append(Hallazgo(DISENO, "git.ficha_sin_commitear",
-                              f"{n} fichero(s) de memory/ sin commitear — el hash del commit y el "
-                              "snippet entran en el siguiente checkpoint (Step 6c); confirma que "
-                              "ninguno es de otra sesion antes de barrerlos"))
-        else:
-            h.append(Hallazgo(HECHO, "git.ficha_sin_commitear", "memory/ sin cambios sin commitear"))
+        git_memoria(h, memory_dir, session_file)
 
     return h
 

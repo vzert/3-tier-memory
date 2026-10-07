@@ -15,6 +15,14 @@ CORE RULES:
 If `memory/` exists in the project root, use it (Model B). Otherwise check auto-memory (Model A).
 Read `memory/MEMORY.md` to confirm the system is initialized.
 
+**Git worktrees (2.52.0).** If this session runs inside a linked git worktree, the memory is the
+one in the MAIN worktree of the repo, not a `memory/` next to you: the block below prints it as
+`MEMORY_DIR=<absolute path>`. From then on, every `memory/...` path in this file (SESSION_FILE,
+plans, research, the indexes you read) means that directory, and the Write/Edit calls use the
+absolute path. Outside a worktree it prints `MEMORY_DIR=memory` and nothing changes. Why: with
+`EnterWorktree` the hooks read the main checkout's memory while a relative `memory/` wrote into the
+worktree, and a session launched inside a worktree with `memory/` gitignored had no memory at all.
+
 Since v2.12.0 you do NOT edit the shared indexes (`_pendientes.md`, `pendientes/YYYY-MM.md`,
 `_session-index.md`, `_learnings.md`, `_plans-index.md`, `_research-index.md`) or the rule
 numbering of `learnings/<topic>.md` by hand. Several agents may be checkpointing on this machine
@@ -28,7 +36,6 @@ on those index files (off by default; the "Fallback (no JBIN)" branches below ar
 set it to `0` for a deliberate hand edit). Locate the scripts once:
 
 ```bash
-MEMORY_DIR="memory"   # the directory located above (Model B); use the Model A path otherwise
 if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-emit.py" ]; then
   JBIN="${CLAUDE_PLUGIN_ROOT}/bin"
 elif [ -f "plugins/3-tier-memory/bin/journal-emit.py" ]; then
@@ -47,6 +54,13 @@ else
 fi
 { [ -n "$JBIN" ] && [ -f "$JBIN/journal-compact.py" ]; } || JBIN=NONE   # dirname "" da "." sin plugin: la variable, no solo el eco
 echo "JBIN=$JBIN"
+# La memoria: la de este arbol, o la del worktree principal si esto es un worktree enlazado (2.52.0).
+MEMORY_DIR="memory"
+if [ "$JBIN" != NONE ] && [ -f "$JBIN/memory-home.sh" ]; then
+  _M=$(bash "$JBIN/memory-home.sh" --memory-dir "$PWD")
+  [ "$_M" != "$PWD/memory" ] && [ -d "$_M" ] && MEMORY_DIR="$_M"
+fi
+echo "MEMORY_DIR=$MEMORY_DIR"   # Model A (no memory/ here): use the auto-memory path instead
 ```
 
 If it prints `JBIN=NONE` (plugin older than 2.12.0), use the manual edits marked **Fallback**
@@ -257,7 +271,7 @@ python3 "$JBIN/journal-emit.py" --type session.add --slug "DATE-SLUG" --date DAT
 
 The compactor inserts `| DATE | [[sessions/DATE-SLUG\|SLUG]] | <status> | <summary> | |` at the
 top of the `## Sessions` table of `memory/_session-index.md` and prunes that table to the 10
-most recent rows by date. The Commit cell is filled in Step 6c with a second `session.add`
+most recent rows by date. The Commit cell is filled in Step 6 with a second `session.add`
 (same slug, `--commit`). Do NOT edit the index by hand.
 
 **Correcting a session's Fecha or alias** is NOT a `session.add` (an add never rewrites those two
@@ -1014,7 +1028,8 @@ minimal `---` block (type/date/status) to any typed file that's missing one, and
 if you wrote them correctly. Idempotent, atomic, never touches the body.
 
 ```bash
-MEMORY_DIR="memory"   # the directory located in Step 0 (Model B); use the Model A path otherwise
+MEMORY_DIR="memory"   # the MEMORY_DIR printed in Step 0 (absolute in a git worktree); Model A path otherwise
+_MH=""; for _c in "${CLAUDE_PLUGIN_ROOT:-}/bin/memory-home.sh" "$PWD/plugins/3-tier-memory/bin/memory-home.sh" "$(find "$HOME/.claude/plugins" -name memory-home.sh -path '*/3-tier-memory/*' 2>/dev/null | sort -V | tail -1)"; do [ -f "$_c" ] && { _MH="$_c"; break; }; done; [ -n "$_MH" ] && _M=$(bash "$_MH" --memory-dir "$PWD") && [ "$_M" != "$PWD/memory" ] && [ -d "$_M" ] && MEMORY_DIR="$_M"   # worktree de git: la memoria del principal (2.52.0)
 if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/ensure-frontmatter.py" ]; then
   SEAL="${CLAUDE_PLUGIN_ROOT}/bin/ensure-frontmatter.py"
 else
@@ -1078,14 +1093,15 @@ informe del Step 7.
 ## Step 5d: Redact secrets (deterministic gate — runs BEFORE any commit)
 
 Session/plan/research digests can capture real API keys, tokens, or private keys pasted
-verbatim from the work. Step 6 runs `git add memory/`, so in any project where `memory/` is
-NOT gitignored, an unredacted secret would be committed and (on push) leak. A "remember to
+verbatim from the work. Step 6 commits this session's files and the shared indexes, so in any
+project where `memory/` is NOT gitignored, an unredacted secret would be committed and (on push) leak. A "remember to
 redact" rule is not enough — enforce it deterministically. Run the scanner in `--apply` mode
 so it replaces each detected secret VALUE with `<REDACTED>` in place. It skips values already
 in safe form (`$VAR`, `<REDACTED>`, placeholders), so it's idempotent and a no-op when clean.
 
 ```bash
-MEMORY_DIR="memory"   # the directory located in Step 0 (Model B); use the Model A path otherwise
+MEMORY_DIR="memory"   # the MEMORY_DIR printed in Step 0 (absolute in a git worktree); Model A path otherwise
+_MH=""; for _c in "${CLAUDE_PLUGIN_ROOT:-}/bin/memory-home.sh" "$PWD/plugins/3-tier-memory/bin/memory-home.sh" "$(find "$HOME/.claude/plugins" -name memory-home.sh -path '*/3-tier-memory/*' 2>/dev/null | sort -V | tail -1)"; do [ -f "$_c" ] && { _MH="$_c"; break; }; done; [ -n "$_MH" ] && _M=$(bash "$_MH" --memory-dir "$PWD") && [ "$_M" != "$PWD/memory" ] && [ -d "$_M" ] && MEMORY_DIR="$_M"   # worktree de git: la memoria del principal (2.52.0)
 if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/scan-secrets.py" ]; then
   SCAN="${CLAUDE_PLUGIN_ROOT}/bin/scan-secrets.py"
 else
@@ -1107,40 +1123,50 @@ list the file:line of each finding (the output is already masked — never echo 
 warn that **any key that was committed/pushed in a previous checkpoint is compromised and must
 be rotated** — redaction here only protects future commits, it does not un-leak history.
 
-## Step 6: Git commit (best-effort)
+## Step 6: Git commit (best-effort) — solo lo de ESTA sesion
 
 Memory files are already saved (Steps 1-5). The git commit is a convenience — if git is unavailable, skip it gracefully.
 
-**6a. Check git availability:**
+**Nunca `git add memory/` ni `git commit -a` aqui.** Hasta 2.51.0 este paso hacia `git add memory/`
+y barria lo que otras sesiones del mismo checkout tenian a medias: en una instalacion real, un
+commit (2026-10-06) metio 19 archivos ajenos, y 26 de 125 commits con fichas del 28-sep al 6-oct
+llevaron fichas de otras sesiones. En un banco de 100 ordenes al azar con 3 sesiones, 6,4 archivos
+ajenos por corrida. El indice de git tambien es compartido: un `git add` de rutas propias seguido de
+un `git commit` sin rutas se lleva igual lo que otra sesion dejo en el indice (2,7 por corrida).
 
-Run: `command -v git && git rev-parse --is-inside-work-tree 2>/dev/null`
-
-If this fails → set GIT_SKIP = "git not available or no repository initialized" and jump to 6d.
-
-**6b. Stage changes:**
-
-Run: `git add memory/`
-Then check: `git diff --cached --name-only -- memory/`
-
-If nothing is staged → set GIT_SKIP = "no changes staged (memory/ may be in .gitignore or no changes to commit)" and jump to 6d.
-
-**6c. Commit:**
-
-Run:
-```
-git commit -m "checkpoint: DATE-SLUG — summary"
-```
-
-If the commit succeeds: get the short hash, record it in the session log `## Commits` section, and fill the `_session-index.md` Commit column through the journal:
+`checkpoint-commit.py` hace el commit con rutas (`git add -- <rutas>` + `git commit --only -- <rutas>`):
+- de `sessions/`, `plans/`, `research/`, `handoffs/` entra SOLO la ficha y los plans/research que la
+  ficha enlaza (Step 5 ya obliga a enlazarlos: un plan sin enlace se queda fuera);
+- todo lo demas de memory/ (indices `_*.md`, `pendientes/`, `learnings/`, `.journal/`...) es
+  compartido y entra entero: que traiga filas de otras sesiones es lo esperado;
+- corre en el repo que CONTIENE la memoria (en un worktree, el principal), bajo el candado del
+  compactador si lo consigue en 10 s (si no, commitea igual e imprime `AVISO candado-ocupado`:
+  reportalo), y reintenta si otro proceso tiene `.git/index.lock`;
+- si el commit falla, deja el indice de git exactamente como estaba para esas rutas.
 
 ```bash
-python3 "$JBIN/journal-emit.py" --type session.add --slug "DATE-SLUG" --date DATE --commit '`<short-hash>`'
-python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"
+python3 "$JBIN/checkpoint-commit.py" --memory-dir "$MEMORY_DIR" --session-file "$SESSION_FILE" \
+  --mensaje "checkpoint: DATE-SLUG — summary"
 ```
 
-(**Fallback (no JBIN)**: write the hash into the Commit cell by hand.) Do NOT amend to embed the hash into that same commit — a commit cannot contain its own hash: writing the hash changes the tree, which produces a new hash, and amending to "fix" the mismatch loops forever. Leave the hash annotation as an uncommitted forward reference; it rolls into the next checkpoint's commit, exactly like the `## Como retomar` snippet already does in Step 8.
+La ultima linea dice que paso:
+- `COMMIT hash=<h> rama=<r> archivos=N propios=N compartidos=N` → anota `<h>` en `## Commits` de la
+  ficha y llena la columna Commit de `_session-index.md` por el journal:
 
-If the commit fails (e.g., user.name/user.email not configured) → set GIT_SKIP = the error message.
+  ```bash
+  python3 "$JBIN/journal-emit.py" --type session.add --slug "DATE-SLUG" --date DATE --commit '`<h>`'
+  python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"
+  ```
+
+  (**Fallback (no JBIN)**: write the hash into the Commit cell by hand.) No hagas `--amend` para meter
+  el hash en ese mismo commit: un commit no puede contener su propio hash (escribirlo cambia el arbol
+  y el hash; enmendar para "arreglarlo" no termina nunca). La ficha y el indice con el hash entran en
+  el commit de la cola, Step 8f.
+- `COMMIT skip=<motivo>` → GIT_SKIP = esa linea (`memoria-ignorada`, `sin-cambios`, `sin-repo`,
+  `head-suelto`, `commit-fallo <error>`, `index-lock`...) y sigue a 6d.
+
+**Fallback (no JBIN, o el script no existe)**: commitea solo tus rutas, nunca el directorio:
+`git add -- <ficha> <tus plans/research> <indices _*.md> && git commit --only -m "..." -- <las mismas rutas>`.
 
 **6d. If GIT_SKIP is set:**
 
@@ -1174,7 +1200,7 @@ El script **no repara y no escribe**: lee `memory/` y el estado de git, y da cua
 
 `POR-DISEÑO` es un estado de primera clase por una razon medida: al preguntarle, el agente tambien
 confesaba como fallas cosas que este mismo archivo ORDENA (no hacer `git push`, dejar el hash del
-commit sin commitear — Step 6c). Sin una referencia fija de que cuenta como omision, la confesion
+commit como referencia adelantada — Step 6; no commitear archivos de otras sesiones — Step 6). Sin una referencia fija de que cuenta como omision, la confesion
 libre produce un muro de falsos positivos y el usuario se queda tan ciego como con el silencio.
 
 **Que hacer con cada `SALTADO` o `PARCIAL`:**

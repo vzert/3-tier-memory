@@ -4,6 +4,19 @@ description: Backfill memory from past JSONL conversation history. Reconstructs 
 
 # Backfill Memory from JSONL History
 
+<!-- worktree-memoria (2.52.0) -->
+**Git worktrees.** Si esta sesion corre dentro de un worktree enlazado de git, la memoria es la del
+worktree PRINCIPAL del repo, no un `memory/` junto a ti (con `memory/` ignorada ni siquiera existe; con
+`memory/` versionada es una copia que nadie mas lee). Corre este bloque una vez y, en TODO este
+archivo, lee cada `memory/...` como `<MEMORY_DIR impreso>/...`: lecturas, Write/Edit y argumentos de
+scripts. Fuera de un worktree imprime `MEMORY_DIR=memory` y nada cambia.
+
+```bash
+MEMORY_DIR="memory"
+_MH=""; for _c in "${CLAUDE_PLUGIN_ROOT:-}/bin/memory-home.sh" "$PWD/plugins/3-tier-memory/bin/memory-home.sh" "$(find "$HOME/.claude/plugins" -name memory-home.sh -path '*/3-tier-memory/*' 2>/dev/null | sort -V | tail -1)"; do [ -f "$_c" ] && { _MH="$_c"; break; }; done; [ -n "$_MH" ] && _M=$(bash "$_MH" --memory-dir "$PWD") && [ "$_M" != "$PWD/memory" ] && [ -d "$_M" ] && MEMORY_DIR="$_M"   # worktree de git: la memoria del principal (2.52.0)
+echo "MEMORY_DIR=$MEMORY_DIR"
+```
+
 Reconstruct the full memory system from past Claude Code conversation logs. Uses parallel Haiku subagents for extraction (cheaper, faster) and the main session for synthesis and writing.
 
 ## Step 0: Overrides y reconsider mode
@@ -98,6 +111,7 @@ If `$EXTRACT_SCRIPT` is empty or the file doesn't exist, report error: "Could no
 is emitted as an event and written by the compactor in Step 4 — never by editing the indexes by hand:
 ```bash
 MEMORY_DIR="memory"   # Model B; use the auto-memory path for Model A
+_MH=""; for _c in "${CLAUDE_PLUGIN_ROOT:-}/bin/memory-home.sh" "$PWD/plugins/3-tier-memory/bin/memory-home.sh" "$(find "$HOME/.claude/plugins" -name memory-home.sh -path '*/3-tier-memory/*' 2>/dev/null | sort -V | tail -1)"; do [ -f "$_c" ] && { _MH="$_c"; break; }; done; [ -n "$_MH" ] && _M=$(bash "$_MH" --memory-dir "$PWD") && [ "$_M" != "$PWD/memory" ] && [ -d "$_M" ] && MEMORY_DIR="$_M"   # worktree de git: la memoria del principal (2.52.0)
 if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-emit.py" ]; then
   JBIN="${CLAUDE_PLUGIN_ROOT}/bin"
 elif [ -f "plugins/3-tier-memory/bin/journal-emit.py" ]; then
@@ -576,18 +590,20 @@ git rev-parse --is-inside-work-tree 2>/dev/null
 ```
 If not -> skip git, report "Git: not in a repo."
 
-### 5c. Stage and commit
+### 5c. Stage and commit — solo lo que ESTE backfill creo (2.52.0)
+
+Nunca `git add memory/`: barre fichas y planes a medias de otras sesiones del mismo checkout (en una
+instalacion real, 19 archivos ajenos en un solo commit). Pasa con `--propio` cada ficha, plan y
+research que este backfill escribio; lo compartido (indices, `learnings/`, `pendientes/`) entra solo:
+
 ```bash
-git add memory/
-git commit -m "memory: backfill N sessions from JSONL history
-
-Sessions: DATE_FIRST to DATE_LAST
-Created: N session files, M pendientes, K learnings, P plans, R research
-
-Co-Authored-By: Claude <noreply@anthropic.com>"
+python3 "$JBIN/checkpoint-commit.py" --memory-dir "$MEMORY_DIR" --solo-compartidos \
+  --propio "$MEMORY_DIR/sessions/<ficha-1>.md" --propio "$MEMORY_DIR/plans/plan-<x>.md" \
+  --mensaje "memory: backfill N sessions from JSONL history (DATE_FIRST to DATE_LAST)"
 ```
 
-If commit fails -> report the error but do NOT fail the backfill. Memory files are already written.
+La ultima linea dice `COMMIT hash=...` o `COMMIT skip=<motivo>`. Si es skip, reportalo pero NO falles
+el backfill: los archivos de memoria ya estan escritos.
 
 ### 5d. Record result
 Save the commit hash (or "skipped") for the final report.

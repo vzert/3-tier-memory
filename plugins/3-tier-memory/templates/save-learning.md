@@ -4,6 +4,19 @@ description: Save a learning/rule to memory (lightweight, for Paperclip agents)
 
 # Save Learning
 
+<!-- worktree-memoria (2.52.0) -->
+**Git worktrees.** Si esta sesion corre dentro de un worktree enlazado de git, la memoria es la del
+worktree PRINCIPAL del repo, no un `memory/` junto a ti (con `memory/` ignorada ni siquiera existe; con
+`memory/` versionada es una copia que nadie mas lee). Corre este bloque una vez y, en TODO este
+archivo, lee cada `memory/...` como `<MEMORY_DIR impreso>/...`: lecturas, Write/Edit y argumentos de
+scripts. Fuera de un worktree imprime `MEMORY_DIR=memory` y nada cambia.
+
+```bash
+MEMORY_DIR="memory"
+_MH=""; for _c in "${CLAUDE_PLUGIN_ROOT:-}/bin/memory-home.sh" "$PWD/plugins/3-tier-memory/bin/memory-home.sh" "$(find "$HOME/.claude/plugins" -name memory-home.sh -path '*/3-tier-memory/*' 2>/dev/null | sort -V | tail -1)"; do [ -f "$_c" ] && { _MH="$_c"; break; }; done; [ -n "$_MH" ] && _M=$(bash "$_MH" --memory-dir "$PWD") && [ "$_M" != "$PWD/memory" ] && [ -d "$_M" ] && MEMORY_DIR="$_M"   # worktree de git: la memoria del principal (2.52.0)
+echo "MEMORY_DIR=$MEMORY_DIR"
+```
+
 Guarda un learning o regla crítica en el sistema de memoria, sin hacer checkpoint completo.
 
 **Uso**: Cuando descubras un patrón nuevo, regla de negocio, gotcha técnico, o corrección a un learning existente.
@@ -22,6 +35,7 @@ single compactor under a lock, which assigns the number (`max + 1`). Locate the 
 
 ```bash
 MEMORY_DIR="memory"   # the directory located above (Model B); use the Model A path otherwise
+_MH=""; for _c in "${CLAUDE_PLUGIN_ROOT:-}/bin/memory-home.sh" "$PWD/plugins/3-tier-memory/bin/memory-home.sh" "$(find "$HOME/.claude/plugins" -name memory-home.sh -path '*/3-tier-memory/*' 2>/dev/null | sort -V | tail -1)"; do [ -f "$_c" ] && { _MH="$_c"; break; }; done; [ -n "$_MH" ] && _M=$(bash "$_MH" --memory-dir "$PWD") && [ "$_M" != "$PWD/memory" ] && [ -d "$_M" ] && MEMORY_DIR="$_M"   # worktree de git: la memoria del principal (2.52.0)
 if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-emit.py" ]; then
   JBIN="${CLAUDE_PLUGIN_ROOT}/bin"
 elif [ -f "plugins/3-tier-memory/bin/journal-emit.py" ]; then
@@ -165,8 +179,11 @@ If it reports `secrets_redacted=N` with N>0, warn the user to rotate any key tha
 
 If git is available and there are changes:
 ```bash
-git add memory/learnings/ memory/_learnings.md
-git commit -m "learning: <brief-description>"
+# --only con rutas (2.52.0): el indice de git es compartido; un `git commit` sin rutas se lleva
+# tambien lo que otra sesion del mismo checkout dejo con `git add`.
+# MEMORY_DIR = el de Step 0 (en un worktree de git, la memoria del principal).
+git -C "$MEMORY_DIR" add -- learnings/ _learnings.md
+git -C "$MEMORY_DIR" commit --only -m "learning: <brief-description>" -- learnings/ _learnings.md
 ```
 
 If git fails or is not available, continue anyway.

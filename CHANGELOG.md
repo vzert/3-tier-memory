@@ -1,6 +1,99 @@
 # Changelog
 
 
+## [2.52.0] - 2026-10-07
+Origen: otra sesion midio, a pedido del usuario, que con varias sesiones en un
+mismo checkout el Step 6 de `/checkpoint-3t` (`git add memory/` + commit) mete en su commit archivos
+de las otras. En una instalacion real (2026-10-06) un solo commit de checkpoint metio 19 archivos ajenos (fichas de sesiones vivas, colas
+de Step 8 de sesiones viejas, un plan de otra sesion). Del 28-sep al 6-oct, 26 de 125 commits con
+fichas llevaron fichas de otras sesiones. Banco f9d (100 ordenes al azar x 3 sesiones, eventos y
+compactador reales): 6,4 archivos de otra sesion por corrida, en 100 de 100. Y con worktrees la
+memoria quedaba partida: con `EnterWorktree` los hooks reciben `CLAUDE_PROJECT_DIR` = principal y el
+checkpoint escribia `memory/` relativo al worktree.
+
+### Changed
+- **Step 6 commitea solo lo de su sesion** con `bin/checkpoint-commit.py`: `git add -- <rutas>` +
+  `git commit --only -- <rutas>`. De `sessions/`, `plans/`, `research/` y `handoffs/` entra solo la
+  ficha y los plans/research que la ficha enlaza; el resto de `memory/` (indices, `learnings/`,
+  `pendientes/`, `.journal/`) es compartido y entra entero. `--only` porque el indice de git tambien
+  es compartido: con `git add` de rutas propias y `git commit` sin rutas el banco dio 2,7 ajenos por
+  corrida. Corre en el repo que contiene la memoria, bajo el candado del compactador si lo consigue en
+  10 s (si no, commitea igual e imprime `AVISO candado-ocupado`), y reintenta ante `.git/index.lock`.
+- **Step 8f: commit de la cola.** El snippet `## Como retomar`, los recordatorios y el hash de Step 6
+  se escriben despues del commit y hasta ahora nadie los commiteaba (8 decia "no agregues git commit
+  aqui"); los barria el siguiente checkpoint de otra sesion. Ahora la sesion los commitea con el
+  mismo script. El hash de Step 6 sigue siendo referencia adelantada en su commit y entra en el de
+  la cola.
+- **Una memoria por repo con worktrees.** `bin/memory-home.sh`: en un worktree enlazado, la memoria
+  es la de la misma carpeta dentro del worktree PRINCIPAL (si existe; si no, nada cambia). Vale para
+  las dos formas de entrar: `EnterWorktree` y lanzar `claude` dentro del worktree. Los hooks leen
+  `MEMORY_PROJECT_DIR` (nuevo, de `resolve-project-dir.sh`); `CLAUDE_PROJECT_DIR` no cambia. Step 0
+  del checkpoint imprime `MEMORY_DIR=<ruta absoluta>` en un worktree. Opt-out:
+  `memoria_worktree=propia` en `memory/.memory-config`. Se descarto memoria por worktree: el banco
+  mide 10 archivos en conflicto por fusion de ramas, y con `merge=union` numeros de regla repetidos
+  en 100 de 100 corridas.
+- `checkpoint-audit.py`: `git.commit_solo_propio` (el ultimo commit de la ficha no trae fichas,
+  planes ni research de otra sesion) y `git.ficha_sin_commitear` separa lo propio (SALTADO si la
+  ficha no esta en ningun commit), lo compartido y lo de otras sesiones (POR-DISEÑO: no se barre).
+  Mide en el repo que contiene la memoria, no en el cwd.
+- `/consolidate-3t` y `/migrate-learnings-3t` commitean con `checkpoint-commit.py --solo-compartidos`;
+  `/save-learning` con `git commit --only -- <rutas>` en el repo de la memoria.
+- **Los scripts de Python tambien resuelven el worktree** (`bin/memhome.py`, llama a `memory-home.sh`):
+  `journal-emit.py`, `journal-compact.py`, `expire-pendientes.py` y `triage-scan.py` sin
+  `--memory-dir`, o con un `--memory-dir` que apunta a `<worktree>/memory`, usan la memoria del
+  principal. Sin esto (adversario, ronda 1) el `session.add --commit` de Step 6 salia 1 desde un
+  worktree con memory/ ignorada, y con memory/ versionada el evento caia en la copia del worktree:
+  `CLAUDE_PROJECT_DIR` llega vacia a las llamadas Bash del agente y el cwd es el worktree.
+- **Cada `MEMORY_DIR="memory"` de las plantillas** (checkpoint, save-learning, consolidate,
+  migrate-learnings, triage, enrich, backfill, migrate: 11) lleva detras una linea que lo cambia por
+  la memoria del principal en un worktree. `test-memory-home.sh` lo comprueba por construccion.
+- `checkpoint-commit.py`: rutas con acentos (`core.quotePath=false`; antes salia `sin-cambios` despues
+  del `git add` y dejaba la ficha en el indice compartido), enlaces `[[../plans/x]]` y
+  `[T](../plans/x.md)` (28 en fichas reales de una instalacion), y se para con un merge, rebase o
+  cherry-pick a medias (`skip=operacion-en-curso`) antes de tocar el indice.
+- **Que plan es "propio"**: solo los enlazados en las secciones `## Plans` y `## Research` de la ficha
+  (donde Step 5 los pone). Un "ver tambien [[plans/plan-a]]" en otra seccion ya no se lleva el plan a
+  medias de otra sesion (adversario, ronda 2; hay planes enlazados desde 2 o mas fichas en las 10
+  instalaciones revisadas). Un plan que dos sesiones vivas registran a la vez es de las dos.
+- **Un commit que falla deja el indice como estaba**: si `git commit --only` falla (un pre-commit que
+  rechaza, una firma que falla, `index.lock` todo el tiempo), el script deshace en el indice lo que
+  hizo SU `git add`: quita lo nuevo y repone, con el mismo blob, lo que otro ya tenia preparado (ronda
+  3: restaurar solo los nombres dejaba el contenido nuevo en un indice ya preparado). Una entrada que
+  otro proceso cambio despues de ese `git add` no se toca (ronda 4: la restauracion la pisaba).
+- `/backfill-3t` commitea con `checkpoint-commit.py --solo-compartidos --propio <lo que creo>`. Ninguna
+  plantilla ni comando hace ya `git add memory/` ni `git commit` sin rutas (la prueba lo comprueba
+  sobre todos).
+- **Bloque de worktree en cada comando que toca la memoria** (`/status-3t`, `/audit-3t`,
+  `/backfill-3t`, `/consolidate-3t`, `/enrich-3t`, `/triage-3t`, `/migrate-learnings-3t`,
+  `/save-learning`, `/migrate`, `/setup-memory`): imprime `MEMORY_DIR` y pide leer cada `memory/...`
+  del archivo como esa ruta. `/status-3t` lee el journal de ahi; `/setup-memory` no crea una segunda
+  memoria en un worktree.
+- `memory-home.sh`: con un git anterior a 2.31, `rev-parse` devuelve `--path-format=absolute` como
+  texto con exit 0; ahora se detecta y la carpeta queda sin cambios (antes un monorepo con git viejo
+  tomaba la memoria de la raiz).
+
+### Medido
+- Banco f9d con una via nueva que llama al `checkpoint-commit.py` real en Step 6 y en 8f (100 ordenes
+  al azar x 3 sesiones; copia del banco en un temporal, el original no se toco; corrido sobre el codigo
+  final de esta version, con los eventos y el compactador de este mismo `bin/`): fichas y planes de
+  otra sesion en un commit 0 (antes 6,4 por corrida, 100 de 100); propios sin commit al final 1,0
+  (antes 2,8; el que queda es la cola vieja de la sesion del fixture, que nadie adopta a proposito);
+  compartidos sin commit 0 (antes 1). El banco cuenta como "ajenos" 1,84 por corrida, y los 184 son
+  `learnings/<tema>.md`: los escribe el compactador entero y bajo candado, y aqui son compartidos.
+- `test-checkpoint-commit.sh` (52 asertos, 100 ordenes al azar sin un solo ajeno) y
+  `test-memory-home.sh` (32). Con `memory_home` anulado en `resolve-project-dir.sh`, o con
+  session-start leyendo `$CLAUDE_PROJECT_DIR/memory`, `test-memory-home.sh` falla.
+
+### No cambia
+- Las colas viejas ya en disco (de checkpoints anteriores a 2.52.0) no se adoptan: no se puede probar
+  que su sesion termino. Quedan sin commit hasta que su sesion haga otro checkpoint o alguien las
+  commitee a mano.
+- Una sesion que ya corre con la plantilla vieja sigue con `git add memory/` hasta que se reinicie
+  (la plantilla y los hooks se cargan al abrir la sesion).
+- Limites conocidos: en Windows `memhome.py` llama a `bash`; si el primero en el PATH es el de WSL y no
+  el de Git Bash, los scripts de Python no resuelven el worktree (los hooks si). No se probo en
+  Windows: el CI de windows-latest no ha corrido sobre esta rama.
+
 ## [2.51.1] - 2026-10-07
 ### Fixed
 - **`bin/test-learnings-migracion.sh` en Windows** (CI 37635413247: rojo solo en windows-latest, la

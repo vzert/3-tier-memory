@@ -76,3 +76,18 @@ if [ -z "${CLAUDE_PROJECT_DIR:-}" ]; then
   # con `set -u` la referencia justo despues del source.
   CLAUDE_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-}"
 fi
+
+# La carpeta cuya memory/ usan los hooks (2.52.0). Igual a CLAUDE_PROJECT_DIR salvo en un worktree
+# enlazado de git: ahi es la misma carpeta dentro del worktree PRINCIPAL, si esa tiene memory/. Sin
+# esto, una sesion lanzada dentro de un worktree no veia la memoria del repo (ver memory-home.sh).
+# CLAUDE_PROJECT_DIR no se toca: session-start instala .claude/commands en el proyecto de la sesion,
+# y la memoria auto (ENCODED) sigue su ruta. Queda asignada siempre, aunque vacia (propiedad 1).
+MEMORY_PROJECT_DIR="$CLAUDE_PROJECT_DIR"
+_MH="$(dirname "${BASH_SOURCE[0]:-$0}")/memory-home.sh"
+if [ -n "$CLAUDE_PROJECT_DIR" ] && [ -f "$_MH" ]; then
+  # shellcheck source=/dev/null
+  source "$_MH"
+  MEMORY_PROJECT_DIR=$(memory_home "$CLAUDE_PROJECT_DIR")
+  MEMORY_PROJECT_DIR="${MEMORY_PROJECT_DIR:-$CLAUDE_PROJECT_DIR}"
+fi
+unset _MH

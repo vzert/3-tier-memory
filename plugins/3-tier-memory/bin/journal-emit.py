@@ -176,9 +176,11 @@ MAX_EXCL_RETRIES = 5
 def resolve_memory_dir(explicit):
     """MEMORY_DIR explicito > env > ./memory (Model B) > auto-memory (Model A)."""
     cand = explicit or os.environ.get("MEMORY_DIR")
+    # memhome (2.52.0): en un worktree enlazado de git, la memoria es la del principal.
+    import memhome
     if cand:
-        return os.path.abspath(cand)
-    proj = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+        return memhome.normaliza(cand)
+    proj = memhome.home(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
     local = os.path.join(proj, "memory")
     if os.path.isfile(os.path.join(local, "_pendientes.md")):
         return local

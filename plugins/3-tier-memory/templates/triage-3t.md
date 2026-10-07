@@ -4,6 +4,19 @@ description: Barrido del backlog de pendientes — leer, decidir y cerrar con ev
 
 # /triage-3t — barrido del backlog
 
+<!-- worktree-memoria (2.52.0) -->
+**Git worktrees.** Si esta sesion corre dentro de un worktree enlazado de git, la memoria es la del
+worktree PRINCIPAL del repo, no un `memory/` junto a ti (con `memory/` ignorada ni siquiera existe; con
+`memory/` versionada es una copia que nadie mas lee). Corre este bloque una vez y, en TODO este
+archivo, lee cada `memory/...` como `<MEMORY_DIR impreso>/...`: lecturas, Write/Edit y argumentos de
+scripts. Fuera de un worktree imprime `MEMORY_DIR=memory` y nada cambia.
+
+```bash
+MEMORY_DIR="memory"
+_MH=""; for _c in "${CLAUDE_PLUGIN_ROOT:-}/bin/memory-home.sh" "$PWD/plugins/3-tier-memory/bin/memory-home.sh" "$(find "$HOME/.claude/plugins" -name memory-home.sh -path '*/3-tier-memory/*' 2>/dev/null | sort -V | tail -1)"; do [ -f "$_c" ] && { _MH="$_c"; break; }; done; [ -n "$_MH" ] && _M=$(bash "$_MH" --memory-dir "$PWD") && [ "$_M" != "$PWD/memory" ] && [ -d "$_M" ] && MEMORY_DIR="$_M"   # worktree de git: la memoria del principal (2.52.0)
+echo "MEMORY_DIR=$MEMORY_DIR"
+```
+
 Sesion dedicada a vaciar el cementerio de pendientes **leyendolos**, no adivinando. El usuario
 corre el comando; tu haces el barrido y **el usuario aprueba antes de que se emita nada**.
 
@@ -31,6 +44,7 @@ aqui.) Los dos scripts resuelven la ruta solos si omites `--memory-dir`.
 ```bash
 JBIN="${CLAUDE_PLUGIN_ROOT}/bin"
 MEMORY_DIR="memory"   # Model B; usa la ruta de Model A si el proyecto no tiene memory/ local
+_MH=""; for _c in "${CLAUDE_PLUGIN_ROOT:-}/bin/memory-home.sh" "$PWD/plugins/3-tier-memory/bin/memory-home.sh" "$(find "$HOME/.claude/plugins" -name memory-home.sh -path '*/3-tier-memory/*' 2>/dev/null | sort -V | tail -1)"; do [ -f "$_c" ] && { _MH="$_c"; break; }; done; [ -n "$_MH" ] && _M=$(bash "$_MH" --memory-dir "$PWD") && [ "$_M" != "$PWD/memory" ] && [ -d "$_M" ] && MEMORY_DIR="$_M"   # worktree de git: la memoria del principal (2.52.0)
 python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"     # aplicar lo que otros dejaron
 python3 "$JBIN/triage-scan.py" --memory-dir "$MEMORY_DIR" --limit 25
 ```

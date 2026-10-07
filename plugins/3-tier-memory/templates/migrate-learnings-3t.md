@@ -4,6 +4,19 @@ description: Migrate an existing learnings corpus — link each Quick Reference 
 
 # Learnings migration (F7 of the learnings lifecycle)
 
+<!-- worktree-memoria (2.52.0) -->
+**Git worktrees.** Si esta sesion corre dentro de un worktree enlazado de git, la memoria es la del
+worktree PRINCIPAL del repo, no un `memory/` junto a ti (con `memory/` ignorada ni siquiera existe; con
+`memory/` versionada es una copia que nadie mas lee). Corre este bloque una vez y, en TODO este
+archivo, lee cada `memory/...` como `<MEMORY_DIR impreso>/...`: lecturas, Write/Edit y argumentos de
+scripts. Fuera de un worktree imprime `MEMORY_DIR=memory` y nada cambia.
+
+```bash
+MEMORY_DIR="memory"
+_MH=""; for _c in "${CLAUDE_PLUGIN_ROOT:-}/bin/memory-home.sh" "$PWD/plugins/3-tier-memory/bin/memory-home.sh" "$(find "$HOME/.claude/plugins" -name memory-home.sh -path '*/3-tier-memory/*' 2>/dev/null | sort -V | tail -1)"; do [ -f "$_c" ] && { _MH="$_c"; break; }; done; [ -n "$_MH" ] && _M=$(bash "$_MH" --memory-dir "$PWD") && [ "$_M" != "$PWD/memory" ] && [ -d "$_M" ] && MEMORY_DIR="$_M"   # worktree de git: la memoria del principal (2.52.0)
+echo "MEMORY_DIR=$MEMORY_DIR"
+```
+
 Since 2.45-2.50 the plugin can retire rules, dedup on write, attach trigger phrases
 (`<!-- disparadores: ... -->`) and warn when it is time to consolidate. A corpus written before
 that has none of it: Quick Reference lines are short versions of rules with different words (in
@@ -35,6 +48,7 @@ If `memory/` exists in the project root, use it (Model B). Otherwise check auto-
 
 ```bash
 MEMORY_DIR="memory"   # the directory located above (Model B); use the Model A path otherwise
+_MH=""; for _c in "${CLAUDE_PLUGIN_ROOT:-}/bin/memory-home.sh" "$PWD/plugins/3-tier-memory/bin/memory-home.sh" "$(find "$HOME/.claude/plugins" -name memory-home.sh -path '*/3-tier-memory/*' 2>/dev/null | sort -V | tail -1)"; do [ -f "$_c" ] && { _MH="$_c"; break; }; done; [ -n "$_MH" ] && _M=$(bash "$_MH" --memory-dir "$PWD") && [ "$_M" != "$PWD/memory" ] && [ -d "$_M" ] && MEMORY_DIR="$_M"   # worktree de git: la memoria del principal (2.52.0)
 if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/learnings-migracion.py" ]; then
   JBIN="${CLAUDE_PLUGIN_ROOT}/bin"
 elif [ -f "plugins/3-tier-memory/bin/learnings-migracion.py" ]; then
@@ -172,9 +186,10 @@ That writes `memory/.migracion-learnings.json`; the session-start notice stops c
 
 ## Step 6: Git commit (best-effort)
 
-Same best-effort pattern as /checkpoint-3t Step 6: if `git` works here, `git add memory/` and
-`git commit -m "migrate-learnings: links + disparadores — DATE"`; otherwise report the skip
-reason. The recall index rebuilds itself on the next prompt.
+Same best-effort pattern as /checkpoint-3t Step 6 (2.52.0: solo lo compartido, nunca
+`git add memory/`, que barre fichas y planes a medias de otras sesiones del mismo checkout):
+`python3 "$JBIN/checkpoint-commit.py" --memory-dir "$MEMORY_DIR" --solo-compartidos --mensaje "migrate-learnings: links + disparadores — DATE"`.
+Its last line says `COMMIT hash=...` or `COMMIT skip=<reason>`; report the skip reason. The recall index rebuilds itself on the next prompt.
 
 Tell the user: lines linked (agreed by judge and candidate / decided by the user / `ninguna`),
 lines the journal cannot link and why, rules enriched, rules rejected and why, the three criteria

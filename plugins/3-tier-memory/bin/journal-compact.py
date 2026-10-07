@@ -264,9 +264,11 @@ def atomic_write(path, lines):
 
 def resolve_memory_dir(explicit):
     cand = explicit or os.environ.get("MEMORY_DIR")
+    # memhome (2.52.0): en un worktree enlazado de git, la memoria es la del principal.
+    import memhome
     if cand:
-        return os.path.abspath(cand)
-    proj = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+        return memhome.normaliza(cand)
+    proj = memhome.home(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
     local = os.path.join(proj, "memory")
     # .journal/ tambien vale como centinela: si alguien borro _pendientes.md, este es justo el
     # momento en que hay que poder decirlo, no el momento de quedarse ciego. (Ronda 6.)

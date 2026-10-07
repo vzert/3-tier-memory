@@ -610,4 +610,25 @@ sesion cambias el estado de un pendiente citado en la ficha, el hook lo pide otr
 nuevo. Limite: cerrar DESPUES el pendiente que este bloque propone, sin tocar ninguno de la ficha,
 no vuelve a disparar el hook; el propio prompt dice "si ya no aplica, cierralo".
 
-No agregues git commit aqui — el cambio al session file ya quedo dentro del flujo de Step 6, pero como Step 8 corre DESPUES, ni `## Como retomar` ni `## Recordatorios de calendario` estaran en el commit. Es aceptable: el snippet vive en disco y el commit es best-effort. Si el usuario quiere comitearlo, puede `git add memory/sessions/DATE-SLUG.md && git commit --amend --no-edit` manualmente o esperar al proximo checkpoint.
+### 8f. Commit de la cola (2.52.0) — ULTIMO paso, despues de 8a-8e
+
+Lo que este Step escribe (el snippet `## Como retomar`, los recordatorios de calendario) y el hash
+que Step 6 anoto en la ficha y en `_session-index.md` van despues del commit de Step 6. Hasta 2.51.0
+este paso decia "no agregues git commit aqui", y esa cola no la commiteaba nadie: el siguiente
+checkpoint de OTRA sesion la barria con su `git add memory/` (en una instalacion real entraron colas
+de sesiones de dias antes). Con commits por rutas nadie barre lo ajeno, asi que cada sesion commitea
+su cola:
+
+```bash
+python3 "$JBIN/checkpoint-commit.py" --memory-dir "$MEMORY_DIR" --session-file "$SESSION_FILE" \
+  --mensaje "checkpoint-cola: DATE-SLUG"
+```
+
+Usa el MISMO `MEMORY_DIR` y `SESSION_FILE` de Step 6. Lleva la ficha, sus plans/research enlazados y
+lo compartido; no lleva nada de otras sesiones. Su hash no se anota en ningun lado (seria otra cola);
+`COMMIT skip=sin-cambios` es normal si nada cambio. No es `--amend`: es un commit nuevo, y el hash
+de Step 6 sigue valiendo. Lo que edites DESPUES de esto (por ejemplo al contestar la revision del
+cierre) entra en el proximo checkpoint de esta misma sesion. Reporta solo la linea `COMMIT` (no
+las `  + ruta`) en tu respuesta a la revision del cierre, ANTES de las salidas de 8b, 8e y 8c: el
+cierre tiene que terminar con ellas, y el hook de cierre bloquea si despues del ultimo bloque siguen
+mas de 300 caracteres.

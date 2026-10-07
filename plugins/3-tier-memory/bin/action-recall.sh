@@ -32,8 +32,8 @@ INDEX="$STATE_DIR/.action-index.json"
 
 # Mismo memory/ que recall.sh (Model B, luego Model A), solo para el pie de retirada.
 MEMORY_DIR=""
-if [ -f "$CLAUDE_PROJECT_DIR/memory/_pendientes.md" ]; then
-  MEMORY_DIR="$CLAUDE_PROJECT_DIR/memory"
+if [ -f "$MEMORY_PROJECT_DIR/memory/_pendientes.md" ]; then
+  MEMORY_DIR="$MEMORY_PROJECT_DIR/memory"
 elif [ -f "$STATE_DIR/memory/_pendientes.md" ]; then
   MEMORY_DIR="$STATE_DIR/memory"
 fi

@@ -25,7 +25,7 @@ source "$(dirname "$0")/resolve-project-dir.sh"
 
 # Solo cuenta si hay un sistema de memoria de verdad (mismo criterio que los demas hooks).
 ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
-if [ ! -f "$CLAUDE_PROJECT_DIR/memory/_pendientes.md" ] \
+if [ ! -f "$MEMORY_PROJECT_DIR/memory/_pendientes.md" ] \
    && [ ! -f "$HOME/.claude/projects/$ENCODED/memory/_pendientes.md" ]; then
   exit 0
 fi

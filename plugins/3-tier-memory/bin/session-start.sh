@@ -166,8 +166,8 @@ json.dump(d, open(f, 'w'), indent=2)
 fi
 
 # Detect memory directory (Model B first, then Model A fallback)
-if [ -f "$CLAUDE_PROJECT_DIR/memory/_pendientes.md" ]; then
-  MEMORY_DIR="$CLAUDE_PROJECT_DIR/memory"
+if [ -f "$MEMORY_PROJECT_DIR/memory/_pendientes.md" ]; then
+  MEMORY_DIR="$MEMORY_PROJECT_DIR/memory"
 elif [ -d "$HOME/.claude/projects" ]; then
   # Model A: try auto-memory
   ENCODED=$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')
