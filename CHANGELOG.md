@@ -51,7 +51,7 @@ del Quick Reference compartian titulo con su regla.
   otra instalacion (27 topics); el candidato 1 acerto en 156 de 161 y en 18 de 21. Por eso el comando no enlaza con el candidato 1 solo.
 - Banco de recall sobre copias de tres instalaciones, sin marca y con todo el Quick Reference
   marcado: los 32 casos dan el mismo detalle.
-- `bin/test-learnings-migracion.sh` (nuevo, 60 asertos) y 14 mutaciones en
+- `bin/test-learnings-migracion.sh` (nuevo, 63 asertos) y 16 mutaciones en
   `tools/mutation-check.sh` (`tools/mutaciones/m_learnings_migracion.py`).
 
 ## [2.50.0] - 2026-10-06
