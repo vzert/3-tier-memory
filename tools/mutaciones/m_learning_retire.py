@@ -36,8 +36,8 @@ M = {
     "fila-antes-de-validar": [
         ("    if not sup:", "    if True:")],
     "qr-reutiliza-numero": [
-        ('insert_at_section_end(ilines, s0, s1, f"{max(qnums) + 1 if qnums else 1}. {q}")',
-         'insert_at_section_end(ilines, s0, s1, f"{max([n for n, _ in (rule_text(l) for l in ilines[s0:s1]) if n] or [0]) + 1}. {q}")')],
+        ('insert_at_section_end(ilines, s0, s1, f"{max(qnums) + 1 if qnums else 1}. {q}{marca}")',
+         'insert_at_section_end(ilines, s0, s1, f"{max([n for n, _ in (rule_text(l) for l in ilines[s0:s1]) if n] or [0]) + 1}. {q}{marca}")')],
     "supersedes-qr-tarde": [
         ("                quitar_qr = quickref_a_quitar(read_lines(ipath), qp, retirada_ya)", "                pass"),
         ("    if q or quitar_qr:",

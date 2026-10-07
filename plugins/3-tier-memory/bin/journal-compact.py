@@ -2247,6 +2247,7 @@ def apply_learning_add(mem, p):
     text = normalize_text(p.get("text") or "")
     qp = normalize_text(p.get("quickref_prefix") or "")
     quitar_qr = None
+    qr_regla = None   # valor de la marca de enlace de la linea del Quick Reference (2.51.0)
     if text:
         lines = read_lines(tpath)
         start, related = body_region(lines)
@@ -2328,6 +2329,18 @@ def apply_learning_add(mem, p):
             bump_updated(lines)
             atomic_write(tpath, lines)
             changed = True
+        # El enlace Quick Reference -> regla (F7, 2.51.0): aqui se sabe topic y numero, despues
+        # habria que adivinarlo. Vinetas, y un numero repetido en el topic (`topic#N` seria
+        # ambiguo): solo el topic.
+        if existe is not None:
+            n_regla = rule_text(lines[existe])[0]
+        else:
+            n_regla = (max(nums) + 1 if nums else 1) if numbered else None
+        s2, r2 = body_region(lines)   # despues de insertar: la region crecio
+        if n_regla is not None and len(reglas_numero(lines, s2, r2, n_regla)) == 1:
+            qr_regla = f"{topic}#{n_regla}"
+        else:
+            qr_regla = topic
     if sup:
         changed = asegurar_fila() or changed
 
@@ -2347,8 +2360,12 @@ def apply_learning_add(mem, p):
             qchanged = True
         if q:
             s0, s1 = section_bounds(ilines, "## Quick Reference")
-            if not any(t and normalize_text(t) == q for _, t in (rule_text(l) for l in ilines[s0:s1])):
-                insert_at_section_end(ilines, s0, s1, f"{max(qnums) + 1 if qnums else 1}. {q}")
+            # Idempotencia sin la marca de enlace: un replay sobre una linea ya marcada no es otra
+            # version corta (sin esto, se insertaba una linea duplicada; medido 2026-10-06).
+            if not any(t and normalize_text(learning_marks.sin_regla_qr(t)) == q
+                       for _, t in (rule_text(l) for l in ilines[s0:s1])):
+                marca = learning_marks.comentario_regla_qr(qr_regla) if qr_regla else ""
+                insert_at_section_end(ilines, s0, s1, f"{max(qnums) + 1 if qnums else 1}. {q}{marca}")
                 qchanged = True
         if qchanged:
             bump_updated(ilines)
@@ -2652,17 +2669,27 @@ def apply_learning_update(mem, p):
             changed = True
 
     q = normalize_text(p.get("quickref") or "")
-    if q:
+    qregla = (p.get("quickref_regla") or "").strip()
+    if q or qregla:
         ilines = read_lines(ipath)
         sec = section_bounds(ilines, "## Quick Reference")
         if not sec:
             raise Quarantine("no-anchor: falta '## Quick Reference' en _learnings.md")
         s0, s1 = sec
-        i, ya = find_rule_anchored(ilines, s0, s1,
-                                   normalize_text(p.get("quickref_prefix") or ""), q,
-                                   "'## Quick Reference'")
-        if not ya:
-            rewrite_rule(ilines, i, s1, q, "'## Quick Reference'")
+        if qregla:
+            comprobar_regla_qr(mem, qregla)
+        i, _ya = find_rule_anchored(ilines, s0, s1,
+                                    normalize_text(p.get("quickref_prefix") or ""), q,
+                                    "'## Quick Reference'")
+        # Como en el topic file: la linea es texto + marca de enlace, y cada parte se conserva si
+        # el evento no trae otra (sin esto, corregir el texto borraba la marca; medido 2026-10-06).
+        _n, viejo = rule_text(ilines[i])
+        cuerpo = q or learning_marks.sin_regla_qr(viejo)
+        marca = (learning_marks.comentario_regla_qr(qregla) if qregla
+                 else learning_marks.sufijo_regla_qr(viejo))
+        final = cuerpo + marca
+        if normalize_text(final) != normalize_text(viejo):
+            rewrite_rule(ilines, i, s1, final, "'## Quick Reference'")
             bump_updated(ilines)
             atomic_write(ipath, ilines)
             changed = True
@@ -2693,6 +2720,28 @@ def apply_learning_update(mem, p):
             changed = True
 
     return changed
+
+
+def comprobar_regla_qr(mem, v):
+    """Quarantine si la marca `v` no apunta a algo que exista HOY: `<topic>#<N>` exige una sola
+    regla numerada N viva en el topic; `<topic>`, el topic file; `ninguna` siempre vale."""
+    if v == "ninguna":
+        return
+    topic, _, n = v.partition("#")
+    tpath = os.path.join(mem, "learnings", topic + ".md")
+    if not os.path.isfile(tpath):
+        raise Quarantine(f"no-anchor: quickref_regla {v!r}: learnings/{topic}.md no existe")
+    if not n:
+        return
+    lines = read_lines(tpath)
+    start, related = body_region(lines)
+    hits = reglas_numero(lines, start, related, int(n))
+    if len(hits) != 1:
+        raise Quarantine(f"{'no-anchor' if not hits else 'ambiguous'}: quickref_regla {v!r}: hay "
+                         f"{len(hits)} reglas #{n} en learnings/{topic}.md — el enlace necesita una")
+    if learning_marks.regla_retirada(rule_text(lines[hits[0]])[1]):
+        raise Quarantine(f"no-anchor: quickref_regla {v!r}: la regla #{n} esta retirada — el Quick "
+                         f"Reference es verdad vigente; enlaza la que la reemplaza o quita la linea")
 
 
 def set_last_verified(mem, topic, lv):
@@ -3904,8 +3953,19 @@ def validate(ev):
         if not p.get("topic"):
             raise Quarantine("malformed: learning.update sin 'topic'")
         if not (p.get("text") or p.get("quickref") or p.get("title") or p.get("when")
-                or p.get("disparadores") or p.get("last_verified")):
+                or p.get("disparadores") or p.get("last_verified") or p.get("quickref_regla")):
             raise Quarantine("malformed: learning.update sin nada que corregir")
+        qr = p.get("quickref_regla")
+        if qr:
+            if not learning_marks.valor_regla_qr_valido(qr):
+                raise Quarantine(f"malformed: learning.update quickref_regla {qr!r} no es "
+                                 f"<topic>#<N>, <topic> ni ninguna")
+            if qr != "ninguna" and qr.split("#")[0] != p["topic"]:
+                raise Quarantine(f"malformed: learning.update quickref_regla {qr!r} no es del "
+                                 f"topic {p['topic']}")
+            if not p.get("quickref_prefix"):
+                raise Quarantine("malformed: learning.update con 'quickref_regla' sin "
+                                 "'quickref_prefix'")
         lv = p.get("last_verified")
         if lv:
             if not (isinstance(lv, str) and DATE_RE.match(lv)):

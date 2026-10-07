@@ -779,6 +779,19 @@ PYEOF
       out ""
     fi
   fi
+
+  # Corpus viejo sin migrar (F7, 2.51.0): lineas del Quick Reference sin enlace a su regla, o menos
+  # del 90 % de las enlazadas con disparadores. Solo lo que /migrate-learnings-3t puede arreglar
+  # (una linea que el journal no puede reescribir no avisa). Mismos canales y misma rama que
+  # CONSOLIDAR, por lo mismo: migrar pide decisiones de la persona.
+  if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/learnings-migracion.py" ] && [ -d "$MEMORY_DIR/learnings" ]; then
+    MIGRAR_AVISO=$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/learnings-migracion.py" --memory-dir "$MEMORY_DIR" --aviso 2>/dev/null | tr -d '\r' | head -1)
+    if [ -n "$MIGRAR_AVISO" ]; then
+      out "$MIGRAR_AVISO"
+      human "$MIGRAR_AVISO"
+      out ""
+    fi
+  fi
 fi
 
 # Migrate old command names to -3t suffix (one-time, for existing installs)
@@ -818,7 +831,7 @@ fi
 UPDATED=""
 INSTALLED=""
 
-for cmd in checkpoint-3t status-3t audit-3t backfill-3t save-learning consolidate-3t enrich-3t triage-3t; do
+for cmd in checkpoint-3t status-3t audit-3t backfill-3t save-learning consolidate-3t enrich-3t triage-3t migrate-learnings-3t; do
   [ -n "${SKIP_CMD_INSTALL:-}" ] && break
   LOCAL_CMD="$CMDS_DIR/$cmd.md"
   PLUGIN_CMD="$TEMPLATES_DIR/$cmd.md"
@@ -884,7 +897,7 @@ except Exception:
 fi
 if [ -z "${SKIP_CMD_INSTALL:-}" ] && [ "$IS_SELF_REPO" = "1" ]; then
   DESYNC=""
-  for cmd in checkpoint-3t status-3t audit-3t backfill-3t save-learning consolidate-3t enrich-3t triage-3t; do
+  for cmd in checkpoint-3t status-3t audit-3t backfill-3t save-learning consolidate-3t enrich-3t triage-3t migrate-learnings-3t; do
     LOCAL_CMD="$CMDS_DIR/$cmd.md"
     TREE_CMD="$SELF_TEMPLATES_DIR/$cmd.md"
     # Corre DESPUES del auto-update de arriba, que ya dejo LOCAL_CMD igual al plugin INSTALADO

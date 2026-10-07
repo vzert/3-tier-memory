@@ -213,7 +213,8 @@ def parse_learnings(memory_dir, units):
     section = re.search(r"## Quick Reference(.*?)(\n## |\Z)", qref, re.DOTALL)
     if section:
         for line in section.group(1).splitlines():
-            s = line.strip()
+            # Sin la marca de enlace (2.51.0): ni se indexa ni se muestra.
+            s = learning_marks.sin_regla_qr(line.strip())
             if learning_marks.regla_retirada(s):
                 continue
             if s.startswith("- "):

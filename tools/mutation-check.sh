@@ -270,6 +270,24 @@ caso "lv ignorado"             journal-compact.py m_consolidate.py test-learning
 caso "lv emisor sin validar"   journal-emit.py    m_consolidate.py test-learning-update.sh "23d fecha imposible" lv-emisor-sin-validar
 
 echo
+echo "Enlace Quick Reference -> regla y learnings-migracion.py (2.51.0, F7)"
+L=m_learnings_migracion.py; S=test-learnings-migracion.sh
+caso "add sin marca"           journal-compact.py $L $S "linea 3 del QR con la marca topic#N" add-sin-marca
+caso "replay del add duplica"  journal-compact.py $L $S "replay del add: una sola linea" add-duplica
+caso "numero repetido enlaza"  journal-compact.py $L $S "regla con numero repetido: marca el topic" repetido-numera
+caso "update borra la marca"   journal-compact.py $L $S "texto nuevo . misma marca" update-borra-marca
+caso "destino sin comprobar"   journal-compact.py $L $S "regla que no existe: cuarentena" sin-comprobar-destino
+caso "valor sin validar"       journal-compact.py $L $S "compactador: valor malo a mano" compactador-sin-validar
+caso "indice con la marca"     build-recall-index.py $L $S "el indice no lleva la marca" indice-con-marca
+caso "recordatorio con marca"  rule-reinject-nudge.sh $L $S "el recordatorio no trae la marca" recordatorio-con-marca
+caso "aviso cuenta bloqueadas" learnings-migracion.py $L $S "QR tras un comentario HTML: el aviso calla" aviso-cuenta-bloqueadas
+caso "aplicar sin comprobar"   learnings-migracion.py $L $S "regla tras un bloque de codigo: exit 1" aplicar-sin-comprobar
+caso "prefijo no unico"        learnings-migracion.py $L $S "y se aplican sin cuarentena" prefijo-no-unico
+caso "candidato repetido"      learnings-migracion.py $L $S "el numero repetido no sale como topic#N" candidatos-con-repetidos
+caso "decididas ignoradas"     learnings-migracion.py $L $S "decidir: el aviso calla" decididas-ignoradas
+caso "migrar solo al agente"   session-start.sh $L $S "persona: la linea" aviso-solo-agente
+
+echo
 echo "run-tests.sh (p-46153b135b): una suite que sale 0 sin su linea de resumen es FALLA"
 # El aserto esperado de sin-resumen-no-exigido es "exit 0 a mitad", no el del trap: en bash 5
 # (ubuntu, Git Bash) la suite del trap sale rc=2 y da FALLA con o sin mutacion (CI 37006005796).

@@ -157,7 +157,7 @@ compact --quiet >/dev/null
 chk "la regla nueva es la 8" "8. **El clon se limpia con git clean -fdx** — reset no basta" "$(regla 8)"
 chk "la 3 queda superada por #8" "3. **El clon se limpia con reset** — antiguo — ⊘ RETIRADA ($HOY, superada por #8): reset no quita lo no versionado" "$(regla 3)"
 chk "Quick Reference: la 3 fuera, la nueva es la 4 (el numero 3 no se reutiliza)" \
-  "1. **Uno corto** — a|2. **Dos corto** — b|4. **Clon: git clean -fdx**" "$(qr | grep -E '^[0-9]+\. ' | paste -sd'|' -)"
+  "1. **Uno corto** — a|2. **Dos corto** — b|4. **Clon: git clean -fdx** <!-- regla: gate#8 -->" "$(qr | grep -E '^[0-9]+\. ' | paste -sd'|' -)"
 H=$(huella); replay; compact --quiet >/dev/null
 chk "replay del supersedes: noop, sin cuarentena" "$H|0" "$(huella)|$(cuar)"
 fixture; H=$(huella)

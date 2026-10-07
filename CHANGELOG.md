@@ -1,6 +1,58 @@
 # Changelog
 
 
+## [2.51.0] - 2026-10-06
+Origen: F7 del plan de ciclo de vida de los learnings. La F7 se hizo a mano en el repo del plugin
+(enlazar cada linea del Quick Reference con su regla, escribir disparadores en esas reglas, revisar
+correcciones por adicion y pares) y pasa a ser una capacidad del plugin que cada usuario corre en su
+instalacion. El enlace no se puede deducir por titulo: en el corpus del plugin solo 11 de 162 lineas
+del Quick Reference compartian titulo con su regla.
+
+### Added
+- **Marca de enlace `<!-- regla: <topic>#<N> -->`** al final de una linea del Quick Reference
+  (`<topic>` solo si la regla es una vineta o su numero se repite en el topic; `ninguna` si la
+  persona decide que no hay regla). Nunca un numero de linea. `learning.add --quickref` la escribe
+  solo, porque sabe topic y numero. `learning.update --quickref-prefix QP --quickref-regla V` la
+  escribe o la cambia en una linea vieja; el compactador comprueba que el destino exista, este vivo
+  y no sea ambiguo, y si no, cuarentena.
+- **`bin/learnings-migracion.py`**: `--estado` (los criterios de la F7: correcciones por adicion,
+  pares fuertes, lineas enlazadas y con disparadores, retiros con nota), `--aviso`, `--candidatos`
+  (las 6 reglas vivas mas parecidas de TODOS los topics para cada linea sin enlace, Dice-IDF),
+  `--lote` (reglas sin disparadores por prioridad: enlazadas desde el Quick Reference, citadas en
+  fichas de 30 dias, que nombran un comando o una ruta, el resto), `--aplicar-enlaces` y
+  `--aplicar-disparadores` (emiten los eventos; lo que el journal no puede reescribir se rechaza
+  antes de emitir, con el motivo) y `--decidir` (reglas que la persona deja sin disparadores a
+  proposito; `memory/.migracion-learnings.json`).
+- **`/migrate-learnings-3t`** (`templates/migrate-learnings-3t.md`) y la guia de los escritores de
+  disparadores (`templates/guia-disparadores.md`, no es un comando). Un enlace se aplica solo si el
+  candidato 1 y un agente juez coinciden, o si lo decide la persona. Disparadores solo en las reglas
+  del Quick Reference salvo que la persona pida mas. Dice en el informe lo que no puede medir: el
+  banco de recall vive en este repo, no en la instalacion.
+- **`session-start.sh`**: una linea "MIGRAR-LEARNINGS: …" al agente y a la persona cuando hay lineas
+  del Quick Reference sin enlace o menos del 90 % de las enlazadas con disparadores. No avisa por lo
+  que el journal no puede arreglar (una linea tras un bloque de codigo o un comentario HTML). No en
+  agentes de Paperclip.
+
+### Fixed
+- **`learning.update --quickref` borraba lo que la linea llevaba detras** y un replay de
+  `learning.add --quickref` sobre una linea con comentario insertaba una linea duplicada. Medido con
+  eventos reales sobre una copia antes de cambiar nada; ahora la marca se conserva y la idempotencia
+  compara sin ella.
+
+### Verificacion
+- Reproduccion de la F7 con el script desde la copia de la memoria de este repo previa a la F7 (la
+  tabla congelada de la F7 como juez, la entrada de disparadores de la F7 como escritor): el topic
+  file sale identico al real salvo las dos reglas con el numero 63 repetido (fuera por diseno) y
+  tres reglas posteriores; el Quick Reference identico; 95,0 % de lineas enlazadas con
+  disparadores, igual que la F7; 0 cuarentenas; `--check-drift` rc=0.
+- Candidatos: la regla correcta estaba entre las 6 en 160 de 161 lineas de este repo y en 21 de 21
+  de una muestra etiquetada a ciegas en otra instalacion (27 topics); el candidato 1 acerto en 154
+  de 161 y en 18 de 21. Por eso el comando no enlaza con el candidato 1 solo.
+- Banco de recall sobre copias de tres instalaciones, sin marca y con todo el Quick Reference
+  marcado: los 32 casos dan el mismo detalle.
+- `bin/test-learnings-migracion.sh` (nuevo, 60 asertos) y 14 mutaciones en
+  `tools/mutation-check.sh` (`tools/mutaciones/m_learnings_migracion.py`).
+
 ## [2.50.0] - 2026-10-06
 Origen: F6 del plan de ciclo de vida de los learnings. Fusionar, superar o corregir una regla seguia
 siendo en parte una edicion a mano (traer el detalle de una regla a otra, `last_verified`, el Quick

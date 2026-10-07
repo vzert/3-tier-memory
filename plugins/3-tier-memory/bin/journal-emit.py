@@ -85,6 +85,10 @@ Tipos de evento:
                     [--quickref-prefix QP --quickref "<nuevo>"] [--title TT] [--when W]
                     [--match-prefix P --disparadores "<frases=...>"]                     (2.48.0)
                     [--last-verified YYYY-MM-DD]                                          (2.50.0)
+                    [--quickref-prefix QP --quickref-regla <T>#<N>|<T>|ninguna]           (2.51.0)
+                    --quickref-regla escribe (o cambia) la marca `<!-- regla: ... -->` que enlaza
+                    la linea del Quick Reference con su regla; sin --quickref no toca el texto, y
+                    --quickref sin --quickref-regla conserva la marca que tenia.
                     --last-verified pone `last_verified:` en el frontmatter del topic file (lo
                     que /audit-3t mira para la frescura). Solo avanza: una fecha anterior a la
                     que ya tiene no la cambia, asi que un replay viejo no la hace retroceder.
@@ -676,6 +680,8 @@ def main():
     ap.add_argument("--disparadores", default=None)
     # learning.update: fecha de la ultima revision del topic (F6, 2.50.0)
     ap.add_argument("--last-verified", dest="last_verified", default="")
+    # learning.update: enlace Quick Reference -> regla (F7, 2.51.0)
+    ap.add_argument("--quickref-regla", dest="quickref_regla", default="")
     a = ap.parse_args()
 
     memory_dir = resolve_memory_dir(a.memory_dir)
@@ -876,15 +882,26 @@ def main():
                      "ACTUAL de la regla que los lleva)")
         if mprefix and not (text or disp):
             sys.exit("journal-emit: --match-prefix sin --text ni --disparadores no corrige nada")
-        if qprefix and not quickref:
-            sys.exit("journal-emit: --quickref-prefix sin --quickref no corrige nada")
+        qregla = (a.quickref_regla or "").strip()
+        if qregla:
+            import learning_marks
+            if not learning_marks.valor_regla_qr_valido(qregla):
+                sys.exit(f"journal-emit: --quickref-regla {qregla!r} tiene que ser <topic>#<N>, "
+                         f"<topic> o ninguna")
+            if qregla != "ninguna" and qregla.split("#")[0] != topic:
+                sys.exit(f"journal-emit: --quickref-regla {qregla!r} no es del --topic {topic}")
+            if not qprefix:
+                sys.exit("journal-emit: --quickref-regla necesita --quickref-prefix (el prefijo de "
+                         "la linea ACTUAL del Quick Reference)")
+        if qprefix and not (quickref or qregla):
+            sys.exit("journal-emit: --quickref-prefix sin --quickref ni --quickref-regla no corrige nada")
         last_verified = (a.last_verified or "").strip()
         if last_verified and not (re.fullmatch(r"\d{4}-\d{2}-\d{2}", last_verified)
                                   and fecha_real(last_verified)):
             sys.exit(f"journal-emit: --last-verified {last_verified!r} no es una fecha YYYY-MM-DD")
-        if not (text or quickref or title or when or disp or last_verified):
+        if not (text or quickref or qregla or title or when or disp or last_verified):
             sys.exit("journal-emit: learning.update necesita al menos uno de --text, --quickref, "
-                     "--title, --when, --disparadores o --last-verified")
+                     "--quickref-regla, --title, --when, --disparadores o --last-verified")
         base["payload"] = {
             "topic": topic,
             "match_prefix": mprefix,
@@ -892,6 +909,7 @@ def main():
             "disparadores": disp,
             "quickref_prefix": qprefix,
             "quickref": quickref,
+            "quickref_regla": qregla,
             "title": title,
             "when": when,
             "last_verified": last_verified,

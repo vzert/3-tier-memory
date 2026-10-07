@@ -75,8 +75,20 @@ DUE=$((COUNT / INTERVAL))
 LEARNINGS_FILE="$MEMORY_DIR/_learnings.md"
 [ -f "$LEARNINGS_FILE" ] || exit 0
 
-OUTPUT=$(LEARNINGS_FILE="$LEARNINGS_FILE" WINDOW_COUNT="$WINDOW_COUNT" OFFSET=$((DELIVERED * WINDOW_COUNT)) python3 <<'PYEOF' 2>/dev/null
-import os, re
+OUTPUT=$(LM_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd)" LEARNINGS_FILE="$LEARNINGS_FILE" WINDOW_COUNT="$WINDOW_COUNT" OFFSET=$((DELIVERED * WINDOW_COUNT)) python3 <<'PYEOF' 2>/dev/null
+import os, re, sys
+
+# La marca de enlace `<!-- regla: ... -->` (2.51.0) no es para el agente: se quita con el mismo
+# lector que la escribe. Sin learning_marks a mano, se quita cualquier comentario HTML final.
+sys.dont_write_bytecode = True   # sin __pycache__ dentro del plugin instalado
+try:
+    if not os.environ.get("LM_DIR"):
+        raise ImportError("sin LM_DIR")
+    sys.path.insert(0, os.environ["LM_DIR"])
+    from learning_marks import sin_regla_qr
+except Exception:
+    def sin_regla_qr(t):
+        return re.sub(r"[ \t]*<!--.*?-->[ \t]*$", "", t)
 
 path = os.environ["LEARNINGS_FILE"]
 window = int(os.environ["WINDOW_COUNT"])
@@ -102,7 +114,7 @@ for l in lines[start:]:
     if s.startswith("## "):
         break
     if re.match(r"^\d+\.\s", s):
-        rules.append(s)
+        rules.append(sin_regla_qr(s))
 
 if not rules:
     raise SystemExit(0)

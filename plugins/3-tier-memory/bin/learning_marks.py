@@ -222,6 +222,62 @@ def comentario_disparadores(s):
     return f" <!-- disparadores: {'; '.join(partes)} -->"
 
 
+# --- Enlace Quick Reference -> regla (F7 del plan de ciclo de vida de learnings, 2.51.0) ----------
+#
+# La linea del '## Quick Reference' de _learnings.md es una version corta de UNA regla de un topic
+# file, con otras palabras: en el corpus de este repo solo 11 de 162 titulos coincidian con el de
+# su regla, asi que el enlace no se puede deducir por titulo. Se escribe una vez, al final de la
+# linea del Quick Reference, como comentario HTML (mismas razones que los disparadores):
+#
+#     N. **Version corta** — detalle <!-- regla: <topic>#<M> -->
+#
+# Valores: `<topic>#<M>` (regla numerada M del topic), `<topic>` (el topic solo tiene vinetas, que
+# no tienen numero estable) o `ninguna` (la persona decidio que no hay regla). Nunca un numero de
+# linea: cambia con cada learning.add. La escribe `learning.add --quickref` (sabe topic y numero) y
+# `learning.update --quickref-regla` (para rellenar lo viejo); la leen learnings-migracion.py y el
+# aviso de session-start. Quien sirve la linea al agente la quita (sin_regla_qr).
+
+_REGLA_QR = re.compile(r"[ \t]*<!--[ \t]*regla:[ \t]*([^<>]*?)[ \t]*-->[ \t]*$")
+_VALOR_REGLA_QR = re.compile(r"^(?:ninguna|[A-Za-z0-9][A-Za-z0-9._-]*(?:#[1-9][0-9]*)?)$")
+
+
+def valor_regla_qr_valido(v):
+    """True si `v` es `ninguna`, `<topic>` o `<topic>#<M>`."""
+    return isinstance(v, str) and bool(_VALOR_REGLA_QR.match(v.strip()))
+
+
+def _inicio_regla_qr(texto):
+    if "<!--" not in (texto or ""):
+        return None, None
+    m = _REGLA_QR.search(texto)
+    if not m or any(a <= m.start() < b for a, b in code_spans(texto)):
+        return None, None
+    return m.start(), m.group(1).strip()
+
+
+def regla_qr_de(texto):
+    """El valor de la marca de enlace de una linea del Quick Reference, o None (sin marca o rota)."""
+    _, v = _inicio_regla_qr(texto)
+    return v if v is not None and valor_regla_qr_valido(v) else None
+
+
+def sin_regla_qr(texto):
+    """La linea sin la marca de enlace (ni el espacio que la precede)."""
+    i, _ = _inicio_regla_qr(texto)
+    return texto if i is None else texto[:i].rstrip()
+
+
+def sufijo_regla_qr(texto):
+    """La marca tal cual esta escrita (con su espacio previo), o ""."""
+    i, _ = _inicio_regla_qr(texto)
+    return "" if i is None else texto[i:]
+
+
+def comentario_regla_qr(v):
+    """` <!-- regla: <v> -->`. `v` ya tiene que haber pasado valor_regla_qr_valido()."""
+    return f" <!-- regla: {v.strip()} -->"
+
+
 def retirada_por(texto):
     """El numero M de `por #M` (canonico) o de `SUPERSEDED by [[...#M]]`; None si no lo dice."""
     s = sufijo_marca(texto)
