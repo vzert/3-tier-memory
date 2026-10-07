@@ -1,6 +1,15 @@
 # Changelog
 
 
+## [2.51.1] - 2026-10-07
+### Fixed
+- **`bin/test-learnings-migracion.sh` en Windows** (CI 37635413247: rojo solo en windows-latest, la
+  suite y su arnes de mutacion). El python incrustado en la prueba abria los ficheros sin
+  `encoding`, y en Windows eso es cp1252: leia la raya `—` de los fixtures como `0x97` y abortaba, o
+  reescribia el fixture en cp1252 y los asertos siguientes veian otra cosa. Ahora abre en UTF-8 y
+  escribe con `newline=""` (sin CRLF). Solo la prueba: `bin/learnings-migracion.py` ya abria todo en
+  UTF-8.
+
 ## [2.51.0] - 2026-10-06
 Origen: F7 del plan de ciclo de vida de los learnings. La F7 se hizo a mano en el repo del plugin
 (enlazar cada linea del Quick Reference con su regla, escribir disparadores en esas reglas, revisar

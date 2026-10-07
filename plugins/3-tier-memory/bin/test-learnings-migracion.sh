@@ -156,7 +156,7 @@ chk "emisor: sin --quickref-prefix -> exit 1" "1" "$rc"
 # Un evento valido del emisor, con el valor cambiado a mano en pending/.
 emit --type learning.update --topic gate --quickref-prefix "**Contar" --quickref-regla gate#1 >/dev/null
 for f in "$M"/.journal/pending/*.json; do
-  python3 -c "import json,sys;p=sys.argv[1];e=json.load(open(p));e['payload']['quickref_regla']='gate#1 -->';json.dump(e,open(p,'w'))" "$f"
+  python3 -c "import json,sys;p=sys.argv[1];e=json.load(open(p,encoding='utf-8'));e['payload']['quickref_regla']='gate#1 -->';json.dump(e,open(p,'w',encoding='utf-8',newline=''))" "$f"
 done
 has "compactador: valor malo a mano -> cuarentena" "$(compact; motivos)" "malformed: learning.update quickref_regla"
 emit --type learning.update --topic shell --quickref-prefix "**Contar con grep" --quickref-regla shell#1 >/dev/null
@@ -173,7 +173,7 @@ python3 "$BIN/build-recall-index.py" "$M" "$T/idx.jsonl" >/dev/null
 IDX=$(cat "$T/idx.jsonl")
 has "el indice tiene la linea del QR" "$IDX" "Contar con grep"
 hasnt "el indice no lleva la marca" "$IDX" "regla: shell"
-KW=$(python3 -c "import json,sys;[print(' '.join(json.loads(l).get('keywords') or [])) for l in open(sys.argv[1]) if 'Contar con grep' in json.loads(l)['texto']]" "$T/idx.jsonl")
+KW=$(python3 -c "import json,sys;[print(' '.join(json.loads(l).get('keywords') or [])) for l in open(sys.argv[1],encoding='utf-8') if 'Contar con grep' in json.loads(l)['texto']]" "$T/idx.jsonl")
 has "  la unidad del QR esta" "$KW" "contar"
 hasnt "  y sus palabras no traen la marca" "$KW" "regla\|shell"
 STATE="$T/home"; mkdir -p "$STATE"
@@ -190,9 +190,9 @@ A=$(mig --aviso)
 has "aviso: lineas sin enlace" "$A" "^MIGRAR-LEARNINGS: 2 lineas del Quick Reference sin enlace a su regla"
 mig --candidatos > "$T/cand.jsonl"
 chk "candidatos: una fila por linea sin marca" "2" "$(wc -l < "$T/cand.jsonl" | tr -d ' ')"
-C1=$(python3 -c "import json,sys;r=[json.loads(l) for l in open(sys.argv[1])];print(r[0]['candidatas'][0]['regla'], r[1]['candidatas'][0]['regla'])" "$T/cand.jsonl")
+C1=$(python3 -c "import json,sys;r=[json.loads(l) for l in open(sys.argv[1],encoding='utf-8')];print(r[0]['candidatas'][0]['regla'], r[1]['candidatas'][0]['regla'])" "$T/cand.jsonl")
 chk "candidato 1 entre topics (gate y shell)" "gate#1 shell#1" "$C1"
-C2=$(python3 -c "import json,sys;r=[json.loads(l) for l in open(sys.argv[1])];print(sorted({c['regla'] for x in r for c in x['candidatas']}))" "$T/cand.jsonl")
+C2=$(python3 -c "import json,sys;r=[json.loads(l) for l in open(sys.argv[1],encoding='utf-8')];print(sorted({c['regla'] for x in r for c in x['candidatas']}))" "$T/cand.jsonl")
 hasnt "candidatos: la retirada no sale" "$C2" "shell#2"
 hasnt "candidatos: el numero repetido no sale como topic#N" "$C2" "gate#3"
 has "candidatos: vinetas y repetidos como topic" "$C2" "'notas'"
@@ -205,12 +205,12 @@ has "estado: dos enlazadas" "$E" '"numerada": 2'
 has "estado: 0 % con disparadores" "$E" '"porcentaje": 0.0'
 has "aviso: pide disparadores" "$(mig --aviso)" "2 reglas del Quick Reference sin disparadores"
 mig --lote --nivel 1 --tam 0 > "$T/lote.jsonl"
-chk "lote nivel 1: las dos enlazadas" "gate#1 shell#1" "$(python3 -c "import json,sys;print(' '.join(sorted(json.loads(l)['id'] for l in open(sys.argv[1]))))" "$T/lote.jsonl")"
+chk "lote nivel 1: las dos enlazadas" "gate#1 shell#1" "$(python3 -c "import json,sys;print(' '.join(sorted(json.loads(l)['id'] for l in open(sys.argv[1],encoding='utf-8'))))" "$T/lote.jsonl")"
 chk "lote nivel 4: tambien gate#2 (no la repetida ni la retirada)" "gate#1 gate#2 shell#1" "$(mig --lote --nivel 4 --tam 0 | python3 -c "import json,sys;print(' '.join(sorted(json.loads(l)['id'] for l in sys.stdin)))")"
 python3 - "$T/lote.jsonl" "$T/esc.jsonl" <<'EOF'
 import json, sys
-with open(sys.argv[2], "w") as f:
-    for r in map(json.loads, open(sys.argv[1])):
+with open(sys.argv[2], "w", encoding="utf-8", newline="") as f:
+    for r in map(json.loads, open(sys.argv[1], encoding="utf-8")):
         f.write(json.dumps({"id": r["id"], "match_prefix": r["match_prefix"],
                             "frases": ["voy a subir la rama ya", "estoy empujando con el review", "hice push y el review fallo"],
                             "cmd": ["git push"], "path": [], "tool": ["Bash"]}) + "\n")
@@ -227,9 +227,9 @@ cat >> "$M/learnings/gate.md.tmp" <<'EOF'
 EOF
 python3 - "$M/learnings/gate.md" <<'EOF'
 import sys
-p = sys.argv[1]; s = open(p).read()
+p = sys.argv[1]; s = open(p, encoding="utf-8").read()
 s = s.replace("## Related", "5. **Un fichero generado `write-if-absent` es INMUTABLE** — uno.\n6. **Un fichero generado write-if-absent es inmutable en todas** — dos.\n\n## Related")
-open(p, "w").write(s)
+open(p, "w", encoding="utf-8", newline="").write(s)
 EOF
 rm -f "$M/learnings/gate.md.tmp"
 P5=$(mig --lote --nivel 4 --tam 0 | python3 -c "import json,sys;[print(json.loads(l)['match_prefix']) for l in sys.stdin if json.loads(l)['id'] in ('gate#5','gate#6')]")
@@ -241,9 +241,9 @@ chk "  y se aplican sin cuarentena" "0" "$(cuar)"
 fixture
 python3 - "$M/learnings/gate.md" <<'EOF'
 import sys
-p = sys.argv[1]; s = open(p).read()
+p = sys.argv[1]; s = open(p, encoding="utf-8").read()
 s = s.replace("## Rules\n", "## Rules\n\n```\nbloque\n```\n")
-open(p, "w").write(s)
+open(p, "w", encoding="utf-8", newline="").write(s)
 EOF
 printf '%s\n' '{"id":"gate#1","match_prefix":"**No hagas push","frases":["una frase de prueba aqui","otra frase de prueba aqui","tercera frase de prueba aqui"]}' > "$T/esc3.jsonl"
 mig --aplicar-disparadores "$T/esc3.jsonl" > "$T/res.json"; rc=$?
@@ -252,9 +252,9 @@ has "  motivo codigo-antes" "$(cat "$T/res.json")" "codigo-antes"
 chk "  nada emitido ni en cuarentena" "0 0" "$(ls "$M/.journal/pending" 2>/dev/null | grep -c . | tr -d ' ') $(cuar)"
 python3 - "$M/_learnings.md" <<'EOF'
 import sys
-p = sys.argv[1]; s = open(p).read()
+p = sys.argv[1]; s = open(p, encoding="utf-8").read()
 s = s.replace("## Quick Reference — Most Critical Rules\n", "## Quick Reference — Most Critical Rules\n\n<!-- nota a mano -->\n")
-open(p, "w").write(s)
+open(p, "w", encoding="utf-8", newline="").write(s)
 EOF
 chk "QR tras un comentario HTML: el aviso calla" "" "$(mig --aviso)"
 has "  y el estado las cuenta como bloqueadas" "$(mig --estado)" '"c3_lineas_que_el_journal_no_puede_marcar": 2'
@@ -265,12 +265,12 @@ printf '%s\n' '{"prefijo":"**Push con review","regla":"gate#1"}' > "$T/enl.jsonl
 mig --aplicar-enlaces "$T/enl.jsonl" >/dev/null
 python3 - "$M/learnings/gate.md" "$M/_learnings.md" <<'EOF2'
 import sys
-p = sys.argv[1]; s = open(p).read()
-open(p, "w").write(s.replace("## Rules\n", "## Rules\n\n```\nbloque\n```\n"))
-p = sys.argv[2]; s = open(p).read()
+p = sys.argv[1]; s = open(p, encoding="utf-8").read()
+open(p, "w", encoding="utf-8", newline="").write(s.replace("## Rules\n", "## Rules\n\n```\nbloque\n```\n"))
+p = sys.argv[2]; s = open(p, encoding="utf-8").read()
 s = s.replace("2. **Contar con grep** — el exit 1 de grep -c no es error",
               "<!-- nota -->\n2. **Contar con grep** — el exit 1 de grep -c no es error <!-- regla: nada#9 -->")
-open(p, "w").write(s)
+open(p, "w", encoding="utf-8", newline="").write(s)
 EOF2
 chk "regla enlazada no reescribible + marca rota bloqueada: el aviso calla" "" "$(mig --aviso)"
 E=$(mig --estado)
