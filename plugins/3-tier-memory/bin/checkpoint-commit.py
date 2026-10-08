@@ -172,9 +172,9 @@ def main():
 
     if a.listar:
         for p in propias:
-            print(f"propia {os.path.relpath(p, mem)}")
+            print(f"propia {os.path.relpath(p, mem).replace(os.sep, '/')}")
         for p in compartidas:
-            print(f"compartida {os.path.relpath(p, mem)}")
+            print(f"compartida {os.path.relpath(p, mem).replace(os.sep, '/')}")
         return
 
     try:
@@ -197,12 +197,18 @@ def main():
         if ruta and os.path.exists(os.path.join(repo, ruta) if not os.path.isabs(ruta) else ruta):
             fin("operacion-en-curso", f"({marca}: termina o aborta esa operacion y vuelve a correr esto)")
 
-    rutas = propias + compartidas
+    # A partir de aqui, toda ruta que se le da a git es RELATIVA al repo y con `/`: es la forma en
+    # que git las devuelve (ls-files, check-ignore, show), asi que se comparan como cadenas tambien
+    # en Windows, donde las absolutas salian con `\` o como `C:/` y no casaban (CI de 2.52.0).
+    def rel(p):
+        return os.path.relpath(p, repo).replace(os.sep, "/")
+    propias = [rel(p) for p in propias]
+    rutas = propias + [rel(p) for p in compartidas]
     # Una ruta ignorada hace fallar `git add` entero: se quitan antes (un directorio no hace falta,
     # git add ya salta lo ignorado de dentro).
     r = subprocess.run(["git", "-c", "core.quotePath=false", "-C", repo, "check-ignore", "--stdin"], input="\n".join(rutas),
                        capture_output=True, text=True, encoding="utf-8", errors="replace")
-    ignoradas = {os.path.realpath(l) for l in r.stdout.splitlines() if l.strip()}
+    ignoradas = {l for l in r.stdout.splitlines() if l.strip()}
     rutas = [p for p in rutas if p not in ignoradas]
     propias = [p for p in propias if p not in ignoradas]
     if not rutas:
@@ -255,6 +261,12 @@ def main():
                                encoding="utf-8", errors="replace")
 
         def falla(motivo, detalle=""):
+            # Solo para pruebas: un comando que corre justo antes de deshacer, en el hueco donde otro
+            # proceso puede preparar algo en el indice. Una prueba de carrera real no lo reproducia en
+            # CI (verde en local, rojo en las tres plataformas de CI de 2.52.0).
+            otro = os.environ.get("_CHECKPOINT_COMMIT_ANTES_DE_DESHACER")
+            if otro:
+                subprocess.run(otro, shell=True, cwd=repo)
             deshacer()
             fin(motivo, detalle)
 
@@ -269,12 +281,8 @@ def main():
                 # HEAD; una borrada del disco sigue en HEAD y su borrado entra.
                 conocidas = set(git(repo, "ls-files", "--full-name", "--", *rutas).stdout.splitlines())
                 conocidas |= set(git(repo, "ls-tree", "-r", "--name-only", "--full-tree", "HEAD", "--",
-                                     *[os.path.relpath(p, repo) for p in rutas]).stdout.splitlines())
-                spec = []
-                for p in rutas:
-                    rel = os.path.relpath(p, repo).replace(os.sep, "/")
-                    if any(c == rel or c.startswith(rel + "/") for c in conocidas):
-                        spec.append(p)
+                                     *rutas).stdout.splitlines())
+                spec = [p for p in rutas if any(c == p or c.startswith(p + "/") for c in conocidas)]
                 if not spec:
                     falla("sin-cambios")
                 co = git(repo, "commit", "--only", "-m", a.mensaje, "--", *spec)
@@ -304,8 +312,7 @@ def main():
     nombres = [n for n in nombres if n.strip()]
     for n in nombres:
         print(f"  + {n}")
-    prop_rel = {os.path.relpath(p, repo).replace(os.sep, "/") for p in propias}
-    n_prop = sum(1 for n in nombres if n in prop_rel)
+    n_prop = sum(1 for n in nombres if n in set(propias))
     print(f"COMMIT hash={h} rama={rama} archivos={len(nombres)} propios={n_prop} "
           f"compartidos={len(nombres) - n_prop}")
 

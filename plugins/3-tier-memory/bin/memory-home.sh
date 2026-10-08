@@ -48,6 +48,12 @@ memory_home() {
   case "$gd" in --*) printf '%s' "$d"; return 0 ;; esac
   main=$(git -C "$d" worktree list --porcelain 2>/dev/null | awk 'NR==1 && /^worktree /{sub(/^worktree /,""); print} NR==2 && /^bare$/{print "BARE"}')
   case "$main" in *BARE*|"") printf '%s' "$d"; return 0 ;; esac
+  # Windows (Git Bash): git da `C:/...`, el shell trabaja con `/c/...`. Se devuelve en la forma del
+  # shell (-u) para que se compare con $PWD y CLAUDE_PROJECT_DIR; memhome.py pide la de Python (-m)
+  # con MEMORY_HOME_FORMA. Medido en el CI de windows-latest de 2.52.0.
+  if command -v cygpath >/dev/null 2>&1; then
+    main=$(cygpath "${MEMORY_HOME_FORMA:--u}" "$main" 2>/dev/null || printf '%s' "$main")
+  fi
   rel="${rel%/}"
   cand="$main${rel:+/$rel}"
   while :; do

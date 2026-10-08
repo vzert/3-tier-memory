@@ -447,7 +447,7 @@ def _tope_valido(linea, nombrados, responsabilidad):
 def corre_git(repo_root, *args):
     try:
         r = subprocess.run(["git", "-C", repo_root] + list(args),
-                           capture_output=True, text=True, timeout=20)
+                           capture_output=True, text=True, timeout=20, encoding="utf-8", errors="replace")
     except Exception:
         return None
     if r.returncode != 0:
@@ -515,7 +515,7 @@ def git_memoria(h, memory_dir, session_file):
     # Sin corre_git: su .strip() se come el espacio de la primera linea (" M ruta") y l[3:] corta mal.
     try:
         st = subprocess.run(["git", "-c", "core.quotePath=false", "-C", repo, "status", "--porcelain", "--untracked-files=all", "--", mem],
-                            capture_output=True, text=True, timeout=20)
+                            capture_output=True, text=True, timeout=20, encoding="utf-8", errors="replace")
     except Exception:
         return
     if st.returncode != 0:

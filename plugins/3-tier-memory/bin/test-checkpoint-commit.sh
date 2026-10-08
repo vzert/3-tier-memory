@@ -204,18 +204,15 @@ echo "== al fallar, no pisa lo que otro preparo DESPUES de nuestro add"
 R14="$TMP/r14"; nuevo_repo "$R14"; M14="$R14/memory"
 printf -- '- mio\n' >> "$M14/_pendientes.md"; printf '# S\n' > "$M14/sessions/s.md"
 printf 'ajeno\n' > "$TMP/ajeno.md"
-# El hook rechaza y deja un "otro proceso" que, en cuanto git suelta el index.lock del commit, prepara
-# un cambio ajeno en el indice REAL (commit --only le da al hook uno temporal). Llega antes o despues
-# de la restauracion: en los dos casos el cambio ajeno tiene que quedar.
-cat > "$R14/.git/hooks/pre-commit" <<HOOK
-#!/bin/sh
-unset GIT_INDEX_FILE
-b=\$(git hash-object -w "$TMP/ajeno.md")
-( i=0; while [ \$i -lt 300 ]; do git update-index --cacheinfo 100644,\$b,memory/_pendientes.md 2>/dev/null && break; i=\$((i+1)); sleep 0.01; done ) >/dev/null 2>&1 &
-exit 1
-HOOK
+# El hook rechaza el commit; "otro proceso" prepara un cambio ajeno en el indice justo en el hueco
+# entre el fallo y la restauracion (gancho de prueba _CHECKPOINT_COMMIT_ANTES_DE_DESHACER: una
+# carrera real con un proceso de fondo pasaba en local y no se reproducia en CI).
+printf '#!/bin/sh\nexit 1\n' > "$R14/.git/hooks/pre-commit"
 chmod +x "$R14/.git/hooks/pre-commit"
-out=$(CC --memory-dir "$M14" --session-file "$M14/sessions/s.md" --mensaje x); sleep 1
+b=$(git -C "$R14" hash-object -w "$TMP/ajeno.md")
+out=$(_CHECKPOINT_COMMIT_ANTES_DE_DESHACER="git update-index --cacheinfo 100644,$b,memory/_pendientes.md" \
+  CC --memory-dir "$M14" --session-file "$M14/sessions/s.md" --mensaje x)
+has "skip" "$out" "COMMIT skip=commit-fallo"
 eq "el cambio ajeno preparado sigue en el indice" "$(git -C "$R14" show :memory/_pendientes.md 2>/dev/null)" "ajeno"
 eq "la ficha nueva (solo nuestra) salio del indice" "$(git -C "$R14" ls-files memory/sessions/s.md)" ""
 

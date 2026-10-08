@@ -1,6 +1,27 @@
 # Changelog
 
 
+## [2.52.1] - 2026-10-07
+El CI de 2.52.0 salio rojo en las tres plataformas.
+
+### Fixed
+- **Windows: los scripts de Python no resolvian el worktree.** `memhome.py` llamaba a `bash` por su
+  nombre, y en Windows CreateProcess busca primero en System32 y da con el bash de WSL, que no ve las
+  rutas de Windows: los eventos del journal volvian a caer en el worktree. Ahora usa el `bash` del
+  PATH (`shutil.which`) y le pasa la ruta con `/`. Sin bash en el PATH, nada cambia.
+- **Windows: rutas en dos formas.** `memory-home.sh` devuelve la ruta en la forma del shell (`/c/...`,
+  con `cygpath`), que es la que comparan los hooks con `$PWD`; `memhome.py` pide la de Python
+  (`C:/...`). `checkpoint-commit.py` le da a git solo rutas relativas al repo y con `/`, que es como
+  git las devuelve: con absolutas, `check-ignore` y `--listar` no casaban en Windows.
+- **Windows: rutas con acentos.** `memhome.py` leia la salida de `memory-home.sh` con la pagina de
+  codigos de Windows (cp1252) y bash escribe en UTF-8: `Migración` volvia como `MigraciÃ³n` y
+  `checkpoint-commit.py` salia `skip=sin-memoria`. Ahora lee en UTF-8, igual que las llamadas a git de
+  `checkpoint-audit.py` (`git_memoria`), que tenian el mismo patron.
+- **La prueba de "no pisa lo que otro preparo"** era una carrera real con un proceso de fondo: verde
+  en local, roja en CI. Ahora el otro proceso entra por un gancho de prueba
+  (`_CHECKPOINT_COMMIT_ANTES_DE_DESHACER`) justo en el hueco entre el fallo y la restauracion; con la
+  guarda quitada, la prueba falla.
+
 ## [2.52.0] - 2026-10-07
 Origen: otra sesion midio, a pedido del usuario, que con varias sesiones en un
 mismo checkout el Step 6 de `/checkpoint-3t` (`git add memory/` + commit) mete en su commit archivos
