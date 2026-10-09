@@ -510,10 +510,11 @@ por modal, y tantos modales como hagan falta.
 **Como se lo presentas (2.53.1).** "Candidato" es palabra de este mecanismo, no del usuario: no la
 uses en lo que el lee. Antes del primer modal, una sola frase, con el numero real:
 
-> De esta sesion salieron N cosas que podrian quedar como pendientes. Te las muestro una por una
-> para que decidas cuales vale la pena guardar.
+> De esta sesion salieron N cosas que podrian quedar como pendientes. Te las muestro para que
+> decidas cuales vale la pena guardar.
 
-Si no salio ninguna, una frase y nada mas: "De esta sesion no salio nada que valga la pena guardar
+Con una sola: "De esta sesion salio una cosa que podria quedar como pendiente. Te la muestro para
+que decidas si vale la pena guardarla." Si no salio ninguna, una frase y nada mas: "De esta sesion no salio nada que valga la pena guardar
 como pendiente." Cada pregunta:
 - **Encabezado**: de que se trata en 1-3 palabras (`CI 2.53.0`, `Re-checkpoint`), nunca
   `Candidato N`.
@@ -1324,7 +1325,9 @@ correcta cuando no falta nada.
 ## Step 7: Report
 
 Empieza pegando **literal** la salida de Step 7a. Despues, el reporte de
-siempre: session path, N candidatos a pendiente (G guardados, D descartados, S sin confirmar), M resolved, journal result (`applied=N` for Steps 3c, 5a and 6c together, any quarantined event with its reason, and whether any **Fallback** path was used), N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, N rows pruned by hand (if any), frontmatter sealed (if N>0), **secrets redacted (if N>0, with file:line list + rotate-your-keys warning)**, git result (commit hash OR reason skipped).
+siempre: session path, los pendientes nuevos en palabras simples, sin "candidato" (p.ej. "De 8 cosas
+que salieron, guardaste 1 como pendiente; las otras 7 no", y si hubo `sin confirmar`: "S quedaron
+sin preguntar, sin pantalla"), M resolved, journal result (`applied=N` for Steps 3c, 5a and 6c together, any quarantined event with its reason, and whether any **Fallback** path was used), N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, N rows pruned by hand (if any), frontmatter sealed (if N>0), **secrets redacted (if N>0, with file:line list + rotate-your-keys warning)**, git result (commit hash OR reason skipped).
 
 **Say what a number MEANS, not just the number.** A count the user cannot interpret reads as a
 failure: an `adopted=12 rows_added=12` on a memory older than 2.12.0 is a one-time migration and

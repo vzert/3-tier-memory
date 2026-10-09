@@ -10,8 +10,10 @@ pendiente" y pidio un texto que cualquiera entienda a la primera.
   primer modal ("De esta sesion salieron N cosas que podrian quedar como pendientes. Te las muestro
   una por una para que decidas cuales vale la pena guardar."), sin la palabra "candidato" en lo que
   el usuario lee. El encabezado de cada pregunta dice de que se trata, no `Candidato N`. La opcion
-  `Descartar` pasa a `No guardar`. En la ficha nada cambia (`## Candidatos a pendiente`,
-  `decision: descartado`): los lee `checkpoint-audit.py`.
+  `Descartar` pasa a `No guardar` (en la ficha, `decision: descartado`; dicho en las dos
+  plantillas). El reporte final de `/checkpoint-3t` (Step 7) y el informe de `/backfill-3t` tampoco
+  dicen "candidato". En la ficha nada cambia (`## Candidatos a pendiente`, `decision: descartado`):
+  los lee `checkpoint-audit.py`.
 
 ## [2.53.0] - 2026-10-09
 Origen: el usuario vio que los pendientes se acumulan aunque cada checkpoint concilia los viejos
