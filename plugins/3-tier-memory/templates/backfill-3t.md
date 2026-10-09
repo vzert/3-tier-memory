@@ -463,7 +463,7 @@ If the draft has pendientes AND this session is within the 5 most recent:
    razon. Opciones, la recomendada primero: `Guardar (Media)`, `Guardar con otra prioridad`,
    `Descartar`. No dejes fuera ningun candidato por tu cuenta. Modal cerrado sin respuesta =
    descartado. **Sin pantalla** (la misma senal que `/checkpoint-3t` Step 3b: `AskUserQuestion` no
-   esta disponible o vuelve con un error que no es una respuesta del usuario): no emitas ninguno. Escribe la decision en una
+   esta disponible o vuelve con un error que no es un rechazo del usuario): no emitas ninguno. Escribe la decision en una
    seccion `## Candidatos a pendiente` de la ficha de esa sesion, con el formato de
    `/checkpoint-3t` Step 3b (`decision: guardado p-…`, `descartado` o `sin confirmar`), y
    nombralos en el informe final.

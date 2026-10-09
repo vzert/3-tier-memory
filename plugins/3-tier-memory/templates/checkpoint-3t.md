@@ -519,8 +519,10 @@ reescribir el pendiente). **Si cierra el modal sin responder, o lo rechaza, el c
 descarta.**
 
 **Sin pantalla** — la senal es la herramienta, no el modo: `AskUserQuestion` no esta entre tus
-herramientas, o la llamas y vuelve con un error que no es una respuesta del usuario (la herramienta
-no disponible, sin nadie que conteste). `PAPERCLIP_RUN_ID` definido tambien cuenta: ese agente no
+herramientas, o la llamas y vuelve con un error que no es un rechazo del usuario. El rechazo del
+usuario vuelve con el texto `The user doesn't want to proceed with this tool use`: eso es
+`descartado`. Cualquier otro error (la herramienta no disponible, una llamada mal formada) no llego
+a nadie: corrige la llamada si estaba mal formada; si no hay pantalla, `sin confirmar`. `PAPERCLIP_RUN_ID` definido tambien cuenta: ese agente no
 tiene pantalla. Un `claude -p` o un cron suelen caer aqui, pero no lo supongas por el modo: si el
 modal vuelve con una respuesta, hay alguien contestando. Sin pantalla, no preguntes y no emitas
 nada. Cada candidato queda con decision
@@ -543,8 +545,8 @@ un id que exista, si un pendiente abierto que nacio en esta sesion (`_origen` = 
 como `guardado`, si hay mas `_descartado:` en `## Bugs fixed` que lineas `descartado`/`sin
 confirmar` aqui, o si falta la seccion cuando habia algo de eso que decidir. El hook de cierre
 anade `pendientes.candidatos_pregunta`: una decision `guardado` o `descartado` sin ningun
-`AskUserQuestion` en el turno del checkpoint que haya vuelto (respondido, o cerrado por el usuario)
-la tomaste tu. Limite honesto: mide que hubo al menos una pregunta, no que cubriera cada
+`AskUserQuestion` en el turno del checkpoint que haya llegado al usuario (respondido, o rechazado
+por el con el texto de arriba) la tomaste tu. Un error con otro texto no cuenta como pregunta. Limite honesto: mide que hubo al menos una pregunta, no que cubriera cada
 candidato, y no ve un candidato que nunca escribiste aqui.
 
 **4. Emite solo los que el usuario guardo.** For EACH kept candidate, emit one event:

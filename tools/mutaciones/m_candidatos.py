@@ -24,8 +24,11 @@ M = {
     "guard-no-pasa": [
         ('        extra += ["--preguntas-usuario", str(respondidas)]', "        pass")],
     "guard-sin-resultado-cuenta": [
-        ("        respondidas = sum(1 for i in preguntas if i in resultados)",
-         "        respondidas = len(preguntas)")],
+        ("        respondidas = sum(1 for i in preguntas if i in resultados and",
+         "        respondidas = sum(1 for i in preguntas if True and")],
+    "guard-error-cuenta": [
+        ("                          (i not in con_error or RECHAZO_USUARIO.search(resultados[i])))",
+         "                          True)")],
     "guard-sin-checkpoint": [
         ('        extra += ["--preguntas-usuario", str(respondidas)]',
          '        extra += ["--preguntas-usuario", str(respondidas)]\n    else:\n        extra += ["--preguntas-usuario", "0"]')],

@@ -1633,8 +1633,8 @@ chk "CA9: ficha anterior a 2.53.0 → POR-DISENO" "1" "$(cand_out "$M" "" 2026-1
 
 # La pregunta de verdad: solo la mide el hook de cierre (pasa --preguntas-usuario).
 M="$T/mCP1"; cand_ficha "$M" '- algo — decision: descartado'
-chk "CP1: decision tomada con 0 preguntas respondidas → SALTADO" "1" "$(cand_out "$M" "--preguntas-usuario 0" | grep -c 'SALTADO .*pendientes.candidatos_pregunta')"
-chk "CP2: con 1 pregunta respondida → HECHO" "1" "$(cand_out "$M" "--preguntas-usuario 1" | grep -c 'HECHO .*pendientes.candidatos_pregunta')"
+chk "CP1: decision tomada con 0 preguntas al usuario → SALTADO" "1" "$(cand_out "$M" "--preguntas-usuario 0" | grep -c 'SALTADO .*pendientes.candidatos_pregunta')"
+chk "CP2: con 1 pregunta al usuario → HECHO" "1" "$(cand_out "$M" "--preguntas-usuario 1" | grep -c 'HECHO .*pendientes.candidatos_pregunta')"
 chk "CP3: sin el dato del hook (Step 7a) el chequeo no se emite" "0" "$(cand_out "$M" | grep -c 'pendientes.candidatos_pregunta')"
 M="$T/mCP4"; cand_ficha "$M" '- algo — decision: sin confirmar (sin pantalla)'
 chk "CP4: solo sin confirmar (sin pantalla) no necesita pregunta" "0" "$(cand_out "$M" "--preguntas-usuario 0" | grep -c 'SALTADO .*pendientes.candidatos_pregunta')"

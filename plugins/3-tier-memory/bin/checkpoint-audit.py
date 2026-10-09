@@ -1014,7 +1014,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             h.append(Hallazgo(HECHO, "pendientes.candidatos",
                               "cada pendiente nuevo de la sesion tiene la decision del usuario"))
         # La pregunta de verdad. Solo con el dato del hook de cierre, que cuenta en el transcript
-        # los AskUserQuestion respondidos del turno del checkpoint. Una decision `guardado` o
+        # los AskUserQuestion del turno del checkpoint que llegaron al usuario. Una decision `guardado` o
         # `descartado` sin ninguna pregunta la tomo el agente, que es justo lo que 2.53.0 quita.
         # `sin confirmar` (sin pantalla) no necesita pregunta. Mide que hubo al menos una, no que
         # cubriera cada candidato: vigila el olvido, no un agente que finge.
@@ -1024,14 +1024,14 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             if preguntas_usuario == 0:
                 h.append(Hallazgo(SALTADO, "pendientes.candidatos_pregunta",
                                   f"{decididos} candidato(s) con decision y ninguna pregunta "
-                                  "al usuario que haya vuelto (respondida o cerrada por el) en el "
-                                  "turno del checkpoint",
+                                  "que haya llegado al usuario (respondida o rechazada por el) en "
+                                  "el turno del checkpoint",
                                   corrige="hazle las preguntas de Step 3b con AskUserQuestion; si "
                                           "no hay pantalla, la decision es `sin confirmar`"))
             else:
                 h.append(Hallazgo(HECHO, "pendientes.candidatos_pregunta",
                                   f"{preguntas_usuario} pregunta(s) al usuario en el turno, "
-                                  "respondidas o cerradas por el"))
+                                  "respondidas o rechazadas por el"))
 
     # 8. El snippet de continuidad nombra los pendientes que la sesion deja abiertos
     # Step 8 excluye de `Sigue abierto` todo pendiente con `_revisar` FUTURO respecto a la ficha:
@@ -1642,8 +1642,8 @@ def main():
     ap.add_argument("--veredicto-adversario", choices=("break", "hold"), default=None,
                     help="ultimo veredicto del adversario en el transcript; lo pasa el hook Stop")
     ap.add_argument("--preguntas-usuario", type=int, default=None,
-                    help="AskUserQuestion del turno del checkpoint que volvieron con resultado "
-                         "(respondidos o cerrados por el usuario); lo pasa el hook Stop")
+                    help="AskUserQuestion del turno del checkpoint que llegaron al usuario "
+                         "(respondidos o rechazados por el); lo pasa el hook Stop")
     args = ap.parse_args()
 
     if not os.path.isdir(args.memory_dir):

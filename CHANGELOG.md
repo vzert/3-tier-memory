@@ -15,7 +15,7 @@ usuario decide.
   prioridad`, `Descartar`. El agente no omite ningun candidato por su cuenta. Un modal cerrado sin
   respuesta descarta. Solo los guardados se emiten con `pendiente.add`. La conciliacion (Step 3a)
   no cambia.
-- **Sin pantalla** (`AskUserQuestion` no disponible, o vuelve con un error que no es una respuesta
+- **Sin pantalla** (`AskUserQuestion` no disponible, o vuelve con un error que no es un rechazo
   del usuario; o `PAPERCLIP_RUN_ID` definido) no se emite nada: los candidatos quedan en la ficha
   como `sin confirmar`. La senal es la herramienta, no el modo: un `claude -p` con alguien
   contestando el modal no cuenta como sin pantalla.
@@ -38,13 +38,15 @@ usuario decide.
   otro flujo sin pendientes nuevos no la necesita). `_descartado:` cuenta como cierre en
   `bugs.cierre` y en `snippet.ninguno_defecto`.
 - **`pendientes.candidatos_pregunta`**: el hook de cierre cuenta los `AskUserQuestion` del turno del
-  checkpoint que volvieron con resultado, respondidos o cerrados por el usuario (un modal cerrado
-  es una decision: descartar), y los pasa como `--preguntas-usuario`. Una decision
+  checkpoint que llegaron al usuario: respondidos, o rechazados por el (Claude Code los devuelve con
+  `The user doesn't want to proceed with this tool use`; un modal cerrado es una decision:
+  descartar). Un error con otro texto (llamada mal formada, sin pantalla) no cuenta. Los pasa como
+  `--preguntas-usuario`. Una decision
   `guardado`/`descartado` sin ninguno sale `SALTADO`. Limite: mide que hubo una pregunta, no que
   cubriera cada candidato.
 - La revision del cierre (`checkpoint-close-guard.sh`) ya no pide cubrir con un pendiente un
   hallazgo que el usuario descarto: lo lista como "no cuenta como falta".
-- 22 asertos en `test-checkpoint-audit.sh`, 5 en `test-checkpoint-close-guard.sh` y 9 mutaciones
+- 22 asertos en `test-checkpoint-audit.sh`, 6 en `test-checkpoint-close-guard.sh` y 10 mutaciones
   (`tools/mutaciones/m_candidatos.py`).
 
 ## [2.52.1] - 2026-10-07

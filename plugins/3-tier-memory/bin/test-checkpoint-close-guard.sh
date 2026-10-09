@@ -1058,8 +1058,8 @@ algo
 ## Como retomar
 Ninguno — la sesion cerro sin continuidad.
 EOF
-# $1 salida, $2 con|sin|error|cortado|reimprime (respondido, ausente, rechazado, sin
-# tool_result, o un turno que solo reimprime el snippet sin correr /checkpoint-3t)
+# $1 salida, $2 con|sin|error|invalido|cortado|reimprime (respondido, ausente, rechazado por el
+# usuario, error que no llego a nadie, sin tool_result, o un turno que solo reimprime el snippet)
 txc() {
   python3 - "$1" "$2" "$FC" <<'PY'
 import json, sys
@@ -1075,8 +1075,12 @@ if preg not in ("sin", "reimprime"):
     a([{"type": "tool_use", "id": "q1", "name": "AskUserQuestion", "input": {"questions": []}}])
     r = {"type": "tool_result", "tool_use_id": "q1", "content": "Your questions have been answered"}
     if preg == "error":
+        # El texto real de un rechazo del usuario (229 casos medidos en transcripts locales).
         r = {"type": "tool_result", "tool_use_id": "q1", "is_error": True,
-             "content": "The user doesn't want to proceed with this tool use."}
+             "content": "The user doesn't want to proceed with this tool use. The tool use was rejected."}
+    if preg == "invalido":
+        r = {"type": "tool_result", "tool_use_id": "q1", "is_error": True,
+             "content": "<tool_use_error>InputValidationError: AskUserQuestion failed</tool_use_error>"}
     if preg != "cortado":
         u([r])
 a([{"type": "tool_use", "id": "t2", "name": "Bash", "input": {"command": f'python3 "$JBIN/print-como-retomar.py" "{ficha}"'}}])
@@ -1092,6 +1096,8 @@ txc "$T/tc.jsonl" con
 chk "con AskUserQuestion respondido: no lo reclama" "0" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
 txc "$T/tc.jsonl" error
 chk "un modal cerrado por el usuario SI es una pregunta hecha (Step 3b descarta)" "0" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" invalido
+chk "un error que no llego al usuario (InputValidationError) no cuenta como pregunta" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
 txc "$T/tc.jsonl" cortado
 chk "un AskUserQuestion sin resultado (turno cortado) no cuenta" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
 txc "$T/tc.jsonl" reimprime
