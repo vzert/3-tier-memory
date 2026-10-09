@@ -8,12 +8,15 @@ pendiente" y pidio un texto que cualquiera entienda a la primera.
 ### Changed
 - **`/checkpoint-3t` Step 3b y `/backfill-3t` 3d: como se presenta al usuario.** Una frase antes del
   primer modal ("De esta sesion salieron N cosas que podrian quedar como pendientes. Te las muestro
-  una por una para que decidas cuales vale la pena guardar."), sin la palabra "candidato" en lo que
-  el usuario lee. El encabezado de cada pregunta dice de que se trata, no `Candidato N`. La opcion
-  `Descartar` pasa a `No guardar` (en la ficha, `decision: descartado`; dicho en las dos
-  plantillas). El reporte final de `/checkpoint-3t` (Step 7) y el informe de `/backfill-3t` tampoco
-  dicen "candidato". En la ficha nada cambia (`## Candidatos a pendiente`, `decision: descartado`):
-  los lee `checkpoint-audit.py`.
+  para que decidas cuales vale la pena guardar.", con su forma en singular para una sola), sin la
+  palabra "candidato" en lo que se le dice al usuario con palabras. El encabezado de cada pregunta
+  dice de que se trata, no `Candidato N`. La opcion `Descartar` pasa a `No guardar` (en la ficha,
+  `decision: descartado`; dicho en las dos plantillas). Las frases del reporte final de
+  `/checkpoint-3t` (Step 7) y del informe de `/backfill-3t` tampoco dicen "candidato".
+- **Lo que no cambia, por decision del usuario:** el bloque tecnico de Step 7a, que se pega tal cual,
+  conserva sus claves internas, entre ellas `pendientes.candidatos`; y la ficha conserva
+  `## Candidatos a pendiente` y `decision: descartado`. Los leen `checkpoint-audit.py` y el hook de
+  cierre.
 
 ## [2.53.0] - 2026-10-09
 Origen: el usuario vio que los pendientes se acumulan aunque cada checkpoint concilia los viejos
