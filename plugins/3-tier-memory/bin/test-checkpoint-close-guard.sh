@@ -1075,7 +1075,7 @@ if preg not in ("sin", "reimprime"):
     a([{"type": "tool_use", "id": "q1", "name": "AskUserQuestion", "input": {"questions": []}}])
     r = {"type": "tool_result", "tool_use_id": "q1", "content": "Your questions have been answered"}
     if preg == "error":
-        # El texto real de un rechazo del usuario (229 casos medidos en transcripts locales).
+        # El texto real de un rechazo del usuario (mas de 200 casos medidos en transcripts locales, 2026-10-09).
         r = {"type": "tool_result", "tool_use_id": "q1", "is_error": True,
              "content": "The user doesn't want to proceed with this tool use. The tool use was rejected."}
     if preg == "invalido":

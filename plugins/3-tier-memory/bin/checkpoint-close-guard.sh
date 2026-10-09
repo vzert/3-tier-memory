@@ -195,7 +195,7 @@ escritas = []          # fichas escritas con Write (Step 2 del checkpoint, o /ba
 preguntas = []         # tool_use_id de cada AskUserQuestion del turno (Step 3b, 2.53.0)
 con_error = set()      # tool_use_id cuyo tool_result vino con is_error
 # El texto con que Claude Code devuelve una herramienta que el USUARIO rechazo. Medido el 2026-10-09
-# en los transcripts locales: 229 tool_result con esta frase, de cualquier herramienta. Un error con
+# en los transcripts locales: mas de 200 tool_result que empiezan asi (215-219 segun como se cuente), de cualquier herramienta. Un error con
 # otro texto (InputValidationError, herramienta no disponible sin pantalla) no llego a nadie.
 RECHAZO_USUARIO = re.compile(r"The user doesn't want to proceed with this tool use")
 SESION_RE = re.compile(r"(?:^|/)memory/sessions/[^/]+\.md$")
