@@ -460,8 +460,9 @@ If the draft has pendientes AND this session is within the 5 most recent:
    los candidatos de las 5 sesiones y preguntalos con `AskUserQuestion`, uno por pregunta (hasta 4
    por modal, en tandas). Cada pregunta explica el candidato para alguien que no vio esa sesion
    (que es, de que sesion y fecha sale, que pasa si no se hace) y lleva tu recomendacion con su
-   razon. Opciones, la recomendada primero: `Guardar (Media)`, `Guardar con otra prioridad`,
-   `Descartar`. No dejes fuera ningun candidato por tu cuenta. Modal cerrado sin respuesta =
+   razon. Opciones, la recomendada primero: `Guardar (prioridad Media)`, `Guardar con otra
+   prioridad`, `No guardar`. Presentalo con las mismas palabras que `/checkpoint-3t` Step 3b ("Como
+   se lo presentas"): una frase antes del primer modal, sin la palabra "candidato". No dejes fuera ningun candidato por tu cuenta. Modal cerrado sin respuesta =
    descartado. **Sin pantalla** (la misma senal que `/checkpoint-3t` Step 3b: `AskUserQuestion` no
    esta disponible o vuelve con un error que no es un rechazo del usuario): no emitas ninguno. Escribe la decision en una
    seccion `## Candidatos a pendiente` de la ficha de esa sesion, con el formato de

@@ -1,6 +1,18 @@
 # Changelog
 
 
+## [2.53.1] - 2026-10-09
+Origen: la primera corrida en vivo de 2.53.0. El usuario leyo "Ahora te propondre 8 candidatos a
+pendiente" y pidio un texto que cualquiera entienda a la primera.
+
+### Changed
+- **`/checkpoint-3t` Step 3b y `/backfill-3t` 3d: como se presenta al usuario.** Una frase antes del
+  primer modal ("De esta sesion salieron N cosas que podrian quedar como pendientes. Te las muestro
+  una por una para que decidas cuales vale la pena guardar."), sin la palabra "candidato" en lo que
+  el usuario lee. El encabezado de cada pregunta dice de que se trata, no `Candidato N`. La opcion
+  `Descartar` pasa a `No guardar`. En la ficha nada cambia (`## Candidatos a pendiente`,
+  `decision: descartado`): los lee `checkpoint-audit.py`.
+
 ## [2.53.0] - 2026-10-09
 Origen: el usuario vio que los pendientes se acumulan aunque cada checkpoint concilia los viejos
 (154 abiertos en este repo). La causa principal: Step 3b abria un pendiente por cada cosa que

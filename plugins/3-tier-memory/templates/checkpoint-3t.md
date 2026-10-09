@@ -505,12 +505,28 @@ sesion haya pasado algo nuevo sobre el (entonces dilo en su explicacion). Un can
 pendiente abierto tampoco se propone: eso es Step 3a (`pendiente.update` si su texto quedo falso).
 
 **2. Preguntale al usuario, un candidato por pregunta.** Usa `AskUserQuestion`: hasta 4 candidatos
-por modal, y tantos modales como hagan falta. Cada pregunta explica el candidato a detalle, para
-alguien que no vio la sesion: que es, de donde salio (que paso en la sesion), que pasa si no se
-hace, y tu recomendacion con su razon. Las opciones, la recomendada primero con "(Recommended)":
-- `Guardar (<prioridad que propones>)`
-- `Guardar con otra prioridad` — el usuario la dice en la nota, o eliges la otra que mencione
-- `Descartar`
+por modal, y tantos modales como hagan falta.
+
+**Como se lo presentas (2.53.1).** "Candidato" es palabra de este mecanismo, no del usuario: no la
+uses en lo que el lee. Antes del primer modal, una sola frase, con el numero real:
+
+> De esta sesion salieron N cosas que podrian quedar como pendientes. Te las muestro una por una
+> para que decidas cuales vale la pena guardar.
+
+Si no salio ninguna, una frase y nada mas: "De esta sesion no salio nada que valga la pena guardar
+como pendiente." Cada pregunta:
+- **Encabezado**: de que se trata en 1-3 palabras (`CI 2.53.0`, `Re-checkpoint`), nunca
+  `Candidato N`.
+- **Texto**, cuatro partes cortas para alguien que no vio la sesion: que es; de donde salio (que paso
+  en la sesion); que pasa si no se hace; y tu recomendacion con su razon ("Te recomiendo guardarlo:
+  …" / "Te recomiendo no guardarlo: …").
+- **Opciones**, la recomendada primero con "(Recommended)":
+  - `Guardar (prioridad <la que propones>)`
+  - `Guardar con otra prioridad` — el usuario la dice en la nota, o eliges la otra que mencione
+  - `No guardar` — en la ficha es `decision: descartado`
+
+En la ficha los nombres no cambian (`## Candidatos a pendiente`, `descartado`): los lee
+`checkpoint-audit.py`. Lo de arriba es solo lo que el usuario lee.
 
 Recomienda `descartar` dos casos que la memoria del plugin ya midio como ruido: un pendiente de
 propagacion ("verificar que la otra instalacion actualizo"), que ningun agente puede avanzar, y uno
