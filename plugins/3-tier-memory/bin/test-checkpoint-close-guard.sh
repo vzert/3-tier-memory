@@ -1032,5 +1032,62 @@ echo "== 2.44.0: la misma respuesta con fences sobre una ficha anterior al corte
 sed -i.bak 's/^date: 2026-10-01$/date: 2026-09-30/' "$F" && rm -f "$F.bak"
 chk "sin reclamo de fences" "0" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -c 'fence fuera del snippet')"
 
+echo "== 2.53.0: candidatos a pendiente decididos sin ninguna pregunta al usuario =="
+MC="$T/mcand"; mkdir -p "$MC/sessions" "$MC/pendientes"
+printf '# Pendientes\n\n## Alta prioridad\n\n## Media prioridad\n\n## Baja prioridad\n' > "$MC/_pendientes.md"
+FC="$MC/sessions/2026-10-09-demo.md"
+cat > "$FC" <<'EOF'
+---
+type: session
+date: 2026-10-09
+---
+# Demo
+
+## Contexto
+algo
+
+## Bugs fixed
+- Ninguno
+
+## Candidatos a pendiente
+- revisar algo — recomendacion: descartar — decision: descartado
+
+## Pendientes
+- Ninguno
+
+## Como retomar
+Ninguno — la sesion cerro sin continuidad.
+EOF
+# $1 salida, $2 con|sin|error (AskUserQuestion respondido, ausente, o rechazado)
+txc() {
+  python3 - "$1" "$2" "$FC" <<'PY'
+import json, sys
+out, preg, ficha = sys.argv[1:4]
+R = []
+def a(b): R.append({"type": "assistant", "message": {"role": "assistant", "content": b}})
+def u(c): R.append({"type": "user", "message": {"role": "user", "content": c}})
+u("guarda el checkpoint")
+a([{"type": "tool_use", "id": "t1", "name": "Skill", "input": {"skill": "checkpoint-3t"}}])
+u([{"type": "tool_result", "tool_use_id": "t1", "content": "Launching skill: checkpoint-3t"}])
+if preg != "sin":
+    a([{"type": "tool_use", "id": "q1", "name": "AskUserQuestion", "input": {"questions": []}}])
+    r = {"type": "tool_result", "tool_use_id": "q1", "content": "Your questions have been answered"}
+    if preg == "error":
+        r["is_error"] = True
+    u([r])
+a([{"type": "tool_use", "id": "t2", "name": "Bash", "input": {"command": f'python3 "$JBIN/print-como-retomar.py" "{ficha}"'}}])
+u([{"type": "tool_result", "tool_use_id": "t2", "content": "ok"}])
+a([{"type": "text", "text": "listo"}])
+with open(out, "w", encoding="utf-8") as fh:
+    for x in R: fh.write(json.dumps(x, ensure_ascii=False) + "\n")
+PY
+}
+txc "$T/tc.jsonl" sin
+chk "sin AskUserQuestion: reclama la decision tomada por el agente" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" con
+chk "con AskUserQuestion respondido: no lo reclama" "0" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" error
+chk "un modal rechazado no cuenta como pregunta respondida" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

@@ -126,8 +126,8 @@ def main():
         print(f"Retomamos las recomendaciones sin resolver de research/{slug}.md:")
         for item in items:
             print(f"- {item}")
-        print("Para cada una: cita en su linea el pendiente abierto que la lleva (p-…; crealo en "
-              "Step 3b si no existe), abre un plan, o declinala (marca [x] -- declinado: motivo).")
+        print("Para cada una: cita en su linea el pendiente abierto que la lleva (p-…; si no existe, "
+              "proponlo en Step 3b), abre un plan, o declinala (marca [x] -- declinado: motivo).")
         print(SEP_BOTTOM)
         printed_any = True
 

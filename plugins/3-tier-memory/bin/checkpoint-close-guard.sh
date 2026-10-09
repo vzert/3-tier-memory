@@ -192,6 +192,8 @@ disparo = False
 por_checkpoint = False # el turno corrio /checkpoint-3t (no solo reimprimio un snippet)
 fichas = []            # fichas que el turno CERRO: argumento de print-como-retomar.py o Edit con marca
 escritas = []          # fichas escritas con Write (Step 2 del checkpoint, o /backfill-3t)
+preguntas = []         # tool_use_id de cada AskUserQuestion del turno (Step 3b, 2.53.0)
+con_error = set()      # tool_use_id cuyo tool_result vino con is_error (modal rechazado o fallido)
 SESION_RE = re.compile(r"(?:^|/)memory/sessions/[^/]+\.md$")
 MARCAS_EDIT = ("## Como retomar", "Proximo paso:", "Próximo paso:", "## Recordatorios de calendario")
 
@@ -213,6 +215,8 @@ for r in turno:
                 if isinstance(rc, list):
                     rc = "\n".join(x.get("text", "") for x in rc if isinstance(x, dict))
                 resultados[b.get("tool_use_id")] = rc if isinstance(rc, str) else ""
+                if b.get("is_error"):
+                    con_error.add(b.get("tool_use_id"))
         # `/checkpoint-3t` tecleado como comando: la marca va en el prompt del usuario.
         txt = c if isinstance(c, str) else " ".join(
             b.get("text", "") for b in (c or []) if isinstance(b, dict) and b.get("type") == "text")
@@ -233,6 +237,8 @@ for r in turno:
         inp = b.get("input") or {}
         if nombre == "Skill" and str(inp.get("skill", "")).split(":")[-1] == "checkpoint-3t":
             disparo = por_checkpoint = True
+        elif nombre == "AskUserQuestion":
+            preguntas.append(b.get("id"))
         elif nombre == "Bash":
             cmd = inp.get("command") or ""
             # Disparo por CAMBIO DE ESTADO (2.33.1, p-c72a33ae7a): un turno que cierra, caduca o
@@ -594,6 +600,12 @@ def revisar(ficha):
     # `Proximo paso: ninguno` es un defecto hallado en vivo que nadie registro (p-272254efc5).
     memory_dir = os.path.dirname(os.path.dirname(ficha))
     extra = ["--veredicto-adversario", ultimo_veredicto] if ultimo_veredicto else []
+    # Step 3b (2.53.0): cuantos AskUserQuestion del turno volvieron con respuesta. Sin ninguno,
+    # una decision `guardado`/`descartado` en `## Candidatos a pendiente` la tomo el agente.
+    # Solo en un turno que corrio /checkpoint-3t: reimprimir un snippet no decide candidatos.
+    if por_checkpoint:
+        respondidas = sum(1 for i in preguntas if i in resultados and i not in con_error)
+        extra += ["--preguntas-usuario", str(respondidas)]
     try:
         r = subprocess.run([sys.executable, os.path.join(BIN, "checkpoint-audit.py"), memory_dir,
                             "--session-file", ficha, "--solo-snippet", "--json", "--no-git"] + extra,

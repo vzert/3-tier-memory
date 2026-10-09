@@ -455,8 +455,18 @@ backfilled session may be pruned from the index right away (its Tier 3 file stay
 **Only extract pendientes from the 5 most recent sessions** (by dateFirst). Older pendientes are likely already resolved.
 
 If the draft has pendientes AND this session is within the 5 most recent:
-1. Before adding, check if an equivalent pendiente already exists in `_pendientes.md` (fuzzy match on key phrases). Skip duplicates.
-2. For each new pendiente, emit one event (the compactor writes both tiers in Step 4):
+1. Before proposing, check if an equivalent pendiente already exists in `_pendientes.md` (fuzzy match on key phrases). Skip duplicates.
+2. **El usuario decide cuales se guardan (2.53.0), igual que en `/checkpoint-3t` Step 3b.** Junta
+   los candidatos de las 5 sesiones y preguntalos con `AskUserQuestion`, uno por pregunta (hasta 4
+   por modal, en tandas). Cada pregunta explica el candidato para alguien que no vio esa sesion
+   (que es, de que sesion y fecha sale, que pasa si no se hace) y lleva tu recomendacion con su
+   razon. Opciones, la recomendada primero: `Guardar (Media)`, `Guardar con otra prioridad`,
+   `Descartar`. No dejes fuera ningun candidato por tu cuenta. Modal cerrado sin respuesta =
+   descartado. **Headless** (sin `AskUserQuestion`): no emitas ninguno. Escribe la decision en una
+   seccion `## Candidatos a pendiente` de la ficha de esa sesion, con el formato de
+   `/checkpoint-3t` Step 3b (`decision: guardado p-…`, `descartado` o `sin confirmar`), y
+   nombralos en el informe final.
+3. For each candidate the user kept, emit one event (the compactor writes both tiers in Step 4):
    ```bash
    python3 "$JBIN/journal-emit.py" --type pendiente.add --text "<texto>" --prioridad Media \
      --origen "[[sessions/YYYY-MM-DD-slug]] (backfill)" --creado YYYY-MM-DD   # dateFirst, NOT today

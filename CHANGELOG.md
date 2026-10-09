@@ -1,6 +1,44 @@
 # Changelog
 
 
+## [2.53.0] - 2026-10-09
+Origen: el usuario vio que los pendientes se acumulan aunque cada checkpoint concilia los viejos
+(154 abiertos en este repo). La causa principal: Step 3b abria un pendiente por cada cosa que
+encontraba, tambien para cosas que no lo merecian. Desde esta version el agente propone y el
+usuario decide.
+
+### Changed
+- **`/checkpoint-3t` Step 3b ya no crea pendientes por su cuenta.** Junta los candidatos con las
+  mismas nueve categorias de antes y pregunta cada uno con `AskUserQuestion` (hasta 4 por modal, en
+  tandas). Cada pregunta explica el candidato para alguien que no vio la sesion y trae la
+  recomendacion del agente con su razon. Opciones: `Guardar (<prioridad>)`, `Guardar con otra
+  prioridad`, `Descartar`. El agente no omite ningun candidato por su cuenta. Un modal cerrado sin
+  respuesta descarta. Solo los guardados se emiten con `pendiente.add`. La conciliacion (Step 3a)
+  no cambia.
+- **Sin pantalla** (`PAPERCLIP_RUN_ID`, `claude -p`, cron, o sin `AskUserQuestion`) no se emite
+  nada: los candidatos quedan en la ficha como `sin confirmar`.
+- **Seccion nueva de la ficha: `## Candidatos a pendiente`**, una linea por candidato con
+  `decision: guardado p-…`, `descartado` o `sin confirmar`. El siguiente checkpoint lee las 5 fichas
+  mas recientes y no vuelve a proponer lo que el usuario ya descarto.
+- **`## Bugs fixed` admite un tercer cierre, `_descartado: <decision del usuario>_`**, para un
+  defecto abierto que el usuario decidio no registrar. Step 3b punto 9 pasa de "crear es
+  obligatorio" a "proponerlo es obligatorio, guardarlo lo decide el usuario".
+- **`/backfill-3t` paso 3d** pregunta igual antes de emitir; sin pantalla no emite.
+- Los textos de `checkpoint-audit.py`, Step 8, `pre-compact.sh` y `print-research-recomendaciones.py`
+  que mandaban crear un pendiente ahora mandan proponerlo.
+
+### Added
+- **`checkpoint-audit.py` `pendientes.candidatos`** (fichas desde 2026-10-09): `SALTADO` si falta la
+  seccion, si una linea no lleva decision, si un `guardado` no trae un id que exista, o si un
+  pendiente abierto nacido en la sesion no sale como `guardado`. `_descartado:` cuenta como cierre
+  en `bugs.cierre` y en `snippet.ninguno_defecto`.
+- **`pendientes.candidatos_pregunta`**: el hook de cierre cuenta los `AskUserQuestion` respondidos
+  del turno del checkpoint (un modal rechazado no cuenta) y los pasa como `--preguntas-usuario`.
+  Una decision `guardado`/`descartado` sin ninguna pregunta respondida sale `SALTADO`. Limite: mide
+  que hubo una pregunta, no que cubriera cada candidato.
+- 17 asertos en `test-checkpoint-audit.sh`, 3 en `test-checkpoint-close-guard.sh` y 6 mutaciones
+  (`tools/mutaciones/m_candidatos.py`).
+
 ## [2.52.1] - 2026-10-07
 El CI de 2.52.0 salio rojo en las tres plataformas.
 

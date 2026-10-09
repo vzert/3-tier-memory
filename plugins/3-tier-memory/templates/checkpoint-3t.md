@@ -187,6 +187,7 @@ importance: <0-10>
 ## Bugs fixed
 - <defecto> _verificado: <test, corrida o consulta que lo comprobo en esta sesion>_
 - <defecto que NO quedo cerrado y verificado> _pendiente: <id de Step 3b; lo pones en Step 3d>_
+- <defecto abierto que el usuario decidio no registrar en Step 3b> _descartado: <su decision>_
 <or "Ninguno">
 
 ## Plans
@@ -202,6 +203,9 @@ importance: <0-10>
 ## Callejones sin salida
 - <what was tried> → <why it failed> → <what to do instead>
 <or "Ninguno">
+
+## Candidatos a pendiente
+<filled in Step 3b — leave this placeholder for now>
 
 ## Pendientes
 <filled in Step 3d — leave this placeholder for now>
@@ -224,22 +228,25 @@ importance: <0-10>
 ```
 
 **`## Bugs fixed` — cada defecto declara como se cerro (2.34.0).** Cada linea de primer nivel
-lleva UNO de dos campos, y lo decides al escribirla:
+lleva UNO de tres campos:
 - `_verificado: <evidencia>_` — el arreglo se comprobo en esta sesion: el test que lo cubre, la
   corrida que lo mostro, la consulta que lo confirmo. Reescribir una regla o un parrafo NO es
   evidencia: un arreglo solo en prosa no esta verificado.
-- `_pendiente: p-…_` — el defecto no quedo cerrado y verificado (Step 3b punto 9). En Step 2 aun no
-  hay id: deja el campo con el texto del pendiente y pon el id en Step 3d.
+- `_pendiente: p-…_` — el defecto no quedo cerrado y verificado (Step 3b punto 9) y el usuario
+  decidio guardarlo. En Step 2 aun no hay id ni decision: deja el campo con el texto del candidato
+  y pon el id en Step 3d.
+- `_descartado: <decision del usuario>_` — el defecto no quedo cerrado, lo propusiste en Step 3b y
+  el usuario decidio no abrirle pendiente (o cerro el modal sin responder). Lo escribes en Step 3d.
 
 Una linea de primer nivel por defecto. El campo va en el texto propio de esa linea, no en un
 sub-bullet: un hijo con `_verificado:` no cierra a su padre. Cuenta todo defecto hallado en la
 sesion, tambien los que el usuario senalo en vivo.
-`checkpoint-audit.py` marca `SALTADO` en `bugs.cierre` una linea sin ninguno de los dos campos, o
+`checkpoint-audit.py` marca `SALTADO` en `bugs.cierre` una linea sin ninguno de los tres campos, o
 con un `_pendiente:` que no existe en la memoria. Tambien marca `snippet.ninguno_defecto` si el
 snippet dice `ninguno` y un `_pendiente:` de aqui sigue abierto e inmediato. El hook de cierre
 anade dos senales mas cuando el ultimo veredicto del adversario de goalspec en la sesion es
 `break` (lo lee del transcript, tambien si solo llego en la salida de una herramienta): con el
-snippet en `ninguno`, que ningun `_pendiente:` abierto de esta seccion lo registre; con cualquier
+snippet en `ninguno`, que ningun `_pendiente:` abierto ni `_descartado:` de esta seccion lo registre; con cualquier
 snippet (2.42.0, `bugs.veredicto_break`), que ningun item de esta seccion nombre al adversario o su
 hallazgo. Un defecto que marco el adversario y ya arreglaste va aqui igual, con su `_verificado:`. Limite honesto: el script solo mide el
 campo. No puede saber si un `_verificado:` es verdad, ni ver un defecto que nunca escribiste aqui
@@ -344,8 +351,9 @@ Without it, the recommendations you did NOT act on live only as prose inside a r
 marked `completed` — nothing lists them again, ever, unless someone happens to reopen that exact
 file. If it prints any research with unresolved `## Recomendaciones` items, read them NOW, before
 Step 5. Since 2.44.0 they are not pasted in the closing (Step 8d): every item still unchecked must
-cite, in its own line, the OPEN pendiente that carries it (`p-…`; create it in Step 3b if missing),
-or be checked off (implemented, or `-- declinado: <motivo>`). `checkpoint-audit.py`
+cite, in its own line, the OPEN pendiente that carries it (`p-…`; if missing, propose it in Step 3b
+and cite it only if the user keeps it), or be checked off (implemented, or `-- declinado: <motivo>`;
+a candidate the user discarded in Step 3b is `-- declinado: descartado por el usuario`). `checkpoint-audit.py`
 (`research.recomendaciones`) flags any unchecked item without an open pendiente.
 
 **Read `adopted` and `rows_added` before you call anything broken — on the FIRST checkpoint of a
@@ -463,9 +471,14 @@ described above.
 
 If reconciliation finds zero existing pendientes, say so and continue.
 
-### Step 3b — Extraccion de pendientes nuevos
+### Step 3b — Candidatos a pendiente: los propones, el usuario decide (2.53.0)
 
-Scan the ENTIRE conversation for:
+**Tu no creas pendientes. Los propones y el usuario decide cuales se guardan.** Hasta 2.52 este paso
+emitia un `pendiente.add` por cada cosa que encontraba, y los pendientes se acumulaban aunque Step 3a
+cerrara los viejos: 154 abiertos en este repo el 2026-10-09, muchos para cosas que no merecian uno.
+Desde 2.53.0 nada se emite sin un si explicito del usuario.
+
+**1. Junta los candidatos.** Scan the ENTIRE conversation for:
 1. Verification items ("confirmar", "verificar", "monitorear")
 2. Deferred work ("despues hay que", "proxima sesion", TODO, FIXME)
 3. Conditional checks ("si no mejora", "si vuelve a pasar")
@@ -476,15 +489,59 @@ Scan the ENTIRE conversation for:
 8. Documentation gaps
 9. **Every defect found during this session that is not closed AND verified** — including
    the ones the user pointed out live, and including the ones you already "fixed" by
-   rewriting prose (a rule, a template paragraph). **This one is mandatory, not a heuristic.**
-   A prose-only fix is not a closed defect. If it has no pendiente, the `<next-step>` ladder
-   in Step 8 cannot see it. Measured in session 5790b9f2 of this repo: the closing snippet
-   fell to the generic case 4 while exactly that work was open (learning 272). Since 2.33.0,
-   `Proximo paso:` must cite a pendiente id, so unregistered work cannot be named there. Since
-   2.34.0, its line in `## Bugs fixed` carries `_pendiente: p-…_` (Step 3d writes the id), and
-   `checkpoint-audit.py` rejects a `ninguno` snippet while that pendiente is open and immediate.
+   rewriting prose (a rule, a template paragraph). **Proposing it is mandatory, not a heuristic;
+   keeping it is the user's call.** A prose-only fix is not a closed defect. If it has no
+   pendiente, the `<next-step>` ladder in Step 8 cannot see it. Measured in session 5790b9f2 of
+   this repo: the closing snippet fell to the generic case 4 while exactly that work was open
+   (learning 272). Since 2.33.0, `Proximo paso:` must cite a pendiente id, so unregistered work
+   cannot be named there. Its line in `## Bugs fixed` carries `_pendiente: p-…_` if the user keeps
+   it (Step 3d writes the id) or `_descartado: <su decision>_` if not.
 
-For EACH new pendiente, emit one event:
+**No dejes fuera ningun candidato por tu cuenta.** Lo que te parezca trivial lo propones igual, con
+recomendacion `descartar`: el usuario ve todo lo que encontraste y decide. La unica excepcion es un
+candidato que una ficha reciente ya registro como `descartado`: lee `## Candidatos a pendiente` de
+las 5 fichas mas recientes de `memory/sessions/` y no lo vuelvas a proponer, salvo que en esta
+sesion haya pasado algo nuevo sobre el (entonces dilo en su explicacion). Un candidato que ya es un
+pendiente abierto tampoco se propone: eso es Step 3a (`pendiente.update` si su texto quedo falso).
+
+**2. Preguntale al usuario, un candidato por pregunta.** Usa `AskUserQuestion`: hasta 4 candidatos
+por modal, y tantos modales como hagan falta. Cada pregunta explica el candidato a detalle, para
+alguien que no vio la sesion: que es, de donde salio (que paso en la sesion), que pasa si no se
+hace, y tu recomendacion con su razon. Las opciones, la recomendada primero con "(Recommended)":
+- `Guardar (<prioridad que propones>)`
+- `Guardar con otra prioridad` — el usuario la dice en la nota, o eliges la otra que mencione
+- `Descartar`
+
+Recomienda `descartar` dos casos que la memoria del plugin ya midio como ruido: un pendiente de
+propagacion ("verificar que la otra instalacion actualizo"), que ningun agente puede avanzar, y uno
+cuyo unico actor es el usuario o un tercero, sin nada que hacer aqui (es una espera, no trabajo). Si el usuario contesta con "Other", sigue su texto (puede
+reescribir el pendiente). **Si cierra el modal sin responder, o lo rechaza, el candidato se
+descarta.**
+
+**Sin pantalla** (`PAPERCLIP_RUN_ID` definido, `claude -p`, cron, o `AskUserQuestion` no esta
+disponible o falla): no preguntes y no emitas nada. Cada candidato queda con decision
+`sin confirmar`. No cuenta como pendiente, no sale al inicio de sesion, y queda escrito en la ficha.
+
+**3. Escribe la decision en la ficha**, en `## Candidatos a pendiente` (reemplaza el placeholder de
+Step 2), una linea por candidato:
+
+```markdown
+## Candidatos a pendiente
+- <texto del candidato> — recomendacion: guardar|descartar — decision: guardado `p-xxxxxxxxxx`
+- <texto del candidato> — recomendacion: descartar — decision: descartado
+- <texto del candidato> — decision: sin confirmar (sin pantalla)
+<or "Ninguno">
+```
+
+El id de `guardado` sale del stdout de `journal-emit.py` (abajo). `checkpoint-audit.py`
+(`pendientes.candidatos`) marca `SALTADO` si falta la seccion, si una linea no lleva decision, si un
+`guardado` no trae un id que exista, o si un pendiente abierto que nacio en esta sesion (`_origen` =
+esta ficha) no sale como `guardado`. El hook de cierre anade `pendientes.candidatos_pregunta`: una
+decision `guardado` o `descartado` sin ningun `AskUserQuestion` respondido en el turno del
+checkpoint la tomaste tu. Limite honesto: mide que hubo al menos una pregunta, no que cubriera cada
+candidato, y no ve un candidato que nunca escribiste aqui.
+
+**4. Emite solo los que el usuario guardo.** For EACH kept candidate, emit one event:
 
 ```bash
 python3 "$JBIN/journal-emit.py" --type pendiente.add --text "<texto del pendiente>" \
@@ -599,7 +656,8 @@ Step 3a, con los mismos numeros.
 
 **Pon tambien el id en `## Bugs fixed`.** Cada linea que Step 2 dejo con `_pendiente: <texto>_`
 pasa a `_pendiente: p-xxxxxxxxxx_`, con el id que el journal asigno al pendiente de ese defecto
-(Step 3b punto 9).
+(Step 3b punto 9). Si el usuario lo descarto, o quedo `sin confirmar`, la linea pasa a
+`_descartado: <su decision>_` (p.ej. `_descartado: el usuario no lo quiso como pendiente_`).
 
 Take every id from the `journal-emit.py` stdout of Steps 3a/3b, or from the line the compactor
 wrote in `_pendientes.md` — **never type one from memory and never make one up**. If an id you

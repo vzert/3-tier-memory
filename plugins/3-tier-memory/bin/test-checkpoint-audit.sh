@@ -1588,6 +1588,72 @@ chk "vencido ajeno con casilla: el colapso vale (HECHO)" "1" "$(sa_out "$M" | gr
 M="$T/mSA2"; sa_ficha "$M" 2026-10-01-demo
 chk "control: el mismo pendiente nacido en esta ficha sigue siendo SALTADO" "1" "$(sa_out "$M" | grep -c 'SALTADO .*snippet.sigue_abierto')"
 
+# ---------------------------------------------------------------- 2.53.0: candidatos a pendiente
+# Desde 2.53.0 Step 3b no crea pendientes: los propone en AskUserQuestion y escribe la decision en
+# `## Candidatos a pendiente`. `pendientes.candidatos` mide que todo pendiente abierto nacido en la
+# sesion salga como `guardado` con su id; `pendientes.candidatos_pregunta` (solo con el dato del
+# hook) que una decision tomada tenga al menos una pregunta respondida detras.
+cand_ficha() {   # $1 memoria, $2 cuerpo de `## Candidatos a pendiente` (o "__SIN__" para omitirla), $3 fecha
+  local M="$1"; nueva_memoria "$M"; local F="${3:-2026-10-09}"; local S="$M/sessions/$F-demo.md"; ficha_completa "$S"
+  python3 - "$S" "$2" "$F" <<'PYS'
+import sys; p, cuerpo, f = sys.argv[1:4]; t=open(p,encoding="utf-8").read()
+t=t.replace("date: 2026-09-19","date: "+f,1)
+if cuerpo != "__SIN__":
+    t=t.replace("## Pendientes\n","## Candidatos a pendiente\n"+cuerpo+"\n\n## Pendientes\n",1)
+open(p,"w",encoding="utf-8").write(t)
+PYS
+}
+cand_pend() {   # $1 memoria, $2 id, $3 slug de origen: un pendiente abierto
+  printf -- '- [ ] algo nuevo — _origen: [[sessions/%s]]_ — _creado: 2026-10-09_ — _id: %s_\n' "$3" "$2" > "$1/.l"
+  python3 -c 'import sys;p=sys.argv[1];t=open(p, encoding="utf-8").read();open(p, "w", encoding="utf-8").write(t.replace("## Media prioridad\n","## Media prioridad\n\n"+open(sys.argv[2], encoding="utf-8").read(),1))' "$1/_pendientes.md" "$1/.l"
+}
+cand_out() { $AUD "$1" --session-file "$1/sessions/${3:-2026-10-09}-demo.md" --no-git --hoy 2026-10-09 $2 2>&1; }
+
+M="$T/mCA1"; cand_ficha "$M" "- Ninguno"
+chk "CA1: seccion con Ninguno y sin pendientes nuevos → HECHO" "1" "$(cand_out "$M" | grep -c 'HECHO .*pendientes.candidatos ')"
+M="$T/mCA2"; cand_ficha "$M" "__SIN__"
+chk "CA2: ficha de 2.53.0 sin la seccion → SALTADO" "1" "$(cand_out "$M" | grep -c 'SALTADO .*pendientes.candidatos ')"
+M="$T/mCA3"; cand_ficha "$M" "- Ninguno"; cand_pend "$M" p-c1c1c1c1c1 2026-10-09-demo
+chk "CA3: pendiente nacido en la sesion sin decision guardado → SALTADO" "1" "$(cand_out "$M" | grep -c 'SALTADO .*pendientes.candidatos ')"
+chk "CA3: nombra el id creado sin el si del usuario" "1" "$(cand_out "$M" | grep -c 'p-c1c1c1c1c1 nacio en esta sesion')"
+M="$T/mCA4"; cand_ficha "$M" '- algo nuevo — recomendacion: guardar — decision: guardado `p-c1c1c1c1c1`'; cand_pend "$M" p-c1c1c1c1c1 2026-10-09-demo
+chk "CA4: el mismo pendiente con decision guardado → HECHO" "1" "$(cand_out "$M" | grep -c 'HECHO .*pendientes.candidatos ')"
+M="$T/mCA5"; cand_ficha "$M" "- Ninguno"; cand_pend "$M" p-c2c2c2c2c2 2026-10-01-otra
+chk "CA5: pendiente abierto de OTRA sesion no cuenta → HECHO" "1" "$(cand_out "$M" | grep -c 'HECHO .*pendientes.candidatos ')"
+M="$T/mCA6"; cand_ficha "$M" '- algo — decision: guardado `p-dededede0d`'
+chk "CA6: guardado con un id que no existe → SALTADO" "1" "$(cand_out "$M" | grep -c 'SALTADO .*pendientes.candidatos ')"
+M="$T/mCA7"; cand_ficha "$M" '- algo sin decidir — recomendacion: descartar'
+chk "CA7: linea sin decision → SALTADO" "1" "$(cand_out "$M" | grep -c 'SALTADO .*pendientes.candidatos ')"
+M="$T/mCA8"; cand_ficha "$M" '- algo — decision: descartado
+- otra cosa — decision: sin confirmar (sin pantalla)'
+chk "CA8: descartado y sin confirmar sin pendiente → HECHO" "1" "$(cand_out "$M" | grep -c 'HECHO .*pendientes.candidatos ')"
+M="$T/mCA9"; cand_ficha "$M" "__SIN__" 2026-10-08; cand_pend "$M" p-c3c3c3c3c3 2026-10-08-demo
+chk "CA9: ficha anterior a 2.53.0 → POR-DISENO" "1" "$(cand_out "$M" "" 2026-10-08 | grep -c 'POR-DISEÑO .*pendientes.candidatos ')"
+
+# La pregunta de verdad: solo la mide el hook de cierre (pasa --preguntas-usuario).
+M="$T/mCP1"; cand_ficha "$M" '- algo — decision: descartado'
+chk "CP1: decision tomada con 0 preguntas respondidas → SALTADO" "1" "$(cand_out "$M" "--preguntas-usuario 0" | grep -c 'SALTADO .*pendientes.candidatos_pregunta')"
+chk "CP2: con 1 pregunta respondida → HECHO" "1" "$(cand_out "$M" "--preguntas-usuario 1" | grep -c 'HECHO .*pendientes.candidatos_pregunta')"
+chk "CP3: sin el dato del hook (Step 7a) el chequeo no se emite" "0" "$(cand_out "$M" | grep -c 'pendientes.candidatos_pregunta')"
+M="$T/mCP4"; cand_ficha "$M" '- algo — decision: sin confirmar (sin pantalla)'
+chk "CP4: solo sin confirmar (sin pantalla) no necesita pregunta" "0" "$(cand_out "$M" "--preguntas-usuario 0" | grep -c 'SALTADO .*pendientes.candidatos_pregunta')"
+chk "CP5: --solo-snippet (modo del hook) incluye el chequeo" "1" "$(cand_out "$M" "--solo-snippet --preguntas-usuario 0" | grep -c 'pendientes.candidatos ')"
+
+# `_descartado:` es el tercer cierre de un defecto en `## Bugs fixed`.
+M="$T/mCD1"; cand_ficha "$M" '- el defecto — decision: descartado'
+python3 - "$M/sessions/2026-10-09-demo.md" <<'PYS'
+import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+t=t.replace("## Bugs fixed\n- Ninguno","## Bugs fixed\n- el defecto que no se cerro _descartado: el usuario no lo quiso como pendiente_",1)
+open(p,"w",encoding="utf-8").write(t)
+PYS
+chk "CD1: defecto con _descartado: declara su cierre → HECHO" "1" "$(cand_out "$M" | grep -c 'HECHO .*bugs.cierre')"
+python3 - "$M/sessions/2026-10-09-demo.md" <<'PYS'
+import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+t=t.replace("_descartado: el usuario no lo quiso como pendiente_","sin campo",1)
+open(p,"w",encoding="utf-8").write(t)
+PYS
+chk "CD2: control: sin campo sigue SALTADO" "1" "$(cand_out "$M" | grep -c 'SALTADO .*bugs.cierre')"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

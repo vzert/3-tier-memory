@@ -290,6 +290,16 @@ caso "decididas ignoradas"     learnings-migracion.py $L $S "decidir: el aviso c
 caso "migrar solo al agente"   session-start.sh $L $S "persona: la linea" aviso-solo-agente
 
 echo
+echo "Candidatos a pendiente decididos por el usuario (2.53.0)"
+L=m_candidatos.py; S=test-checkpoint-audit.sh
+caso "pendiente sin guardado"  checkpoint-audit.py $L $S "CA3: pendiente nacido en la sesion" sin-origen
+caso "decision sin pregunta"   checkpoint-audit.py $L $S "CP1: decision tomada con 0 preguntas" sin-pregunta
+caso "descartado no cierra"    checkpoint-audit.py $L $S "CD1: defecto con _descartado:" descartado-no-cierra
+caso "hook sin candidatos"     checkpoint-audit.py $L $S "CP5: --solo-snippet" solo-snippet-sin-candidatos
+caso "guard no pasa preguntas" checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "sin AskUserQuestion: reclama" guard-no-pasa
+caso "modal rechazado cuenta"  checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "un modal rechazado no cuenta" guard-error-cuenta
+
+echo
 echo "run-tests.sh (p-46153b135b): una suite que sale 0 sin su linea de resumen es FALLA"
 # El aserto esperado de sin-resumen-no-exigido es "exit 0 a mitad", no el del trap: en bash 5
 # (ubuntu, Git Bash) la suite del trap sale rc=2 y da FALLA con o sin mutacion (CI 37006005796).

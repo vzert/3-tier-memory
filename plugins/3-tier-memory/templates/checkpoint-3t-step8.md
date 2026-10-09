@@ -160,14 +160,16 @@ Reglas para llenar los slots:
      trabajo propio sin cerrar: el defecto que el usuario acababa de senalar en vivo, "arreglado"
      solo con prosa y nunca registrado como pendiente, asi que la escalera no lo veia. Ahora no
      hay caso 4. O hay un candidato real de los casos 1-3, o es el caso 5. Si el trabajo existe
-     pero no tiene pendiente, **registralo en Step 3b** y sera el caso 2. `checkpoint-audit.py`
+     pero no tiene pendiente, **proponlo en Step 3b**: si el usuario lo guarda, sera el caso 2; si
+     lo descarta, no es trabajo registrado y no va aqui. `checkpoint-audit.py`
      marca `SALTADO` en `snippet.proximo_paso` si la linea empieza por ese texto.
   5. **Si la sesion genuinamente no dejo trabajo que retomar** (una sesion de reporte, de
      verificacion puntual, o que se cerro sola) — no hay pendiente nuevo, no hay uno relacionado,
      y "revisar _pendientes.md" seria un placeholder vacio, no una pista real — dilo tal cual:
      `ninguno — <en media linea, por que esta sesion se cierra sola>`. Antes de declararlo,
      preguntate si esta sesion encontro algun defecto o trabajo que no quedo cerrado y
-     verificado. Si lo hay y no tiene pendiente, este caso no aplica: vuelve a Step 3b.
+     verificado. Si lo hay y no lo propusiste en Step 3b, este caso no aplica: vuelve a Step 3b.
+     Si lo propusiste y el usuario lo descarto (`_descartado:` en `## Bugs fixed`), si aplica.
      `checkpoint-audit.py` marca `SALTADO` en `snippet.ninguno_defecto` un `ninguno` con un
      `_pendiente:` de `## Bugs fixed` abierto e inmediato (2.34.0).
 
@@ -566,8 +568,9 @@ que la ficha enlaza. Victor (2026-10-01): no le servian, y repetian lo que ya ll
 - **No hay bloque de research en el cierre** ni seccion `## Recomendaciones de research sin
   resolver` en la ficha (las fichas anteriores la conservan).
 - **Cada recomendacion sin marcar cita en su linea el pendiente abierto que la lleva** (`p-…`), o se
-  marca `[x]` (implementada o `-- declinado: motivo`). Si no tiene pendiente, crealo en Step 3b y
-  pon su id en la linea del research. Ese pendiente es el que sale despues en las capas del cierre
+  marca `[x]` (implementada o `-- declinado: motivo`). Si no tiene pendiente, proponlo en Step 3b;
+  si el usuario lo guarda, pon su id en la linea del research, y si lo descarta, marcala
+  `[x] … -- declinado: descartado por el usuario`. Ese pendiente es el que sale despues en las capas del cierre
   (🔔 si vence hoy, ➕ si toca) o en el calendario: la recomendacion no se pierde, que es el caso
   del 2026-09-17 por el que existia este paso (una sesion implemento 1 de 4 recomendaciones y las
   otras 3 no salieron en ningun lado).

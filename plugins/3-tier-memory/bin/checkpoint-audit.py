@@ -138,6 +138,12 @@ DESDE_BUGS_CIERRE = "2026-09-23"
 # `bugs.veredicto_break` (2.42.0): desde aqui un `break` del adversario tiene que salir en
 # `## Bugs fixed` con cualquier snippet, no solo con `Proximo paso: ninguno` (8-sexies).
 DESDE_BUGS_BREAK = "2026-09-30"
+# Tercer cierre de un defecto (2.53.0): el usuario decidio en Step 3b no abrirle pendiente.
+DESCARTADO_BUG = re.compile(r"_descartado:\s*(.*?)_(?=\s|$|[.,;:)\]—])", re.S)
+# `pendientes.candidatos` (2.53.0): desde aqui cada pendiente nuevo sale en `## Candidatos a
+# pendiente` con la decision del usuario. Mismo borde aceptado que DESDE_RECONCILIACION.
+DESDE_CANDIDATOS = "2026-10-09"
+DECISION_CANDIDATO = re.compile(r"decision:\s*\**\s*(guardado|descartado|sin confirmar)\b", re.I)
 # 2.35.0: desde esta fecha el snippet `Como retomar` no lleva la linea `Sigue abierto:`.
 DESDE_SIN_SIGUE_ABIERTO = "2026-09-23"
 BULLET_PRIMER_NIVEL = re.compile(r"^( {0,3})(?:[-*+]|\d+[.)])[ \t]+")
@@ -599,7 +605,8 @@ def avisos_script_en_seco(h, memory_dir, nombre_script, claves_problema):
         h.append(Hallazgo(HECHO, clave_hallazgo, f"{nombre_script} en seco: sin avisos"))
 
 
-def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=False, veredicto_adv=None):
+def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=False, veredicto_adv=None,
+            preguntas_usuario=None):
     h = []
     texto = leer(session_file)
     secs = secciones(texto)
@@ -935,6 +942,76 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             h.append(Hallazgo(HECHO, "pendientes.dualwrite",
                               f"los {len(ids_ficha)} id(s) tienen su fila mensual"))
 
+    # 7-bis. Un pendiente nuevo nace solo con el si del usuario (2.53.0). Step 3b ya no emite
+    # `pendiente.add` por su cuenta: propone cada candidato en un AskUserQuestion y escribe la
+    # decision en `## Candidatos a pendiente`. Con la extraccion automatica los pendientes se
+    # acumulaban (154 abiertos aqui, 2026-10-09) aunque la conciliacion cerrara los viejos: el
+    # agente abria pendientes para cosas que no los merecian. Se mide la ESTRUCTURA: todo pendiente
+    # abierto que nacio en esta sesion (`_origen` = esta ficha) tiene que salir como `guardado` con
+    # su id. Limite: el script no ve el transcript; si la pregunta se hizo de verdad lo mide
+    # `pendientes.candidatos_pregunta`, que solo emite el hook de cierre (`preguntas_usuario`).
+    sec_cand = seccion_por_prefijo(secs, "Candidatos a pendiente")
+    if fecha_ficha and fecha_ficha < DESDE_CANDIDATOS:
+        h.append(Hallazgo(DISENO, "pendientes.candidatos",
+                          f"ficha del {fecha_ficha}, anterior a {DESDE_CANDIDATOS}: los pendientes "
+                          "nuevos no pasaban por el usuario"))
+    else:
+        malos = []
+        guardados, decididos = set(), 0
+        if sec_cand is None:
+            malos.append("la ficha no lleva `## Candidatos a pendiente` (Step 3b)")
+        else:
+            for l in sec_cand.splitlines():
+                s = l.strip()
+                if not BULLET_PRIMER_NIVEL.match(l.expandtabs(4)) or \
+                        re.match(r"^[-*+]\s+\**\s*ninguno\**\s*\.?\s*$", s, re.I):
+                    continue
+                m = DECISION_CANDIDATO.search(s)
+                if not m:
+                    malos.append(f"sin `decision: guardado p-…|descartado|sin confirmar`: {s[:70]}")
+                    continue
+                if m.group(1).lower() == "guardado":
+                    ids_l = ID_PENDIENTE.findall(s)
+                    if not ids_l:
+                        malos.append(f"`guardado` sin el id que asigno el journal: {s[:70]}")
+                    guardados |= set(ids_l)
+                if m.group(1).lower() in ("guardado", "descartado"):
+                    decididos += 1
+        if sec_cand is not None:
+            historicos_c = ids_historicos(memory_dir)
+            for i in sorted(guardados - historicos_c):
+                malos.append(f"{i} sale como `guardado` y no existe en la memoria")
+            origen_c = origenes_abiertos(memory_dir)
+            sin_si = sorted(i for i, o in origen_c.items() if o == slug and i not in guardados)
+            for i in sin_si:
+                malos.append(f"{i} nacio en esta sesion y no sale como `guardado` en "
+                             "`## Candidatos a pendiente`: se creo sin la decision del usuario")
+        if malos:
+            h.append(Hallazgo(SALTADO, "pendientes.candidatos",
+                              f"{len(malos)} problema(s) en los pendientes nuevos de la sesion", malos,
+                              corrige="Step 3b: pregunta cada candidato con AskUserQuestion y escribe "
+                                      "su decision en `## Candidatos a pendiente`; un pendiente que el "
+                                      "usuario no aprobo se cierra con journal-emit.py --type "
+                                      "pendiente.resolve --estado abandoned"))
+        else:
+            h.append(Hallazgo(HECHO, "pendientes.candidatos",
+                              "cada pendiente nuevo de la sesion tiene la decision del usuario"))
+        # La pregunta de verdad. Solo con el dato del hook de cierre, que cuenta en el transcript
+        # los AskUserQuestion respondidos del turno del checkpoint. Una decision `guardado` o
+        # `descartado` sin ninguna pregunta la tomo el agente, que es justo lo que 2.53.0 quita.
+        # `sin confirmar` (sin pantalla) no necesita pregunta. Mide que hubo al menos una, no que
+        # cubriera cada candidato: vigila el olvido, no un agente que finge.
+        if preguntas_usuario is not None and decididos:
+            if preguntas_usuario == 0:
+                h.append(Hallazgo(SALTADO, "pendientes.candidatos_pregunta",
+                                  f"{decididos} candidato(s) con decision y ninguna pregunta "
+                                  "respondida al usuario en el turno del checkpoint",
+                                  corrige="hazle las preguntas de Step 3b con AskUserQuestion; si "
+                                          "no hay pantalla, la decision es `sin confirmar`"))
+            else:
+                h.append(Hallazgo(HECHO, "pendientes.candidatos_pregunta",
+                                  f"{preguntas_usuario} pregunta(s) respondida(s) en el turno"))
+
     # 8. El snippet de continuidad nombra los pendientes que la sesion deja abiertos
     # Step 8 excluye de `Sigue abierto` todo pendiente con `_revisar` FUTURO respecto a la ficha:
     # ese ya sale con su Titulo/Descripcion completos en `## Recordatorios de calendario` (Step
@@ -1138,8 +1215,8 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             es_caso1 = pp.lower().startswith("fase actual") and bool(planes_laxo)
             if not ids_pp and not es_caso1:
                 problemas.append("no cita el `_id` de ningun pendiente: si es trabajo real, "
-                                 "registralo en Step 3b (`pendiente.add`) y cita su id; si nada es "
-                                 "accionable hoy, es el caso 5")
+                                 "proponlo al usuario en Step 3b y, si lo guarda, cita su id; si "
+                                 "nada es accionable hoy (o lo descarto), es el caso 5")
             for i in ids_pp:
                 if i not in ids_abiertos:
                     # Un id que no esta abierto en `_pendientes.md` no es trabajo registrado: o se
@@ -1172,8 +1249,8 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                               "`Proximo paso:` no es un paso inmediato y registrado",
                               problemas,
                               corrige="rehaz `Proximo paso:` con la escalera de Step 8 (casos 1-3 "
-                                      "o 5); si falta el pendiente, emitelo antes con "
-                                      "journal-emit.py --type pendiente.add"))
+                                      "o 5); si falta el pendiente, proponlo antes al usuario "
+                                      "(Step 3b) y emitelo solo si lo guarda"))
         else:
             h.append(Hallazgo(HECHO, "snippet.proximo_paso",
                               "`Proximo paso:` es caso 1, 5, o un pendiente registrado e inmediato"))
@@ -1204,8 +1281,11 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             ids_b = PENDIENTE_BUG.findall(propio)
             evid = [e.strip() for e in VERIFICADO.findall(propio)]
             evid = [e for e in evid if e and not re.fullmatch(r"<[^>]*>", e)]
-            if not ids_b and not evid:
-                malos.append(f"sin `_verificado: <evidencia>_` ni `_pendiente: p-…_`: {primera}")
+            desc = [e.strip() for e in DESCARTADO_BUG.findall(propio)]
+            desc = [e for e in desc if e and not re.fullmatch(r"<[^>]*>", e)]
+            if not ids_b and not evid and not desc:
+                malos.append(f"sin `_verificado: <evidencia>_`, `_pendiente: p-…_` ni "
+                             f"`_descartado: <decision del usuario>_`: {primera}")
             for i in PENDIENTE_BUG.findall(b):
                 if i not in historicos:
                     malos.append(f"{i} no existe en la memoria (ni abierto ni en pendientes/): {primera}")
@@ -1214,8 +1294,9 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                               f"{len(malos)} defecto(s) de `## Bugs fixed` sin cierre declarado",
                               malos,
                               corrige="al final de cada linea: `_verificado: <test o corrida que lo "
-                                      "comprobo>_`, o registra el defecto con journal-emit.py --type "
-                                      "pendiente.add (Step 3b punto 9) y cita `_pendiente: p-…_`"))
+                                      "comprobo>_`, o proponlo como candidato en Step 3b punto 9: "
+                                      "si el usuario lo guarda, `_pendiente: p-…_`; si lo descarta, "
+                                      "`_descartado: <su decision>_`"))
         else:
             h.append(Hallazgo(HECHO, "bugs.cierre",
                               f"los {len(bugs)} defecto(s) de `## Bugs fixed` declaran su cierre"))
@@ -1239,7 +1320,8 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                                "es un defecto que la siguiente sesion no sabe que existio"],
                               corrige="anade a `## Bugs fixed` cada defecto que marco el adversario, "
                                       "diciendo que lo marco el, con `_verificado: <como se "
-                                      "comprobo el arreglo>_` o `_pendiente: p-…_` si sigue abierto"))
+                                      "comprobo el arreglo>_`; si sigue abierto, `_pendiente: p-…_` o "
+                                      "`_descartado: <decision del usuario>_`"))
 
     # 8-sexies. `ninguno` no puede tapar un defecto abierto (2.34.0, p-272254efc5). Dos senales,
     # las dos estructuradas: (1) un `_pendiente:` de `## Bugs fixed` que sigue abierto e inmediato
@@ -1260,15 +1342,17 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         if inmediatos:
             prob.append("`## Bugs fixed` registra defecto(s) abierto(s) e inmediato(s): "
                         + ", ".join(inmediatos))
-        if veredicto_adv == "break" and not vivos:
+        descartados_bugs = [b for _, b in bugs if DESCARTADO_BUG.search(b)]
+        if veredicto_adv == "break" and not vivos and not descartados_bugs:
             prob.append("el ultimo veredicto del adversario es `break` y ningun `_pendiente:` "
                         "abierto de `## Bugs fixed` lo registra")
         if prob:
             h.append(Hallazgo(SALTADO, "snippet.ninguno_defecto",
                               "el snippet dice `ninguno` con un defecto de la sesion abierto", prob,
-                              corrige="registra el defecto (pendiente.add, Step 3b punto 9), citalo "
-                                      "con `_pendiente: p-…_` en `## Bugs fixed`, y ponlo como "
-                                      "`Proximo paso:` si es inmediato"))
+                              corrige="propon el defecto como candidato (Step 3b punto 9); si el "
+                                      "usuario lo guarda, citalo con `_pendiente: p-…_` en `## Bugs "
+                                      "fixed` y ponlo como `Proximo paso:` si es inmediato; si lo "
+                                      "descarta, `_descartado: <su decision>_`"))
         else:
             h.append(Hallazgo(HECHO, "snippet.ninguno_defecto",
                               "`ninguno` sin defecto abierto registrado ni `break` sin cerrar"))
@@ -1475,7 +1559,8 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     if solo_snippet:
         # Modo del hook de cierre (checkpoint-close-guard.sh): solo lo que Step 8 escribe. Los
         # reparadores en seco tardan segundos y no dependen del snippet; ya los midio Step 7a.
-        return [x for x in h if x.clave.startswith(("snippet.", "bugs.")) or x.clave == "plan.mencionado_no_enlazado"]
+        return [x for x in h if x.clave.startswith(("snippet.", "bugs.", "pendientes.candidatos"))
+                or x.clave == "plan.mencionado_no_enlazado"]
     avisos_script_en_seco(h, memory_dir, "repair-dualwrite.py",
                           ("header_issues", "odd_values", "unaligned_rows", "unrepairable",
                            "ids_invented", "missing_data", "pipes_broken"))
@@ -1535,6 +1620,8 @@ def main():
     ap.add_argument("--json", action="store_true", help="salida JSON (para el hook Stop)")
     ap.add_argument("--veredicto-adversario", choices=("break", "hold"), default=None,
                     help="ultimo veredicto del adversario en el transcript; lo pasa el hook Stop")
+    ap.add_argument("--preguntas-usuario", type=int, default=None,
+                    help="AskUserQuestion respondidos en el turno del checkpoint; lo pasa el hook Stop")
     args = ap.parse_args()
 
     if not os.path.isdir(args.memory_dir):
@@ -1552,7 +1639,7 @@ def main():
     repo_root = args.repo_root or os.getcwd()
     hallazgos = auditar(args.memory_dir, args.session_file, repo_root,
                         not args.no_git and not args.solo_snippet, hoy, args.solo_snippet,
-                        args.veredicto_adversario)
+                        args.veredicto_adversario, args.preguntas_usuario)
 
     if args.count:
         print(sum(1 for x in hallazgos if x.estado in (SALTADO, PARCIAL)))
