@@ -15,8 +15,10 @@ usuario decide.
   prioridad`, `Descartar`. El agente no omite ningun candidato por su cuenta. Un modal cerrado sin
   respuesta descarta. Solo los guardados se emiten con `pendiente.add`. La conciliacion (Step 3a)
   no cambia.
-- **Sin pantalla** (`PAPERCLIP_RUN_ID`, `claude -p`, cron, o sin `AskUserQuestion`) no se emite
-  nada: los candidatos quedan en la ficha como `sin confirmar`.
+- **Sin pantalla** (`AskUserQuestion` no disponible, o vuelve con un error que no es una respuesta
+  del usuario; o `PAPERCLIP_RUN_ID` definido) no se emite nada: los candidatos quedan en la ficha
+  como `sin confirmar`. La senal es la herramienta, no el modo: un `claude -p` con alguien
+  contestando el modal no cuenta como sin pantalla.
 - **Seccion nueva de la ficha: `## Candidatos a pendiente`**, una linea por candidato con
   `decision: guardado p-…`, `descartado` o `sin confirmar`. El siguiente checkpoint lee las 5 fichas
   mas recientes y no vuelve a proponer lo que el usuario ya descarto.

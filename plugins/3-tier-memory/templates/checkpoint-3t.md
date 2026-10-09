@@ -518,8 +518,12 @@ cuyo unico actor es el usuario o un tercero, sin nada que hacer aqui (es una esp
 reescribir el pendiente). **Si cierra el modal sin responder, o lo rechaza, el candidato se
 descarta.**
 
-**Sin pantalla** (`PAPERCLIP_RUN_ID` definido, `claude -p`, cron, o `AskUserQuestion` no esta
-disponible o falla): no preguntes y no emitas nada. Cada candidato queda con decision
+**Sin pantalla** — la senal es la herramienta, no el modo: `AskUserQuestion` no esta entre tus
+herramientas, o la llamas y vuelve con un error que no es una respuesta del usuario (la herramienta
+no disponible, sin nadie que conteste). `PAPERCLIP_RUN_ID` definido tambien cuenta: ese agente no
+tiene pantalla. Un `claude -p` o un cron suelen caer aqui, pero no lo supongas por el modo: si el
+modal vuelve con una respuesta, hay alguien contestando. Sin pantalla, no preguntes y no emitas
+nada. Cada candidato queda con decision
 `sin confirmar`. No cuenta como pendiente, no sale al inicio de sesion, y queda escrito en la ficha.
 
 **3. Escribe la decision en la ficha**, en `## Candidatos a pendiente` (reemplaza el placeholder de

@@ -1592,7 +1592,8 @@ chk "control: el mismo pendiente nacido en esta ficha sigue siendo SALTADO" "1" 
 # Desde 2.53.0 Step 3b no crea pendientes: los propone en AskUserQuestion y escribe la decision en
 # `## Candidatos a pendiente`. `pendientes.candidatos` mide que todo pendiente abierto nacido en la
 # sesion salga como `guardado` con su id; `pendientes.candidatos_pregunta` (solo con el dato del
-# hook) que una decision tomada tenga al menos una pregunta respondida detras.
+# hook) que una decision tomada tenga detras al menos una pregunta que volvio del usuario
+# (respondida, o cerrada por el: Step 3b descarta en ese caso).
 cand_ficha() {   # $1 memoria, $2 cuerpo de `## Candidatos a pendiente` (o "__SIN__" para omitirla), $3 fecha
   local M="$1"; nueva_memoria "$M"; local F="${3:-2026-10-09}"; local S="$M/sessions/$F-demo.md"; ficha_completa "$S"
   python3 - "$S" "$2" "$F" <<'PYS'

@@ -1024,12 +1024,14 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             if preguntas_usuario == 0:
                 h.append(Hallazgo(SALTADO, "pendientes.candidatos_pregunta",
                                   f"{decididos} candidato(s) con decision y ninguna pregunta "
-                                  "respondida al usuario en el turno del checkpoint",
+                                  "al usuario que haya vuelto (respondida o cerrada por el) en el "
+                                  "turno del checkpoint",
                                   corrige="hazle las preguntas de Step 3b con AskUserQuestion; si "
                                           "no hay pantalla, la decision es `sin confirmar`"))
             else:
                 h.append(Hallazgo(HECHO, "pendientes.candidatos_pregunta",
-                                  f"{preguntas_usuario} pregunta(s) respondida(s) en el turno"))
+                                  f"{preguntas_usuario} pregunta(s) al usuario en el turno, "
+                                  "respondidas o cerradas por el"))
 
     # 8. El snippet de continuidad nombra los pendientes que la sesion deja abiertos
     # Step 8 excluye de `Sigue abierto` todo pendiente con `_revisar` FUTURO respecto a la ficha:
@@ -1640,7 +1642,8 @@ def main():
     ap.add_argument("--veredicto-adversario", choices=("break", "hold"), default=None,
                     help="ultimo veredicto del adversario en el transcript; lo pasa el hook Stop")
     ap.add_argument("--preguntas-usuario", type=int, default=None,
-                    help="AskUserQuestion respondidos en el turno del checkpoint; lo pasa el hook Stop")
+                    help="AskUserQuestion del turno del checkpoint que volvieron con resultado "
+                         "(respondidos o cerrados por el usuario); lo pasa el hook Stop")
     args = ap.parse_args()
 
     if not os.path.isdir(args.memory_dir):
