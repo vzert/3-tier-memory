@@ -1611,8 +1611,8 @@ cand_out() { $AUD "$1" --session-file "$1/sessions/${3:-2026-10-09}-demo.md" --n
 
 M="$T/mCA1"; cand_ficha "$M" "- Ninguno"
 chk "CA1: seccion con Ninguno y sin pendientes nuevos → HECHO" "1" "$(cand_out "$M" | grep -c 'HECHO .*pendientes.candidatos ')"
-M="$T/mCA2"; cand_ficha "$M" "__SIN__"
-chk "CA2: ficha de 2.53.0 sin la seccion → SALTADO" "1" "$(cand_out "$M" | grep -c 'SALTADO .*pendientes.candidatos ')"
+M="$T/mCA2"; cand_ficha "$M" "__SIN__"; cand_pend "$M" p-c4c4c4c4c4 2026-10-09-demo
+chk "CA2: ficha de 2.53.0 sin la seccion y con un pendiente nacido en ella → SALTADO" "1" "$(cand_out "$M" | grep -c 'SALTADO .*pendientes.candidatos ')"
 M="$T/mCA3"; cand_ficha "$M" "- Ninguno"; cand_pend "$M" p-c1c1c1c1c1 2026-10-09-demo
 chk "CA3: pendiente nacido en la sesion sin decision guardado → SALTADO" "1" "$(cand_out "$M" | grep -c 'SALTADO .*pendientes.candidatos ')"
 chk "CA3: nombra el id creado sin el si del usuario" "1" "$(cand_out "$M" | grep -c 'p-c1c1c1c1c1 nacio en esta sesion')"
@@ -1653,6 +1653,34 @@ t=t.replace("_descartado: el usuario no lo quiso como pendiente_","sin campo",1)
 open(p,"w",encoding="utf-8").write(t)
 PYS
 chk "CD2: control: sin campo sigue SALTADO" "1" "$(cand_out "$M" | grep -c 'SALTADO .*bugs.cierre')"
+
+# Ronda 1 de los adversarios de 2.53.0.
+# (a) Una ficha de otro flujo, sin pendientes nuevos ni descartes, no necesita la seccion.
+M="$T/mCB1"; cand_ficha "$M" "__SIN__"
+chk "CB1: sin seccion y sin nada que decidir → HECHO (no falso SALTADO)" "1" "$(cand_out "$M" | grep -c 'HECHO .*pendientes.candidatos ')"
+# (b) `_descartado:` sin su candidato `descartado` no cierra el defecto en silencio.
+M="$T/mCB2"; cand_ficha "$M" "- Ninguno"
+python3 - "$M/sessions/2026-10-09-demo.md" <<'PYS'
+import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+t=t.replace("## Bugs fixed\n- Ninguno","## Bugs fixed\n- un hueco real _descartado: no vale la pena_",1)
+open(p,"w",encoding="utf-8").write(t)
+PYS
+chk "CB2: _descartado: sin candidato descartado → SALTADO" "1" "$(cand_out "$M" | grep -c 'SALTADO .*pendientes.candidatos ')"
+chk "CB3: y lo dice" "1" "$(cand_out "$M" | grep -c 'con `_descartado:` y solo 0')"
+python3 - "$M/sessions/2026-10-09-demo.md" <<'PYS'
+import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+t=t.replace("## Candidatos a pendiente\n- Ninguno","## Candidatos a pendiente\n- un hueco real — decision: descartado",1)
+open(p,"w",encoding="utf-8").write(t)
+PYS
+chk "CB4: con su candidato descartado → HECHO" "1" "$(cand_out "$M" | grep -c 'HECHO .*pendientes.candidatos ')"
+# (c) `snippet.ninguno_defecto`: un `break` del adversario con el defecto descartado por el usuario
+# no exige pendiente; sin el `_descartado:` si.
+python3 - "$M/sessions/2026-10-09-demo.md" <<'PYS'
+import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+t=t.replace("- un hueco real _descartado:","- el adversario marco un hueco real _descartado:",1)
+open(p,"w",encoding="utf-8").write(t)
+PYS
+chk "CB5: ninguno + break + defecto descartado por el usuario → no SALTADO" "0" "$(cand_out "$M" "--solo-snippet --veredicto-adversario break" | grep -c 'SALTADO .*snippet.ninguno_defecto')"
 
 echo
 echo "pass=$pass fail=$fail"

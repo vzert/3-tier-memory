@@ -1,8 +1,9 @@
 import io, sys
 # Candidatos a pendiente decididos por el usuario (2.53.0). Cada mutacion apaga una pieza y su aserto
 # tiene que caer: el pendiente nacido en la sesion sin `guardado`, la pregunta que no se hizo, el
-# `_descartado:` como cierre de un defecto, el filtro de --solo-snippet, y en el hook de cierre el
-# conteo de AskUserQuestion respondidos (sin pasarlo, o contando un modal rechazado).
+# `_descartado:` como cierre de un defecto (y que necesite su candidato), `snippet.ninguno_defecto`
+# con un defecto descartado, el filtro de --solo-snippet, y en el hook de cierre el conteo de
+# AskUserQuestion (sin pasarlo, contando uno sin resultado, o midiendo un turno sin /checkpoint-3t).
 #
 # Uso: m_candidatos.py <fichero> <mutacion>
 # Patrones de una sola linea, sin "\n": el checkout de Windows trae CRLF (regla 322).
@@ -10,7 +11,7 @@ import io, sys
 M = {
     # checkpoint-audit.py
     "sin-origen": [
-        ("            sin_si = sorted(i for i, o in origen_c.items() if o == slug and i not in guardados)",
+        ("            sin_si = [i for i in nacidos if i not in guardados]",
          "            sin_si = []")],
     "sin-pregunta": [
         ("            if preguntas_usuario == 0:", "            if False:")],
@@ -22,9 +23,17 @@ M = {
     # checkpoint-close-guard.sh
     "guard-no-pasa": [
         ('        extra += ["--preguntas-usuario", str(respondidas)]', "        pass")],
-    "guard-error-cuenta": [
-        ("        respondidas = sum(1 for i in preguntas if i in resultados and i not in con_error)",
-         "        respondidas = sum(1 for i in preguntas if i in resultados)")],
+    "guard-sin-resultado-cuenta": [
+        ("        respondidas = sum(1 for i in preguntas if i in resultados)",
+         "        respondidas = len(preguntas)")],
+    "guard-sin-checkpoint": [
+        ('        extra += ["--preguntas-usuario", str(respondidas)]',
+         '        extra += ["--preguntas-usuario", str(respondidas)]\n    else:\n        extra += ["--preguntas-usuario", "0"]')],
+    "descartado-sin-candidato": [
+        ("        if n_desc_bugs > no_guardados:", "        if False:")],
+    "ninguno-ignora-descartado": [
+        ("        if veredicto_adv == \"break\" and not vivos and not descartados_bugs:",
+         "        if veredicto_adv == \"break\" and not vivos:")],
 }
 
 p, nombre = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""

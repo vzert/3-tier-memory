@@ -957,9 +957,21 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                           "nuevos no pasaban por el usuario"))
     else:
         malos = []
-        guardados, decididos = set(), 0
+        guardados, decididos, no_guardados = set(), 0, 0
+        # `_descartado:` de `## Bugs fixed`: el tercer cierre de un defecto solo vale si Step 3b lo
+        # propuso y el usuario lo descarto. Sin esto, un agente que nunca pregunto cerraba el
+        # defecto con `_descartado:` y el audit no veia nada (adversario de 2.53.0, ronda 1).
+        n_desc_bugs = sum(1 for _, b in bullets_bugs(seccion_por_prefijo(secs, "Bugs fixed") or "")
+                          if DESCARTADO_BUG.search(b))
+        origen_c = origenes_abiertos(memory_dir)
+        nacidos = sorted(i for i, o in origen_c.items() if o == slug)
         if sec_cand is None:
-            malos.append("la ficha no lleva `## Candidatos a pendiente` (Step 3b)")
+            # Sin pendientes nacidos aqui ni defectos descartados no hay nada que decidir: una ficha
+            # de otro flujo (una que no corre Step 3b) no tiene por que llevar la seccion
+            # (adversario externo de 2.53.0). Con algo que decidir, la falta es la omision.
+            if nacidos or n_desc_bugs:
+                malos.append("la ficha no lleva `## Candidatos a pendiente` (Step 3b) y la sesion "
+                             "abrio pendientes o descarto defectos")
         else:
             for l in sec_cand.splitlines():
                 s = l.strip()
@@ -977,15 +989,20 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                     guardados |= set(ids_l)
                 if m.group(1).lower() in ("guardado", "descartado"):
                     decididos += 1
+                if m.group(1).lower() in ("descartado", "sin confirmar"):
+                    no_guardados += 1
         if sec_cand is not None:
             historicos_c = ids_historicos(memory_dir)
             for i in sorted(guardados - historicos_c):
                 malos.append(f"{i} sale como `guardado` y no existe en la memoria")
-            origen_c = origenes_abiertos(memory_dir)
-            sin_si = sorted(i for i, o in origen_c.items() if o == slug and i not in guardados)
+            sin_si = [i for i in nacidos if i not in guardados]
             for i in sin_si:
                 malos.append(f"{i} nacio en esta sesion y no sale como `guardado` en "
                              "`## Candidatos a pendiente`: se creo sin la decision del usuario")
+        if n_desc_bugs > no_guardados:
+            malos.append(f"{n_desc_bugs} defecto(s) de `## Bugs fixed` con `_descartado:` y solo "
+                         f"{no_guardados} candidato(s) `descartado`/`sin confirmar` en "
+                         "`## Candidatos a pendiente`: un defecto se descarta proponiendolo en Step 3b")
         if malos:
             h.append(Hallazgo(SALTADO, "pendientes.candidatos",
                               f"{len(malos)} problema(s) en los pendientes nuevos de la sesion", malos,
@@ -1002,6 +1019,8 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         # `sin confirmar` (sin pantalla) no necesita pregunta. Mide que hubo al menos una, no que
         # cubriera cada candidato: vigila el olvido, no un agente que finge.
         if preguntas_usuario is not None and decididos:
+            # Un modal rechazado o cerrado SI es una pregunta hecha: Step 3b manda descartar en ese
+            # caso, y el hook ya lo cuenta (adversarios de 2.53.0, ronda 1).
             if preguntas_usuario == 0:
                 h.append(Hallazgo(SALTADO, "pendientes.candidatos_pregunta",
                                   f"{decididos} candidato(s) con decision y ninguna pregunta "

@@ -534,11 +534,13 @@ Step 2), una linea por candidato:
 ```
 
 El id de `guardado` sale del stdout de `journal-emit.py` (abajo). `checkpoint-audit.py`
-(`pendientes.candidatos`) marca `SALTADO` si falta la seccion, si una linea no lleva decision, si un
-`guardado` no trae un id que exista, o si un pendiente abierto que nacio en esta sesion (`_origen` =
-esta ficha) no sale como `guardado`. El hook de cierre anade `pendientes.candidatos_pregunta`: una
-decision `guardado` o `descartado` sin ningun `AskUserQuestion` respondido en el turno del
-checkpoint la tomaste tu. Limite honesto: mide que hubo al menos una pregunta, no que cubriera cada
+(`pendientes.candidatos`) marca `SALTADO` si una linea no lleva decision, si un `guardado` no trae
+un id que exista, si un pendiente abierto que nacio en esta sesion (`_origen` = esta ficha) no sale
+como `guardado`, si hay mas `_descartado:` en `## Bugs fixed` que lineas `descartado`/`sin
+confirmar` aqui, o si falta la seccion cuando habia algo de eso que decidir. El hook de cierre
+anade `pendientes.candidatos_pregunta`: una decision `guardado` o `descartado` sin ningun
+`AskUserQuestion` en el turno del checkpoint que haya vuelto (respondido, o cerrado por el usuario)
+la tomaste tu. Limite honesto: mide que hubo al menos una pregunta, no que cubriera cada
 candidato, y no ve un candidato que nunca escribiste aqui.
 
 **4. Emite solo los que el usuario guardo.** For EACH kept candidate, emit one event:
@@ -656,8 +658,10 @@ Step 3a, con los mismos numeros.
 
 **Pon tambien el id en `## Bugs fixed`.** Cada linea que Step 2 dejo con `_pendiente: <texto>_`
 pasa a `_pendiente: p-xxxxxxxxxx_`, con el id que el journal asigno al pendiente de ese defecto
-(Step 3b punto 9). Si el usuario lo descarto, o quedo `sin confirmar`, la linea pasa a
-`_descartado: <su decision>_` (p.ej. `_descartado: el usuario no lo quiso como pendiente_`).
+(Step 3b punto 9). Si el usuario lo descarto, la linea pasa a `_descartado: <su decision>_`
+(p.ej. `_descartado: el usuario no lo quiso como pendiente_`); si quedo `sin confirmar` (sin
+pantalla), a `_descartado: sin confirmar, sin pantalla_`. Cada `_descartado:` necesita su linea
+`descartado` o `sin confirmar` en `## Candidatos a pendiente`: `checkpoint-audit.py` lo cuenta.
 
 Take every id from the `journal-emit.py` stdout of Steps 3a/3b, or from the line the compactor
 wrote in `_pendientes.md` — **never type one from memory and never make one up**. If an id you
@@ -1298,7 +1302,7 @@ correcta cuando no falta nada.
 ## Step 7: Report
 
 Empieza pegando **literal** la salida de Step 7a. Despues, el reporte de
-siempre: session path, N pendientes extracted, M resolved, journal result (`applied=N` for Steps 3c, 5a and 6c together, any quarantined event with its reason, and whether any **Fallback** path was used), N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, N rows pruned by hand (if any), frontmatter sealed (if N>0), **secrets redacted (if N>0, with file:line list + rotate-your-keys warning)**, git result (commit hash OR reason skipped).
+siempre: session path, N candidatos a pendiente (G guardados, D descartados, S sin confirmar), M resolved, journal result (`applied=N` for Steps 3c, 5a and 6c together, any quarantined event with its reason, and whether any **Fallback** path was used), N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, N rows pruned by hand (if any), frontmatter sealed (if N>0), **secrets redacted (if N>0, with file:line list + rotate-your-keys warning)**, git result (commit hash OR reason skipped).
 
 **Say what a number MEANS, not just the number.** A count the user cannot interpret reads as a
 failure: an `adopted=12 rows_added=12` on a memory older than 2.12.0 is a one-time migration and

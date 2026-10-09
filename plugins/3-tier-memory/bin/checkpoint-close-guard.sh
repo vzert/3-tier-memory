@@ -193,7 +193,6 @@ por_checkpoint = False # el turno corrio /checkpoint-3t (no solo reimprimio un s
 fichas = []            # fichas que el turno CERRO: argumento de print-como-retomar.py o Edit con marca
 escritas = []          # fichas escritas con Write (Step 2 del checkpoint, o /backfill-3t)
 preguntas = []         # tool_use_id de cada AskUserQuestion del turno (Step 3b, 2.53.0)
-con_error = set()      # tool_use_id cuyo tool_result vino con is_error (modal rechazado o fallido)
 SESION_RE = re.compile(r"(?:^|/)memory/sessions/[^/]+\.md$")
 MARCAS_EDIT = ("## Como retomar", "Proximo paso:", "Próximo paso:", "## Recordatorios de calendario")
 
@@ -215,8 +214,6 @@ for r in turno:
                 if isinstance(rc, list):
                     rc = "\n".join(x.get("text", "") for x in rc if isinstance(x, dict))
                 resultados[b.get("tool_use_id")] = rc if isinstance(rc, str) else ""
-                if b.get("is_error"):
-                    con_error.add(b.get("tool_use_id"))
         # `/checkpoint-3t` tecleado como comando: la marca va en el prompt del usuario.
         txt = c if isinstance(c, str) else " ".join(
             b.get("text", "") for b in (c or []) if isinstance(b, dict) and b.get("type") == "text")
@@ -600,11 +597,13 @@ def revisar(ficha):
     # `Proximo paso: ninguno` es un defecto hallado en vivo que nadie registro (p-272254efc5).
     memory_dir = os.path.dirname(os.path.dirname(ficha))
     extra = ["--veredicto-adversario", ultimo_veredicto] if ultimo_veredicto else []
-    # Step 3b (2.53.0): cuantos AskUserQuestion del turno volvieron con respuesta. Sin ninguno,
-    # una decision `guardado`/`descartado` en `## Candidatos a pendiente` la tomo el agente.
-    # Solo en un turno que corrio /checkpoint-3t: reimprimir un snippet no decide candidatos.
+    # Step 3b (2.53.0): cuantos AskUserQuestion del turno llegaron al usuario y volvieron, con
+    # respuesta o rechazados (un modal cerrado es una decision: Step 3b lo descarta). Sin ninguno,
+    # una decision `guardado`/`descartado` en `## Candidatos a pendiente` la tomo el agente. Un
+    # AskUserQuestion sin tool_result (turno interrumpido) no cuenta. Solo en un turno que corrio
+    # /checkpoint-3t: reimprimir un snippet no decide candidatos.
     if por_checkpoint:
-        respondidas = sum(1 for i in preguntas if i in resultados and i not in con_error)
+        respondidas = sum(1 for i in preguntas if i in resultados)
         extra += ["--preguntas-usuario", str(respondidas)]
     try:
         r = subprocess.run([sys.executable, os.path.join(BIN, "checkpoint-audit.py"), memory_dir,
@@ -740,7 +739,7 @@ REVISION_ITEMS = (
     "Reglas aprendidas que no llegaron a learning (o quedaron solo en otra seccion)",
     "Pendientes: la tabla de reconciliacion de 3a impresa en tu texto y su linea RECONCILIACION al "
     "dia; texto de un pendiente vivo que quedo falso (`pendiente.update`); hallazgos menores o "
-    "afirmaciones sin un pendiente que las cubra",
+    "afirmaciones que no propusiste como candidato en Step 3b",
     "Criterios de cierre que dio el usuario y que no se cumplieron tal como los escribio (dilo, no "
     "los reinterpretes en silencio)",
     "Plan o research que la sesion toco sin `## Estado`, sin su fila al dia o sin upsert",
@@ -754,7 +753,8 @@ POR_DISENO = ("no publicar los commits (el checkpoint no sube nada); el hash del
               "(cada sesion commitea lo suyo); el alcance acotado de 3a con su linea RECONCILIACION; "
               "avisos que vienen de otra sesion (`ids_invented`, pendientes ajenos vencidos que no "
               "te toca cerrar); un candidato a learning decidido `ya existe #N` en el paso 0 de "
-              "Step 4 (no se emite a proposito)")
+              "Step 4 (no se emite a proposito); un candidato a pendiente que el usuario "
+              "descarto en Step 3b, o que quedo `sin confirmar` sin pantalla")
 
 
 def revision_contestada():

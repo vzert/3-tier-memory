@@ -297,7 +297,10 @@ caso "decision sin pregunta"   checkpoint-audit.py $L $S "CP1: decision tomada c
 caso "descartado no cierra"    checkpoint-audit.py $L $S "CD1: defecto con _descartado:" descartado-no-cierra
 caso "hook sin candidatos"     checkpoint-audit.py $L $S "CP5: --solo-snippet" solo-snippet-sin-candidatos
 caso "guard no pasa preguntas" checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "sin AskUserQuestion: reclama" guard-no-pasa
-caso "modal rechazado cuenta"  checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "un modal rechazado no cuenta" guard-error-cuenta
+caso "sin resultado cuenta"    checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "un AskUserQuestion sin resultado" guard-sin-resultado-cuenta
+caso "mide sin checkpoint"     checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "solo reimprime el snippet" guard-sin-checkpoint
+caso "descartado sin candidato" checkpoint-audit.py $L $S "CB2: _descartado: sin candidato" descartado-sin-candidato
+caso "ninguno sin descartado"  checkpoint-audit.py $L $S "CB5: ninguno . break . defecto descartado" ninguno-ignora-descartado
 
 echo
 echo "run-tests.sh (p-46153b135b): una suite que sale 0 sin su linea de resumen es FALLA"

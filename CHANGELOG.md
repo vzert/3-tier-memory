@@ -24,19 +24,25 @@ usuario decide.
   defecto abierto que el usuario decidio no registrar. Step 3b punto 9 pasa de "crear es
   obligatorio" a "proponerlo es obligatorio, guardarlo lo decide el usuario".
 - **`/backfill-3t` paso 3d** pregunta igual antes de emitir; sin pantalla no emite.
-- Los textos de `checkpoint-audit.py`, Step 8, `pre-compact.sh` y `print-research-recomendaciones.py`
-  que mandaban crear un pendiente ahora mandan proponerlo.
+- Los textos de `checkpoint-audit.py`, Step 8, `pre-compact.sh`, `print-research-recomendaciones.py`
+  y la revision del cierre de `checkpoint-close-guard.sh` que mandaban crear un pendiente ahora mandan
+  proponerlo.
 
 ### Added
-- **`checkpoint-audit.py` `pendientes.candidatos`** (fichas desde 2026-10-09): `SALTADO` si falta la
-  seccion, si una linea no lleva decision, si un `guardado` no trae un id que exista, o si un
-  pendiente abierto nacido en la sesion no sale como `guardado`. `_descartado:` cuenta como cierre
-  en `bugs.cierre` y en `snippet.ninguno_defecto`.
-- **`pendientes.candidatos_pregunta`**: el hook de cierre cuenta los `AskUserQuestion` respondidos
-  del turno del checkpoint (un modal rechazado no cuenta) y los pasa como `--preguntas-usuario`.
-  Una decision `guardado`/`descartado` sin ninguna pregunta respondida sale `SALTADO`. Limite: mide
-  que hubo una pregunta, no que cubriera cada candidato.
-- 17 asertos en `test-checkpoint-audit.sh`, 3 en `test-checkpoint-close-guard.sh` y 6 mutaciones
+- **`checkpoint-audit.py` `pendientes.candidatos`** (fichas desde 2026-10-09): `SALTADO` si una
+  linea no lleva decision, si un `guardado` no trae un id que exista, si un pendiente abierto nacido
+  en la sesion no sale como `guardado`, si `## Bugs fixed` trae mas `_descartado:` que candidatos
+  `descartado`/`sin confirmar`, o si falta la seccion habiendo algo de eso que decidir (una ficha de
+  otro flujo sin pendientes nuevos no la necesita). `_descartado:` cuenta como cierre en
+  `bugs.cierre` y en `snippet.ninguno_defecto`.
+- **`pendientes.candidatos_pregunta`**: el hook de cierre cuenta los `AskUserQuestion` del turno del
+  checkpoint que volvieron con resultado, respondidos o cerrados por el usuario (un modal cerrado
+  es una decision: descartar), y los pasa como `--preguntas-usuario`. Una decision
+  `guardado`/`descartado` sin ninguno sale `SALTADO`. Limite: mide que hubo una pregunta, no que
+  cubriera cada candidato.
+- La revision del cierre (`checkpoint-close-guard.sh`) ya no pide cubrir con un pendiente un
+  hallazgo que el usuario descarto: lo lista como "no cuenta como falta".
+- 22 asertos en `test-checkpoint-audit.sh`, 5 en `test-checkpoint-close-guard.sh` y 9 mutaciones
   (`tools/mutaciones/m_candidatos.py`).
 
 ## [2.52.1] - 2026-10-07

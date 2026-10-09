@@ -1058,7 +1058,8 @@ algo
 ## Como retomar
 Ninguno — la sesion cerro sin continuidad.
 EOF
-# $1 salida, $2 con|sin|error (AskUserQuestion respondido, ausente, o rechazado)
+# $1 salida, $2 con|sin|error|cortado|reimprime (respondido, ausente, rechazado, sin
+# tool_result, o un turno que solo reimprime el snippet sin correr /checkpoint-3t)
 txc() {
   python3 - "$1" "$2" "$FC" <<'PY'
 import json, sys
@@ -1067,14 +1068,17 @@ R = []
 def a(b): R.append({"type": "assistant", "message": {"role": "assistant", "content": b}})
 def u(c): R.append({"type": "user", "message": {"role": "user", "content": c}})
 u("guarda el checkpoint")
-a([{"type": "tool_use", "id": "t1", "name": "Skill", "input": {"skill": "checkpoint-3t"}}])
-u([{"type": "tool_result", "tool_use_id": "t1", "content": "Launching skill: checkpoint-3t"}])
-if preg != "sin":
+if preg != "reimprime":
+    a([{"type": "tool_use", "id": "t1", "name": "Skill", "input": {"skill": "checkpoint-3t"}}])
+    u([{"type": "tool_result", "tool_use_id": "t1", "content": "Launching skill: checkpoint-3t"}])
+if preg not in ("sin", "reimprime"):
     a([{"type": "tool_use", "id": "q1", "name": "AskUserQuestion", "input": {"questions": []}}])
     r = {"type": "tool_result", "tool_use_id": "q1", "content": "Your questions have been answered"}
     if preg == "error":
-        r["is_error"] = True
-    u([r])
+        r = {"type": "tool_result", "tool_use_id": "q1", "is_error": True,
+             "content": "The user doesn't want to proceed with this tool use."}
+    if preg != "cortado":
+        u([r])
 a([{"type": "tool_use", "id": "t2", "name": "Bash", "input": {"command": f'python3 "$JBIN/print-como-retomar.py" "{ficha}"'}}])
 u([{"type": "tool_result", "tool_use_id": "t2", "content": "ok"}])
 a([{"type": "text", "text": "listo"}])
@@ -1087,7 +1091,11 @@ chk "sin AskUserQuestion: reclama la decision tomada por el agente" "1" "$(corre
 txc "$T/tc.jsonl" con
 chk "con AskUserQuestion respondido: no lo reclama" "0" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
 txc "$T/tc.jsonl" error
-chk "un modal rechazado no cuenta como pregunta respondida" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+chk "un modal cerrado por el usuario SI es una pregunta hecha (Step 3b descarta)" "0" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" cortado
+chk "un AskUserQuestion sin resultado (turno cortado) no cuenta" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" reimprime
+chk "un turno que solo reimprime el snippet no mide candidatos" "0" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
 
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
