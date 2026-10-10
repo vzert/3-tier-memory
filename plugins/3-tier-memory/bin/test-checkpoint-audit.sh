@@ -1594,7 +1594,7 @@ chk "control: el mismo pendiente nacido en esta ficha sigue siendo SALTADO" "1" 
 # sesion salga como `guardado` con su id; `pendientes.candidatos_pregunta` (solo con el dato del
 # hook) que no haya menos preguntas que volvieron del usuario (respondidas, o cerradas por el: Step
 # 3b descarta en ese caso) que decisiones, y desde 2.54.0 que cada decision cite con `pregunta:` el
-# encabezado de una de ellas, sin repetirlo (casos CQ).
+# encabezado de una de ellas, una decision por pregunta (casos CQ).
 cand_ficha() {   # $1 memoria, $2 cuerpo de `## Candidatos a pendiente` (o "__SIN__" para omitirla), $3 fecha
   local M="$1"; nueva_memoria "$M"; local F="${3:-2026-10-09}"; local S="$M/sessions/$F-demo.md"; ficha_completa "$S"
   python3 - "$S" "$2" "$F" <<'PYS'
@@ -1654,6 +1654,9 @@ chk "CQ4: decision sin pregunta: → SALTADO" "1" "$(cand_out "$M" "--preguntas-
 M="$T/mCQ5"; cand_ficha "$M" '- algo — pregunta: Rama — decision: descartado
 - otra — pregunta: Rama — decision: descartado'
 chk "CQ5: dos decisiones citan la misma pregunta → SALTADO" "1" "$(cand_out "$M" "--preguntas-usuario 2 --encabezados-usuario [\"Rama\",\"Otra\"]" | grep -c 'SALTADO .*pendientes.candidatos_pregunta')"
+# p-ea8992fa7e: en un re-checkpoint el hook pasa las preguntas de todos los checkpoints de la
+# sesion, y dos pueden llevar el mismo encabezado (una por checkpoint): cada una cubre una decision.
+chk "CQ6: dos decisiones y dos preguntas con el mismo encabezado (re-checkpoint) → HECHO" "1" "$(cand_out "$M" "--preguntas-usuario 2 --encabezados-usuario [\"Rama\",\"Rama\"]" | grep -c 'HECHO .*pendientes.candidatos_pregunta')"
 M="$T/mCP4"
 chk "CP5: --solo-snippet (modo del hook) incluye el chequeo" "1" "$(cand_out "$M" "--solo-snippet --preguntas-usuario 0" | grep -c 'pendientes.candidatos ')"
 

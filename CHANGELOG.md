@@ -1,6 +1,32 @@
 # Changelog
 
 
+## [2.54.1] - 2026-10-10
+Origen: p-ea8992fa7e. Un segundo `/checkpoint-3t` en la misma sesion sobre la misma ficha daba
+falsos SALTADO. Medido el 2026-10-09: de 74 checkpoints posteriores al primero de su sesion, 6
+editaron la ficha y 0 la reescribieron.
+
+### Fixed
+- **Re-checkpoint que edita la ficha:** las decisiones del primer checkpoint citan preguntas de su
+  turno, y el hook de cierre solo contaba las del turno actual, asi que las reclamaba en
+  `pendientes.candidatos_pregunta`. Ahora suma las preguntas de cada turno de la sesion que corrio
+  `/checkpoint-3t`. Las preguntas de un turno sin checkpoint siguen sin contar.
+- **Mismo encabezado en dos checkpoints:** `checkpoint-audit.py` cuenta los encabezados como
+  multiconjunto: cada pregunta cubre una decision. Antes la segunda decision que citaba `Rama`
+  caia en "ya la cita otra decision" aunque hubieran llegado dos preguntas `Rama`.
+- **Re-checkpoint que reescribe la ficha** (arreglo minimo, sin prueba en rojo): el `corrige` de
+  `pendientes.candidatos` y Step 3b mandan editar la ficha, no reescribirla, y recuperar las
+  lineas `guardado` del checkpoint anterior antes de cerrar nada como `abandoned`. Limite: el audit
+  sigue sin ver una linea `guardado` que se perdio al reescribir; lo dice el `corrige`, no lo
+  arregla.
+
+### Tests
+- `test-checkpoint-close-guard.sh`: re-checkpoint editado, mismo encabezado en dos checkpoints, y
+  una pregunta de un turno sin checkpoint que no cubre una decision. `test-checkpoint-audit.sh`: CQ6.
+- `tools/mutaciones/m_candidatos.py`: `repetida-por-conjunto`, `guard-solo-este-turno`,
+  `guard-turno-sin-checkpoint`; `pregunta-repetida-pasa` re-anclada.
+
+
 ## [2.54.0] - 2026-10-09
 Origen: una sesion de otro proyecto propuso en Step 3b tres cosas que eran omisiones del
 propio agente (una rama remota sin borrar, la fila de un plan sin actualizar, un script de medicion

@@ -1122,5 +1122,50 @@ chk "una pregunta ajena a los candidatos no cubre la decision: lo reclama" "1" "
 txc "$T/tc.jsonl" reimprime
 chk "un turno que solo reimprime el snippet no mide candidatos" "0" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
 
+echo "== p-ea8992fa7e: un segundo /checkpoint-3t que EDITA la ficha conserva las decisiones del primero =="
+# Turnos de la sesion: $2 = lista "ck:Encabezado" o "otro:Encabezado" (vacio tras ':' = sin
+# pregunta). Cada turno `ck` corre el skill y cierra con print-como-retomar; el ultimo es el que mide.
+txr() {
+  python3 - "$1" "$2" "$FC" <<'PY'
+import json, sys
+out, turnos, ficha = sys.argv[1:4]
+R = []
+def a(b): R.append({"type": "assistant", "message": {"role": "assistant", "content": b}})
+def u(c): R.append({"type": "user", "message": {"role": "user", "content": c}})
+for k, t in enumerate(turnos.split(",")):
+    tipo, enc = t.split(":")
+    u(f"prompt {k}")
+    if tipo == "ck":
+        a([{"type": "tool_use", "id": f"s{k}", "name": "Skill", "input": {"skill": "checkpoint-3t"}}])
+        u([{"type": "tool_result", "tool_use_id": f"s{k}", "content": "Launching skill: checkpoint-3t"}])
+    if enc:
+        a([{"type": "tool_use", "id": f"q{k}", "name": "AskUserQuestion",
+            "input": {"questions": [{"question": "x", "header": enc}]}}])
+        u([{"type": "tool_result", "tool_use_id": f"q{k}", "content": "Your questions have been answered"}])
+    if tipo == "ck":
+        a([{"type": "tool_use", "id": f"p{k}", "name": "Bash",
+            "input": {"command": f'python3 "$JBIN/print-como-retomar.py" "{ficha}"'}}])
+        u([{"type": "tool_result", "tool_use_id": f"p{k}", "content": "ok"}])
+    a([{"type": "text", "text": "listo"}])
+with open(out, "w", encoding="utf-8") as fh:
+    for x in R: fh.write(json.dumps(x, ensure_ascii=False) + "\n")
+PY
+}
+cp "$FC" "$FC.bak"
+python3 - "$FC" <<'PY'
+import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+t=t.replace("- revisar algo — pregunta: Uno — recomendacion: descartar — decision: descartado\n",
+            "- revisar algo — pregunta: Uno — recomendacion: descartar — decision: descartado\n- otra cosa — pregunta: Dos — decision: descartado\n",1)
+open(p,"w",encoding="utf-8").write(t)
+PY
+txr "$T/tr.jsonl" "ck:Uno,ck:Dos"
+chk "re-checkpoint editado: la decision del primero cita su pregunta de entonces y no lo reclama" "0" "$(corre "$T/tr.jsonl" false - | grep -c 'candidatos_pregunta')"
+txr "$T/tr.jsonl" "ck:Uno,otro:Dos,ck:"
+chk "una pregunta de un turno que no es checkpoint no cubre una decision: lo reclama" "1" "$(corre "$T/tr.jsonl" false - | grep -c 'candidatos_pregunta')"
+sed -i.b2 's/pregunta: Dos/pregunta: Uno/' "$FC" && rm -f "$FC.b2"
+txr "$T/tr.jsonl" "ck:Uno,ck:Uno"
+chk "re-checkpoint con el mismo encabezado en los dos checkpoints: no lo reclama" "0" "$(corre "$T/tr.jsonl" false - | grep -c 'candidatos_pregunta')"
+mv "$FC.bak" "$FC"
+
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

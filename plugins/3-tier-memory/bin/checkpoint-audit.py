@@ -1025,14 +1025,18 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                               f"{len(malos)} problema(s) en los pendientes nuevos de la sesion", malos,
                               corrige="Step 3b: pregunta cada candidato con AskUserQuestion y escribe "
                                       "su decision en `## Candidatos a pendiente` (`hecho` lleva "
-                                      "`_verificado: <evidencia>_`); un pendiente que el "
+                                      "`_verificado: <evidencia>_`). Si es un re-checkpoint y "
+                                      "reescribiste la ficha, primero recupera las lineas "
+                                      "`guardado` del checkpoint anterior: ese pendiente el "
+                                      "usuario ya lo aprobo. Solo un pendiente que el "
                                       "usuario no aprobo se cierra con journal-emit.py --type "
                                       "pendiente.resolve --estado abandoned"))
         else:
             h.append(Hallazgo(HECHO, "pendientes.candidatos",
                               "cada pendiente nuevo de la sesion tiene la decision del usuario"))
         # La pregunta de verdad. Solo con el dato del hook de cierre, que cuenta en el transcript
-        # los AskUserQuestion del turno del checkpoint que llegaron al usuario. Una decision `guardado`,
+        # los AskUserQuestion de los turnos de /checkpoint-3t de la sesion (desde 2.54.1 tambien los de un
+        # checkpoint anterior: p-ea8992fa7e) que llegaron al usuario. Una decision `guardado`,
         # `hecho` o `descartado` sin ninguna pregunta la tomo el agente, que es justo lo que 2.53.0 quita.
         # `sin confirmar` (sin pantalla) no necesita pregunta. Desde 2.54.0 compara cuantas: el hook
         # cuenta las preguntas de cada modal y aqui no pueden ser menos que las decisiones. No mide
@@ -1046,23 +1050,27 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             # candidatos ya no cuenta por uno (adversario externo de 2.54.0, ronda 4).
             ligar = []
             if encabezados_usuario is not None:
-                llegaron = {norm_encabezado(e) for e in encabezados_usuario if str(e).strip()}
-                vistos_c = set()
+                # Multiconjunto (p-ea8992fa7e): en un re-checkpoint el hook pasa las preguntas de
+                # todos los checkpoints de la sesion y dos pueden compartir encabezado; cada pregunta
+                # cubre una decision, no mas.
+                llegaron = collections.Counter(norm_encabezado(e) for e in encabezados_usuario
+                                               if str(e).strip())
+                vistos_c = collections.Counter()
                 for enc, ini in citados:
                     if enc is None:
                         ligar.append(f"sin `pregunta: <encabezado>`: {ini}")
                     elif enc not in llegaron:
-                        ligar.append(f"cita `pregunta: {enc}`, que no llego al usuario en el turno: {ini}")
-                    elif enc in vistos_c:
+                        ligar.append(f"cita `pregunta: {enc}`, que no llego al usuario en un checkpoint de la sesion: {ini}")
+                    elif vistos_c[enc] >= llegaron[enc]:
                         ligar.append(f"`pregunta: {enc}` ya la cita otra decision: {ini}")
-                    vistos_c.add(enc)
+                    vistos_c[enc] += 1
             if preguntas_usuario < decididos or ligar:
                 cuantas = "ninguna pregunta" if preguntas_usuario == 0 else \
                     f"{preguntas_usuario} pregunta(s)"
                 h.append(Hallazgo(SALTADO, "pendientes.candidatos_pregunta",
                                   f"{decididos} candidato(s) con decision y {cuantas} que hayan "
-                                  "llegado al usuario (respondidas o rechazadas por el) en el turno "
-                                  "del checkpoint: Step 3b pone un candidato por pregunta", ligar,
+                                  "llegado al usuario (respondidas o rechazadas por el) en los turnos "
+                                  "de checkpoint de la sesion: Step 3b pone un candidato por pregunta", ligar,
                                   corrige="hazle las preguntas de Step 3b con AskUserQuestion, una por "
                                           "candidato, y cita su encabezado en la linea "
                                           "(`pregunta: <encabezado>`); si no hay pantalla, la "
@@ -1681,7 +1689,7 @@ def main():
     ap.add_argument("--veredicto-adversario", choices=("break", "hold"), default=None,
                     help="ultimo veredicto del adversario en el transcript; lo pasa el hook Stop")
     ap.add_argument("--preguntas-usuario", type=int, default=None,
-                    help="preguntas de los AskUserQuestion del turno del checkpoint que llegaron "
+                    help="preguntas de los AskUserQuestion de los turnos de checkpoint de la sesion que llegaron "
                          "al usuario (respondidos o rechazados por el); lo pasa el hook Stop")
     ap.add_argument("--encabezados-usuario", default=None,
                     help="JSON: encabezados de esas preguntas; lo pasa el hook Stop (2.54.0)")

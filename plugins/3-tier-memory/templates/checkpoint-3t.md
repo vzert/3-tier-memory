@@ -602,11 +602,19 @@ El id de `guardado` sale del stdout de `journal-emit.py` (abajo). `checkpoint-au
 un id que exista, si un `hecho` no trae `_verificado: <evidencia>_`, si un pendiente abierto que nacio en esta sesion (`_origen` = esta ficha) no sale
 como `guardado`, si hay mas `_descartado:` en `## Bugs fixed` que lineas `descartado`/`sin
 confirmar` aqui, o si falta la seccion cuando habia algo de eso que decidir. El hook de cierre
-anade `pendientes.candidatos_pregunta`: toma las preguntas de los `AskUserQuestion` del turno del
-checkpoint que llegaron al usuario (respondidos, o rechazados por el con el texto de arriba) y,
-desde 2.54.0, exige que cada decision `guardado`, `hecho` o `descartado` cite con `pregunta:` el
-encabezado de una de ellas, sin repetirlo. Una decision sin `pregunta:`, con un encabezado que no
-llego al usuario, o con uno que ya cita otra decision, la tomaste tu. Un error con otro texto no
+anade `pendientes.candidatos_pregunta`: toma las preguntas de los `AskUserQuestion` de cada turno
+de esta sesion que corrio `/checkpoint-3t` y que llegaron al usuario (respondidos, o rechazados por
+el con el texto de arriba) y, desde 2.54.0, exige que cada decision `guardado`, `hecho` o
+`descartado` cite con `pregunta:` el encabezado de una de ellas; cada pregunta cubre una sola
+decision. Una decision sin `pregunta:`, con un encabezado que no llego al usuario, o con uno que ya
+cubre otra decision, la tomaste tu.
+
+**Re-checkpoint (2.54.1).** Si esta sesion ya corrio `/checkpoint-3t` y la ficha existe, editala:
+deja tal cual las lineas de `## Candidatos a pendiente` del checkpoint anterior (citan preguntas de
+aquel turno y el hook las cuenta) y agrega solo las nuevas. Si la reescribiste y el audit dice que
+un pendiente nacido en esta sesion no sale como `guardado`, recupera su linea `guardado` del
+checkpoint anterior (el transcript, o la ficha commiteada); no lo cierres como `abandoned`: el
+usuario ya lo aprobo. Un error con otro texto no
 cuenta como pregunta. Limite honesto: comprueba que la pregunta citada llego al usuario, no que su
 texto describiera bien al candidato. Si por descuido citas el encabezado de otra pregunta que si
 llego, no lo ve: antes de escribir cada linea, mira que el encabezado sea el de la pregunta de ese

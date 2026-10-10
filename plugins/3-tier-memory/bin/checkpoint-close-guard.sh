@@ -211,6 +211,17 @@ def resolver(ruta, base):
     return ruta if os.path.isabs(ruta) else os.path.normpath(os.path.join(base, ruta))
 
 
+def registrar_pregunta(b):
+    preguntas.append(b.get("id"))
+    # Un modal lleva hasta 4 preguntas y Step 3b pone un candidato por pregunta: se cuentan
+    # las preguntas, no los modales (adversario externo de 2.54.0). Uno sin lista cuenta 1.
+    inp = b.get("input") or {}
+    qs = inp.get("questions")
+    n_preg[b.get("id")] = len(qs) if isinstance(qs, list) and qs else 1
+    encab[b.get("id")] = [str(q.get("header") or "") for q in qs if isinstance(q, dict)] \
+        if isinstance(qs, list) else []
+
+
 for r in turno:
     msg = r.get("message") or {}
     c = msg.get("content")
@@ -244,13 +255,7 @@ for r in turno:
         if nombre == "Skill" and str(inp.get("skill", "")).split(":")[-1] == "checkpoint-3t":
             disparo = por_checkpoint = True
         elif nombre == "AskUserQuestion":
-            preguntas.append(b.get("id"))
-            # Un modal lleva hasta 4 preguntas y Step 3b pone un candidato por pregunta: se cuentan
-            # las preguntas, no los modales (adversario externo de 2.54.0). Uno sin lista cuenta 1.
-            qs = inp.get("questions")
-            n_preg[b.get("id")] = len(qs) if isinstance(qs, list) and qs else 1
-            encab[b.get("id")] = [str(q.get("header") or "") for q in qs if isinstance(q, dict)] \
-                if isinstance(qs, list) else []
+            registrar_pregunta(b)
         elif nombre == "Bash":
             cmd = inp.get("command") or ""
             # Disparo por CAMBIO DE ESTADO (2.33.1, p-c72a33ae7a): un turno que cierra, caduca o
@@ -619,6 +624,26 @@ def revisar(ficha):
     # sin tool_result (turno interrumpido). Sin ninguno, una decision `guardado`/`hecho`/`descartado` la
     # tomo el agente. Solo en un turno que corrio /checkpoint-3t.
     if por_checkpoint:
+        # Re-checkpoint (p-ea8992fa7e): un segundo /checkpoint-3t que EDITA la ficha deja las
+        # decisiones del primero, y esas citan preguntas de SU turno. Contando solo este turno el
+        # hook las reclamaba. Se suman las preguntas de todo turno anterior de esta sesion que corrio
+        # /checkpoint-3t; las de un turno sin checkpoint siguen sin contar (no son de Step 3b).
+        bordes = [i for i, r in enumerate(recs[:inicio]) if es_prompt_real(r)] + [inicio]
+        for a_t, b_t in zip([0] + bordes, bordes):
+            if a_t >= b_t or not any(es_checkpoint(r) for r in recs[a_t:b_t]):
+                continue
+            for r in recs[a_t:b_t]:
+                for b in (r.get("message") or {}).get("content") or []:
+                    if not isinstance(b, dict):
+                        continue
+                    if r.get("type") == "assistant" and b.get("type") == "tool_use" \
+                            and b.get("name") == "AskUserQuestion" and b.get("id") not in n_preg:
+                        registrar_pregunta(b)
+                    elif r.get("type") == "user" and b.get("type") == "tool_result" \
+                            and b.get("tool_use_id") in n_preg:
+                        resultados[b.get("tool_use_id")] = _texto_resultado(b)
+                        if b.get("is_error"):
+                            con_error.add(b.get("tool_use_id"))
         llegaron = [i for i in preguntas if i in resultados and
                     (i not in con_error or RECHAZO_USUARIO.search(resultados[i]))]
         respondidas = sum(n_preg.get(i, 1) for i in llegaron)

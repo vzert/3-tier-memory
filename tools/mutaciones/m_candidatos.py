@@ -5,6 +5,7 @@ import io, sys
 # con un defecto descartado, el filtro de --solo-snippet, y en el hook de cierre el conteo de
 # AskUserQuestion (sin pasarlo, contando uno sin resultado, o midiendo un turno sin /checkpoint-3t).
 # 2.54.0 (Hacerlo ahora): `hecho` exige `_verificado:`, pide pregunta como toda decision, y es decision.
+# 2.54.1 (re-checkpoint): las preguntas de un checkpoint anterior cuentan; las de otro turno, no.
 #
 # Uso: m_candidatos.py <fichero> <mutacion>
 # Patrones de una sola linea, sin "\n": el checkout de Windows trae CRLF (regla 322).
@@ -50,7 +51,18 @@ M = {
     "pregunta-sin-ligar": [
         ("            if encabezados_usuario is not None:", "            if False:")],
     "pregunta-repetida-pasa": [
-        ("                    elif enc in vistos_c:", "                    elif False:")],
+        ("                    elif vistos_c[enc] >= llegaron[enc]:", "                    elif False:")],
+    # p-ea8992fa7e (2.54.1): re-checkpoint. Cada pregunta cubre una decision (multiconjunto, no
+    # conjunto), y el hook suma las preguntas de los turnos de checkpoint anteriores de la sesion.
+    "repetida-por-conjunto": [
+        ("                    elif vistos_c[enc] >= llegaron[enc]:",
+         "                    elif vistos_c[enc] >= 1:")],
+    "guard-solo-este-turno": [
+        ("            if a_t >= b_t or not any(es_checkpoint(r) for r in recs[a_t:b_t]):",
+         "            if True:")],
+    "guard-turno-sin-checkpoint": [
+        ("            if a_t >= b_t or not any(es_checkpoint(r) for r in recs[a_t:b_t]):",
+         "            if a_t >= b_t:")],
     "guard-sin-encabezados": [
         ('        extra += ["--encabezados-usuario",', '        extra += [] and ["--encabezados-usuario",')],
     "hecho-no-pregunta": [

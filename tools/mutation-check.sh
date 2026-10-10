@@ -308,6 +308,9 @@ caso "cuenta modales"          checkpoint-close-guard.sh $L test-checkpoint-clos
 caso "menos preguntas"         checkpoint-audit.py $L $S "CP6: 2 decisiones y 1 pregunta" menos-preguntas-que-decisiones
 caso "pregunta sin ligar"      checkpoint-audit.py $L $S "CQ2: un encabezado citado que no llego" pregunta-sin-ligar
 caso "pregunta repetida"       checkpoint-audit.py $L $S "CQ5: dos decisiones citan la misma pregunta" pregunta-repetida-pasa
+caso "repetida por conjunto"   checkpoint-audit.py $L $S "CQ6: dos decisiones y dos preguntas con el mismo encabezado" repetida-por-conjunto
+caso "guard solo este turno"   checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "re-checkpoint editado" guard-solo-este-turno
+caso "guard turno sin ckpt"    checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "una pregunta de un turno que no es checkpoint" guard-turno-sin-checkpoint
 caso "guard sin encabezados"   checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "una pregunta ajena a los candidatos" guard-sin-encabezados
 caso "hecho sin pregunta"      checkpoint-audit.py $L $S "CH5: hecho sin ninguna pregunta" hecho-no-pregunta
 caso "hecho no es decision"    checkpoint-audit.py $L $S "CH1: hecho con evidencia" hecho-no-es-decision
