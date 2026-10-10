@@ -15,7 +15,7 @@ M = {
         ("            sin_si = [i for i in nacidos if i not in guardados]",
          "            sin_si = []")],
     "sin-pregunta": [
-        ("            if preguntas_usuario == 0:", "            if False:")],
+        ("            if preguntas_usuario < decididos:", "            if False:")],
     "descartado-no-cierra": [
         ("            if not ids_b and not evid and not desc:", "            if not ids_b and not evid:")],
     "solo-snippet-sin-candidatos": [
@@ -46,7 +46,7 @@ M = {
         ("        respondidas = sum(n_preg.get(i, 1) for i in preguntas if i in resultados and",
          "        respondidas = sum(1 for i in preguntas if i in resultados and")],
     "menos-preguntas-que-decisiones": [
-        ("            elif preguntas_usuario < decididos:", "            elif False:")],
+        ("            if preguntas_usuario < decididos:", "            if preguntas_usuario == 0:")],
     "hecho-no-pregunta": [
         ('                if m.group(1).lower() in ("guardado", "descartado", "hecho"):',
          '                if m.group(1).lower() in ("guardado", "descartado"):')],

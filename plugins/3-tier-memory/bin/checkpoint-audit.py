@@ -1029,22 +1029,17 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         if preguntas_usuario is not None and decididos:
             # Un modal rechazado o cerrado SI es una pregunta hecha: Step 3b manda descartar en ese
             # caso, y el hook ya lo cuenta (adversarios de 2.53.0, ronda 1).
-            if preguntas_usuario == 0:
+            # 2.54.0: el hook cuenta preguntas, no modales. Step 3b pone un candidato por pregunta,
+            # asi que menos preguntas que decisiones = alguna la tomo el agente (0 es el caso extremo).
+            if preguntas_usuario < decididos:
+                cuantas = "ninguna pregunta" if preguntas_usuario == 0 else \
+                    f"solo {preguntas_usuario} pregunta(s)"
                 h.append(Hallazgo(SALTADO, "pendientes.candidatos_pregunta",
-                                  f"{decididos} candidato(s) con decision y ninguna pregunta "
-                                  "que haya llegado al usuario (respondida o rechazada por el) en "
-                                  "el turno del checkpoint",
-                                  corrige="hazle las preguntas de Step 3b con AskUserQuestion; si "
-                                          "no hay pantalla, la decision es `sin confirmar`"))
-            elif preguntas_usuario < decididos:
-                # 2.54.0: el hook cuenta preguntas, no modales. Step 3b pone un candidato por
-                # pregunta, asi que menos preguntas que decisiones = alguna la tomo el agente.
-                h.append(Hallazgo(SALTADO, "pendientes.candidatos_pregunta",
-                                  f"{decididos} candidato(s) con decision y solo "
-                                  f"{preguntas_usuario} pregunta(s) al usuario en el turno del "
-                                  "checkpoint: Step 3b pone un candidato por pregunta",
-                                  corrige="pregunta con AskUserQuestion cada candidato que decidiste "
-                                          "sin preguntar; si no hay pantalla, `sin confirmar`"))
+                                  f"{decididos} candidato(s) con decision y {cuantas} que hayan "
+                                  "llegado al usuario (respondidas o rechazadas por el) en el turno "
+                                  "del checkpoint: Step 3b pone un candidato por pregunta",
+                                  corrige="hazle las preguntas de Step 3b con AskUserQuestion, una por "
+                                          "candidato; si no hay pantalla, la decision es `sin confirmar`"))
             else:
                 h.append(Hallazgo(HECHO, "pendientes.candidatos_pregunta",
                                   f"{preguntas_usuario} pregunta(s) al usuario en el turno, "

@@ -38,7 +38,7 @@ quieras". Ni pendiente ni descarte servian: el agente podia hacerlas en minutos.
   no trae `_verificado: <evidencia>_` (o trae el placeholder de la plantilla).
   `pendientes.candidatos_pregunta` cuenta `hecho` como decision que necesita una pregunta al
   usuario. Limite: el audit no mide si el candidato cumplia las tres condiciones de `Hacerlo
-  ahora` ni que la pregunta nombrara un comando sin vuelta atras. 8 asertos nuevos (CH1-CH8) y 3 mutaciones en `tools/mutaciones/m_candidatos.py`.
+  ahora` ni que la pregunta nombrara un comando sin vuelta atras. 8 asertos nuevos (CH1-CH8) y 4 mutaciones en `tools/mutaciones/m_candidatos.py`.
 
 ## [2.53.1] - 2026-10-09
 Origen: la primera corrida en vivo de 2.53.0. El usuario leyo "Ahora te propondre 8 candidatos a
