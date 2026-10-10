@@ -1077,7 +1077,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                                           "decision es `sin confirmar`"))
             else:
                 h.append(Hallazgo(HECHO, "pendientes.candidatos_pregunta",
-                                  f"{preguntas_usuario} pregunta(s) al usuario en el turno, "
+                                  f"{preguntas_usuario} pregunta(s) al usuario en los turnos de checkpoint de la sesion, "
                                   "respondidas o rechazadas por el"))
 
     # 8. El snippet de continuidad nombra los pendientes que la sesion deja abiertos
