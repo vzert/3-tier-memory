@@ -468,7 +468,8 @@ If the draft has pendientes AND this session is within the 5 most recent:
    respuesta = descartado. **Sin pantalla** (la misma senal que `/checkpoint-3t` Step 3b: `AskUserQuestion` no
    esta disponible o vuelve con un error que no es un rechazo del usuario): no emitas ninguno. Escribe la decision en una
    seccion `## Candidatos a pendiente` de la ficha de esa sesion, con el formato de
-   `/checkpoint-3t` Step 3b (`decision: guardado p-…`, `descartado` o `sin confirmar`), y
+   `/checkpoint-3t` Step 3b (`pregunta: <encabezado>` en cada linea decidida; `decision: guardado
+   p-…`, `descartado` o `sin confirmar`), y
    nombralos en el informe final en palabras simples, sin "candidato" (p.ej. "De 4 cosas que
    salieron, guardaste 2 como pendiente").
 3. For each candidate the user kept, emit one event (the compactor writes both tiers in Step 4):

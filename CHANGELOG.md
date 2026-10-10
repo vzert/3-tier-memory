@@ -23,7 +23,10 @@ quieras". Ni pendiente ni descarte servian: el agente podia hacerlas en minutos.
   `AskUserQuestion` que llego al usuario y pasa sus encabezados; `checkpoint-audit.py` marca
   `SALTADO` si hay menos preguntas que decisiones, si una decision no cita `pregunta:`, si cita un
   encabezado que no llego al usuario, o si dos decisiones citan el mismo. Sin los datos del hook
-  (Step 7a) solo cuenta. Asertos CP6-CP7 y CQ1-CQ5, tres del hook; mutaciones `guard-cuenta-modales`,
+  (Step 7a) solo cuenta. Limite: no ve una decision que cita por error el encabezado de otra
+  pregunta que si llego al usuario; eso exigiria juzgar si el texto de la pregunta describe al
+  candidato. Un revisor externo lo considero bloqueante; se publica con el limite declarado, por
+  decision del autor. Asertos CP6-CP7 y CQ1-CQ5, tres del hook; mutaciones `guard-cuenta-modales`,
   `menos-preguntas-que-decisiones`, `pregunta-sin-ligar`, `pregunta-repetida-pasa` y
   `guard-sin-encabezados`.
 - **Por que dentro de Step 3b y no despues del checkpoint.** Medido el 2026-10-09 sobre los 495

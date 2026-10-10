@@ -607,7 +607,9 @@ desde 2.54.0, exige que cada decision `guardado`, `hecho` o `descartado` cite co
 encabezado de una de ellas, sin repetirlo. Una decision sin `pregunta:`, con un encabezado que no
 llego al usuario, o con uno que ya cita otra decision, la tomaste tu. Un error con otro texto no
 cuenta como pregunta. Limite honesto: comprueba que la pregunta citada llego al usuario, no que su
-texto describiera bien al candidato, y no ve un candidato que nunca escribiste aqui.
+texto describiera bien al candidato. Si por descuido citas el encabezado de otra pregunta que si
+llego, no lo ve: antes de escribir cada linea, mira que el encabezado sea el de la pregunta de ese
+candidato. Tampoco ve un candidato que nunca escribiste aqui.
 
 **4. Emite solo los que el usuario guardo.** For EACH kept candidate, emit one event:
 
