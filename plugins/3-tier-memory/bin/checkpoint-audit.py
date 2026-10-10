@@ -1023,8 +1023,9 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         # La pregunta de verdad. Solo con el dato del hook de cierre, que cuenta en el transcript
         # los AskUserQuestion del turno del checkpoint que llegaron al usuario. Una decision `guardado`,
         # `hecho` o `descartado` sin ninguna pregunta la tomo el agente, que es justo lo que 2.53.0 quita.
-        # `sin confirmar` (sin pantalla) no necesita pregunta. Mide que hubo al menos una, no que
-        # cubriera cada candidato: vigila el olvido, no un agente que finge.
+        # `sin confirmar` (sin pantalla) no necesita pregunta. Desde 2.54.0 compara cuantas: el hook
+        # cuenta las preguntas de cada modal y aqui no pueden ser menos que las decisiones. No mide
+        # que cada pregunta fuera sobre su candidato: vigila el olvido, no un agente que finge.
         if preguntas_usuario is not None and decididos:
             # Un modal rechazado o cerrado SI es una pregunta hecha: Step 3b manda descartar en ese
             # caso, y el hook ya lo cuenta (adversarios de 2.53.0, ronda 1).
@@ -1035,6 +1036,15 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                                   "el turno del checkpoint",
                                   corrige="hazle las preguntas de Step 3b con AskUserQuestion; si "
                                           "no hay pantalla, la decision es `sin confirmar`"))
+            elif preguntas_usuario < decididos:
+                # 2.54.0: el hook cuenta preguntas, no modales. Step 3b pone un candidato por
+                # pregunta, asi que menos preguntas que decisiones = alguna la tomo el agente.
+                h.append(Hallazgo(SALTADO, "pendientes.candidatos_pregunta",
+                                  f"{decididos} candidato(s) con decision y solo "
+                                  f"{preguntas_usuario} pregunta(s) al usuario en el turno del "
+                                  "checkpoint: Step 3b pone un candidato por pregunta",
+                                  corrige="pregunta con AskUserQuestion cada candidato que decidiste "
+                                          "sin preguntar; si no hay pantalla, `sin confirmar`"))
             else:
                 h.append(Hallazgo(HECHO, "pendientes.candidatos_pregunta",
                                   f"{preguntas_usuario} pregunta(s) al usuario en el turno, "

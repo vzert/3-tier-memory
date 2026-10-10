@@ -543,15 +543,14 @@ publicar algo), el texto de la pregunta dice exactamente que vas a correr y que 
 atras: la respuesta del usuario es su autorizacion, y solo para eso.
 
 **Lo haces dentro de Step 3b**, antes de Step 3c, no despues del checkpoint. Medido el 2026-10-09
-sobre los 496 `/checkpoint-3t` de la maquina del autor del plugin
-(`tools/medir-trabajo-tras-checkpoint.py` en el repo del plugin): en 137
-(27%) el usuario pidio otra cosa despues del checkpoint, y en 116 (23%) siguieron 5 o mas
-herramientas de trabajo; en otros 92 (18%) su primer mensaje fue sobre el checkpoint mismo ("¿falto
-algo?"). En casi la mitad, el checkpoint no es el final de la sesion. Y lo que se hace despues
+sobre los 495 `/checkpoint-3t` de los ultimos 30 dias en la maquina del autor del plugin
+(`tools/medir-trabajo-tras-checkpoint.py` en el repo del plugin): en 137 (27%) el usuario pidio
+otra cosa despues del checkpoint, y en 116 (23%) siguieron 5 o mas llamadas a herramientas; en
+otros 91 (18%) su primer mensaje fue sobre el checkpoint mismo ("¿falto algo?"). En casi la mitad, el checkpoint no es el final de la sesion. Y lo que se hace despues
 llega cuando la ficha (Step 2), el commit (Step 6) y el audit (Step 7a) ya corrieron: solo queda
 registrado si alguien vuelve a editar la ficha. Hecho dentro de Step 3b, la ficha ya trae la
 evidencia cuando Step 6 la commitea y `checkpoint-audit.py` lo revisa en la misma corrida. Limite: el
-audit mide que la linea `hecho` traiga evidencia y que hubo una pregunta; no mide si el candidato
+audit mide que la linea `hecho` traiga evidencia y que no hubo menos preguntas que decisiones; no mide si el candidato
 cumplia las tres condiciones de arriba, ni que la pregunta nombrara el comando sin vuelta atras.
 Eso queda en tu pregunta y en la eleccion del usuario.
 
@@ -602,10 +601,12 @@ El id de `guardado` sale del stdout de `journal-emit.py` (abajo). `checkpoint-au
 un id que exista, si un `hecho` no trae `_verificado: <evidencia>_`, si un pendiente abierto que nacio en esta sesion (`_origen` = esta ficha) no sale
 como `guardado`, si hay mas `_descartado:` en `## Bugs fixed` que lineas `descartado`/`sin
 confirmar` aqui, o si falta la seccion cuando habia algo de eso que decidir. El hook de cierre
-anade `pendientes.candidatos_pregunta`: una decision `guardado`, `hecho` o `descartado` sin ningun
-`AskUserQuestion` en el turno del checkpoint que haya llegado al usuario (respondido, o rechazado
-por el con el texto de arriba) la tomaste tu. Un error con otro texto no cuenta como pregunta. Limite honesto: mide que hubo al menos una pregunta, no que cubriera cada
-candidato, y no ve un candidato que nunca escribiste aqui.
+anade `pendientes.candidatos_pregunta`: cuenta las preguntas de los `AskUserQuestion` del turno del
+checkpoint que llegaron al usuario (respondidos, o rechazados por el con el texto de arriba). Desde
+2.54.0 cuenta preguntas, no modales: si hay menos preguntas que decisiones `guardado`, `hecho` o
+`descartado`, alguna la tomaste tu. Un error con otro texto no cuenta como pregunta. Limite
+honesto: no mide que cada pregunta fuera sobre su candidato, y no ve un candidato que nunca
+escribiste aqui.
 
 **4. Emite solo los que el usuario guardo.** For EACH kept candidate, emit one event:
 

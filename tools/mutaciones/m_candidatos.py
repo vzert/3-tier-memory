@@ -25,8 +25,8 @@ M = {
     "guard-no-pasa": [
         ('        extra += ["--preguntas-usuario", str(respondidas)]', "        pass")],
     "guard-sin-resultado-cuenta": [
-        ("        respondidas = sum(1 for i in preguntas if i in resultados and",
-         "        respondidas = sum(1 for i in preguntas if True and")],
+        ("        respondidas = sum(n_preg.get(i, 1) for i in preguntas if i in resultados and",
+         "        respondidas = sum(n_preg.get(i, 1) for i in preguntas if True and")],
     "guard-error-cuenta": [
         ("                          (i not in con_error or RECHAZO_USUARIO.search(resultados[i])))",
          "                          True)")],
@@ -42,6 +42,11 @@ M = {
     "hecho-evidencia-vacia": [
         ('                    if not [e for e in evid_c if e and not re.fullmatch(r"<[^>]*>", e)]:',
          '                    if not [e for e in evid_c if not re.fullmatch(r"<[^>]*>", e)]:')],
+    "guard-cuenta-modales": [
+        ("        respondidas = sum(n_preg.get(i, 1) for i in preguntas if i in resultados and",
+         "        respondidas = sum(1 for i in preguntas if i in resultados and")],
+    "menos-preguntas-que-decisiones": [
+        ("            elif preguntas_usuario < decididos:", "            elif False:")],
     "hecho-no-pregunta": [
         ('                if m.group(1).lower() in ("guardado", "descartado", "hecho"):',
          '                if m.group(1).lower() in ("guardado", "descartado"):')],

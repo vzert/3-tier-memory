@@ -1072,7 +1072,8 @@ if preg != "reimprime":
     a([{"type": "tool_use", "id": "t1", "name": "Skill", "input": {"skill": "checkpoint-3t"}}])
     u([{"type": "tool_result", "tool_use_id": "t1", "content": "Launching skill: checkpoint-3t"}])
 if preg not in ("sin", "reimprime"):
-    a([{"type": "tool_use", "id": "q1", "name": "AskUserQuestion", "input": {"questions": []}}])
+    qs = [{"question": "a"}, {"question": "b"}] if preg == "dos" else []
+    a([{"type": "tool_use", "id": "q1", "name": "AskUserQuestion", "input": {"questions": qs}}])
     r = {"type": "tool_result", "tool_use_id": "q1", "content": "Your questions have been answered"}
     if preg == "error":
         # El texto real de un rechazo del usuario (mas de 200 casos medidos en transcripts locales, 2026-10-09).
@@ -1100,6 +1101,19 @@ txc "$T/tc.jsonl" invalido
 chk "un error que no llego al usuario (InputValidationError) no cuenta como pregunta" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
 txc "$T/tc.jsonl" cortado
 chk "un AskUserQuestion sin resultado (turno cortado) no cuenta" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+# 2.54.0: se cuentan las preguntas de cada modal, no los modales.
+cp "$FC" "$FC.bak"
+python3 - "$FC" <<'PY'
+import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+t=t.replace("- revisar algo — recomendacion: descartar — decision: descartado\n",
+            "- revisar algo — recomendacion: descartar — decision: descartado\n- otra cosa — decision: descartado\n",1)
+open(p,"w",encoding="utf-8").write(t)
+PY
+txc "$T/tc.jsonl" con
+chk "dos decisiones y un modal con una pregunta: lo reclama" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" dos
+chk "dos decisiones y un modal con dos preguntas: no lo reclama" "0" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+mv "$FC.bak" "$FC"
 txc "$T/tc.jsonl" reimprime
 chk "un turno que solo reimprime el snippet no mide candidatos" "0" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
 

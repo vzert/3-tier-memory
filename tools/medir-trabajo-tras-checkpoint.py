@@ -14,6 +14,7 @@ sesion o de un supervisor (adversario de 2.54.0: la primera medicion los contaba
 Tambien cuenta, en sesiones con 2+ checkpoints, que hizo cada checkpoint posterior con la ficha
 del primero (Write encima, solo Edit, ficha nueva, ninguna).
 Las cifras del CHANGELOG salen de: python3 tools/medir-trabajo-tras-checkpoint.py 2026-10-10T02:00
+Claude Code conserva unos 30 dias de transcripts: otro dia, el mismo comando da cifras algo distintas.
 """
 import json, glob, os, re, sys, collections
 HASTA = (sys.argv[1:2] + ["9999"])[0]

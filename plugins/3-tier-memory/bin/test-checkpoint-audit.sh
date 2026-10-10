@@ -1638,6 +1638,11 @@ chk "CP2: con 1 pregunta al usuario → HECHO" "1" "$(cand_out "$M" "--preguntas
 chk "CP3: sin el dato del hook (Step 7a) el chequeo no se emite" "0" "$(cand_out "$M" | grep -c 'pendientes.candidatos_pregunta')"
 M="$T/mCP4"; cand_ficha "$M" '- algo — decision: sin confirmar (sin pantalla)'
 chk "CP4: solo sin confirmar (sin pantalla) no necesita pregunta" "0" "$(cand_out "$M" "--preguntas-usuario 0" | grep -c 'SALTADO .*pendientes.candidatos_pregunta')"
+M="$T/mCP6"; cand_ficha "$M" '- algo — decision: descartado
+- otra — decision: hecho _verificado: corrida ok_'
+chk "CP6: 2 decisiones y 1 pregunta → SALTADO" "1" "$(cand_out "$M" "--preguntas-usuario 1" | grep -c 'SALTADO .*pendientes.candidatos_pregunta')"
+chk "CP7: 2 decisiones y 2 preguntas → HECHO" "1" "$(cand_out "$M" "--preguntas-usuario 2" | grep -c 'HECHO .*pendientes.candidatos_pregunta')"
+M="$T/mCP4"
 chk "CP5: --solo-snippet (modo del hook) incluye el chequeo" "1" "$(cand_out "$M" "--solo-snippet --preguntas-usuario 0" | grep -c 'pendientes.candidatos ')"
 
 # `_descartado:` es el tercer cierre de un defecto en `## Bugs fixed`.

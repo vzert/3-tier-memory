@@ -16,12 +16,20 @@ quieras". Ni pendiente ni descarte servian: el agente podia hacerlas en minutos.
   _verificado: <evidencia>_`. Si no lo puede terminar, se vuelve pendiente (`decision: guardado
   p-… (no se pudo hacer ahora: <motivo>)`). Sin pantalla no se ofrece. `/backfill-3t` 3d no la
   ofrece: esa sesion ya termino.
-- **Por que dentro de Step 3b y no despues del checkpoint.** Medido el 2026-10-09 sobre los 496
+- **`pendientes.candidatos_pregunta` cuenta preguntas, no modales.** Un modal lleva hasta 4
+  preguntas y Step 3b pone un candidato por pregunta. Hasta 2.53.1 bastaba un modal con una sola
+  pregunta para que pasaran varias decisiones. Ahora `checkpoint-close-guard.sh` suma las preguntas
+  de cada `AskUserQuestion` que llego al usuario, y `checkpoint-audit.py` marca `SALTADO` si son
+  menos que las decisiones `guardado`, `hecho` o `descartado`. Asertos CP6-CP7 y dos del hook;
+  mutaciones `guard-cuenta-modales` y `menos-preguntas-que-decisiones`.
+- **Por que dentro de Step 3b y no despues del checkpoint.** Medido el 2026-10-09 sobre los 495
   `/checkpoint-3t` de la maquina del autor (`tools/medir-trabajo-tras-checkpoint.py 2026-10-10T02:00`):
   en 137 (27%) el usuario pidio otra cosa despues del checkpoint y en 116 (23%) siguieron 5 o mas
-  herramientas de trabajo; en otros 92 (18%) su primer mensaje fue sobre el checkpoint mismo; en 267
+  llamadas a herramientas; en otros 91 (18%) su primer mensaje fue sobre el checkpoint mismo; en 267
   (53%) no escribio nada mas. La clasificacion es aproximada (palabras clave) y no cuenta mensajes de
-  otra sesion ni de un supervisor. Lo hecho "despues" llega cuando la ficha, el commit (Step 6) y el
+  otra sesion ni de un supervisor. Claude Code conserva unos 30 dias de transcripts (el mas viejo
+  era del 2026-09-09), asi que el mismo comando da cifras algo distintas otro dia: una primera
+  corrida del mismo dia dio 496 y 92. Lo hecho "despues" llega cuando la ficha, el commit (Step 6) y el
   audit (Step 7a) ya corrieron. El riesgo contrario no aparecio: de los 74 checkpoints que siguieron
   a otro en la misma sesion, ninguno reescribio con Write la ficha del primero (36 crearon otra, 6 la
   editaron, 32 no escribieron ficha): el riesgo de que un segundo checkpoint borre lo anotado por el
@@ -30,8 +38,7 @@ quieras". Ni pendiente ni descarte servian: el agente podia hacerlas en minutos.
   no trae `_verificado: <evidencia>_` (o trae el placeholder de la plantilla).
   `pendientes.candidatos_pregunta` cuenta `hecho` como decision que necesita una pregunta al
   usuario. Limite: el audit no mide si el candidato cumplia las tres condiciones de `Hacerlo
-  ahora`, ni que cada decision tuviera su propia pregunta (basta una, como en 2.53.0). 8 asertos
-  nuevos (CH1-CH8) y 3 mutaciones en `tools/mutaciones/m_candidatos.py`.
+  ahora` ni que la pregunta nombrara un comando sin vuelta atras. 8 asertos nuevos (CH1-CH8) y 3 mutaciones en `tools/mutaciones/m_candidatos.py`.
 
 ## [2.53.1] - 2026-10-09
 Origen: la primera corrida en vivo de 2.53.0. El usuario leyo "Ahora te propondre 8 candidatos a
