@@ -516,7 +516,8 @@ uses en lo que el lee. Antes del primer modal, una sola frase, con el numero rea
 Con una sola: "De esta sesion salio una cosa que podria quedar como pendiente. Te la muestro para
 que decidas si vale la pena guardarla." Si no salio ninguna, una frase y nada mas: "De esta sesion no salio nada que valga la pena guardar
 como pendiente." Cada pregunta:
-- **Encabezado**: de que se trata en 1-3 palabras (`CI 2.53.0`, `Re-checkpoint`), nunca
+- **Encabezado**: de que se trata en 1-3 palabras y 12 caracteres como maximo, el limite de
+  `AskUserQuestion` (`CI 2.53.0`, `Re-ckpt`), nunca
   `Candidato N`. Distinto en cada pregunta del turno: la linea de la ficha lo cita (punto 3).
 - **Texto**, cuatro partes cortas para alguien que no vio la sesion: que es; de donde salio (que paso
   en la sesion); que pasa si no se hace; y tu recomendacion con su razon ("Te recomiendo guardarlo:
