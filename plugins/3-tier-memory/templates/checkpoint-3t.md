@@ -547,17 +547,20 @@ sobre los 496 `/checkpoint-3t` de la maquina del autor del plugin
 (`tools/medir-trabajo-tras-checkpoint.py`): en 137
 (27%) el usuario pidio otra cosa despues del checkpoint, y en 116 (23%) siguieron 5 o mas
 herramientas de trabajo; en otros 92 (18%) su primer mensaje fue sobre el checkpoint mismo ("¿falto
-algo?"). En casi la mitad, el checkpoint no es el final de la sesion. Lo que se deja "para despues
-del checkpoint" se mezcla con lo que sigue y no queda en la ficha, en el commit ni en el audit.
-Hecho dentro de Step 3b, la ficha nace con la evidencia, Step 6 lo commitea y `checkpoint-audit.py`
-lo revisa en la misma corrida.
+algo?"). En casi la mitad, el checkpoint no es el final de la sesion. Y lo que se hace despues
+llega cuando la ficha (Step 2), el commit (Step 6) y el audit (Step 7a) ya corrieron: solo queda
+registrado si alguien vuelve a editar la ficha. Hecho dentro de Step 3b, la ficha nace con la
+evidencia, Step 6 lo commitea y `checkpoint-audit.py` lo revisa en la misma corrida. Limite: el
+audit mide que la linea `hecho` traiga evidencia y que hubo una pregunta; no mide si el candidato
+cumplia las tres condiciones de arriba. Eso lo decide el usuario al elegir la opcion.
 
 Al hacerlo: corre la accion y comprueba el resultado (la salida del comando, el archivo que quedo,
 el estado que consultaste). La linea queda `decision: hecho _verificado: <evidencia>_`. Si el
 candidato venia de `## Bugs fixed`, esa linea pasa a `_verificado: <la misma evidencia>_`. Si
 cambiaste archivos, anadelos a `## Cambios realizados`. **Si no lo puedes terminar** (el
 clasificador lo niega, falla, resulta mas grande de lo que parecia), no lo dejes a medias ni lo
-descartes: el usuario lo queria hecho, asi que emitelo como pendiente (punto 4) y la linea queda
+descartes: el usuario lo queria hecho, asi que emitelo como pendiente (punto 4), con la prioridad
+que le habrias propuesto en `Guardar`, y la linea queda
 ``decision: guardado `p-…` (no se pudo hacer ahora: <motivo>)``. Dilo en el reporte.
 
 En la ficha los nombres no cambian (`## Candidatos a pendiente`, `descartado`): los lee

@@ -21,14 +21,16 @@ quieras". Ni pendiente ni descarte servian: el agente podia hacerlas en minutos.
   en 137 (27%) el usuario pidio otra cosa despues del checkpoint y en 116 (23%) siguieron 5 o mas
   herramientas de trabajo; en otros 92 (18%) su primer mensaje fue sobre el checkpoint mismo; en 267
   (53%) no escribio nada mas. La clasificacion es aproximada (palabras clave) y no cuenta mensajes de
-  otra sesion ni de un supervisor. Lo hecho "despues" se mezcla con lo que sigue y no queda en la
-  ficha, el commit ni el audit. El riesgo contrario no aparecio: de los 74 checkpoints que siguieron
+  otra sesion ni de un supervisor. Lo hecho "despues" llega cuando la ficha, el commit (Step 6) y el
+  audit (Step 7a) ya corrieron. El riesgo contrario no aparecio: de los 74 checkpoints que siguieron
   a otro en la misma sesion, ninguno reescribio con Write la ficha del primero (36 crearon otra, 6 la
   editaron, 32 no escribieron ficha), asi que p-ea8992fa7e no fue lo que decidio.
 - **`checkpoint-audit.py` (`pendientes.candidatos`) acepta `decision: hecho`** y marca `SALTADO` si
   no trae `_verificado: <evidencia>_` (o trae el placeholder de la plantilla).
   `pendientes.candidatos_pregunta` cuenta `hecho` como decision que necesita una pregunta al
-  usuario. 8 asertos nuevos (CH1-CH8) y 3 mutaciones en `tools/mutaciones/m_candidatos.py`.
+  usuario. Limite: el audit no mide si el candidato cumplia las tres condiciones de `Hacerlo
+  ahora`, ni que cada decision tuviera su propia pregunta (basta una, como en 2.53.0). 8 asertos
+  nuevos (CH1-CH8) y 3 mutaciones en `tools/mutaciones/m_candidatos.py`.
 
 ## [2.53.1] - 2026-10-09
 Origen: la primera corrida en vivo de 2.53.0. El usuario leyo "Ahora te propondre 8 candidatos a
