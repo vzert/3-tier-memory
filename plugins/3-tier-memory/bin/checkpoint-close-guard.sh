@@ -192,7 +192,7 @@ disparo = False
 por_checkpoint = False # el turno corrio /checkpoint-3t (no solo reimprimio un snippet)
 fichas = []            # fichas que el turno CERRO: argumento de print-como-retomar.py o Edit con marca
 escritas = []          # fichas escritas con Write (Step 2 del checkpoint, o /backfill-3t)
-preguntas = []         # tool_use_id de cada AskUserQuestion del turno (Step 3b, 2.53.0)
+preguntas = []         # tool_use_id de cada AskUserQuestion del turno (Step 3b, 2.53.0; 2.54.1: y de los checkpoints anteriores)
 n_preg = {}            # tool_use_id -> cuantas preguntas lleva ese modal (2.54.0)
 encab = {}             # tool_use_id -> encabezados de sus preguntas (2.54.0)
 con_error = set()      # tool_use_id cuyo tool_result vino con is_error
@@ -617,7 +617,8 @@ def revisar(ficha):
     # `Proximo paso: ninguno` es un defecto hallado en vivo que nadie registro (p-272254efc5).
     memory_dir = os.path.dirname(os.path.dirname(ficha))
     extra = ["--veredicto-adversario", ultimo_veredicto] if ultimo_veredicto else []
-    # Step 3b (2.53.0): cuantos AskUserQuestion del turno llegaron al usuario: los que volvieron
+    # Step 3b (2.53.0): cuantos AskUserQuestion del turno (y, desde 2.54.1, de los
+    # checkpoints anteriores de la sesion) llegaron al usuario: los que volvieron
     # con respuesta, y los que el usuario rechazo (un modal cerrado es una decision: Step 3b lo
     # descarta). Un error con otro texto no llego a nadie (llamada mal formada, sin pantalla) y no
     # cuenta: ahi Step 3b manda `sin confirmar` (adversario de 2.53.0, ronda 3). Tampoco cuenta uno
