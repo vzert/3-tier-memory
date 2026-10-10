@@ -1,6 +1,33 @@
 # Changelog
 
 
+## [2.54.0] - 2026-10-09
+Origen: una sesion de otro proyecto propuso en Step 3b tres cosas que eran omisiones del
+propio agente (una rama remota sin borrar, la fila de un plan sin actualizar, un script de medicion
+sin commitear), las tres con `No guardar` recomendado y una con "lo puedes correr tu cuando
+quieras". Ni pendiente ni descarte servian: el agente podia hacerlas en minutos.
+
+### Added
+- **`/checkpoint-3t` Step 3b: opcion `Hacerlo ahora`.** Se ofrece cuando el agente lo puede hacer
+  en esta sesion, no espera a nadie y es chico; en ese caso se recomienda por encima de `No
+  guardar`, y el agente ya no puede recomendar "lo puedes correr tu" para algo que puede correr el.
+  Si la accion no tiene vuelta atras, la pregunta dice que comando va a correr. El agente lo hace
+  dentro de Step 3b, antes de compactar, y la linea de la ficha queda `decision: hecho
+  _verificado: <evidencia>_`. Si no lo puede terminar, se vuelve pendiente (`decision: guardado
+  p-… (no se pudo hacer ahora: <motivo>)`). Sin pantalla no se ofrece. `/backfill-3t` 3d no la
+  ofrece: esa sesion ya termino.
+- **Por que dentro de Step 3b y no despues del checkpoint.** Medido el 2026-10-09 en los 497
+  `/checkpoint-3t` de 5176 transcripts de la maquina del autor: en 235 (47%) el usuario siguio
+  escribiendo despues del checkpoint y en 179 (36%) hubo 5 o mas herramientas de trabajo despues.
+  Lo hecho "despues" se mezcla con el trabajo siguiente y no queda en la ficha, el commit ni el
+  audit. En esos datos, de los 74 checkpoints que siguieron a otro en la misma sesion, ninguno
+  reescribio con Write la ficha del primero (36 crearon otra, 6 la editaron, 32 no escribieron
+  ficha).
+- **`checkpoint-audit.py` (`pendientes.candidatos`) acepta `decision: hecho`** y marca `SALTADO` si
+  no trae `_verificado: <evidencia>_` (o trae el placeholder de la plantilla).
+  `pendientes.candidatos_pregunta` cuenta `hecho` como decision que necesita una pregunta al
+  usuario. 7 asertos nuevos (CH1-CH7) y 3 mutaciones en `tools/mutaciones/m_candidatos.py`.
+
 ## [2.53.1] - 2026-10-09
 Origen: la primera corrida en vivo de 2.53.0. El usuario leyo "Ahora te propondre 8 candidatos a
 pendiente" y pidio un texto que cualquiera entienda a la primera.

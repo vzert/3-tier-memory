@@ -608,7 +608,7 @@ def revisar(ficha):
     # con respuesta, y los que el usuario rechazo (un modal cerrado es una decision: Step 3b lo
     # descarta). Un error con otro texto no llego a nadie (llamada mal formada, sin pantalla) y no
     # cuenta: ahi Step 3b manda `sin confirmar` (adversario de 2.53.0, ronda 3). Tampoco cuenta uno
-    # sin tool_result (turno interrumpido). Sin ninguno, una decision `guardado`/`descartado` la
+    # sin tool_result (turno interrumpido). Sin ninguno, una decision `guardado`/`hecho`/`descartado` la
     # tomo el agente. Solo en un turno que corrio /checkpoint-3t.
     if por_checkpoint:
         respondidas = sum(1 for i in preguntas if i in resultados and
@@ -763,7 +763,8 @@ POR_DISENO = ("no publicar los commits (el checkpoint no sube nada); el hash del
               "avisos que vienen de otra sesion (`ids_invented`, pendientes ajenos vencidos que no "
               "te toca cerrar); un candidato a learning decidido `ya existe #N` en el paso 0 de "
               "Step 4 (no se emite a proposito); un candidato a pendiente que el usuario "
-              "descarto en Step 3b, o que quedo `sin confirmar` sin pantalla")
+              "descarto en Step 3b, o que quedo `sin confirmar` sin pantalla; uno que el usuario "
+              "eligio `Hacerlo ahora` y quedo `hecho` con su `_verificado:`")
 
 
 def revision_contestada():

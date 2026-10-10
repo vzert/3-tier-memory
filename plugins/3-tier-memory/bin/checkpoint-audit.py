@@ -143,7 +143,9 @@ DESCARTADO_BUG = re.compile(r"_descartado:\s*(.*?)_(?=\s|$|[.,;:)\]—])", re.S)
 # `pendientes.candidatos` (2.53.0): desde aqui cada pendiente nuevo sale en `## Candidatos a
 # pendiente` con la decision del usuario. Mismo borde aceptado que DESDE_RECONCILIACION.
 DESDE_CANDIDATOS = "2026-10-09"
-DECISION_CANDIDATO = re.compile(r"decision:\s*\**\s*(guardado|descartado|sin confirmar)\b", re.I)
+# `hecho` (2.54.0): el usuario eligio `Hacerlo ahora` y el agente lo hizo dentro de Step 3b; la
+# linea trae `_verificado: <evidencia>_`, como un defecto cerrado de `## Bugs fixed`.
+DECISION_CANDIDATO = re.compile(r"decision:\s*\**\s*(guardado|descartado|sin confirmar|hecho)\b", re.I)
 # 2.35.0: desde esta fecha el snippet `Como retomar` no lleva la linea `Sigue abierto:`.
 DESDE_SIN_SIGUE_ABIERTO = "2026-09-23"
 BULLET_PRIMER_NIVEL = re.compile(r"^( {0,3})(?:[-*+]|\d+[.)])[ \t]+")
@@ -948,7 +950,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     # acumulaban (154 abiertos aqui, 2026-10-09) aunque la conciliacion cerrara los viejos: el
     # agente abria pendientes para cosas que no los merecian. Se mide la ESTRUCTURA: todo pendiente
     # abierto que nacio en esta sesion (`_origen` = esta ficha) tiene que salir como `guardado` con
-    # su id. Limite: el script no ve el transcript; si la pregunta se hizo de verdad lo mide
+    # su id; un `hecho` (2.54.0) trae su `_verificado:`. Limite: el script no ve el transcript; si la pregunta se hizo de verdad lo mide
     # `pendientes.candidatos_pregunta`, que solo emite el hook de cierre (`preguntas_usuario`).
     sec_cand = seccion_por_prefijo(secs, "Candidatos a pendiente")
     if fecha_ficha and fecha_ficha < DESDE_CANDIDATOS:
@@ -980,14 +982,18 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                     continue
                 m = DECISION_CANDIDATO.search(s)
                 if not m:
-                    malos.append(f"sin `decision: guardado p-…|descartado|sin confirmar`: {s[:70]}")
+                    malos.append(f"sin `decision: guardado p-…|hecho|descartado|sin confirmar`: {s[:70]}")
                     continue
                 if m.group(1).lower() == "guardado":
                     ids_l = ID_PENDIENTE.findall(s)
                     if not ids_l:
                         malos.append(f"`guardado` sin el id que asigno el journal: {s[:70]}")
                     guardados |= set(ids_l)
-                if m.group(1).lower() in ("guardado", "descartado"):
+                if m.group(1).lower() == "hecho":
+                    evid_c = [e.strip() for e in VERIFICADO.findall(s)]
+                    if not [e for e in evid_c if e and not re.fullmatch(r"<[^>]*>", e)]:
+                        malos.append(f"`hecho` sin `_verificado: <evidencia>_`: {s[:70]}")
+                if m.group(1).lower() in ("guardado", "descartado", "hecho"):
                     decididos += 1
                 if m.group(1).lower() in ("descartado", "sin confirmar"):
                     no_guardados += 1
@@ -1007,15 +1013,16 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             h.append(Hallazgo(SALTADO, "pendientes.candidatos",
                               f"{len(malos)} problema(s) en los pendientes nuevos de la sesion", malos,
                               corrige="Step 3b: pregunta cada candidato con AskUserQuestion y escribe "
-                                      "su decision en `## Candidatos a pendiente`; un pendiente que el "
+                                      "su decision en `## Candidatos a pendiente` (`hecho` lleva "
+                                      "`_verificado: <evidencia>_`); un pendiente que el "
                                       "usuario no aprobo se cierra con journal-emit.py --type "
                                       "pendiente.resolve --estado abandoned"))
         else:
             h.append(Hallazgo(HECHO, "pendientes.candidatos",
                               "cada pendiente nuevo de la sesion tiene la decision del usuario"))
         # La pregunta de verdad. Solo con el dato del hook de cierre, que cuenta en el transcript
-        # los AskUserQuestion del turno del checkpoint que llegaron al usuario. Una decision `guardado` o
-        # `descartado` sin ninguna pregunta la tomo el agente, que es justo lo que 2.53.0 quita.
+        # los AskUserQuestion del turno del checkpoint que llegaron al usuario. Una decision `guardado`,
+        # `hecho` o `descartado` sin ninguna pregunta la tomo el agente, que es justo lo que 2.53.0 quita.
         # `sin confirmar` (sin pantalla) no necesita pregunta. Mide que hubo al menos una, no que
         # cubriera cada candidato: vigila el olvido, no un agente que finge.
         if preguntas_usuario is not None and decididos:

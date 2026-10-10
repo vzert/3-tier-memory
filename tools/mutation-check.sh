@@ -290,7 +290,7 @@ caso "decididas ignoradas"     learnings-migracion.py $L $S "decidir: el aviso c
 caso "migrar solo al agente"   session-start.sh $L $S "persona: la linea" aviso-solo-agente
 
 echo
-echo "Candidatos a pendiente decididos por el usuario (2.53.0)"
+echo "Candidatos a pendiente decididos por el usuario (2.53.0; Hacerlo ahora 2.54.0)"
 L=m_candidatos.py; S=test-checkpoint-audit.sh
 caso "pendiente sin guardado"  checkpoint-audit.py $L $S "CA3: pendiente nacido en la sesion" sin-origen
 caso "decision sin pregunta"   checkpoint-audit.py $L $S "CP1: decision tomada con 0 preguntas" sin-pregunta
@@ -302,6 +302,9 @@ caso "error ajeno cuenta"      checkpoint-close-guard.sh $L test-checkpoint-clos
 caso "mide sin checkpoint"     checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "solo reimprime el snippet" guard-sin-checkpoint
 caso "descartado sin candidato" checkpoint-audit.py $L $S "CB2: _descartado: sin candidato" descartado-sin-candidato
 caso "ninguno sin descartado"  checkpoint-audit.py $L $S "CB5: ninguno . break . defecto descartado" ninguno-ignora-descartado
+caso "hecho sin evidencia"     checkpoint-audit.py $L $S "CH2: hecho sin _verificado:" hecho-sin-evidencia
+caso "hecho sin pregunta"      checkpoint-audit.py $L $S "CH5: hecho sin ninguna pregunta" hecho-no-pregunta
+caso "hecho no es decision"    checkpoint-audit.py $L $S "CH1: hecho con evidencia" hecho-no-es-decision
 
 echo
 echo "run-tests.sh (p-46153b135b): una suite que sale 0 sin su linea de resumen es FALLA"

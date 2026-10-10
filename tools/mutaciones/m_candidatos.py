@@ -4,6 +4,7 @@ import io, sys
 # `_descartado:` como cierre de un defecto (y que necesite su candidato), `snippet.ninguno_defecto`
 # con un defecto descartado, el filtro de --solo-snippet, y en el hook de cierre el conteo de
 # AskUserQuestion (sin pasarlo, contando uno sin resultado, o midiendo un turno sin /checkpoint-3t).
+# 2.54.0 (Hacerlo ahora): `hecho` exige `_verificado:`, pide pregunta como toda decision, y es decision.
 #
 # Uso: m_candidatos.py <fichero> <mutacion>
 # Patrones de una sola linea, sin "\n": el checkout de Windows trae CRLF (regla 322).
@@ -34,6 +35,15 @@ M = {
          '        extra += ["--preguntas-usuario", str(respondidas)]\n    else:\n        extra += ["--preguntas-usuario", "0"]')],
     "descartado-sin-candidato": [
         ("        if n_desc_bugs > no_guardados:", "        if False:")],
+    # 2.54.0: `Hacerlo ahora` -> `decision: hecho _verificado: <evidencia>_`
+    "hecho-sin-evidencia": [
+        ('                        malos.append(f"`hecho` sin `_verificado: <evidencia>_`: {s[:70]}")',
+         "                        pass")],
+    "hecho-no-pregunta": [
+        ('                if m.group(1).lower() in ("guardado", "descartado", "hecho"):',
+         '                if m.group(1).lower() in ("guardado", "descartado"):')],
+    "hecho-no-es-decision": [
+        ("(guardado|descartado|sin confirmar|hecho)\\b", "(guardado|descartado|sin confirmar)\\b")],
     "ninguno-ignora-descartado": [
         ("        if veredicto_adv == \"break\" and not vivos and not descartados_bugs:",
          "        if veredicto_adv == \"break\" and not vivos:")],

@@ -1683,6 +1683,30 @@ open(p,"w",encoding="utf-8").write(t)
 PYS
 chk "CB5: ninguno + break + defecto descartado por el usuario → no SALTADO" "0" "$(cand_out "$M" "--solo-snippet --veredicto-adversario break" | grep -c 'SALTADO .*snippet.ninguno_defecto')"
 
+# ---------------------------------------------------------------- 2.54.0: `Hacerlo ahora`
+# Una omision chica del agente (una rama sin borrar, una fila de plan sin actualizar) ya no tiene
+# que ser pendiente ni perderse: el usuario elige `Hacerlo ahora`, el agente la hace dentro de Step
+# 3b y la linea dice `decision: hecho _verificado: <evidencia>_`. Caso real: una sesion de otro
+# proyecto propuso tres de estas con `No guardar` recomendado.
+M="$T/mCH1"; cand_ficha "$M" '- la rama remota quedo sin borrar — recomendacion: hacer ahora — decision: hecho _verificado: gh api DELETE devolvio 204_'
+chk "CH1: hecho con evidencia → HECHO" "1" "$(cand_out "$M" | grep -c 'HECHO .*pendientes.candidatos ')"
+M="$T/mCH2"; cand_ficha "$M" '- la rama remota quedo sin borrar — decision: hecho'
+chk "CH2: hecho sin _verificado: → SALTADO" "1" "$(cand_out "$M" | grep -c 'SALTADO .*pendientes.candidatos ')"
+chk "CH3: y lo dice" "1" "$(cand_out "$M" | grep -c '`hecho` sin `_verificado:')"
+M="$T/mCH4"; cand_ficha "$M" '- la rama remota quedo sin borrar — decision: hecho _verificado: <evidencia>_'
+chk "CH4: hecho con el placeholder de la plantilla → SALTADO" "1" "$(cand_out "$M" | grep -c 'SALTADO .*pendientes.candidatos ')"
+M="$T/mCH5"; cand_ficha "$M" '- la rama remota quedo sin borrar — decision: hecho _verificado: gh api DELETE devolvio 204_'
+chk "CH5: hecho sin ninguna pregunta al usuario → SALTADO (lo decidio el agente)" "1" "$(cand_out "$M" "--preguntas-usuario 0" | grep -c 'SALTADO .*pendientes.candidatos_pregunta')"
+# Un defecto de `## Bugs fixed` hecho en Step 3b cierra con `_verificado:`: no es un descarte, y no
+# cuenta para el par `_descartado:` ↔ candidato descartado.
+python3 - "$M/sessions/2026-10-09-demo.md" <<'PYS'
+import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+t=t.replace("## Bugs fixed\n- Ninguno","## Bugs fixed\n- deje la rama remota sin borrar _verificado: borrada en Step 3b, gh api DELETE devolvio 204_",1)
+open(p,"w",encoding="utf-8").write(t)
+PYS
+chk "CH6: defecto hecho en Step 3b → bugs.cierre HECHO" "1" "$(cand_out "$M" | grep -c 'HECHO .*bugs.cierre')"
+chk "CH7: y pendientes.candidatos HECHO" "1" "$(cand_out "$M" | grep -c 'HECHO .*pendientes.candidatos ')"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

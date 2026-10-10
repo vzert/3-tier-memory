@@ -520,22 +520,56 @@ como pendiente." Cada pregunta:
   `Candidato N`.
 - **Texto**, cuatro partes cortas para alguien que no vio la sesion: que es; de donde salio (que paso
   en la sesion); que pasa si no se hace; y tu recomendacion con su razon ("Te recomiendo guardarlo:
-  …" / "Te recomiendo no guardarlo: …").
+  …" / "Te recomiendo hacerlo ahora: …" / "Te recomiendo no guardarlo: …").
 - **Opciones**, la recomendada primero con "(Recommended)":
+  - `Hacerlo ahora` — solo si el candidato pasa la prueba de abajo; en la ficha es `decision: hecho`
   - `Guardar (prioridad <la que propones>)`
   - `Guardar con otra prioridad` — el usuario la dice en la nota, o eliges la otra que mencione
   - `No guardar` — en la ficha es `decision: descartado`
+
+**`Hacerlo ahora` (2.54.0).** Hay cosas que no merecen un pendiente y tampoco deberian perderse:
+casi siempre son omisiones tuyas de esta sesion (una rama que quedo sin borrar, la fila de un plan
+sin actualizar, un script de medicion sin commitear). Caso real, una sesion de otro
+proyecto (2026-10-09): tres preguntas asi, las tres con `No guardar` recomendado, una con "lo puedes correr
+tu cuando quieras". Ofrece `Hacerlo ahora` cuando se cumplen las tres:
+1. Lo puedes hacer tu, en esta sesion, con tus herramientas. Si el clasificador o un permiso ya te
+   lo nego en la sesion, no pasa.
+2. No espera a nadie: ni a otra persona, ni a otra instalacion, ni a que pase tiempo.
+3. Es chico: minutos, no otra tarea con su propio plan.
+
+Si pasa las tres, **recomiendala por encima de `No guardar`**, y nunca recomiendes "lo puedes correr
+tu" para algo que puedes correr tu. Si la accion es dificil de deshacer (borrar una rama remota,
+publicar algo), el texto de la pregunta dice exactamente que vas a correr y que no tiene vuelta
+atras: la respuesta del usuario es su autorizacion, y solo para eso.
+
+**Lo haces dentro de Step 3b**, antes de Step 3c, no despues del checkpoint. Medido el 2026-10-09
+en los 497 `/checkpoint-3t` de 5176 transcripts de esta maquina: en 235 (47%) el usuario siguio
+escribiendo despues del checkpoint, y en 179 (36%) hubo 5 o mas herramientas de trabajo despues. El
+checkpoint casi nunca es el final de la sesion. Lo que se deja "para despues del checkpoint" se
+mezcla con el trabajo siguiente y no queda en la ficha, en el commit ni en el audit. Hecho dentro
+de Step 3b, la ficha nace con la evidencia, Step 6 lo commitea y `checkpoint-audit.py` lo revisa en
+la misma corrida.
+
+Al hacerlo: corre la accion y comprueba el resultado (la salida del comando, el archivo que quedo,
+el estado que consultaste). La linea queda `decision: hecho _verificado: <evidencia>_`. Si el
+candidato venia de `## Bugs fixed`, esa linea pasa a `_verificado: <la misma evidencia>_`. Si
+cambiaste archivos, anadelos a `## Cambios realizados`. **Si no lo puedes terminar** (el
+clasificador lo niega, falla, resulta mas grande de lo que parecia), no lo dejes a medias ni lo
+descartes: el usuario lo queria hecho, asi que emitelo como pendiente (punto 4) y la linea queda
+``decision: guardado `p-…` (no se pudo hacer ahora: <motivo>)``. Dilo en el reporte.
 
 En la ficha los nombres no cambian (`## Candidatos a pendiente`, `descartado`): los lee
 `checkpoint-audit.py`. Lo de arriba es solo lo que el usuario lee.
 
 Recomienda `descartar` dos casos que la memoria del plugin ya midio como ruido: un pendiente de
 propagacion ("verificar que la otra instalacion actualizo"), que ningun agente puede avanzar, y uno
-cuyo unico actor es el usuario o un tercero, sin nada que hacer aqui (es una espera, no trabajo). Si el usuario contesta con "Other", sigue su texto (puede
+cuyo unico actor es el usuario o un tercero, sin nada que hacer aqui (es una espera, no trabajo).
+Algo que tu puedes correr no tiene al usuario como unico actor: eso es `Hacerlo ahora`. Si el usuario contesta con "Other", sigue su texto (puede
 reescribir el pendiente). **Si cierra el modal sin responder, o lo rechaza, el candidato se
 descarta.**
 
-**Sin pantalla** — la senal es la herramienta, no el modo: `AskUserQuestion` no esta entre tus
+**Sin pantalla** — la senal es la herramienta, no el modo (tampoco hay `Hacerlo ahora`: nadie lo
+autorizo): `AskUserQuestion` no esta entre tus
 herramientas, o la llamas y vuelve con un error que no es un rechazo del usuario. El rechazo del
 usuario vuelve con el texto `The user doesn't want to proceed with this tool use`: eso es
 `descartado`. Cualquier otro error (la herramienta no disponible, una llamada mal formada) no llego
@@ -551,6 +585,7 @@ Step 2), una linea por candidato:
 ```markdown
 ## Candidatos a pendiente
 - <texto del candidato> — recomendacion: guardar|descartar — decision: guardado `p-xxxxxxxxxx`
+- <texto del candidato> — recomendacion: hacer ahora — decision: hecho _verificado: <evidencia>_
 - <texto del candidato> — recomendacion: descartar — decision: descartado
 - <texto del candidato> — decision: sin confirmar (sin pantalla)
 <or "Ninguno">
@@ -558,10 +593,10 @@ Step 2), una linea por candidato:
 
 El id de `guardado` sale del stdout de `journal-emit.py` (abajo). `checkpoint-audit.py`
 (`pendientes.candidatos`) marca `SALTADO` si una linea no lleva decision, si un `guardado` no trae
-un id que exista, si un pendiente abierto que nacio en esta sesion (`_origen` = esta ficha) no sale
+un id que exista, si un `hecho` no trae `_verificado: <evidencia>_`, si un pendiente abierto que nacio en esta sesion (`_origen` = esta ficha) no sale
 como `guardado`, si hay mas `_descartado:` en `## Bugs fixed` que lineas `descartado`/`sin
 confirmar` aqui, o si falta la seccion cuando habia algo de eso que decidir. El hook de cierre
-anade `pendientes.candidatos_pregunta`: una decision `guardado` o `descartado` sin ningun
+anade `pendientes.candidatos_pregunta`: una decision `guardado`, `hecho` o `descartado` sin ningun
 `AskUserQuestion` en el turno del checkpoint que haya llegado al usuario (respondido, o rechazado
 por el con el texto de arriba) la tomaste tu. Un error con otro texto no cuenta como pregunta. Limite honesto: mide que hubo al menos una pregunta, no que cubriera cada
 candidato, y no ve un candidato que nunca escribiste aqui.
@@ -685,6 +720,8 @@ pasa a `_pendiente: p-xxxxxxxxxx_`, con el id que el journal asigno al pendiente
 (p.ej. `_descartado: el usuario no lo quiso como pendiente_`); si quedo `sin confirmar` (sin
 pantalla), a `_descartado: sin confirmar, sin pantalla_`. Cada `_descartado:` necesita su linea
 `descartado` o `sin confirmar` en `## Candidatos a pendiente`: `checkpoint-audit.py` lo cuenta.
+Si el usuario eligio `Hacerlo ahora` y lo hiciste, la linea ya quedo `_verificado: <evidencia>_` en
+Step 3b; si no se pudo, lleva `_pendiente: p-…_` como cualquier guardado.
 
 Take every id from the `journal-emit.py` stdout of Steps 3a/3b, or from the line the compactor
 wrote in `_pendientes.md` — **never type one from memory and never make one up**. If an id you
@@ -1326,8 +1363,9 @@ correcta cuando no falta nada.
 
 Empieza pegando **literal** la salida de Step 7a. Despues, el reporte de
 siempre: session path, los pendientes nuevos en palabras simples, sin "candidato" (p.ej. "De 8 cosas
-que salieron, guardaste 1 como pendiente; las otras 7 no", y si hubo `sin confirmar`: "S quedaron
-sin preguntar, sin pantalla"), M resolved, journal result (`applied=N` for Steps 3c, 5a and 6c together, any quarantined event with its reason, and whether any **Fallback** path was used), N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, N rows pruned by hand (if any), frontmatter sealed (if N>0), **secrets redacted (if N>0, with file:line list + rotate-your-keys warning)**, git result (commit hash OR reason skipped).
+que salieron, guardaste 1 como pendiente, 2 las hice ahora y las otras 5 no", y si hubo `sin
+confirmar`: "S quedaron sin preguntar, sin pantalla"; si una de `Hacerlo ahora` no se pudo hacer,
+cual y por que quedo como pendiente), M resolved, journal result (`applied=N` for Steps 3c, 5a and 6c together, any quarantined event with its reason, and whether any **Fallback** path was used), N learnings added, plans registered (Y/N), research registered (Y/N), indexes updated, N rows pruned by hand (if any), frontmatter sealed (if N>0), **secrets redacted (if N>0, with file:line list + rotate-your-keys warning)**, git result (commit hash OR reason skipped).
 
 **Say what a number MEANS, not just the number.** A count the user cannot interpret reads as a
 failure: an `adopted=12 rows_added=12` on a memory older than 2.12.0 is a one-time migration and

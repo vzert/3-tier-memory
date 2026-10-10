@@ -461,7 +461,8 @@ If the draft has pendientes AND this session is within the 5 most recent:
    por modal, en tandas). Cada pregunta explica el candidato para alguien que no vio esa sesion
    (que es, de que sesion y fecha sale, que pasa si no se hace) y lleva tu recomendacion con su
    razon. Opciones, la recomendada primero: `Guardar (prioridad Media)`, `Guardar con otra
-   prioridad`, `No guardar` (en la ficha, `decision: descartado`). Presentalo con las mismas
+   prioridad`, `No guardar` (en la ficha, `decision: descartado`). Sin `Hacerlo ahora`: esa
+   sesion ya termino y lo que quedo pendiente en ella no es una omision de esta. Presentalo con las mismas
    palabras que `/checkpoint-3t` Step 3b ("Como se lo presentas"): una frase antes del primer modal,
    sin la palabra "candidato". No dejes fuera ningun candidato por tu cuenta. Modal cerrado sin
    respuesta = descartado. **Sin pantalla** (la misma senal que `/checkpoint-3t` Step 3b: `AskUserQuestion` no
