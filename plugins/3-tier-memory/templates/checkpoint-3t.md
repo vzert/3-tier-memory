@@ -549,10 +549,11 @@ sobre los 496 `/checkpoint-3t` de la maquina del autor del plugin
 herramientas de trabajo; en otros 92 (18%) su primer mensaje fue sobre el checkpoint mismo ("¿falto
 algo?"). En casi la mitad, el checkpoint no es el final de la sesion. Y lo que se hace despues
 llega cuando la ficha (Step 2), el commit (Step 6) y el audit (Step 7a) ya corrieron: solo queda
-registrado si alguien vuelve a editar la ficha. Hecho dentro de Step 3b, la ficha nace con la
-evidencia, Step 6 lo commitea y `checkpoint-audit.py` lo revisa en la misma corrida. Limite: el
+registrado si alguien vuelve a editar la ficha. Hecho dentro de Step 3b, la ficha ya trae la
+evidencia cuando Step 6 la commitea y `checkpoint-audit.py` lo revisa en la misma corrida. Limite: el
 audit mide que la linea `hecho` traiga evidencia y que hubo una pregunta; no mide si el candidato
-cumplia las tres condiciones de arriba. Eso lo decide el usuario al elegir la opcion.
+cumplia las tres condiciones de arriba, ni que la pregunta nombrara el comando sin vuelta atras.
+Eso queda en tu pregunta y en la eleccion del usuario.
 
 Al hacerlo: corre la accion y comprueba el resultado (la salida del comando, el archivo que quedo,
 el estado que consultaste). La linea queda `decision: hecho _verificado: <evidencia>_`. Si el
