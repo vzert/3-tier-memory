@@ -47,6 +47,7 @@ import argparse
 import collections
 import datetime
 import glob
+import json
 import os
 import re
 import shlex
@@ -146,6 +147,13 @@ DESDE_CANDIDATOS = "2026-10-09"
 # `hecho` (2.54.0): el usuario eligio `Hacerlo ahora` y el agente lo hizo dentro de Step 3b; la
 # linea trae `_verificado: <evidencia>_`, como un defecto cerrado de `## Bugs fixed`.
 DECISION_CANDIDATO = re.compile(r"decision:\s*\**\s*(guardado|descartado|sin confirmar|hecho)\b", re.I)
+# `pregunta: <encabezado>` (2.54.0): el encabezado del AskUserQuestion donde el usuario decidio ese
+# candidato. El hook de cierre pasa los encabezados que llegaron al usuario y aqui se cruzan.
+PREGUNTA_CANDIDATO = re.compile(r"pregunta:\s*([^—]+?)\s*(?:—|$)", re.I)
+
+
+def norm_encabezado(t):
+    return re.sub(r"\s+", " ", t.strip().strip("`*").strip()).casefold()
 # 2.35.0: desde esta fecha el snippet `Como retomar` no lleva la linea `Sigue abierto:`.
 DESDE_SIN_SIGUE_ABIERTO = "2026-09-23"
 BULLET_PRIMER_NIVEL = re.compile(r"^( {0,3})(?:[-*+]|\d+[.)])[ \t]+")
@@ -608,7 +616,7 @@ def avisos_script_en_seco(h, memory_dir, nombre_script, claves_problema):
 
 
 def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=False, veredicto_adv=None,
-            preguntas_usuario=None):
+            preguntas_usuario=None, encabezados_usuario=None):
     h = []
     texto = leer(session_file)
     secs = secciones(texto)
@@ -960,6 +968,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     else:
         malos = []
         guardados, decididos, no_guardados = set(), 0, 0
+        citados = []   # (encabezado citado o None, inicio de la linea) de cada decision tomada
         # `_descartado:` de `## Bugs fixed`: el tercer cierre de un defecto solo vale si Step 3b lo
         # propuso y el usuario lo descarto. Sin esto, un agente que nunca pregunto cerraba el
         # defecto con `_descartado:` y el audit no veia nada (adversario de 2.53.0, ronda 1).
@@ -995,6 +1004,8 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                         malos.append(f"`hecho` sin `_verificado: <evidencia>_`: {s[:70]}")
                 if m.group(1).lower() in ("guardado", "descartado", "hecho"):
                     decididos += 1
+                    mp = PREGUNTA_CANDIDATO.search(s)
+                    citados.append((norm_encabezado(mp.group(1)) if mp else None, s[:60]))
                 if m.group(1).lower() in ("descartado", "sin confirmar"):
                     no_guardados += 1
         if sec_cand is not None:
@@ -1031,15 +1042,31 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             # caso, y el hook ya lo cuenta (adversarios de 2.53.0, ronda 1).
             # 2.54.0: el hook cuenta preguntas, no modales. Step 3b pone un candidato por pregunta,
             # asi que menos preguntas que decisiones = alguna la tomo el agente (0 es el caso extremo).
-            if preguntas_usuario < decididos:
+            # Y cada decision cita el encabezado de SU pregunta: una pregunta ajena a los
+            # candidatos ya no cuenta por uno (adversario externo de 2.54.0, ronda 4).
+            ligar = []
+            if encabezados_usuario is not None:
+                llegaron = {norm_encabezado(e) for e in encabezados_usuario if str(e).strip()}
+                vistos_c = set()
+                for enc, ini in citados:
+                    if enc is None:
+                        ligar.append(f"sin `pregunta: <encabezado>`: {ini}")
+                    elif enc not in llegaron:
+                        ligar.append(f"cita `pregunta: {enc}`, que no llego al usuario en el turno: {ini}")
+                    elif enc in vistos_c:
+                        ligar.append(f"`pregunta: {enc}` ya la cita otra decision: {ini}")
+                    vistos_c.add(enc)
+            if preguntas_usuario < decididos or ligar:
                 cuantas = "ninguna pregunta" if preguntas_usuario == 0 else \
-                    f"solo {preguntas_usuario} pregunta(s)"
+                    f"{preguntas_usuario} pregunta(s)"
                 h.append(Hallazgo(SALTADO, "pendientes.candidatos_pregunta",
                                   f"{decididos} candidato(s) con decision y {cuantas} que hayan "
                                   "llegado al usuario (respondidas o rechazadas por el) en el turno "
-                                  "del checkpoint: Step 3b pone un candidato por pregunta",
+                                  "del checkpoint: Step 3b pone un candidato por pregunta", ligar,
                                   corrige="hazle las preguntas de Step 3b con AskUserQuestion, una por "
-                                          "candidato; si no hay pantalla, la decision es `sin confirmar`"))
+                                          "candidato, y cita su encabezado en la linea "
+                                          "(`pregunta: <encabezado>`); si no hay pantalla, la "
+                                          "decision es `sin confirmar`"))
             else:
                 h.append(Hallazgo(HECHO, "pendientes.candidatos_pregunta",
                                   f"{preguntas_usuario} pregunta(s) al usuario en el turno, "
@@ -1654,8 +1681,10 @@ def main():
     ap.add_argument("--veredicto-adversario", choices=("break", "hold"), default=None,
                     help="ultimo veredicto del adversario en el transcript; lo pasa el hook Stop")
     ap.add_argument("--preguntas-usuario", type=int, default=None,
-                    help="AskUserQuestion del turno del checkpoint que llegaron al usuario "
-                         "(respondidos o rechazados por el); lo pasa el hook Stop")
+                    help="preguntas de los AskUserQuestion del turno del checkpoint que llegaron "
+                         "al usuario (respondidos o rechazados por el); lo pasa el hook Stop")
+    ap.add_argument("--encabezados-usuario", default=None,
+                    help="JSON: encabezados de esas preguntas; lo pasa el hook Stop (2.54.0)")
     args = ap.parse_args()
 
     if not os.path.isdir(args.memory_dir):
@@ -1673,13 +1702,13 @@ def main():
     repo_root = args.repo_root or os.getcwd()
     hallazgos = auditar(args.memory_dir, args.session_file, repo_root,
                         not args.no_git and not args.solo_snippet, hoy, args.solo_snippet,
-                        args.veredicto_adversario, args.preguntas_usuario)
+                        args.veredicto_adversario, args.preguntas_usuario,
+                        json.loads(args.encabezados_usuario) if args.encabezados_usuario else None)
 
     if args.count:
         print(sum(1 for x in hallazgos if x.estado in (SALTADO, PARCIAL)))
         return
     if args.json:
-        import json
         print(json.dumps([{"estado": x.estado, "clave": x.clave, "detalle": x.detalle,
                            "lineas": x.lineas, "corrige": x.corrige} for x in hallazgos],
                          ensure_ascii=False))

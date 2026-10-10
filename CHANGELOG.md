@@ -16,12 +16,16 @@ quieras". Ni pendiente ni descarte servian: el agente podia hacerlas en minutos.
   _verificado: <evidencia>_`. Si no lo puede terminar, se vuelve pendiente (`decision: guardado
   p-… (no se pudo hacer ahora: <motivo>)`). Sin pantalla no se ofrece. `/backfill-3t` 3d no la
   ofrece: esa sesion ya termino.
-- **`pendientes.candidatos_pregunta` cuenta preguntas, no modales.** Un modal lleva hasta 4
-  preguntas y Step 3b pone un candidato por pregunta. Hasta 2.53.1 bastaba un modal con una sola
-  pregunta para que pasaran varias decisiones. Ahora `checkpoint-close-guard.sh` suma las preguntas
-  de cada `AskUserQuestion` que llego al usuario, y `checkpoint-audit.py` marca `SALTADO` si son
-  menos que las decisiones `guardado`, `hecho` o `descartado`. Asertos CP6-CP7 y dos del hook;
-  mutaciones `guard-cuenta-modales` y `menos-preguntas-que-decisiones`.
+- **`pendientes.candidatos_pregunta` liga cada decision a su pregunta.** Hasta 2.53.1 bastaba un
+  modal con una sola pregunta, sobre cualquier cosa, para que pasaran varias decisiones. Ahora cada
+  linea decidida de `## Candidatos a pendiente` cita el encabezado de su pregunta (`pregunta:
+  <encabezado>`). `checkpoint-close-guard.sh` cuenta las preguntas (no los modales) de cada
+  `AskUserQuestion` que llego al usuario y pasa sus encabezados; `checkpoint-audit.py` marca
+  `SALTADO` si hay menos preguntas que decisiones, si una decision no cita `pregunta:`, si cita un
+  encabezado que no llego al usuario, o si dos decisiones citan el mismo. Sin los datos del hook
+  (Step 7a) solo cuenta. Asertos CP6-CP7 y CQ1-CQ5, tres del hook; mutaciones `guard-cuenta-modales`,
+  `menos-preguntas-que-decisiones`, `pregunta-sin-ligar`, `pregunta-repetida-pasa` y
+  `guard-sin-encabezados`.
 - **Por que dentro de Step 3b y no despues del checkpoint.** Medido el 2026-10-09 sobre los 495
   `/checkpoint-3t` de la maquina del autor (`tools/medir-trabajo-tras-checkpoint.py 2026-10-10T02:00`):
   en 137 (27%) el usuario pidio otra cosa despues del checkpoint y en 116 (23%) siguieron 5 o mas
@@ -38,7 +42,8 @@ quieras". Ni pendiente ni descarte servian: el agente podia hacerlas en minutos.
   no trae `_verificado: <evidencia>_` (o trae el placeholder de la plantilla).
   `pendientes.candidatos_pregunta` cuenta `hecho` como decision que necesita una pregunta al
   usuario. Limite: el audit no mide si el candidato cumplia las tres condiciones de `Hacerlo
-  ahora` ni que la pregunta nombrara un comando sin vuelta atras. 8 asertos nuevos (CH1-CH8) y 4 mutaciones en `tools/mutaciones/m_candidatos.py`.
+  ahora` ni que la pregunta nombrara un comando sin vuelta atras, ni que el texto de la pregunta
+  describiera bien al candidato. 8 asertos nuevos (CH1-CH8) y 4 mutaciones en `tools/mutaciones/m_candidatos.py`.
 
 ## [2.53.1] - 2026-10-09
 Origen: la primera corrida en vivo de 2.53.0. El usuario leyo "Ahora te propondre 8 candidatos a

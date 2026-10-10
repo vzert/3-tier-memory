@@ -194,6 +194,7 @@ fichas = []            # fichas que el turno CERRO: argumento de print-como-reto
 escritas = []          # fichas escritas con Write (Step 2 del checkpoint, o /backfill-3t)
 preguntas = []         # tool_use_id de cada AskUserQuestion del turno (Step 3b, 2.53.0)
 n_preg = {}            # tool_use_id -> cuantas preguntas lleva ese modal (2.54.0)
+encab = {}             # tool_use_id -> encabezados de sus preguntas (2.54.0)
 con_error = set()      # tool_use_id cuyo tool_result vino con is_error
 # El texto con que Claude Code devuelve una herramienta que el USUARIO rechazo. Medido el 2026-10-09
 # en los transcripts locales: mas de 200 tool_result que empiezan asi (215-219 segun como se cuente), de cualquier herramienta. Un error con
@@ -248,6 +249,8 @@ for r in turno:
             # las preguntas, no los modales (adversario externo de 2.54.0). Uno sin lista cuenta 1.
             qs = inp.get("questions")
             n_preg[b.get("id")] = len(qs) if isinstance(qs, list) and qs else 1
+            encab[b.get("id")] = [str(q.get("header") or "") for q in qs if isinstance(q, dict)] \
+                if isinstance(qs, list) else []
         elif nombre == "Bash":
             cmd = inp.get("command") or ""
             # Disparo por CAMBIO DE ESTADO (2.33.1, p-c72a33ae7a): un turno que cierra, caduca o
@@ -616,9 +619,12 @@ def revisar(ficha):
     # sin tool_result (turno interrumpido). Sin ninguno, una decision `guardado`/`hecho`/`descartado` la
     # tomo el agente. Solo en un turno que corrio /checkpoint-3t.
     if por_checkpoint:
-        respondidas = sum(n_preg.get(i, 1) for i in preguntas if i in resultados and
-                          (i not in con_error or RECHAZO_USUARIO.search(resultados[i])))
+        llegaron = [i for i in preguntas if i in resultados and
+                    (i not in con_error or RECHAZO_USUARIO.search(resultados[i]))]
+        respondidas = sum(n_preg.get(i, 1) for i in llegaron)
         extra += ["--preguntas-usuario", str(respondidas)]
+        extra += ["--encabezados-usuario",
+                  json.dumps([e for i in llegaron for e in encab.get(i, [])], ensure_ascii=False)]
     try:
         r = subprocess.run([sys.executable, os.path.join(BIN, "checkpoint-audit.py"), memory_dir,
                             "--session-file", ficha, "--solo-snippet", "--json", "--no-git"] + extra,

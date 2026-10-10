@@ -15,7 +15,7 @@ M = {
         ("            sin_si = [i for i in nacidos if i not in guardados]",
          "            sin_si = []")],
     "sin-pregunta": [
-        ("            if preguntas_usuario < decididos:", "            if False:")],
+        ("            if preguntas_usuario < decididos or ligar:", "            if False:")],
     "descartado-no-cierra": [
         ("            if not ids_b and not evid and not desc:", "            if not ids_b and not evid:")],
     "solo-snippet-sin-candidatos": [
@@ -25,14 +25,14 @@ M = {
     "guard-no-pasa": [
         ('        extra += ["--preguntas-usuario", str(respondidas)]', "        pass")],
     "guard-sin-resultado-cuenta": [
-        ("        respondidas = sum(n_preg.get(i, 1) for i in preguntas if i in resultados and",
-         "        respondidas = sum(n_preg.get(i, 1) for i in preguntas if True and")],
+        ("        llegaron = [i for i in preguntas if i in resultados and",
+         "        llegaron = [i for i in preguntas if True and")],
     "guard-error-cuenta": [
-        ("                          (i not in con_error or RECHAZO_USUARIO.search(resultados[i])))",
-         "                          True)")],
+        ("                    (i not in con_error or RECHAZO_USUARIO.search(resultados[i]))]",
+         "                    True]")],
     "guard-sin-checkpoint": [
-        ('        extra += ["--preguntas-usuario", str(respondidas)]',
-         '        extra += ["--preguntas-usuario", str(respondidas)]\n    else:\n        extra += ["--preguntas-usuario", "0"]')],
+        ('                  json.dumps([e for i in llegaron for e in encab.get(i, [])], ensure_ascii=False)]',
+         '                  json.dumps([e for i in llegaron for e in encab.get(i, [])], ensure_ascii=False)]\n    else:\n        extra += ["--preguntas-usuario", "0"]')],
     "descartado-sin-candidato": [
         ("        if n_desc_bugs > no_guardados:", "        if False:")],
     # 2.54.0: `Hacerlo ahora` -> `decision: hecho _verificado: <evidencia>_`
@@ -43,10 +43,16 @@ M = {
         ('                    if not [e for e in evid_c if e and not re.fullmatch(r"<[^>]*>", e)]:',
          '                    if not [e for e in evid_c if not re.fullmatch(r"<[^>]*>", e)]:')],
     "guard-cuenta-modales": [
-        ("        respondidas = sum(n_preg.get(i, 1) for i in preguntas if i in resultados and",
-         "        respondidas = sum(1 for i in preguntas if i in resultados and")],
+        ("        respondidas = sum(n_preg.get(i, 1) for i in llegaron)",
+         "        respondidas = sum(1 for i in llegaron)")],
     "menos-preguntas-que-decisiones": [
-        ("            if preguntas_usuario < decididos:", "            if preguntas_usuario == 0:")],
+        ("            if preguntas_usuario < decididos or ligar:", "            if preguntas_usuario == 0 or ligar:")],
+    "pregunta-sin-ligar": [
+        ("            if encabezados_usuario is not None:", "            if False:")],
+    "pregunta-repetida-pasa": [
+        ("                    elif enc in vistos_c:", "                    elif False:")],
+    "guard-sin-encabezados": [
+        ('        extra += ["--encabezados-usuario",', '        extra += [] and ["--encabezados-usuario",')],
     "hecho-no-pregunta": [
         ('                if m.group(1).lower() in ("guardado", "descartado", "hecho"):',
          '                if m.group(1).lower() in ("guardado", "descartado"):')],

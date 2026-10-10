@@ -306,6 +306,9 @@ caso "hecho sin evidencia"     checkpoint-audit.py $L $S "CH2: hecho sin _verifi
 caso "hecho evidencia vacia"   checkpoint-audit.py $L $S "CH8: hecho con _verificado: vacio" hecho-evidencia-vacia
 caso "cuenta modales"          checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "dos decisiones y un modal con dos preguntas" guard-cuenta-modales
 caso "menos preguntas"         checkpoint-audit.py $L $S "CP6: 2 decisiones y 1 pregunta" menos-preguntas-que-decisiones
+caso "pregunta sin ligar"      checkpoint-audit.py $L $S "CQ2: un encabezado citado que no llego" pregunta-sin-ligar
+caso "pregunta repetida"       checkpoint-audit.py $L $S "CQ5: dos decisiones citan la misma pregunta" pregunta-repetida-pasa
+caso "guard sin encabezados"   checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "una pregunta ajena a los candidatos" guard-sin-encabezados
 caso "hecho sin pregunta"      checkpoint-audit.py $L $S "CH5: hecho sin ninguna pregunta" hecho-no-pregunta
 caso "hecho no es decision"    checkpoint-audit.py $L $S "CH1: hecho con evidencia" hecho-no-es-decision
 

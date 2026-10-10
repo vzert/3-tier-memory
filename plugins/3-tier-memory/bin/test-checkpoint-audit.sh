@@ -1642,6 +1642,17 @@ M="$T/mCP6"; cand_ficha "$M" '- algo — decision: descartado
 - otra — decision: hecho _verificado: corrida ok_'
 chk "CP6: 2 decisiones y 1 pregunta → SALTADO" "1" "$(cand_out "$M" "--preguntas-usuario 1" | grep -c 'SALTADO .*pendientes.candidatos_pregunta')"
 chk "CP7: 2 decisiones y 2 preguntas → HECHO" "1" "$(cand_out "$M" "--preguntas-usuario 2" | grep -c 'HECHO .*pendientes.candidatos_pregunta')"
+# 2.54.0, ronda 4: con los encabezados del hook, cada decision cita el de su pregunta.
+M="$T/mCQ1"; cand_ficha "$M" '- algo — pregunta: Rama — decision: descartado
+- otra — pregunta: `PlanVPS` — decision: hecho _verificado: corrida ok_'
+chk "CQ1: cada decision cita un encabezado que llego → HECHO" "1" "$(cand_out "$M" "--preguntas-usuario 2 --encabezados-usuario [\"Rama\",\"planvps\"]" | grep -c 'HECHO .*pendientes.candidatos_pregunta')"
+chk "CQ2: un encabezado citado que no llego → SALTADO" "1" "$(cand_out "$M" "--preguntas-usuario 2 --encabezados-usuario [\"Rama\",\"Otra\"]" | grep -c 'SALTADO .*pendientes.candidatos_pregunta')"
+chk "CQ3: sin los encabezados del hook (Step 7a) no se cruza" "1" "$(cand_out "$M" "--preguntas-usuario 2" | grep -c 'HECHO .*pendientes.candidatos_pregunta')"
+M="$T/mCQ4"; cand_ficha "$M" '- algo — decision: descartado'
+chk "CQ4: decision sin pregunta: → SALTADO" "1" "$(cand_out "$M" "--preguntas-usuario 1 --encabezados-usuario [\"Rama\"]" | grep -c 'SALTADO .*pendientes.candidatos_pregunta')"
+M="$T/mCQ5"; cand_ficha "$M" '- algo — pregunta: Rama — decision: descartado
+- otra — pregunta: Rama — decision: descartado'
+chk "CQ5: dos decisiones citan la misma pregunta → SALTADO" "1" "$(cand_out "$M" "--preguntas-usuario 2 --encabezados-usuario [\"Rama\",\"Otra\"]" | grep -c 'SALTADO .*pendientes.candidatos_pregunta')"
 M="$T/mCP4"
 chk "CP5: --solo-snippet (modo del hook) incluye el chequeo" "1" "$(cand_out "$M" "--solo-snippet --preguntas-usuario 0" | grep -c 'pendientes.candidatos ')"
 

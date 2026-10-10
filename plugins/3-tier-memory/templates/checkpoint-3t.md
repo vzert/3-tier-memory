@@ -517,7 +517,7 @@ Con una sola: "De esta sesion salio una cosa que podria quedar como pendiente. T
 que decidas si vale la pena guardarla." Si no salio ninguna, una frase y nada mas: "De esta sesion no salio nada que valga la pena guardar
 como pendiente." Cada pregunta:
 - **Encabezado**: de que se trata en 1-3 palabras (`CI 2.53.0`, `Re-checkpoint`), nunca
-  `Candidato N`.
+  `Candidato N`. Distinto en cada pregunta del turno: la linea de la ficha lo cita (punto 3).
 - **Texto**, cuatro partes cortas para alguien que no vio la sesion: que es; de donde salio (que paso
   en la sesion); que pasa si no se hace; y tu recomendacion con su razon ("Te recomiendo guardarlo:
   …" / "Te recomiendo hacerlo ahora: …" / "Te recomiendo no guardarlo: …").
@@ -550,7 +550,7 @@ otros 91 (18%) su primer mensaje fue sobre el checkpoint mismo ("¿falto algo?")
 llega cuando la ficha (Step 2), el commit (Step 6) y el audit (Step 7a) ya corrieron: solo queda
 registrado si alguien vuelve a editar la ficha. Hecho dentro de Step 3b, la ficha ya trae la
 evidencia cuando Step 6 la commitea y `checkpoint-audit.py` lo revisa en la misma corrida. Limite: el
-audit mide que la linea `hecho` traiga evidencia y que no hubo menos preguntas que decisiones; no mide si el candidato
+audit mide que la linea `hecho` traiga evidencia y cite una pregunta que llego al usuario; no mide si el candidato
 cumplia las tres condiciones de arriba, ni que la pregunta nombrara el comando sin vuelta atras.
 Eso queda en tu pregunta y en la eleccion del usuario.
 
@@ -589,9 +589,9 @@ Step 2), una linea por candidato:
 
 ```markdown
 ## Candidatos a pendiente
-- <texto del candidato> — recomendacion: guardar|descartar — decision: guardado `p-xxxxxxxxxx`
-- <texto del candidato> — recomendacion: hacer ahora — decision: hecho _verificado: <evidencia>_
-- <texto del candidato> — recomendacion: descartar — decision: descartado
+- <texto del candidato> — pregunta: <encabezado> — recomendacion: guardar|descartar — decision: guardado `p-xxxxxxxxxx`
+- <texto del candidato> — pregunta: <encabezado> — recomendacion: hacer ahora — decision: hecho _verificado: <evidencia>_
+- <texto del candidato> — pregunta: <encabezado> — recomendacion: descartar — decision: descartado
 - <texto del candidato> — decision: sin confirmar (sin pantalla)
 <or "Ninguno">
 ```
@@ -601,12 +601,13 @@ El id de `guardado` sale del stdout de `journal-emit.py` (abajo). `checkpoint-au
 un id que exista, si un `hecho` no trae `_verificado: <evidencia>_`, si un pendiente abierto que nacio en esta sesion (`_origen` = esta ficha) no sale
 como `guardado`, si hay mas `_descartado:` en `## Bugs fixed` que lineas `descartado`/`sin
 confirmar` aqui, o si falta la seccion cuando habia algo de eso que decidir. El hook de cierre
-anade `pendientes.candidatos_pregunta`: cuenta las preguntas de los `AskUserQuestion` del turno del
-checkpoint que llegaron al usuario (respondidos, o rechazados por el con el texto de arriba). Desde
-2.54.0 cuenta preguntas, no modales: si hay menos preguntas que decisiones `guardado`, `hecho` o
-`descartado`, alguna la tomaste tu. Un error con otro texto no cuenta como pregunta. Limite
-honesto: no mide que cada pregunta fuera sobre su candidato, y no ve un candidato que nunca
-escribiste aqui.
+anade `pendientes.candidatos_pregunta`: toma las preguntas de los `AskUserQuestion` del turno del
+checkpoint que llegaron al usuario (respondidos, o rechazados por el con el texto de arriba) y,
+desde 2.54.0, exige que cada decision `guardado`, `hecho` o `descartado` cite con `pregunta:` el
+encabezado de una de ellas, sin repetirlo. Una decision sin `pregunta:`, con un encabezado que no
+llego al usuario, o con uno que ya cita otra decision, la tomaste tu. Un error con otro texto no
+cuenta como pregunta. Limite honesto: comprueba que la pregunta citada llego al usuario, no que su
+texto describiera bien al candidato, y no ve un candidato que nunca escribiste aqui.
 
 **4. Emite solo los que el usuario guardo.** For EACH kept candidate, emit one event:
 
