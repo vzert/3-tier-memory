@@ -543,12 +543,14 @@ publicar algo), el texto de la pregunta dice exactamente que vas a correr y que 
 atras: la respuesta del usuario es su autorizacion, y solo para eso.
 
 **Lo haces dentro de Step 3b**, antes de Step 3c, no despues del checkpoint. Medido el 2026-10-09
-en los 497 `/checkpoint-3t` de 5176 transcripts de esta maquina: en 235 (47%) el usuario siguio
-escribiendo despues del checkpoint, y en 179 (36%) hubo 5 o mas herramientas de trabajo despues. El
-checkpoint casi nunca es el final de la sesion. Lo que se deja "para despues del checkpoint" se
-mezcla con el trabajo siguiente y no queda en la ficha, en el commit ni en el audit. Hecho dentro
-de Step 3b, la ficha nace con la evidencia, Step 6 lo commitea y `checkpoint-audit.py` lo revisa en
-la misma corrida.
+sobre los 496 `/checkpoint-3t` de la maquina del autor del plugin
+(`tools/medir-trabajo-tras-checkpoint.py`): en 137
+(27%) el usuario pidio otra cosa despues del checkpoint, y en 116 (23%) siguieron 5 o mas
+herramientas de trabajo; en otros 92 (18%) su primer mensaje fue sobre el checkpoint mismo ("¿falto
+algo?"). En casi la mitad, el checkpoint no es el final de la sesion. Lo que se deja "para despues
+del checkpoint" se mezcla con lo que sigue y no queda en la ficha, en el commit ni en el audit.
+Hecho dentro de Step 3b, la ficha nace con la evidencia, Step 6 lo commitea y `checkpoint-audit.py`
+lo revisa en la misma corrida.
 
 Al hacerlo: corre la accion y comprueba el resultado (la salida del comando, el archivo que quedo,
 el estado que consultaste). La linea queda `decision: hecho _verificado: <evidencia>_`. Si el

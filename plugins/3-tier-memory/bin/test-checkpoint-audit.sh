@@ -1695,6 +1695,8 @@ chk "CH2: hecho sin _verificado: → SALTADO" "1" "$(cand_out "$M" | grep -c 'SA
 chk "CH3: y lo dice" "1" "$(cand_out "$M" | grep -c '`hecho` sin `_verificado:')"
 M="$T/mCH4"; cand_ficha "$M" '- la rama remota quedo sin borrar — decision: hecho _verificado: <evidencia>_'
 chk "CH4: hecho con el placeholder de la plantilla → SALTADO" "1" "$(cand_out "$M" | grep -c 'SALTADO .*pendientes.candidatos ')"
+M="$T/mCH8"; cand_ficha "$M" '- la rama remota quedo sin borrar — decision: hecho _verificado: _'
+chk "CH8: hecho con _verificado: vacio → SALTADO" "1" "$(cand_out "$M" | grep -c 'SALTADO .*pendientes.candidatos ')"
 M="$T/mCH5"; cand_ficha "$M" '- la rama remota quedo sin borrar — decision: hecho _verificado: gh api DELETE devolvio 204_'
 chk "CH5: hecho sin ninguna pregunta al usuario → SALTADO (lo decidio el agente)" "1" "$(cand_out "$M" "--preguntas-usuario 0" | grep -c 'SALTADO .*pendientes.candidatos_pregunta')"
 # Un defecto de `## Bugs fixed` hecho en Step 3b cierra con `_verificado:`: no es un descarte, y no

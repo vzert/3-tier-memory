@@ -303,6 +303,7 @@ caso "mide sin checkpoint"     checkpoint-close-guard.sh $L test-checkpoint-clos
 caso "descartado sin candidato" checkpoint-audit.py $L $S "CB2: _descartado: sin candidato" descartado-sin-candidato
 caso "ninguno sin descartado"  checkpoint-audit.py $L $S "CB5: ninguno . break . defecto descartado" ninguno-ignora-descartado
 caso "hecho sin evidencia"     checkpoint-audit.py $L $S "CH2: hecho sin _verificado:" hecho-sin-evidencia
+caso "hecho evidencia vacia"   checkpoint-audit.py $L $S "CH8: hecho con _verificado: vacio" hecho-evidencia-vacia
 caso "hecho sin pregunta"      checkpoint-audit.py $L $S "CH5: hecho sin ninguna pregunta" hecho-no-pregunta
 caso "hecho no es decision"    checkpoint-audit.py $L $S "CH1: hecho con evidencia" hecho-no-es-decision
 

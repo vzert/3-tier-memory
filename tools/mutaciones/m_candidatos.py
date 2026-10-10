@@ -39,6 +39,9 @@ M = {
     "hecho-sin-evidencia": [
         ('                        malos.append(f"`hecho` sin `_verificado: <evidencia>_`: {s[:70]}")',
          "                        pass")],
+    "hecho-evidencia-vacia": [
+        ('                    if not [e for e in evid_c if e and not re.fullmatch(r"<[^>]*>", e)]:',
+         '                    if not [e for e in evid_c if not re.fullmatch(r"<[^>]*>", e)]:')],
     "hecho-no-pregunta": [
         ('                if m.group(1).lower() in ("guardado", "descartado", "hecho"):',
          '                if m.group(1).lower() in ("guardado", "descartado"):')],

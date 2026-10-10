@@ -16,17 +16,19 @@ quieras". Ni pendiente ni descarte servian: el agente podia hacerlas en minutos.
   _verificado: <evidencia>_`. Si no lo puede terminar, se vuelve pendiente (`decision: guardado
   p-… (no se pudo hacer ahora: <motivo>)`). Sin pantalla no se ofrece. `/backfill-3t` 3d no la
   ofrece: esa sesion ya termino.
-- **Por que dentro de Step 3b y no despues del checkpoint.** Medido el 2026-10-09 en los 497
-  `/checkpoint-3t` de 5176 transcripts de la maquina del autor: en 235 (47%) el usuario siguio
-  escribiendo despues del checkpoint y en 179 (36%) hubo 5 o mas herramientas de trabajo despues.
-  Lo hecho "despues" se mezcla con el trabajo siguiente y no queda en la ficha, el commit ni el
-  audit. En esos datos, de los 74 checkpoints que siguieron a otro en la misma sesion, ninguno
-  reescribio con Write la ficha del primero (36 crearon otra, 6 la editaron, 32 no escribieron
-  ficha).
+- **Por que dentro de Step 3b y no despues del checkpoint.** Medido el 2026-10-09 sobre los 496
+  `/checkpoint-3t` de la maquina del autor (`tools/medir-trabajo-tras-checkpoint.py 2026-10-10T02:00`):
+  en 137 (27%) el usuario pidio otra cosa despues del checkpoint y en 116 (23%) siguieron 5 o mas
+  herramientas de trabajo; en otros 92 (18%) su primer mensaje fue sobre el checkpoint mismo; en 267
+  (53%) no escribio nada mas. La clasificacion es aproximada (palabras clave) y no cuenta mensajes de
+  otra sesion ni de un supervisor. Lo hecho "despues" se mezcla con lo que sigue y no queda en la
+  ficha, el commit ni el audit. El riesgo contrario no aparecio: de los 74 checkpoints que siguieron
+  a otro en la misma sesion, ninguno reescribio con Write la ficha del primero (36 crearon otra, 6 la
+  editaron, 32 no escribieron ficha), asi que p-ea8992fa7e no fue lo que decidio.
 - **`checkpoint-audit.py` (`pendientes.candidatos`) acepta `decision: hecho`** y marca `SALTADO` si
   no trae `_verificado: <evidencia>_` (o trae el placeholder de la plantilla).
   `pendientes.candidatos_pregunta` cuenta `hecho` como decision que necesita una pregunta al
-  usuario. 7 asertos nuevos (CH1-CH7) y 3 mutaciones en `tools/mutaciones/m_candidatos.py`.
+  usuario. 8 asertos nuevos (CH1-CH8) y 3 mutaciones en `tools/mutaciones/m_candidatos.py`.
 
 ## [2.53.1] - 2026-10-09
 Origen: la primera corrida en vivo de 2.53.0. El usuario leyo "Ahora te propondre 8 candidatos a
