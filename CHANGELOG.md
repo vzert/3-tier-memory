@@ -24,7 +24,8 @@ quieras". Ni pendiente ni descarte servian: el agente podia hacerlas en minutos.
   otra sesion ni de un supervisor. Lo hecho "despues" llega cuando la ficha, el commit (Step 6) y el
   audit (Step 7a) ya corrieron. El riesgo contrario no aparecio: de los 74 checkpoints que siguieron
   a otro en la misma sesion, ninguno reescribio con Write la ficha del primero (36 crearon otra, 6 la
-  editaron, 32 no escribieron ficha), asi que p-ea8992fa7e no fue lo que decidio.
+  editaron, 32 no escribieron ficha): el riesgo de que un segundo checkpoint borre lo anotado por el
+  primero no fue lo que decidio.
 - **`checkpoint-audit.py` (`pendientes.candidatos`) acepta `decision: hecho`** y marca `SALTADO` si
   no trae `_verificado: <evidencia>_` (o trae el placeholder de la plantilla).
   `pendientes.candidatos_pregunta` cuenta `hecho` como decision que necesita una pregunta al

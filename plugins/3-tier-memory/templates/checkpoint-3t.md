@@ -544,7 +544,7 @@ atras: la respuesta del usuario es su autorizacion, y solo para eso.
 
 **Lo haces dentro de Step 3b**, antes de Step 3c, no despues del checkpoint. Medido el 2026-10-09
 sobre los 496 `/checkpoint-3t` de la maquina del autor del plugin
-(`tools/medir-trabajo-tras-checkpoint.py`): en 137
+(`tools/medir-trabajo-tras-checkpoint.py` en el repo del plugin): en 137
 (27%) el usuario pidio otra cosa despues del checkpoint, y en 116 (23%) siguieron 5 o mas
 herramientas de trabajo; en otros 92 (18%) su primer mensaje fue sobre el checkpoint mismo ("¿falto
 algo?"). En casi la mitad, el checkpoint no es el final de la sesion. Y lo que se hace despues
