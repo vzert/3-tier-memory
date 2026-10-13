@@ -69,7 +69,7 @@ def lecturas_plan(cita):
     llevar `.md` y despues el punto de la frase. Ningun regex sabe donde acaba el slug, asi que se
     generan TODAS las lecturas que salen de aplicar, en cualquier orden y hasta agotarlas, dos
     recortes: quitar un signo final y quitar un `.md` final. `plan-a-.md.` da `plan-a-.md.`,
-    `plan-a-.md`, `plan-a-.`, `plan-a-` y `plan-a`. La usan esta linea de afines y
+    `plan-a-.md`, `plan-a-` y `plan-a`. La usan esta linea de afines y
     plan-siguiente-hermano.py: una sola definicion (2.55.0; dos copias distintas de esta logica
     dieron tres rondas de adversario seguidas)."""
     vistas, cola = [], [cita]
