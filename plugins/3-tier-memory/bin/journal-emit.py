@@ -17,6 +17,9 @@ Tipos de evento:
                     [--bloqueado-por "QUE"]  (espera a algo FUERA de la sesion: otra
                     instalacion, un peer, un PR ajeno; checkpoint-audit.py rechaza un
                     `Proximo paso:` que cite un id con `_bloqueado:`)
+                    [--relacionado p-<10 hex>|plan-<slug>]...  (repetible, 2.55.0: otro
+                    pendiente o un plan con el que este va junto; lo lee la capa 🔗 de
+                    print-pendiente-opcional.py para sumar afines al `Proximo paso`)
                     Imprime el id (p-<10 hex>) por stdout.                              (Fase 1)
   pendiente.resolve --id ID --estado resolved|superseded|abandoned [--sesion S] [--nota N]
   pendiente.update  --id ID [--text T] [--prioridad Alta|Media|Baja] [--text-prefix P]
@@ -36,6 +39,9 @@ Tipos de evento:
   pendiente.block   --id ID (--bloqueado-por "QUE" | --desbloquear)
                     Pone, cambia o quita `_bloqueado: QUE_` en un pendiente VIVO. Existe para
                     marcar en Step 3a uno que nacio sin el campo; no cambia el id.
+  pendiente.relate  --id ID (--relacionado X [--relacionado Y ...] | --sin-relacion)
+                    Pone (reemplaza) o quita `_relacionado: X, Y_` en un pendiente VIVO
+                    (2.55.0). Mismo patron que pendiente.block; no cambia el id.
                     [--text-prefix P]  (si no se da, se toma del archivo si la linea existe)
   session.add       --slug DATE-SLUG --date D --status ST --summary R [--commit C]      (Fase 2)
                     Fila en _session-index.md (arriba de la tabla). Si la fila del slug ya
@@ -433,11 +439,35 @@ def limpiar_bloqueado(valor):
     return v[:160]
 
 
+# `_relacionado:` (2.55.0): ids de otros pendientes o slugs de plan, separados por `, `. Solo
+# formas cerradas: el valor lo lee un script (print-pendiente-opcional.py), no una persona, y un
+# texto libre ahi seria el regex-sobre-texto que la regla 216 prohibe.
+RELACIONADO_RE = re.compile(r"^(?:p-[0-9a-f]{10}|plan-[A-Za-z0-9][A-Za-z0-9._-]{0,120})$")
+
+
+def limpiar_relacionados(valores, propio=None):
+    """Lista ordenada y sin duplicados de `--relacionado`; sale con error ante una forma invalida
+    o ante el propio id (un pendiente relacionado consigo mismo no suma nada)."""
+    out = []
+    for v in valores or []:
+        for parte in str(v).split(","):
+            x = parte.strip()
+            if not x:
+                continue
+            if not RELACIONADO_RE.match(x):
+                sys.exit(f"journal-emit: --relacionado '{x}' debe ser p-<10 hex> o plan-<slug>")
+            if x == propio:
+                sys.exit(f"journal-emit: --relacionado no puede ser el propio id ({x})")
+            if x not in out:
+                out.append(x)
+    return out
+
+
 def strip_meta(text):
     # Las mismas claves que `META_RE` en repair-dualwrite.py, que re-deriva este hash para
     # detectar ids inventados. Si divergen, todo pendiente con la clave que falte se reporta
     # como id inventado. Si anades una clave aqui, anadela alli.
-    text = re.sub(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado|bloqueado):[^—]*", "", text)
+    text = re.sub(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado|bloqueado|relacionado):[^—]*", "", text)
     return text.strip()
 
 
@@ -619,7 +649,7 @@ def main():
     ap.add_argument("--type", required=True,
                     choices=["pendiente.add", "pendiente.resolve", "pendiente.update",
                              "pendiente.expire", "pendiente.reopen", "pendiente.window",
-                             "pendiente.block",
+                             "pendiente.block", "pendiente.relate",
                              "session.add", "session.amend",
                              "learning.add", "learning.update", "learning.retire",
                              "plan.upsert", "plan.reopen", "research.upsert",
@@ -634,6 +664,8 @@ def main():
     ap.add_argument("--revisar")
     ap.add_argument("--bloqueado-por", dest="bloqueado_por")
     ap.add_argument("--desbloquear", action="store_true")
+    ap.add_argument("--relacionado", action="append", default=[])   # pendiente.add / .relate
+    ap.add_argument("--sin-relacion", dest="sin_relacion", action="store_true")
     # pendiente.resolve
     ap.add_argument("--id")
     ap.add_argument("--estado")
@@ -722,10 +754,14 @@ def main():
         # `bloqueado` tampoco entra en el hash, por lo mismo que `revisar`: es un estado del
         # pendiente, no su identidad.
         bloqueado = limpiar_bloqueado(a.bloqueado_por)
+        # `relacionado` tampoco: es un enlace, no la identidad.
+        relacionado = limpiar_relacionados(a.relacionado, pid)
         base["payload"] = {"id": pid, "text": text, "prioridad": prio,
                            "origen": origen, "creado": creado, "revisar": revisar}
         if bloqueado:
             base["payload"]["bloqueado"] = bloqueado
+        if relacionado:
+            base["payload"]["relacionado"] = relacionado
         write_event(memory_dir, base)
         print(pid)
         return
@@ -1050,6 +1086,19 @@ def main():
             sys.exit("journal-emit: pendiente.block necesita --bloqueado-por \"QUE\" o "
                      "--desbloquear (uno de los dos)")
         base["payload"] = {"id": pid, "bloqueado": bloqueado}
+        write_event(memory_dir, base)
+        print(pid)
+        return
+
+    if a.type == "pendiente.relate":
+        pid = (a.id or "").strip()
+        if not ID_RE.match(pid):
+            sys.exit("journal-emit: --id debe tener la forma p-<10 hex>")
+        relacionado = limpiar_relacionados(a.relacionado, pid)
+        if bool(relacionado) == bool(a.sin_relacion):
+            sys.exit("journal-emit: pendiente.relate necesita --relacionado X o --sin-relacion "
+                     "(uno de los dos)")
+        base["payload"] = {"id": pid, "relacionado": relacionado}
         write_event(memory_dir, base)
         print(pid)
         return

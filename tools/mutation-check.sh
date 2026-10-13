@@ -123,6 +123,17 @@ caso "cabecera de la revision" checkpoint-close-guard.sh m_capas_cierre.py test-
 caso "solo Retomamos en color" checkpoint-close-guard.sh m_capas_cierre.py test-checkpoint-close-guard.sh "reclama el fence fuera del snippet" fences-sin-control
 caso "fence dentro de una cita" checkpoint-close-guard.sh m_capas_cierre.py test-checkpoint-close-guard.sh "reclama el fence en la cita" fence-sin-cita
 caso "recomendacion con dueno" checkpoint-audit.py m_capas_cierre.py test-checkpoint-audit.sh "avisa del research" reco-sin-dueno-pasa
+T=test-pendiente-relacionado.sh
+caso "_relacionado en la linea" journal-compact.py m_relacionado.py $T "la linea lleva _relacionado: plan-foo_" linea-sin-campo
+caso "relacionado malformado" journal-compact.py m_relacionado.py $T "un relacionado con texto libre va a cuarentena" compact-sin-filtro
+caso "pendiente.relate aplica" journal-compact.py m_relacionado.py $T "relate reemplaza la lista" relate-sin-aplicar
+caso "afines en el snippet" print-como-retomar.py m_relacionado.py $T "hay linea de afines" snippet-sin-afines
+caso "afines sin bloqueados" pendientes_afines.py m_relacionado.py $T "no trae la bloqueada" afines-con-bloqueados
+caso "afines sin los de hoy" pendientes_afines.py m_relacionado.py $T "no trae la que vence hoy" afines-con-vence-hoy
+caso "afines en direccion inversa" pendientes_afines.py m_relacionado.py $T "la media que el ancla cita entra" afines-sin-inversa
+caso "afines Alta primero" pendientes_afines.py m_relacionado.py $T "el Alta ligado va primero aunque sea mas nuevo" afines-sin-prioridad
+caso "afines tope de 2" pendientes_afines.py m_relacionado.py $T "con 3 elegibles salen solo 2" afines-sin-tope
+caso "hermano de la tabla primero" plan-siguiente-hermano.py m_relacionado.py $T "y no desplaza a la fila de la tabla" hermano-fuera-primero
 
 echo "Contrato de check-project-dir-fallback.py (2.41.4): cada pieza, rota, tumba su aserto"
 caso "verde respaldo" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " respaldo: exit 0" r1-sin-quitar-forma

@@ -122,6 +122,11 @@ Reglas para llenar los slots:
      de un eslabon sin `## Estado` es la misma apuesta que inventar un `<next-step>` — mejor admitir
      el limite que fingir que se leyo algo que no estaba.
 
+     **El hermano que sigue lo da `plan-siguiente-hermano.py`** (2.55.0; ver Step 5, "Subir en el
+     arbol"): con `SIGUIENTE plan-<x>`, el `<next-step>` es el `## Estado` de `plan-<x>` (o, si no
+     lo tiene, `Abrir plan-<x>: <su titulo>`), y el `Proximo paso:` cita `plan-<x>` para que la
+     linea de afines traiga los pendientes ligados a ese plan. `SIN-ORDEN` es el caso de abajo.
+
      **Si el padre (o cualquier nivel al que subiste) tiene mas de un hijo `active`/`draft`**, no
      elijas en silencio cual sigue — el orden es el de las FILAS de `## Sub-planes`, de arriba
      hacia abajo (esa tabla ya declara prioridad al escribirse: la fila mas arriba es la que sigue,
@@ -132,6 +137,15 @@ Reglas para llenar los slots:
      regla de `<contexto-1-linea>`, arriba — no se repite aqui.)
   2. El pendiente nuevo de mayor prioridad creado en Step 3b de esta sesion.
   3. Si no hay nuevo, el pendiente existente de mayor prioridad relacionado con el trabajo de la sesion.
+
+  **Afines (2.55.0): no los escribas tu.** `<next-step>` sigue siendo UN item. Cuando su linea cita
+  un `p-…` (casos 2-3) o un `plan-<slug>` (caso 1: cita el slug del plan en la linea), `print-como-
+  retomar.py` mete debajo, en vivo, `Si ese paso es corto, suma en la misma sesion: …` con hasta 2
+  Alta/Media abiertos ligados por `_relacionado:` (Step 3b, `--relacionado`), de esta sesion o de
+  cualquier otra. Asi un Media que una sesion dejo junto a un Alta vuelve en el snippet siguiente
+  sin depender de que alguien se acuerde. Si quieres que un pendiente viejo entre, ligalo en Step
+  3a con `pendiente.relate`; no lo agregues a mano al snippet. Quien retoma decide si el paso es
+  corto: ningun campo lo dice, y el script no lo adivina por el texto (regla 216).
 
   **Ningun candidato de los casos 2 o 3 es valido si su unico dato accionable es una fecha futura**
   — trae `_revisar: YYYY-MM-DD` posterior a hoy en `_pendientes.md`, el mismo campo que Step 8c ya

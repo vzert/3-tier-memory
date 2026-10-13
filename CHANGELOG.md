@@ -1,6 +1,49 @@
 # Changelog
 
 
+## [2.55.0] - 2026-10-13
+Origen: Victor pregunto (via `/goalspec:interview`) si los pendientes se relacionaban para volver
+en el snippet `Como retomar` y si la jerarquia de planes padre/hijo/hermano funcionaba. Medido
+sobre las 8 ultimas fichas de este repo y de `claude-vzert`: el `Proximo paso` elegia el Alta en
+4 de 5 sesiones con Alta y Medias (la quinta, 2026-10-08, lo saco a proposito: tenia `_revisar`
+futuro y salio como recordatorio), pero los Medias que una sesion dejaba no volvian a ningun
+snippet salvo que vencieran (`p-f667380493`, `p-95d33b9363`, `p-b0b80cfb23`, `p-564b0bdc82` nunca
+volvieron). Los pendientes no tenian ningun campo de relacion, y el snippet llevaba un solo item.
+
+### Added
+- **Campo `_relacionado:` en los pendientes.** `journal-emit.py --type pendiente.add
+  --relacionado p-…|plan-<slug>` (repetible) y el evento nuevo `pendiente.relate --id …
+  (--relacionado X… | --sin-relacion)` para ligar uno que ya existe. Solo formas cerradas (id o
+  slug de plan); el emisor rechaza otra cosa y el compactador la cuarentena. Va en la linea de
+  Tier 2, no en la fila mensual (igual que `_bloqueado:`); no cambia el id; `pendiente.update` lo
+  conserva. Las 7 expresiones que despojan metadatos y `META_START_RE` llevan la clave nueva.
+- **Afines en el snippet.** `print-como-retomar.py` mete tras `Proximo paso:` la linea `Si ese
+  paso es corto, suma en la misma sesion: …` con hasta 2 pendientes Alta/Media abiertos ligados
+  al paso en cualquier direccion (el candidato cita el ancla, el ancla cita al candidato, o los dos
+  citan el mismo plan) y de cualquier sesion. Excluye bloqueados, `_revisar` futuro o de hoy (esos
+  ya tienen calendario o la capa 🔔). Alta antes que Media; dentro, el mas viejo. Se calcula en
+  vivo desde `_pendientes.md` (`bin/pendientes_afines.py`); el hook de cierre ya exige cada linea
+  que imprime el script. No decide si el paso es "corto": ningun campo lo dice.
+- **`bin/plan-siguiente-hermano.py`.** Dado el plan hijo que cerro, devuelve el hermano abierto
+  que sigue por el orden de `## Sub-planes` del padre (`SIGUIENTE`), o `SIN-ORDEN`, `NINGUNO`,
+  `SIN-PADRE`. Hace mecanico el cruce indice/tabla que Step 5 pedia hacer a mano desde 2.25.1.
+- **Templates.** Step 3b dice cuando poner `--relacionado` (sin preguntar: es un dato); Step 3a
+  liga con `pendiente.relate` un still-open que va con el trabajo de la sesion; Step 5 y Step 8
+  caso 1 usan el selector de hermanos y citan `plan-<slug>` en `Proximo paso`.
+
+### Verified (sin cambio)
+- **Padre/hijo funciona.** Las dos filas de `_plans-index.md` de este repo sin la anotacion
+  `(fase de plan-puerto-vps)` (`bloque-a`, `puerto-vps`, sesion `[[sessions/x]]`, sin fichero de
+  plan) son restos de una corrida a mano de `test-plan-parent.sh` contra la memoria real el
+  2026-09-12, antes de 2.25.0. Reaplicado el mismo evento sobre una copia, el compactador actual
+  escribe la anotacion. No hay uso real de la jerarquia todavia (0 tablas `## Sub-planes`).
+
+### Tests
+- `test-pendiente-relacionado.sh` (43 asertos): campo, relate, update, cuarentena, afines por
+  direccion, plan, exclusiones, orden, tope, y hermanos. `test-pendiente-update.sh` caso 16 cuenta
+  la cadena nueva. `tools/mutaciones/m_relacionado.py`: 10 mutaciones en `mutation-check.sh`.
+
+
 ## [2.54.1] - 2026-10-10
 Origen: p-ea8992fa7e. Un segundo `/checkpoint-3t` en la misma sesion sobre la misma ficha daba
 falsos SALTADO. Medido el 2026-10-09: de 74 checkpoints posteriores al primero de su sesion, 6

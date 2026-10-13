@@ -26,12 +26,20 @@ snippet de 6 lineas, con o sin condicionales), imprime una cabecera con el emoji
 DENTRO de un fence ``` (2.44.0): pegado en la respuesta, el fence es lo que sale en color, y es el
 unico bloque del cierre que va en color (Victor lo comprobo el 2026-10-01). Sin separadores ni
 texto de introduccion: el emoji marca donde empieza el bloque.
+Afines (2.55.0): si el snippet es un bloque y su `Proximo paso:` cita un `p-…` o un `plan-…`, mete
+justo debajo una linea `Si ese paso es corto, suma en la misma sesion: …` con hasta 2 pendientes
+Alta/Media ligados por `_relacionado:` (pendientes_afines.py). Se calcula EN VIVO desde
+`_pendientes.md`, igual que el bloque de Step 8e: no se guarda en la ficha, y el hook de cierre,
+que vuelve a correr este script, compara contra el estado real. Si la ficha ya trae esa linea
+(escrita a mano), no se duplica.
 Si la seccion esta vacia o dice solo el placeholder (`<filled in Step 8>`), no imprime nada y
 sale con codigo 1 — Step 8a todavia no corrio.
 
 Uso:  print-como-retomar.py SESSION_FILE
 """
 # sella-huellas: no (solo lee un session file y lo re-imprime; no escribe nada)
+import importlib.util
+import os
 import re
 import sys
 
@@ -70,6 +78,38 @@ def extract_section(text):
     return body
 
 
+AFINES_PREFIJO = "Si ese paso es corto, suma"
+
+
+def _afines():
+    """pendientes_afines.py, junto a este script (por ruta: con `python3 -I` el directorio del
+    script no esta en sys.path)."""
+    ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pendientes_afines.py")
+    spec = importlib.util.spec_from_file_location("pendientes_afines", ruta)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def con_afines(inner, text, path):
+    """`inner` con la linea de afines metida tras `Proximo paso:` (y su linea en blanco)."""
+    if AFINES_PREFIJO.lower() in inner.lower():
+        return inner
+    memory_dir = os.path.dirname(os.path.dirname(os.path.abspath(path)))
+    try:
+        linea = _afines().linea_snippet(text, os.path.join(memory_dir, "_pendientes.md"))
+    except (OSError, UnicodeDecodeError) as exc:
+        print(f"⚠ print-como-retomar.py: afines no calculados ({exc})", file=sys.stderr)
+        return inner
+    if not linea:
+        return inner
+    lines = inner.split("\n")
+    for i, l in enumerate(lines):
+        if l.strip().strip("*").strip().lower().startswith(("proximo paso:", "próximo paso:")):
+            return "\n".join(lines[:i + 1] + ["", linea] + lines[i + 1:])
+    return inner
+
+
 def main():
     if len(sys.argv) != 2:
         print("uso: print-como-retomar.py SESSION_FILE", file=sys.stderr)
@@ -92,7 +132,7 @@ def main():
 
     fence = FENCE_RE.match(body)
     if fence:
-        inner = fence.group(1).strip("\n")
+        inner = con_afines(fence.group(1).strip("\n"), text, path)
         print(CABECERA)
         print(FENCE)
         print(inner)

@@ -416,6 +416,10 @@ Para los pendientes DENTRO del alcance, clasifica cada uno en exactamente uno de
   session** (another install, a peer, a foreign PR) and its line has no `_bloqueado:`, mark it:
   `journal-emit.py --type pendiente.block --id p-… --bloqueado-por "<what it waits for>"`.
   Without the field, Step 8 can promote it to `Proximo paso` (see Step 3b, `--bloqueado-por`).
+  If a still-open item clearly goes with a pendiente or plan this session touched and its line
+  has no `_relacionado:`, link it: `journal-emit.py --type pendiente.relate --id p-…
+  --relacionado <p-… | plan-slug>` (2.55.0). That is what brings it back in the next snippet
+  (see Step 3b, `--relacionado`).
 - **corregido** — sigue abierto, pero su TEXTO quedo falso (parte del trabajo se adelanto, el
   alcance se ajusto) o su prioridad cambio. No es un cierre: se emite `pendiente.update`, abajo.
 - **superseded** — the item was absorbed by another pendiente or a scope change (reference the new owner/scope).
@@ -625,8 +629,24 @@ usuario ya lo aprobo.
 ```bash
 python3 "$JBIN/journal-emit.py" --type pendiente.add --text "<texto del pendiente>" \
   --prioridad Alta|Media|Baja --origen "[[sessions/DATE-SLUG]]" [--revisar YYYY-MM-DD] \
-  [--bloqueado-por "<que espera, fuera de esta sesion>"]
+  [--bloqueado-por "<que espera, fuera de esta sesion>"] [--relacionado p-…|plan-<slug>]...
 ```
+
+**`--relacionado` (2.55.0) cuando el pendiente va junto con otro trabajo**: el id de otro pendiente
+(`p-…`) o el slug de un plan (`plan-<slug>`), repetible. Ponlo siempre que aplique una de estas,
+sin preguntar al usuario (es un dato, no una decision):
+- el pendiente sale del mismo trabajo que otro que esta sesion guarda o retomo: emite PRIMERO el de
+  mayor prioridad, toma el id que imprime y pasalo como `--relacionado` en los demas;
+- el pendiente es un paso de un plan: `--relacionado plan-<slug>`;
+- el pendiente continua uno que ya existe (otra sesion): `--relacionado <su id>`.
+El compactador anade `— _relacionado: X, Y_` a la linea de Tier 2 (no a la fila mensual, igual que
+`_bloqueado`). No cambia el id. Consumidor: `print-como-retomar.py` mete en el snippet de Step 8 una
+linea `Si ese paso es corto, suma en la misma sesion: …` con hasta 2 Alta/Media abiertos ligados
+al `Proximo paso:`, de cualquier sesion y en cualquier direccion (`pendientes_afines.py`). Sin el
+campo, un Media dejado junto a un Alta no vuelve a ningun snippet salvo que venza (medido en las 8
+ultimas fichas de dos proyectos, 2026-10-13). Para ligar uno que ya existe:
+`journal-emit.py --type pendiente.relate --id p-… --relacionado X [--relacionado Y]` (reemplaza la
+lista; `--sin-relacion` la quita).
 
 **`--bloqueado-por` cuando el pendiente espera a algo FUERA de esta sesion**: otra instalacion
 que tiene que actualizar, un peer, un mantenedor ajeno, un PR de otro repo, una decision de otra
@@ -1029,6 +1049,12 @@ que cierra un hijo (`--status completed|abandoned|superseded`):
    el hijo siga abierto (se preserva automáticamente al cerrar otros campos — ver la nota del
    compactor más abajo). `grep '(fase de plan-<slug-del-padre>)' _plans-index.md` te da los hijos
    reales; si difiere de `## Sub-planes`, el índice manda y actualizas la tabla para que coincida.
+   **El cruce lo hace un script (2.55.0):** `python3 "$JBIN/plan-siguiente-hermano.py"
+   --memory-dir "$MEMORY_DIR" --plan <slug-del-hijo-que-cerraste>`. Imprime `SIGUIENTE plan-…`
+   (el hermano abierto que sigue, por el orden de `## Sub-planes`; uno que falta en la tabla sale
+   al final con la nota `agregalo`), `SIN-ORDEN …` (varios abiertos y la tabla no los ordena),
+   `NINGUNO …` (paso 4) o `SIN-PADRE …`. Usa su primera linea para los pasos 3 y 4 en vez de
+   cruzar a mano.
 3. **Si queda otro hijo `active` o `draft`** (por el índice, no solo por la tabla), la fila MÁS
    ARRIBA de esos en `## Sub-planes` es el candidato a `<next-step>` de la sombrilla entera —
    aunque esta sesión no lo haya tocado (si el padre no ordenó las filas a propósito, dilo en el

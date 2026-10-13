@@ -130,7 +130,7 @@ HEADERS = {"alta": "## Alta prioridad", "media": "## Media prioridad", "baja": "
 ACTUALIZADO_RE = re.compile(r"\s*—\s*_actualizado: \d{4}-\d{2}-\d{2}_")
 # Donde empieza la cola de metadatos de una linea de Tier 2. La cola se conserva VERBATIM en un
 # update: contiene `_origen:`/`_creado:`/`_id:`/`_revisar:` y cualquier clave que otro escribiera.
-META_START_RE = re.compile(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado|bloqueado):")
+META_START_RE = re.compile(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado|bloqueado|relacionado):")
 SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$")   # tambien guarda contra '../'
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 CELL_SPLIT = re.compile(r"(?<!\\)\|")   # un `\|` dentro de una celda (alias de wikilink) no separa
@@ -402,7 +402,7 @@ def find_id_line(lines, pid):
 
 def line_text(line):
     s = line.strip()[5:].strip()
-    return normalize_text(re.sub(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado|bloqueado):[^—]*", "", s))
+    return normalize_text(re.sub(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado|bloqueado|relacionado):[^—]*", "", s))
 
 
 def header_index(lines, prio):
@@ -634,8 +634,9 @@ def apply_add_index(mem, p):
         raise Quarantine(f"no-anchor: prioridad '{p['prioridad']}' no es Alta, Media ni Baja")
     rev = f" — _revisar: {p['revisar']}_" if p.get("revisar") else ""
     blq = f" — _bloqueado: {p['bloqueado']}_" if p.get("bloqueado") else ""
+    rel = f" — _relacionado: {', '.join(p['relacionado'])}_" if p.get("relacionado") else ""
     new = (f"- [ ] {p['text']} — _origen: {p['origen']}_ — _creado: {p['creado']}_ "
-           f"— _id: {p['id']}_{rev}{blq}")
+           f"— _id: {p['id']}_{rev}{blq}{rel}")
     # Insertar tras el header y su linea en blanco (si la hay): lo nuevo arriba.
     at = h + 1
     if at < len(lines) and lines[at].strip() == "":
@@ -1282,6 +1283,43 @@ def apply_block(mem, p):
     nueva = BLOQUEADO_RE.sub("", lines[i].rstrip("\n"))
     if p.get("bloqueado"):
         nueva = f"{nueva} — _bloqueado: {p['bloqueado']}_"
+    if nueva == lines[i]:
+        return False                      # idempotente
+    lines[i] = nueva
+    atomic_write(path, lines)
+    return True
+
+
+RELACIONADO_RE = re.compile(r"\s*—\s*_relacionado:[^—]*")
+# Misma forma que `journal-emit.RELACIONADO_RE`: el compactador es su propia frontera de confianza.
+RELACIONADO_VALOR_RE = re.compile(r"^(?:p-[0-9a-f]{10}|plan-[A-Za-z0-9][A-Za-z0-9._-]{0,120})$")
+
+
+def relacionado_malformado(v):
+    """Motivo de cuarentena de un `relacionado` de payload, o None si es una lista valida."""
+    if not isinstance(v, list):
+        return "'relacionado' no es una lista"
+    for x in v:
+        if not isinstance(x, str) or not RELACIONADO_VALOR_RE.match(x):
+            return f"'relacionado' con un valor que no es p-<10 hex> ni plan-<slug>: {x!r}"
+    return None
+
+
+def apply_relate(mem, p):
+    """Pone (reemplaza) o quita `_relacionado: X, Y_` en la linea de Tier 2 (2.55.0). Mismo patron
+    que `apply_block`: ligar un pendiente viejo no obliga a editar `_pendientes.md` a mano.
+    `relacionado` vacio = quitarlo."""
+    path = os.path.join(mem, "_pendientes.md")
+    if not os.path.isfile(path):
+        raise Quarantine("no-index: _pendientes.md no existe")
+    lines = read_lines(path)
+    i = find_id_line(lines, p["id"])
+    if i is None:
+        log(f"WARN relate: no hay linea abierta con id {p['id']}")
+        return False
+    nueva = RELACIONADO_RE.sub("", lines[i].rstrip("\n"))
+    if p.get("relacionado"):
+        nueva = f"{nueva} — _relacionado: {', '.join(p['relacionado'])}_"
     if nueva == lines[i]:
         return False                      # idempotente
     lines[i] = nueva
@@ -3811,6 +3849,10 @@ def validate(ev):
                 raise Quarantine(f"malformed: pendiente.add con '{campo}' irreal: {v!r}")
         if "—" in str(p.get("bloqueado", "")) or "\n" in str(p.get("bloqueado", "")):
             raise Quarantine("malformed: pendiente.add con '—' o salto de linea en 'bloqueado'")
+        if "relacionado" in p:
+            motivo = relacionado_malformado(p["relacionado"])
+            if motivo:
+                raise Quarantine(f"malformed: pendiente.add con {motivo}")
     elif t == "pendiente.resolve":
         for k in ("id", "estado"):
             if not p.get(k):
@@ -3859,6 +3901,12 @@ def validate(ev):
             raise Quarantine("malformed: pendiente.block sin 'id'")
         if "—" in str(p.get("bloqueado", "")) or "\n" in str(p.get("bloqueado", "")):
             raise Quarantine("malformed: pendiente.block con '—' o salto de linea en 'bloqueado'")
+    elif t == "pendiente.relate":
+        if not p.get("id"):
+            raise Quarantine("malformed: pendiente.relate sin 'id'")
+        motivo = relacionado_malformado(p.get("relacionado", []))
+        if motivo:
+            raise Quarantine(f"malformed: pendiente.relate con {motivo}")
     elif t == "session.add":
         for k in ("slug", "date"):
             if not p.get(k):
@@ -4081,6 +4129,8 @@ def apply_event(mem, ev):
         return apply_window(mem, p)
     if t == "pendiente.block":
         return apply_block(mem, p)
+    if t == "pendiente.relate":
+        return apply_relate(mem, p)
     if t == "session.add":
         return apply_session_add(mem, p)
     if t == "session.amend":
