@@ -399,8 +399,10 @@ def escribio_la_ficha(transcripcion, nombre):
     MultiEdit con ese `file_path`, o un Bash que redirige (`>`, `>>`, `tee`) a esa ruta. Leerla no
     cuenta: la sesion que retoma lee la ficha anterior, y esa es justo la ajena."""
     import json
-    redir = re.compile(r"(?:>{1,2}|\btee\s+(?:-a\s+)?)\s*['\"]?[^\s'\"]*sessions/" + re.escape(nombre)
-                       + r"(?![\w.-])")
+    # `sessions/` tiene que ser un componente entero de la ruta: `not-sessions/<nombre>` no es la
+    # ficha (adversario externo, ronda 3 de 2.57.0).
+    redir = re.compile(r"(?:>{1,2}|\btee\s+(?:-a\s+)?)\s*['\"]?(?:[^\s'\"]*/)?sessions/"
+                       + re.escape(nombre) + r"(?![\w.-])")
     try:
         fh = open(transcripcion, encoding="utf-8", errors="replace")
     except OSError:
@@ -420,7 +422,8 @@ def escribio_la_ficha(transcripcion, nombre):
                     continue
                 inp = b.get("input") or {}
                 ruta = str(inp.get("file_path") or "").replace("\\", "/")
-                if b.get("name") in ESCRIBE and ruta.endswith("sessions/" + nombre):
+                if b.get("name") in ESCRIBE and (ruta == "sessions/" + nombre
+                                                 or ruta.endswith("/sessions/" + nombre)):
                     return True
                 if b.get("name") == "Bash" and redir.search(str(inp.get("command") or "")):
                     return True

@@ -151,6 +151,7 @@ caso "hilo: audit snippet.hilo" checkpoint-audit.py m_hilo.py $T "empate Alta/Al
 caso "hilo: sello solo de su sesion" stamp-hilo.py m_hilo.py $T "no sella una ficha de otra fecha" sello-sin-guardia
 caso "hilo: el paso es su primer id" checkpoint-audit.py m_hilo.py $T "nombrar al Alta de pasada no lo vuelve el paso: SALTADO" audit-todos-los-ids
 caso "hilo: la sesion escribio la ficha" pendientes_afines.py m_hilo.py $T "ficha del mismo dia, sin sello, que la sesion solo leyo: sin liga" guardia-sin-escritura
+caso "hilo: sessions/ es un componente entero" pendientes_afines.py m_hilo.py $T "escribir not-sessions/<ficha> no es escribir la ficha" ruta-por-sufijo
 caso "hilo: leer no es escribir" pendientes_afines.py m_hilo.py $T "no sella una ficha del mismo dia que la sesion solo leyo" leer-cuenta-como-escribir
 caso "hilo: --transcript con guardia" journal-emit.py m_hilo.py $T "--transcript a mano pasa por la misma guardia de fecha" liga-sin-guardia
 

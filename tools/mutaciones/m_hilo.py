@@ -18,6 +18,8 @@ M = {
     "pasted-sin-quitar": [('texto = PASTED.sub("", texto).strip()', "texto = texto.strip()")],
     "guardia-sin-escritura": [("and escribio_la_ficha(transcripcion, os.path.basename(ficha_path))",
                                "and (True or escribio_la_ficha(transcripcion, os.path.basename(ficha_path)))")],
+    "ruta-por-sufijo": [('if b.get("name") in ESCRIBE and (ruta == "sessions/" + nombre',
+                         'if b.get("name") in ESCRIBE and (ruta.endswith("sessions/" + nombre)')],
     "leer-cuenta-como-escribir": [('ESCRIBE = ("Write", "Edit", "MultiEdit")', 'ESCRIBE = ("Write", "Edit", "MultiEdit", "Read")')],
     "hilo-sin-cierre": [('if p["id"] not in miembros and ids_rel & miembros:', "if False:")],
     "hilo-sin-recibido": [('miembros = set(heredados) | nuevos | ids_pp | {x for x in paso_rec if x.startswith("p-")}',

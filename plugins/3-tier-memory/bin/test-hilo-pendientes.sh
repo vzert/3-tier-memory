@@ -129,6 +129,11 @@ transcripcion "$T/home/.claude/projects/-tmp-proyecto/$SID.jsonl" "$SNIP" 2026-1
 HOME="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
   --type pendiente.add --text "de la ficha escrita" --prioridad Media --origen "[[sessions/2026-10-14-leida]]" >/dev/null 2>&1
 chk "la misma ficha, si la sesion la escribio: liga" "p-aaaaaaaaaa" "$(evento_rel)"
+rm -rf "$M/.journal"
+transcripcion "$T/home/.claude/projects/-tmp-proyecto/$SID.jsonl" "$SNIP" "../not-sessions/2026-10-14-leida.md"
+HOME="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
+  --type pendiente.add --text "casi la ruta" --prioridad Media --origen "[[sessions/2026-10-14-leida]]" >/dev/null 2>&1
+chk "escribir not-sessions/<ficha> no es escribir la ficha" "-" "$(evento_rel)"
 transcripcion "$T/home/.claude/projects/-tmp-proyecto/$SID.jsonl" "$SNIP"
 rm -rf "$M/.journal"
 ficha 2026-10-14-hoy "Proximo paso: x." "hilo_paso: p-dddddddddd"
