@@ -43,16 +43,20 @@ t = t[:j].rstrip("\n") + "\n" + l + "\n\n" + t[j:]
 open(p, "w", encoding="utf-8").write(t)
 PY
 }
-# transcripcion RUTA SNIPPET: un .jsonl cuyo primer mensaje de usuario es el snippet (pegado).
+# transcripcion RUTA SNIPPET [FICHA]: un .jsonl cuyo primer mensaje de usuario es el snippet (pegado)
+# y que despues ESCRIBE la ficha FICHA (por defecto 2026-10-14-hoy.md) con Write, como el Step 2.
 transcripcion() {
   mkdir -p "$(dirname "$1")"
-  python3 - "$1" "$2" <<'PY'
+  python3 - "$1" "$2" "${3:-2026-10-14-hoy.md}" <<'PY'
 import json, sys
-ruta, snip = sys.argv[1], sys.argv[2].replace("\\n", "\n")
+ruta, snip, escrita = sys.argv[1], sys.argv[2].replace("\\n", "\n"), sys.argv[3]
 with open(ruta, "w", encoding="utf-8") as fh:
     fh.write(json.dumps({"type": "permission-mode", "permissionMode": "auto"}) + "\n")
     fh.write(json.dumps({"type": "user", "isMeta": True, "message": {"content": "<local-command-caveat>x</local-command-caveat>"}}) + "\n")
     fh.write(json.dumps({"type": "user", "message": {"role": "user", "content": "\n\n<pasted_content id=\"ab12\">\n" + snip + "\n</pasted_content id=\"ab12\">"}, "timestamp": "2026-10-14T15:00:00Z"}) + "\n")
+    fh.write(json.dumps({"type": "assistant", "timestamp": "2026-10-14T15:10:00Z", "message": {"content": [
+        {"type": "tool_use", "name": "Read", "input": {"file_path": "/p/memory/sessions/2026-10-14-leida.md"}},
+        {"type": "tool_use", "name": "Write", "input": {"file_path": "/p/memory/sessions/" + escrita, "content": "x"}}]}}) + "\n")
 PY
 }
 # ficha SLUG PASO [FRONTMATTER-EXTRA]: una ficha con snippet en fence.
@@ -89,7 +93,7 @@ memoria; ficha 2026-10-14-hoy "Proximo paso: x."
 transcripcion "$T/home/.claude/projects/-tmp-proyecto/$SID.jsonl" "$SNIP"
 HOME="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
   --type pendiente.add --text "nuevo de hoy" --prioridad Media --origen "[[sessions/2026-10-14-hoy]]" >/dev/null 2>"$T/err1"
-chk "el evento trae _relacionado al paso recibido (campo en 2 lineas)" "p-aaaaaaaaaa" "$(evento_rel)"
+chk "el evento trae _relacionado al paso recibido, campo en 2 lineas" "p-aaaaaaaaaa" "$(evento_rel)"
 chk "lo avisa por stderr" "1" "$(grep -c 'ligado al paso recibido: p-aaaaaaaaaa' "$T/err1")"
 rm -rf "$M/.journal"
 HOME="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
@@ -105,7 +109,7 @@ transcripcion "$T/home/.claude/projects/-tmp-proyecto/$SID.jsonl" "$SNIP"
 ficha 2026-09-01-vieja "Proximo paso: x."
 HOME="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
   --type pendiente.add --text "de backfill" --prioridad Media --origen "[[sessions/2026-09-01-vieja]]" >/dev/null 2>&1
-chk "ficha de otra fecha (backfill): no hereda el snippet de la sesion en curso" "-" "$(evento_rel)"
+chk "ficha de otra fecha, backfill: no hereda el snippet de la sesion en curso" "-" "$(evento_rel)"
 rm -rf "$M/.journal"
 ficha 2026-10-14-otra "Proximo paso: x." "session_id: 99999999-2222-3333-4444-555555555555"
 HOME="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
@@ -115,6 +119,17 @@ rm -rf "$M/.journal"
 python3 "$BIN/journal-emit.py" --memory-dir "$M" --transcript "$T/home/.claude/projects/-tmp-proyecto/$SID.jsonl" \
   --type pendiente.add --text "de backfill con ruta" --prioridad Media --origen "[[sessions/2026-09-01-vieja]]" >/dev/null 2>&1
 chk "--transcript a mano pasa por la misma guardia de fecha" "-" "$(evento_rel)"
+rm -rf "$M/.journal"
+ficha 2026-10-14-leida "Proximo paso: x."
+HOME="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
+  --type pendiente.add --text "de la ficha leida" --prioridad Media --origen "[[sessions/2026-10-14-leida]]" >/dev/null 2>&1
+chk "ficha del mismo dia, sin sello, que la sesion solo leyo: sin liga" "-" "$(evento_rel)"
+rm -rf "$M/.journal"
+transcripcion "$T/home/.claude/projects/-tmp-proyecto/$SID.jsonl" "$SNIP" 2026-10-14-leida.md
+HOME="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
+  --type pendiente.add --text "de la ficha escrita" --prioridad Media --origen "[[sessions/2026-10-14-leida]]" >/dev/null 2>&1
+chk "la misma ficha, si la sesion la escribio: liga" "p-aaaaaaaaaa" "$(evento_rel)"
+transcripcion "$T/home/.claude/projects/-tmp-proyecto/$SID.jsonl" "$SNIP"
 rm -rf "$M/.journal"
 ficha 2026-10-14-hoy "Proximo paso: x." "hilo_paso: p-dddddddddd"
 HOME="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
@@ -128,13 +143,14 @@ transcripcion "$T/t.jsonl" "$SNIP"
 OUT=$(python3 "$BIN/stamp-hilo.py" "$M/sessions/2026-10-14-hoy.md" --transcript "$T/t.jsonl")
 chk "sella" "sellado=1 motivo=sellada" "$OUT"
 FM=$(sed -n '1,/^---$/p' "$M/sessions/2026-10-14-hoy.md")
-chk "hilo_retoma" "1" "$(printf '%s' "$FM" | grep -c '^hilo_retoma: 2026-10-13-ayer$')"
 chk "hilo_paso" "1" "$(printf '%s' "$FM" | grep -c '^hilo_paso: p-aaaaaaaaaa$')"
 chk "hilo_heredados: paso + extras + quedan" "1" "$(printf '%s' "$FM" | grep -c '^hilo_heredados: p-aaaaaaaaaa, p-bbbbbbbbbb, p-cccccccccc$')"
-chk "hilo_saltos: el de ayer + 1; el paso no cuenta; uno que ya no vino se olvida" "1" "$(printf '%s' "$FM" | grep -c '^hilo_saltos: p-bbbbbbbbbb=2, p-cccccccccc=1$')"
+chk "hilo_saltos: el de ayer mas 1; el paso no cuenta; uno que ya no vino se olvida" "1" "$(printf '%s' "$FM" | grep -c '^hilo_saltos: p-bbbbbbbbbb=2, p-cccccccccc=1$')"
 chk "no pisa un sello ya puesto" "sellado=0 motivo=ya-sellada" "$(python3 "$BIN/stamp-hilo.py" "$M/sessions/2026-10-14-hoy.md" --transcript "$T/t.jsonl")"
 ficha 2026-09-01-vieja "Proximo paso: z."
 chk "no sella una ficha de otra fecha" "sellado=0 motivo=la-ficha-no-es-de-esa-transcripcion" "$(python3 "$BIN/stamp-hilo.py" "$M/sessions/2026-09-01-vieja.md" --transcript "$T/t.jsonl")"
+ficha 2026-10-14-leida "Proximo paso: z."
+chk "no sella una ficha del mismo dia que la sesion solo leyo" "sellado=0 motivo=la-ficha-no-es-de-esa-transcripcion" "$(python3 "$BIN/stamp-hilo.py" "$M/sessions/2026-10-14-leida.md" --transcript "$T/t.jsonl")"
 
 # El hilo de las pruebas 2, 4 y 5: la ficha de hoy recibio p-aaaaaaaaaa (Alta, de ayer, sin cerrar y
 # sin ninguna liga) y escribe como paso p-1111111111 (Alta, nuevo). p-2222222222 (Media) cita a
@@ -156,7 +172,7 @@ hilo_base() {
 
 echo "== 2. hilo recursivo: el de 2 saltos de _relacionado sale en el snippet =="
 hilo_base; OUT=$(retomar)
-chk "p-3333333333 (nieto) esta en el snippet" "1" "$(printf '%s\n' "$OUT" | grep -c 'p-3333333333')"
+chk "p-3333333333, el nieto, esta en el snippet" "1" "$(printf '%s\n' "$OUT" | grep -c 'p-3333333333')"
 chk "el suelto sin relacion no" "0" "$(printf '%s\n' "$OUT" | grep -c 'p-9999999999')"
 chk "ni el bloqueado ni el de _revisar futuro" "0" "$(printf '%s\n' "$OUT" | grep -c 'p-5555555555\|p-6666666666')"
 

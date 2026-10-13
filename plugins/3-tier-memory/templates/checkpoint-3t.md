@@ -1264,7 +1264,7 @@ fi
 ```
 
 Lee el primer mensaje de la transcripcion; si es un snippet `Retomamos:`, escribe en el
-frontmatter `hilo_retoma`, `hilo_paso`, `hilo_heredados` (los ids del paso, de la linea de extras y
+frontmatter `hilo_paso`, `hilo_heredados` (los ids del paso, de la linea de extras y
 de `quedan N en el hilo`) y `hilo_saltos` (cuantas sesiones seguidas lleva cada heredado sin ser el
 paso). Es lo que leen `print-como-retomar.py` y `checkpoint-audit.py` (`snippet.hilo`) en el Step 8:
 una sola lectura de la transcripcion, para que el hook de cierre, que vuelve a correr esos scripts,

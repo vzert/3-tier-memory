@@ -9,14 +9,15 @@ siguiente (print-como-retomar.py) corre dos veces: en el Step 8b y otra vez en e
 que puede correr sin `CLAUDE_CODE_SESSION_ID`. Si los dos leyeran la transcripcion, podrian dar dos
 salidas. Asi que se lee UNA vez, aqui, y se escribe en el frontmatter:
 
-  hilo_retoma: <slug>        la ficha que el snippet mandaba leer (la sesion anterior)
   hilo_paso: p-…, plan-…     los ids del `Proximo paso` recibido
   hilo_heredados: p-…, …     los ids del paso, de la linea de extras y de `quedan N en el hilo`
   hilo_saltos: p-…=N, …      cuantas sesiones seguidas lleva cada heredado sin ser el paso: el de
-                             la ficha anterior + 1 si en este snippet tampoco fue el paso. Con 2 o
+                             la ficha anterior (la que el snippet manda leer) + 1 si en este
+                             snippet tampoco fue el paso. Con 2 o
                              mas, el heredado le gana el empate al nuevo (regla 3 de Victor).
 
-Si la sesion no arranco con `Retomamos:` no se sella nada (exit 0, `sellado=0`). Si la ficha ya
+Si la sesion no arranco con `Retomamos:` no se sella nada (exit 0, `sellado=0`). Si la ficha no
+es de esa transcripcion (la misma guardia que journal-emit: `ficha_de_la_sesion`), tampoco (exit 3). Si la ficha ya
 tiene `hilo_paso`, no se pisa: el sello describe el arranque de la sesion y ese no cambia en un
 re-checkpoint.
 
@@ -100,8 +101,7 @@ def main(argv):
     paso = set(rec["paso"])
     salt = {i: previos.get(i, 0) + 1 for i in rec["heredados"] if i not in paso}
 
-    lineas = [f"hilo_retoma: {rec['retoma'] or ''}".rstrip(),
-              "hilo_paso: " + ", ".join(rec["paso"]),
+    lineas = ["hilo_paso: " + ", ".join(rec["paso"]),
               "hilo_heredados: " + ", ".join(rec["heredados"]),
               "hilo_saltos: " + ", ".join(f"{i}={n}" for i, n in sorted(salt.items()))]
     cabeza, cola = contenido[:fin + 1], contenido[fin + 1:]

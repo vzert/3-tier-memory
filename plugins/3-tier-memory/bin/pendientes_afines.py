@@ -225,7 +225,8 @@ def recibido(snippet):
 
     paso      = ids `p-…` y `plan-…` (canonicos) del `Proximo paso` (o `Proxima accion`);
     heredados = ids `p-…` del paso, de la linea de extras y de la linea `quedan N en el hilo`;
-    retoma    = el slug de la ficha que el snippet manda leer (la sesion que lo escribio)."""
+    retoma    = el slug de la ficha que el snippet manda leer (la sesion que lo escribio); lo usa
+                stamp-hilo.py para leer los `hilo_saltos` de esa ficha."""
     paso = campo(snippet, "proximo paso:") or campo(snippet, "próximo paso:") \
         or campo(snippet, "proxima accion:") or campo(snippet, "próxima acción:")
     ids_paso, planes = anclas(paso)
@@ -390,10 +391,47 @@ def transcripcion_de(session_id, dirs_proyecto=(), projects_root=None):
     return hits[0] if len(hits) == 1 else None
 
 
+ESCRIBE = ("Write", "Edit", "MultiEdit")
+
+
+def escribio_la_ficha(transcripcion, nombre):
+    """Si la transcripcion tiene una herramienta que ESCRIBIO `sessions/<nombre>`: Write, Edit o
+    MultiEdit con ese `file_path`, o un Bash que redirige (`>`, `>>`, `tee`) a esa ruta. Leerla no
+    cuenta: la sesion que retoma lee la ficha anterior, y esa es justo la ajena."""
+    import json
+    redir = re.compile(r"(?:>{1,2}|\btee\s+(?:-a\s+)?)\s*['\"]?[^\s'\"]*sessions/" + re.escape(nombre)
+                       + r"(?![\w.-])")
+    try:
+        fh = open(transcripcion, encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    with fh:
+        for linea in fh:
+            if nombre not in linea:
+                continue
+            try:
+                d = json.loads(linea)
+            except ValueError:
+                continue
+            if d.get("type") != "assistant":
+                continue
+            for b in (d.get("message") or {}).get("content") or []:
+                if not isinstance(b, dict) or b.get("type") != "tool_use":
+                    continue
+                inp = b.get("input") or {}
+                ruta = str(inp.get("file_path") or "").replace("\\", "/")
+                if b.get("name") in ESCRIBE and ruta.endswith("sessions/" + nombre):
+                    return True
+                if b.get("name") == "Bash" and redir.search(str(inp.get("command") or "")):
+                    return True
+    return False
+
+
 def ficha_de_la_sesion(ficha_path, transcripcion, session_id):
-    """Si la ficha puede ser de la sesion de esa transcripcion: no esta sellada con OTRO
-    `session_id`, y su fecha (la del nombre) cae dentro de las fechas de la transcripcion, con un
-    dia de margen (los `timestamp` son UTC). Falla cerrado: sin fecha legible, False.
+    """Si la ficha es de la sesion de esa transcripcion: no esta sellada con OTRO `session_id`, su
+    fecha (la del nombre) cae dentro de las fechas de la transcripcion, con un dia de margen (los
+    `timestamp` son UTC), y la transcripcion la ESCRIBIO (`escribio_la_ficha`; sin esto, una ficha
+    del mismo dia de otra sesion pasaba: adversario externo, ronda 2 de 2.57.0). Falla cerrado.
 
     Existe para que un `pendiente.add` con `--origen` de OTRA sesion (`/backfill-3t` reconstruye
     pendientes de fichas viejas, una prueba crea fichas de mentira) no herede el snippet de la
@@ -428,7 +466,7 @@ def ficha_de_la_sesion(ficha_path, transcripcion, session_id):
         b = datetime.date.fromisoformat(max(fechas)) + datetime.timedelta(days=1)
     except ValueError:
         return False
-    return a <= f <= b
+    return a <= f <= b and escribio_la_ficha(transcripcion, os.path.basename(ficha_path))
 
 
 def paso_recibido_de(ficha_path=None, transcripcion=None):
