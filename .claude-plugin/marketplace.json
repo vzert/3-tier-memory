@@ -12,6 +12,11 @@
       "name": "3-tier-memory",
       "source": "./plugins/3-tier-memory",
       "description": "Persistent memory across sessions with checkpoints, learnings, pendientes tracking, plans, and research indexes."
+    },
+    {
+      "name": "pendientes",
+      "source": "./plugins/pendientes",
+      "description": "Mod (early access): a 'what to do now' side pane with your 3-tier-memory pendientes and a clickable band above the prompt. Needs the 3-tier-memory plugin."
     }
   ]
 }

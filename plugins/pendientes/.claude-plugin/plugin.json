@@ -1,0 +1,12 @@
+{
+  "name": "pendientes",
+  "version": "0.2.0",
+  "description": "A Claude Code mod: a 'what to do now' side pane with the project's 3-tier-memory pendientes, and a clickable band above the prompt. Needs the 3-tier-memory plugin and Claude Code mods (early access).",
+  "author": {
+    "name": "Will"
+  },
+  "repository": "https://github.com/vzert/3-tier-memory",
+  "license": "MIT",
+  "keywords": ["mod", "pane", "sidebar", "pendientes", "memory"],
+  "types": "./types/index.d.ts"
+}
