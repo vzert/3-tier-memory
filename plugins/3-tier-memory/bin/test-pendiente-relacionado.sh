@@ -164,6 +164,18 @@ compact --quiet >/dev/null
 AF=$(python3 "$BIN/print-como-retomar.py" "$F" | grep '^Si ese paso es corto' || true)
 chk "entra la media ligada al plan citado" "1" "$(printf '%s' "$AF" | grep -c "$M2")"
 
+echo "== B6. un slug valido que termina en '-' o '.' tambien es ancla =="
+emit --type pendiente.relate --id "$M2" --relacionado plan-baz- >/dev/null
+compact --quiet >/dev/null
+sed -i.bak "s/^Proximo paso: .*/Proximo paso: Fase actual: 1 — seguir plan-baz-./" "$F" && rm -f "$F.bak"
+AF=$(python3 "$BIN/print-como-retomar.py" "$F" | grep '^Si ese paso es corto' || true)
+chk "plan-baz- citado al final de una frase trae su media" "1" "$(printf '%s' "$AF" | grep -c "$M2")"
+emit --type pendiente.relate --id "$M2" --relacionado plan-qux. >/dev/null
+compact --quiet >/dev/null
+sed -i.bak "s/^Proximo paso: .*/Proximo paso: seguir plan-qux./" "$F" && rm -f "$F.bak"
+AF=$(python3 "$BIN/print-como-retomar.py" "$F" | grep '^Si ese paso es corto' || true)
+chk "plan-qux. (slug con punto final) trae su media" "1" "$(printf '%s' "$AF" | grep -c "$M2")"
+
 echo "== C. siguiente plan hermano =="
 fixture
 printf -- '---\ntype: index\n---\n# Plans\n\n| Plan | Status | Date | Session | Pendientes | Learnings |\n|---|---|---|---|---|---|\n' > "$M/_plans-index.md"
@@ -192,6 +204,13 @@ chk "un hermano fuera de la tabla va al final y se dice" \
 chk "y no desplaza a la fila de la tabla" "SIGUIENTE plan-hijo-c (active) — hermano en plan-padre" "$(H hijo-a | head -1)"
 emit --type plan.upsert --slug hijo-aa --title hijo-aa --status abandoned --date 2026-10-03 >/dev/null 2>&1
 compact --quiet >/dev/null
+emit --type plan.upsert --slug hijo-z- --title hijo-z- --status active --date 2026-10-02 --parent padre >/dev/null 2>&1
+compact --quiet >/dev/null
+printf -- '# Padre\n\n## Sub-planes\n\n| Sub-plan | Estado | Fase actual |\n|---|---|---|\n| [[plans/plan-hijo-z-]] | active | 1 |\n| [[plans/plan-hijo-c]] | active | 1 |\n| [[plans/plan-hijo-b]] | active | 1 |\n' > "$M/plans/plan-padre.md"
+chk "un slug que termina en '-' respeta su fila" "SIGUIENTE plan-hijo-z- (active) — hermano en plan-padre" "$(H hijo-a | head -1)"
+emit --type plan.upsert --slug hijo-z- --title hijo-z- --status abandoned --date 2026-10-03 >/dev/null 2>&1
+compact --quiet >/dev/null
+printf -- '# Padre\n\n## Sub-planes\n\n| Sub-plan | Estado | Fase actual |\n|---|---|---|\n| [[plans/plan-hijo-a]] | completed | - |\n| [[plans/plan-hijo-c]] | active | 1 |\n| [[plans/plan-hijo-b]] | active | 1 |\n' > "$M/plans/plan-padre.md"
 emit --type plan.upsert --slug hijo-c --title hijo-c --status completed --date 2026-10-04 >/dev/null 2>&1
 emit --type plan.upsert --slug hijo-b --title hijo-b --status completed --date 2026-10-04 >/dev/null 2>&1
 compact --quiet >/dev/null

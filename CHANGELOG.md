@@ -39,9 +39,18 @@ volvieron). Los pendientes no tenian ningun campo de relacion, y el snippet llev
   escribe la anotacion. No hay uso real de la jerarquia todavia (0 tablas `## Sub-planes`).
 
 ### Tests
-- `test-pendiente-relacionado.sh` (47 asertos): campo, relate, update, cuarentena, afines por
+- `test-pendiente-relacionado.sh` (50 asertos): campo, relate, update, cuarentena, afines por
   direccion, plan, exclusiones, orden, tope, y hermanos. `test-pendiente-update.sh` caso 16 cuenta
   la cadena nueva. `tools/mutaciones/m_relacionado.py`: 10 mutaciones en `mutation-check.sh`.
+  `test-checkpoint-audit.sh`: un id que solo aparece en `_relacionado:` de una linea de `##
+  Pendientes` no cuenta como reconciliado en Step 3a.
+
+### Fixed
+- **`checkpoint-audit.py` (Step 3a):** el conteo de reconciliados sacaba todo `p-…` de las lineas
+  de `## Pendientes`; con una linea de Tier 2 copiada a la ficha, los ids de su `_relacionado:` se
+  daban por revisados. Ahora esa cola se quita antes de contar.
+- **Slugs que terminan en `-`, `.` o `_`:** el emisor los acepta, y tanto la linea de afines como el
+  selector de hermanos los recortaban. Ahora prueban cada lectura quitando un signo final a la vez.
 
 
 ## [2.54.1] - 2026-10-10

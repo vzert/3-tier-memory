@@ -53,8 +53,11 @@ def estado(cell):
     return PADRE.sub("", cell).strip().split()[0].lower() if cell.strip() else ""
 
 
-def orden_subplanes(plan_path):
-    """Slugs en el orden de las filas de `## Sub-planes` del padre ([] si no hay tabla)."""
+def orden_subplanes(plan_path, conocidos=()):
+    """Slugs en el orden de las filas de `## Sub-planes` del padre ([] si no hay tabla).
+
+    `conocidos` (los slugs del indice) desempata la lectura de una celda: un slug valido puede
+    terminar en `-`, `.` o `_`, y `.md` puede ir o no."""
     if not os.path.isfile(plan_path):
         return []
     with open(plan_path, encoding="utf-8") as fh:
@@ -67,9 +70,18 @@ def orden_subplanes(plan_path):
         if not l.strip().startswith("|"):
             continue
         celda = l.strip().strip("|").split("|")[0]
-        s = re.search(r"plan-([A-Za-z0-9][A-Za-z0-9._-]*[A-Za-z0-9])", celda)
-        # `[[plans/plan-x.md|X]]` es la misma fila que `[[plans/plan-x]]`: el indice no lleva `.md`.
-        slug = re.sub(r"\.md$", "", s.group(1)) if s else None
+        s = re.search(r"plan-([A-Za-z0-9][A-Za-z0-9._-]*)", celda)
+        slug = None
+        if s:
+            # `[[plans/plan-x.md|X]]` es la misma fila que `[[plans/plan-x]]`: el indice no lleva `.md`.
+            lecturas = []
+            for v in (s.group(1), re.sub(r"\.md$", "", s.group(1))):
+                while v:                      # quitando UN signo final a la vez
+                    lecturas.append(v)
+                    if v[-1] not in "._-":
+                        break
+                    v = v[:-1]
+            slug = next((v for v in lecturas if v in conocidos), lecturas[-1])
         if slug and slug not in out:
             out.append(slug)
     return out
@@ -102,7 +114,7 @@ def main():
         print(f"NINGUNO plan-{padre}: no quedan hijos abiertos — evalua cerrar el padre "
               f"(Step 5, paso 4)")
         return 0
-    orden = orden_subplanes(os.path.join(a.memory_dir, "plans", f"plan-{padre}.md"))
+    orden = orden_subplanes(os.path.join(a.memory_dir, "plans", f"plan-{padre}.md"), set(idx))
     en_tabla = [s for s in orden if s in abiertos]
     fuera = sorted(s for s in abiertos if s not in en_tabla)
     if not en_tabla and len(fuera) > 1:

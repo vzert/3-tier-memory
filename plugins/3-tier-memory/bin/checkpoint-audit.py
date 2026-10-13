@@ -107,6 +107,7 @@ RECONCILIACION = re.compile(r"^RECONCILIACION:\s*(\d+)\s+de\s+(\d+)\b", re.M)
 FECHA_FRONTMATTER = re.compile(r"^date:\s*(\d{4}-\d{2}-\d{2})\s*$", re.M)
 MAS_PENDIENTES = re.compile(r"\+\s*(\d+)\s+m[aá]s", re.I)
 LINEA_PENDIENTE = re.compile(r"^-\s*\[[ xX]\]\s")
+RELACIONADO_COLA = re.compile(r"—\s*_relacionado:[^—\n]*")
 BLOQUE_CALENDARIO = re.compile(r"^###\s+\d{4}-\d{2}-\d{2}\b", re.M)
 # El id RESERVADO por un recordatorio de calendario es el de su propia linea `Retomamos:` (Step
 # 8c-2, dentro del "Pega esto dentro del evento"), no cualquier id que su Descripcion/Comprueba
@@ -659,7 +660,10 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                            if LINEA_PENDIENTE.match(l.strip())]
     if BLOQUE_CALENDARIO.search(_sec_cal) or YA_AGENDADO.search(_sec_cal):
         _lineas_reconcilian.append(_sec_cal)
-    ids_en_ficha = set(ID_PENDIENTE.findall("\n".join(_lineas_reconcilian)))
+    # `— _relacionado: p-…_` (2.55.0) nombra OTRO pendiente: copiar la linea de Tier 2 a la ficha
+    # no reconcilia a los que cita (adversario externo, 2.55.0).
+    ids_en_ficha = set(ID_PENDIENTE.findall("\n".join(
+        RELACIONADO_COLA.sub("", l) for l in _lineas_reconcilian)))
     # Contar por id DISTINTO, no por linea: `_pendientes.md` puede traer el mismo id en dos lineas
     # abiertas (defecto de datos, ver la comprobacion `pendientes.duplicados` mas abajo), y contar
     # lineas hacia que R e incluso N mintieran — medido dogfoodeando este mismo checkpoint: la

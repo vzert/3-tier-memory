@@ -42,7 +42,7 @@ MAX_AFINES = 2
 TEXTO_MAX = 90
 ID = re.compile(r"_id:\s*(p-[0-9a-f]{10})(?![0-9a-f])")
 ID_CUALQUIERA = re.compile(r"(?<![0-9A-Za-z-])p-[0-9a-f]{10}(?![0-9a-f])")
-PLAN_CUALQUIERA = re.compile(r"(?<![0-9A-Za-z-])plan-[A-Za-z0-9][A-Za-z0-9._-]*[A-Za-z0-9]")
+PLAN_CUALQUIERA = re.compile(r"(?<![0-9A-Za-z-])plan-[A-Za-z0-9][A-Za-z0-9._-]*")
 REVISAR = re.compile(r"_revisar:\s*(\d{4}-\d{2}-\d{2})_")
 CREADO = re.compile(r"_creado:\s*(\d{4}-\d{2}-\d{2})_")
 BLOQUEADO = re.compile(r"—\s*_bloqueado:")
@@ -63,10 +63,22 @@ def proximo_paso(ficha_texto):
 
 
 def anclas(linea):
-    """(ids, planes) que cita la linea. Un `plan-x.md` cuenta como `plan-x`."""
+    """(ids, planes) que cita la linea. Un `plan-x.md` cuenta como `plan-x`.
+
+    Un slug valido puede terminar en `-`, `.` o `_` (journal-emit lo acepta), y en prosa un `.`
+    final suele ser el punto de la frase: se toman las DOS lecturas. Un ancla de mas solo casa
+    con un pendiente que cite exactamente ese valor, asi que sobra sin dano."""
     if not linea:
         return set(), set()
-    planes = {re.sub(r"\.md$", "", p) for p in PLAN_CUALQUIERA.findall(linea)}
+    planes = set()
+    for p in PLAN_CUALQUIERA.findall(linea):
+        for v in (p, re.sub(r"\.md$", "", p)):
+            # cada lectura quitando UN signo final a la vez: `plan-a-.` es `plan-a-` o `plan-a`.
+            while len(v) > len("plan-"):
+                planes.add(v)
+                if v[-1] not in "._-":
+                    break
+                v = v[:-1]
     return set(ID_CUALQUIERA.findall(linea)), planes
 
 

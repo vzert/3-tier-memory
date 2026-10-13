@@ -130,6 +130,23 @@ chk "PARCIAL en 3a" "1" "$(printf '%s' "$O" | grep -c 'PARCIAL .*pendientes.3a')
 chk "cuenta 1 de 3" "1" "$(printf '%s' "$O" | grep -c '1 de 3 revisados')"
 chk "remite a /triage-3t" "1" "$(printf '%s' "$O" | grep -c 'pendientes.3a .*triage-3t')"
 
+echo "== Step 3a: un id que solo aparece en _relacionado: de otra linea no cuenta como revisado (2.55.0) =="
+python3 - "$S" <<'PY'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace("- [ ] tres tocado — `p-3333333333` (Media)",
+            "- [ ] tres tocado — `p-3333333333` (Media) — _relacionado: p-1111111111, plan-x_")
+open(p,'w',encoding='utf-8').write(t)
+PY
+O=$($AUD "$M" --session-file "$S" --no-git --hoy $HOY 2>&1)
+chk "sigue contando 1 de 3" "1" "$(printf '%s' "$O" | grep -c '1 de 3 revisados')"
+python3 - "$S" <<'PY'
+import sys
+p=sys.argv[1]; t=open(p,encoding='utf-8').read()
+t=t.replace(" — _relacionado: p-1111111111, plan-x_", "")
+open(p,'w',encoding='utf-8').write(t)
+PY
+
 echo "== el id entre guiones bajos de cursiva SI se reconoce (el fallo real de \\b) =="
 # Con `\b` de cierre, `_id: p-1111111111_` no casaba y el conteo mentia por defecto: 24 de 189
 # en la memoria real que lo destapo. Este aserto es el que impide que vuelva.
