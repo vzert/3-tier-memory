@@ -1,6 +1,32 @@
 # Changelog
 
 
+## [2.56.1] - 2026-10-13
+Origen: issue #11. En una memoria con `.journal/applied/` versionado desde antes de que su
+`.gitignore` lo ignorara (checkpoints de antes de 2.23.0), `checkpoint-commit.py` salia siempre
+`COMMIT skip=commit-fallo hint: ... advice.addIgnoredFile false` y el checkpoint no se commiteaba.
+
+### Fixed
+- **El filtro de rutas ignoradas de `checkpoint-commit.py` ve un directorio ignorado con archivos
+  versionados.** `git check-ignore` sin `--no-index` no lo marcaba (tiene contenido en el indice),
+  y `git add -- .journal/applied` salia 1 y abortaba el commit entero. Ahora usa `--no-index`. Pero
+  `--no-index` tambien marca un archivo versionado que casa con un patron (anadido con `git add
+  -f`), y `git add` si lo acepta: solo se quita la candidata con la que `git add -n` falla. `git add
+  -n` tambien toma `.git/index.lock` (sale 128 con el candado de otro proceso), asi que espera igual
+  que el commit; si el candado no se suelta, la ruta se queda y el commit sale `index-lock`.
+- No toca datos: los archivos viejos de `applied/` siguen versionados y sin cambios en el commit.
+  Sacarlos del indice (`git rm --cached -r .journal/applied`) lo decide cada instalacion; al hacer
+  pull, ese commit borra esos archivos de la copia de trabajo de las otras maquinas.
+
+### Tests
+- `test-checkpoint-commit.sh`, seccion `applied/ versionado de antes de ignorarse (issue #11)`: 8
+  asertos (commitea, no sale `commit-fallo`, entran el pendiente y `pending/`, nada de `applied/`,
+  solo esos dos archivos, un archivo versionado que casa con un patron sigue entrando, y lo mismo
+  con un `index.lock` ajeno durante el filtro). Antes del arreglo la primera version de la seccion
+  salia FAIL en todo lo que miraba el commit, con el mismo mensaje del issue.
+- `tools/mutation-check.sh`: tres mutaciones (`m_commit_ignoradas.py`), una por pieza del arreglo
+  (sin `--no-index`, sin la prueba con `git add -n`, sin esperar al candado).
+
 ## [2.56.0] - 2026-10-13
 Origen: Victor recibio en otro proyecto snippets de cierre que mandaban a la sesion siguiente a hacer
 algo que solo se podia hacer otro dia. Dos casos del 2026-10-13: (1) `Proximo paso: Fase actual: 1 —

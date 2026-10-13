@@ -326,6 +326,12 @@ caso "guard sin encabezados"   checkpoint-close-guard.sh $L test-checkpoint-clos
 caso "hecho sin pregunta"      checkpoint-audit.py $L $S "CH5: hecho sin ninguna pregunta" hecho-no-pregunta
 caso "hecho no es decision"    checkpoint-audit.py $L $S "CH1: hecho con evidencia" hecho-no-es-decision
 
+# Filtro de ignoradas de checkpoint-commit.py (issue #11): cada pieza del arreglo con su aserto.
+I=m_commit_ignoradas.py; C=test-checkpoint-commit.sh
+caso "applied/ versionado aborta"  checkpoint-commit.py $I $C "commitea aunque applied/ tenga archivos versionados" sin-no-index
+caso "no-index pierde versionado"  checkpoint-commit.py $I $C "un archivo versionado que casa con un patron sigue entrando" sin-add-n
+caso "add -n sin esperar al lock"  checkpoint-commit.py $I $C "con index.lock ajeno: entra el versionado" sin-reintento
+
 echo
 echo "run-tests.sh (p-46153b135b): una suite que sale 0 sin su linea de resumen es FALLA"
 # El aserto esperado de sin-resumen-no-exigido es "exit 0 a mitad", no el del trap: en bash 5

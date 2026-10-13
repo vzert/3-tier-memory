@@ -206,9 +206,24 @@ def main():
     rutas = propias + [rel(p) for p in compartidas]
     # Una ruta ignorada hace fallar `git add` entero: se quitan antes (un directorio no hace falta,
     # git add ya salta lo ignorado de dentro).
-    r = subprocess.run(["git", "-c", "core.quotePath=false", "-C", repo, "check-ignore", "--stdin"], input="\n".join(rutas),
-                       capture_output=True, text=True, encoding="utf-8", errors="replace")
-    ignoradas = {l for l in r.stdout.splitlines() if l.strip()}
+    # --no-index: sin el, check-ignore calla sobre un directorio ignorado que tiene archivos
+    # versionados de antes de ignorarse (un .journal/applied/ de antes de 2.23.0), y `git add` de
+    # ese directorio sale 1 y aborta el commit entero (issue #11). Pero --no-index tambien marca un
+    # archivo versionado que casa con un patron (git add -f), y ese `git add` lo acepta: solo se
+    # quita la candidata con la que `git add -n` falla.
+    def add_rechaza(p):
+        # `git add -n` tambien toma .git/index.lock (medido: sale 128 si otro proceso lo tiene). Se
+        # espera como el commit de abajo; si el candado no se suelta, la ruta se queda y el bucle
+        # del commit da index-lock en vez de perderla en silencio.
+        for intento in range(8):
+            ad = git(repo, "add", "-n", "--", p)
+            if "index.lock" not in ad.stderr:
+                return ad.returncode != 0
+            time.sleep(min(0.25 * (2 ** intento), 2.0))
+        return False
+    r = subprocess.run(["git", "-c", "core.quotePath=false", "-C", repo, "check-ignore", "--no-index", "--stdin"],
+                       input="\n".join(rutas), capture_output=True, text=True, encoding="utf-8", errors="replace")
+    ignoradas = {l for l in r.stdout.splitlines() if l.strip() and add_rechaza(l)}
     rutas = [p for p in rutas if p not in ignoradas]
     propias = [p for p in propias if p not in ignoradas]
     if not rutas:

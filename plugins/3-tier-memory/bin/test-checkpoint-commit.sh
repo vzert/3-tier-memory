@@ -80,6 +80,42 @@ out=$(CC --memory-dir "$M" --solo-compartidos --mensaje "ign")
 eq "entra lo no ignorado" "$(files "$R")" "memory/_pendientes.md "
 rm "$R/.gitignore"; git -C "$R" add -A .gitignore; git -C "$R" commit -q -m unign
 
+echo "== applied/ versionado de antes de ignorarse (issue #11)"
+# Un repo con checkpoints de antes de 2.23.0 tiene .journal/applied/ en HEAD y luego el .gitignore
+# del journal que lo ignora. `check-ignore` sin --no-index no ve el directorio (tiene contenido
+# versionado), `git add -- .journal/applied` sale 1 y el commit entero se abortaba.
+R4="$TMP/r4"; nuevo_repo "$R4"; M4="$R4/memory"; mkdir -p "$M4/.journal/applied" "$M4/.journal/pending"
+printf '{}\n' > "$M4/.journal/applied/e1.json"; printf 'f\n' > "$M4/forzado.md"
+git -C "$R4" add -A && git -C "$R4" commit -q -m "applied versionado"
+printf 'applied/\n' > "$M4/.journal/.gitignore"; printf 'forzado.md\n' > "$M4/.gitignore"
+git -C "$R4" add "$M4/.journal/.gitignore" "$M4/.gitignore" && git -C "$R4" commit -q -m "ahora se ignora"
+printf '{}\n' > "$M4/.journal/applied/e2.json"; printf 'cambio\n' >> "$M4/.journal/applied/e1.json"
+printf -- '- fila 11\n' >> "$M4/_pendientes.md"; printf '{}\n' > "$M4/.journal/pending/p1.json"
+out=$(CC --memory-dir "$M4" --solo-compartidos --mensaje "issue 11")
+has "commitea aunque applied/ tenga archivos versionados" "$out" "COMMIT hash="
+hasnt "no sale commit-fallo" "$out" "commit-fallo"
+# Sin `eq` sobre la lista: `sort` pone `.journal` antes o despues de `_pendientes` segun el locale.
+f4=$(files "$R4")
+has "entra el pendiente" "$f4" "memory/_pendientes.md"
+has "entra pending/" "$f4" "memory/.journal/pending/p1.json"
+hasnt "nada de applied/ en el commit" "$f4" "applied"
+eq "solo esos dos archivos" "$(git -C "$R4" show --name-only --format= HEAD | grep -c .)" "2"
+# Un archivo versionado que casa con un patron de ignorado (git add -f): git add lo acepta y su
+# cambio tiene que seguir entrando. `check-ignore --no-index` a secas lo daria por ignorado.
+printf 'f2\n' >> "$M4/forzado.md"
+out=$(CC --memory-dir "$M4" --solo-compartidos --mensaje "forzado")
+eq "un archivo versionado que casa con un patron sigue entrando" "$(files "$R4")" "memory/forzado.md "
+# El filtro prueba con `git add -n`, que tambien toma .git/index.lock: con el candado de otro
+# proceso no puede dar por ignorado lo que no lo esta, ni dejar pasar applied/.
+printf 'f3\n' >> "$M4/forzado.md"; printf '{}\n' > "$M4/.journal/applied/e3.json"
+touch "$R4/.git/index.lock"; ( sleep 1; rm -f "$R4/.git/index.lock" ) &
+out=$(CC --memory-dir "$M4" --solo-compartidos --mensaje "forzado con lock")
+wait
+# El asunto del commit entra en la comparacion: el commit anterior tiene la misma lista de archivos,
+# y sin el un "no commiteo nada" pasaba por bueno (mutation-check, sin-reintento).
+eq "con index.lock ajeno: entra el versionado y applied/ no rompe" \
+  "$(git -C "$R4" log -1 --format=%s) $(files "$R4")" "forzado con lock memory/forzado.md "
+
 echo "== index.lock de otro proceso"
 printf -- '- fila L\n' >> "$M/_pendientes.md"
 touch "$R/.git/index.lock"; ( sleep 1; rm -f "$R/.git/index.lock" ) &
