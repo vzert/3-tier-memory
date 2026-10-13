@@ -98,8 +98,9 @@ Reglas para llenar los slots:
      espere una fecha futura, y `checkpoint-audit.py` marca `SALTADO` un `Proximo paso` que nombre
      una fecha `AAAA-MM-DD` posterior a la de la ficha (salvo `ninguno`/`nada accionable` y un
      plazo como "antes del …"). Escribe la fecha en ese formato: "manana" o "14-oct" no los ve. Y
-     si escribes `ninguno …`/`nada accionable hasta <fecha>`, el audit exige un pendiente abierto
-     con `_revisar: <fecha>` o un recordatorio para esa fecha en la ficha.
+     si escribes `ninguno …`/`nada accionable hasta <fecha>`, el audit exige que el pendiente de ese
+     dia este abierto con `_revisar: <fecha>` y ligado al paso: citado en la linea, o como `_id` de
+     `Retomamos:` en el bloque `### <fecha>` de esta ficha (o en su linea `ya agendado para`).
 
      **Esto es una variante MAS del caso 5, no un mecanismo nuevo de colapso** — mismo principio
      que la variante ya documentada para casos 2-3 mas abajo ("Tambien aplica cuando..."): si,

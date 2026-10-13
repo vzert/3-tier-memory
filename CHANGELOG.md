@@ -22,8 +22,9 @@ texto y muchos que empezaban por `Fase actual: N — <estado>` en vez de por la 
   actual: …` con plan enlazado) no tenia que citar un id, y los chequeos de `_revisar` y
   `_bloqueado` solo miran ids citados: sin id no habia nada que chequear, y el caso (1) pasaba.
   `ninguno …` y `nada accionable …` siguen pasando, pero si nombran una fecha futura tiene que
-  haber un pendiente abierto con `_revisar` en esa fecha o un recordatorio para ella en la ficha:
-  sin eso, el trabajo de ese dia no llega a ningun calendario.
+  haber un pendiente abierto con `_revisar` en esa fecha ligado al paso: citado en la linea, o como
+  `_id` del `Retomamos:` del bloque de calendario de esa fecha en la ficha (o su linea `ya agendado
+  para`). Sin eso, el trabajo de ese dia no llega a ningun calendario.
 - **El caso 1 empieza por la accion, no por `Fase actual: N — <estado>`.** La fase ya va en
   `Retomamos:`. El audit reconoce el caso 1 por el `plan-<slug>` enlazado y `active` (fila de
   `_plans-index.md` o `status:` del plan) que cita la linea, y

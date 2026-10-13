@@ -1350,17 +1350,25 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                     problemas.append(f"{i} tiene `_revisar: {rev_por_id[i]}` futuro: ya sale en "
                                      "`## Recordatorios de calendario`")
         if es_ninguno:
-            # 2.56.0: "nada accionable hasta <fecha>" promete un recordatorio para esa fecha. Tiene
-            # que existir: un bloque de calendario de esta ficha para esa fecha, o un pendiente
-            # abierto con `_revisar` en esa fecha (su recordatorio puede vivir en otra ficha).
+            # 2.56.0: "nada accionable hasta <fecha>" promete un recordatorio para esa fecha, y
+            # ese recordatorio es de un pendiente concreto. Vale si un pendiente ABIERTO con
+            # `_revisar: <fecha>` es (a) uno que la linea cita, (b) el `_id` de la linea
+            # `Retomamos:` de un bloque `### <fecha>` de esta ficha, o (c) el de una linea
+            # `- p-… ya agendado para <fecha>`. Un `_revisar` o un encabezado de la misma fecha
+            # sin relacion con el paso no cuenta (adversario externo, ronda 2).
             futura_n = _afines_mod().fecha_futura(pp, ref)
-            if futura_n and futura_n not in set(rev_por_id.values()) \
-                    and not re.search(r"^###\s+" + futura_n + r"\b", _sec_cal, re.M) \
-                    and futura_n not in {f for _p, f in YA_AGENDADO.findall(_sec_cal)}:
-                problemas.append(f"dice que nada se puede hacer hasta {futura_n}, pero ningun "
-                                 f"pendiente abierto tiene `_revisar: {futura_n}` ni hay "
-                                 "recordatorio para esa fecha: registra el trabajo con "
-                                 f"`--revisar {futura_n}` (Step 3b) para que Step 8c lo agende")
+            if futura_n:
+                respaldo = set(ids_pp)
+                for b in re.split(r"(?m)^(?=###\s)", _sec_cal):
+                    if re.match(r"###\s+" + futura_n + r"\b", b):
+                        respaldo |= set(RETOMAMOS_ID_CALENDARIO.findall(b))
+                respaldo |= {i for i, f in YA_AGENDADO.findall(_sec_cal) if f == futura_n}
+                if not any(rev_por_id.get(i) == futura_n for i in respaldo):
+                    problemas.append(f"dice que nada se puede hacer hasta {futura_n}, pero no cita "
+                                     f"ningun pendiente abierto con `_revisar: {futura_n}` ni hay "
+                                     "en la ficha un recordatorio con su `_id` para esa fecha: "
+                                     f"registra el trabajo con `--revisar {futura_n}` (Step 3b), "
+                                     "citalo en la linea, y deja que Step 8c lo agende")
             # Solo los que SIGUEN abiertos en `_pendientes.md`: uno ya cerrado no es trabajo. En
             # el cierre real son todos; importa al re-auditar una ficha vieja (falso positivo
             # medido en `remedicion-goalspec-precondicion-no-cumplida`).

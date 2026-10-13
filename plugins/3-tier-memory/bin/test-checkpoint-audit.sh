@@ -1175,6 +1175,23 @@ M="$T/mE4"; ficha_nueva "$M" "Proximo paso: enviar el correo (plan-demo)." compl
 chk "ficha nueva, plan enlazado pero completed y sin id: SALTADO (no es caso 1)" "1" "$(pp_out_n "$M" | grep -c 'no cita el `_id`')"
 M="$T/mD6"; ficha_pp "$M" - "Proximo paso: nada accionable hasta 2026-09-20 — la medicion es manana." ""
 chk "'nada accionable hasta <fecha>' sin pendiente con _revisar ni recordatorio: SALTADO" "1" "$(pp_out "$M" | grep -c 'nada se puede hacer hasta 2026-09-20')"
+M="$T/mD7"; ficha_pp "$M" - "Proximo paso: nada accionable hasta 2026-09-20 — la medicion es manana." ""
+pend_linea "$M" p-2222222222 "otro asunto sin relacion" " — _revisar: 2026-09-20_"
+chk "'nada accionable hasta' con un _revisar de la misma fecha SIN relacion: SALTADO" "1" "$(pp_out "$M" | grep -c 'nada se puede hacer hasta 2026-09-20')"
+cal_ficha() {   # $1 memoria, $2 cuerpo de `## Recordatorios de calendario`
+  python3 - "$1/sessions/2026-09-19-demo.md" "$2" <<'PYX'
+import sys; p, cuerpo = sys.argv[1], sys.argv[2].replace("\\n", "\n")
+t = open(p, encoding="utf-8").read().rstrip("\n") + "\n\n## Recordatorios de calendario\n\n" + cuerpo + "\n"
+open(p, "w", encoding="utf-8").write(t)
+PYX
+}
+M="$T/mD8"; ficha_pp "$M" - "Proximo paso: ninguno — plan-demo Fase 1 esta bloqueada hasta 2026-09-20, ver Recordatorios de calendario." ""
+pend_linea "$M" p-3333333333 "medir la fase 1" " — _revisar: 2026-09-20_"
+cal_ficha "$M" "### 2026-09-20\n\nRetomamos: medir la fase 1 _id: p-3333333333_"
+chk "'ninguno … hasta F' con bloque ### F de esta ficha cuyo Retomamos es el pendiente con _revisar F: HECHO" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.proximo_paso')"
+M="$T/mD9"; ficha_pp "$M" - "Proximo paso: ninguno — plan-demo Fase 1 esta bloqueada hasta 2026-09-20, ver Recordatorios de calendario." ""
+cal_ficha "$M" "### 2026-09-20\n\n(vacio)"
+chk "'ninguno … hasta F' con un encabezado ### F vacio: SALTADO" "1" "$(pp_out "$M" | grep -c 'nada se puede hacer hasta 2026-09-20')"
 M="$T/mA8"; ficha_pp "$M" - "Proximo paso: arreglar el parser _id: p-1234567890_.\n\nNo repitas: revisar _pendientes.md y proponer siguiente prioridad no sirve." ""
 pend_linea "$M" p-1234567890 "arreglar el parser" ""
 chk "caso 4 dentro de 'No repitas:' no cuenta: HECHO" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.proximo_paso')"
