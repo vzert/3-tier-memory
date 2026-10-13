@@ -25,6 +25,7 @@ Uso:  plan-siguiente-hermano.py --memory-dir DIR --plan SLUG   (con o sin el pre
 """
 # sella-huellas: no (solo lee _plans-index.md y el fichero del padre; no escribe nada)
 import argparse
+import importlib.util
 import os
 import re
 import sys
@@ -53,6 +54,15 @@ def estado(cell):
     return PADRE.sub("", cell).strip().split()[0].lower() if cell.strip() else ""
 
 
+def _afines():
+    """pendientes_afines.py, junto a este script: su `lecturas_plan` es la unica definicion."""
+    ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pendientes_afines.py")
+    spec = importlib.util.spec_from_file_location("pendientes_afines", ruta)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def orden_subplanes(plan_path, conocidos=()):
     """Slugs en el orden de las filas de `## Sub-planes` del padre ([] si no hay tabla).
 
@@ -70,18 +80,16 @@ def orden_subplanes(plan_path, conocidos=()):
         if not l.strip().startswith("|"):
             continue
         celda = l.strip().strip("|").split("|")[0]
-        s = re.search(r"plan-([A-Za-z0-9][A-Za-z0-9._-]*)", celda)
+        s = re.search(r"plan-[A-Za-z0-9][A-Za-z0-9._-]*", celda)
         slug = None
         if s:
-            # `[[plans/plan-x.md|X]]` es la misma fila que `[[plans/plan-x]]`: el indice no lleva `.md`.
-            lecturas = []
-            for v in (s.group(1), re.sub(r"\.md$", "", s.group(1))):
-                while v:                      # quitando UN signo final a la vez
-                    lecturas.append(v)
-                    if v[-1] not in "._-":
-                        break
-                    v = v[:-1]
-            slug = next((v for v in lecturas if v in conocidos), lecturas[-1])
+            # `[[plans/plan-x.md|X]]` es la misma fila que `[[plans/plan-x]]`: el indice no lleva
+            # `.md`. La lectura que existe en el indice gana; si ninguna existe, la canonica.
+            af = _afines()
+            lect = [v[len("plan-"):] for v in af.lecturas_plan(s.group(0))]
+            slug = next((v for v in lect if v in conocidos), None)
+            if slug is None and lect:
+                slug = af.canonica(s.group(0))[len("plan-"):]
         if slug and slug not in out:
             out.append(slug)
     return out

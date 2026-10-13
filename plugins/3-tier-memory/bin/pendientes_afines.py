@@ -62,6 +62,35 @@ def proximo_paso(ficha_texto):
     return None
 
 
+def lecturas_plan(cita):
+    """Todas las lecturas de una cita `plan-…` sacada de prosa o de una celda, la mas larga primero.
+
+    Un slug valido puede terminar en `.`, `-` o `_` (journal-emit lo acepta), y una cita puede
+    llevar `.md` y despues el punto de la frase. Ningun regex sabe donde acaba el slug, asi que se
+    generan TODAS las lecturas que salen de aplicar, en cualquier orden y hasta agotarlas, dos
+    recortes: quitar un signo final y quitar un `.md` final. `plan-a-.md.` da `plan-a-.md.`,
+    `plan-a-.md`, `plan-a-.`, `plan-a-` y `plan-a`. La usan esta linea de afines y
+    plan-siguiente-hermano.py: una sola definicion (2.55.0; dos copias distintas de esta logica
+    dieron tres rondas de adversario seguidas)."""
+    vistas, cola = [], [cita]
+    while cola:
+        v = cola.pop(0)
+        if v in vistas or len(v) <= len("plan-") or not v.startswith("plan-"):
+            continue
+        vistas.append(v)
+        if v[-1] in "._-":
+            cola.append(v[:-1])
+        if v.endswith(".md"):
+            cola.append(v[:-3])
+    return sorted(vistas, key=len, reverse=True)
+
+
+def canonica(cita):
+    """La lectura mas corta de `lecturas_plan` (sin signos ni `.md` finales), o None."""
+    lect = lecturas_plan(cita)
+    return lect[-1] if lect else None
+
+
 def anclas(linea):
     """(ids, planes) que cita la linea. Un `plan-x.md` cuenta como `plan-x`.
 
@@ -72,13 +101,7 @@ def anclas(linea):
         return set(), set()
     planes = set()
     for p in PLAN_CUALQUIERA.findall(linea):
-        for v in (p, re.sub(r"\.md$", "", p)):
-            # cada lectura quitando UN signo final a la vez: `plan-a-.` es `plan-a-` o `plan-a`.
-            while len(v) > len("plan-"):
-                planes.add(v)
-                if v[-1] not in "._-":
-                    break
-                v = v[:-1]
+        planes.update(lecturas_plan(p))
     return set(ID_CUALQUIERA.findall(linea)), planes
 
 

@@ -176,6 +176,36 @@ sed -i.bak "s/^Proximo paso: .*/Proximo paso: seguir plan-qux./" "$F" && rm -f "
 AF=$(python3 "$BIN/print-como-retomar.py" "$F" | grep '^Si ese paso es corto' || true)
 chk "plan-qux. (slug con punto final) trae su media" "1" "$(printf '%s' "$AF" | grep -c "$M2")"
 
+echo "== B7. matriz: cada slug valido con cada terminacion de prosa sigue siendo ancla (y en Sub-planes) =="
+# Tres rondas de adversario seguidas encontraron, una por una, terminaciones que se perdian
+# (`plan-foo-`, `plan-foo.`, `plan-foo.md.`). La matriz las prueba todas a la vez.
+MATRIZ=$(python3 - "$BIN" <<'PY'
+import importlib.util, os, sys, tempfile
+b = sys.argv[1]
+def mod(n, f):
+    s = importlib.util.spec_from_file_location(n, os.path.join(b, f)); m = importlib.util.module_from_spec(s)
+    s.loader.exec_module(m); return m
+af = mod("pendientes_afines", "pendientes_afines.py")
+sh = mod("plan_siguiente_hermano", "plan-siguiente-hermano.py")
+slugs = ["foo", "foo-", "foo.", "foo_", "a.b", "v1.0"]
+fines = ["", ".", ",", ".md", ".md.", ")", ").", "]].", ".md]]."]
+malos = []
+for s in slugs:
+    for f in fines:
+        _, planes = af.anclas(f"Proximo paso: seguir [[plans/plan-{s}{f}")
+        if f"plan-{s}" not in planes:
+            malos.append(f"anclas plan-{s}{f}")
+    for celda in (f"[[plans/plan-{s}]]", f"[[plans/plan-{s}.md]]", f"[[plans/plan-{s}.md|X]]",
+                  f"plan-{s}.md", f"plan-{s}.md.", f"[p](plans/plan-{s}.md).", f"[p](plans/plan-{s}.md)"):
+        d = tempfile.mkdtemp(); p = os.path.join(d, "plan-padre.md")
+        open(p, "w").write(f"## Sub-planes\n\n| Sub-plan | Estado |\n|---|---|\n| {celda} | active |\n")
+        if sh.orden_subplanes(p, {s, "otro"}) != [s]:
+            malos.append(f"sub-planes {celda} -> {sh.orden_subplanes(p, {s, 'otro'})}")
+print(len(slugs) * len(fines) + len(slugs) * 7, len(malos), "; ".join(malos[:4]))
+PY
+)
+chk "las 96 combinaciones se leen bien" "96 0 " "$MATRIZ"
+
 echo "== C. siguiente plan hermano =="
 fixture
 printf -- '---\ntype: index\n---\n# Plans\n\n| Plan | Status | Date | Session | Pendientes | Learnings |\n|---|---|---|---|---|---|\n' > "$M/_plans-index.md"
