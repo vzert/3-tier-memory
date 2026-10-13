@@ -39,6 +39,11 @@ de ese proyecto del 2026-09-15 al 2026-10-13: 9 `Proximo paso` con fecha futura 
   la ve ningun chequeo: depende de que el pendiente nazca con `--revisar` o `_bloqueado:`.
 - Un pendiente que cita una fecha futura solo como contexto, sin ser plazo, queda fuera de los
   afines (falso positivo aceptado).
+- En el audit, un plazo escrito despues de la fecha ("2026-09-25 es fecha limite", "caduca el
+  2026-11-01 como tarde") o una fecha futura dentro de un comando (`--since …`) tambien marca
+  `SALTADO`: obliga a reescribir la linea, no rompe nada.
+- El caso 1 se reconoce por citar un plan enlazado, asi que un paso sin `_id` que solo menciona un
+  plan enlazado ya no da "no cita el `_id`" (4 fichas viejas de este repo pasan de SALTADO a HECHO).
 
 ## [2.55.0] - 2026-10-13
 Origen: Victor pregunto (via `/goalspec:interview`) si los pendientes se relacionaban para volver
