@@ -55,7 +55,7 @@ hermanos se separaban (61 de 119 sesiones) y la linea de afines de 2.55.0 depend
   pendientes, porque lo nacido en la sesion ya entra al hilo por haber nacido ahi.
   `test-checkpoint-close-guard.sh`: el Alta de la memoria de prueba nace en una sesion previa, porque
   si no el hilo agregaria una linea que las respuestas reales de 2.32.0 no traen.
-- `tools/mutation-check.sh`: 18 mutaciones nuevas (`m_hilo.py`), una por pieza, y 3 de
+- `tools/mutation-check.sh`: 18 casos nuevos con 17 mutaciones (`m_hilo.py`), al menos uno por pieza, y 3 de
   `m_relacionado.py` reescritas para el codigo nuevo.
 
 ### Limites
