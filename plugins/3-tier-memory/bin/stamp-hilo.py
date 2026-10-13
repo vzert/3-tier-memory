@@ -82,6 +82,10 @@ def main(argv):
     if "hilo_paso" in af.frontmatter(contenido):
         return salir(0, 0, "ya-sellada")
 
+    # La misma guardia que journal-emit: la ficha tiene que poder ser de la sesion de esa
+    # transcripcion (sin `session_id` de otra, y con su fecha dentro de la transcripcion).
+    if not af.ficha_de_la_sesion(ficha, trans, os.path.splitext(os.path.basename(trans))[0]):
+        return salir(3, 0, "la-ficha-no-es-de-esa-transcripcion")
     snip = af.snippet_de_transcripcion(trans)
     if not snip:
         return salir(0, 0, "la-sesion-no-arranco-con-Retomamos")

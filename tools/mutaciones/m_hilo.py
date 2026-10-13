@@ -12,7 +12,7 @@ M = {
     # journal-emit.py
     "liga-sin-auto": [("auto = [x for x in paso_recibido(origen, memory_dir, a.transcript)",
                        "auto = [x for x in []")],
-    "liga-sin-guardia": [("if not af.ficha_de_la_sesion(ficha, transcript, sid):", "if False:")],
+    "liga-sin-guardia": [("if transcript and not af.ficha_de_la_sesion(", "if False and not af.ficha_de_la_sesion(")],
     # pendientes_afines.py
     "campo-una-linea": [("if not sig.strip() or ETIQUETA.match(sig):", "if True:")],
     "pasted-sin-quitar": [('texto = PASTED.sub("", texto).strip()', "texto = texto.strip()")],
@@ -24,10 +24,13 @@ M = {
     "baja-con-alta": [("extras = (altas_medias or resto)[:MAX_AFINES]", "extras = resto[:MAX_AFINES]")],
     "sin-quedan": [("    if quedan:", "    if False:")],
     # stamp-hilo.py
+    "sello-sin-guardia": [('if not af.ficha_de_la_sesion(ficha, trans, os.path.splitext(os.path.basename(trans))[0]):',
+                           "if False:")],
     "saltos-sin-previo": [("salt = {i: previos.get(i, 0) + 1", "salt = {i: 0 + 1")],
     # print-como-retomar.py
     "print-sin-slug": [("                                        slug=slug)", "                                        slug=None)")],
     # checkpoint-audit.py
+    "audit-todos-los-ids": [("citados = ID_PENDIENTE.findall(pp)[:1]", "citados = ID_PENDIENTE.findall(pp)")],
     "audit-sin-hilo": [('if mejor is not None and mejor <= rango[primero["id"]]:', "if True:")],
 }
 

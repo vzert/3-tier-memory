@@ -490,10 +490,12 @@ def paso_recibido(origen, memory_dir, transcript=None):
         if not transcript and ficha and os.path.isfile(ficha):
             dirs = [os.environ.get("CLAUDE_PROJECT_DIR"), os.getcwd(),
                     os.path.dirname(os.path.abspath(memory_dir))]
-            sid = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
-            transcript = af.transcripcion_de(sid, dirs)
-            if not af.ficha_de_la_sesion(ficha, transcript, sid):
-                transcript = None
+            transcript = af.transcripcion_de(os.environ.get("CLAUDE_CODE_SESSION_ID", ""), dirs)
+        # Venga de donde venga (tambien `--transcript`), la transcripcion solo cuenta si la ficha
+        # puede ser de esa sesion. El id de la sesion es el nombre del `.jsonl`.
+        if transcript and not af.ficha_de_la_sesion(
+                ficha, transcript, os.path.splitext(os.path.basename(transcript))[0]):
+            transcript = None
         return [x for x in af.paso_recibido_de(ficha, transcript) if RELACIONADO_RE.match(x)]
     except Exception as exc:   # la liga es un extra: un fallo aqui no pierde el evento
         print(f"journal-emit: aviso: no se pudo leer el paso recibido ({exc})", file=sys.stderr)

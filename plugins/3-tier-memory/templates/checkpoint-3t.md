@@ -647,8 +647,10 @@ del sello de la ficha (5c-bis) o, antes de sellar, de la transcripcion de `CLAUD
 Los `--relacionado` de abajo se suman a esa liga.
 El compactador anade `— _relacionado: X, Y_` a la linea de Tier 2 (no a la fila mensual, igual que
 `_bloqueado`). No cambia el id. Consumidor: `print-como-retomar.py` mete en el snippet de Step 8 una
-linea `Si ese paso es corto, suma en la misma sesion: …` con hasta 2 Alta/Media abiertos ligados
-al `Proximo paso:`, de cualquier sesion y en cualquier direccion (`pendientes_afines.py`). Sin el
+linea `Si ese paso es corto, suma en la misma sesion: …` con hasta 2 del hilo fuera del paso
+(Alta > Media > Baja; la Baja solo si no queda Alta ni Media), y debajo `quedan N en el hilo: <ids>`
+(2.57.0, `pendientes_afines.py`). El hilo incluye lo ligado al `Proximo paso:`, de cualquier sesion
+y en cualquier direccion. Sin el
 campo, un Media dejado junto a un Alta no vuelve a ningun snippet salvo que venza (medido en las 8
 ultimas fichas de dos proyectos, 2026-10-13). Para ligar uno que ya existe:
 `journal-emit.py --type pendiente.relate --id p-… --relacionado X [--relacionado Y]` (reemplaza la

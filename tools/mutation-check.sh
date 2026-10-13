@@ -148,6 +148,9 @@ caso "hilo: quedan N" pendientes_afines.py m_hilo.py $T "quedan N con el resto, 
 caso "hilo: saltos acumulan" stamp-hilo.py m_hilo.py $T "hilo_saltos: el de ayer + 1; el paso no cuenta; uno que ya no vino se olvida" saltos-sin-previo
 caso "hilo: print ve los nacidos" print-como-retomar.py m_hilo.py $T "quedan N con el resto, solo ids" print-sin-slug
 caso "hilo: audit snippet.hilo" checkpoint-audit.py m_hilo.py $T "empate Alta/Alta, el paso cita al heredado: SALTADO" audit-sin-hilo
+caso "hilo: sello solo de su sesion" stamp-hilo.py m_hilo.py $T "no sella una ficha de otra fecha" sello-sin-guardia
+caso "hilo: el paso es su primer id" checkpoint-audit.py m_hilo.py $T "nombrar al Alta de pasada no lo vuelve el paso: SALTADO" audit-todos-los-ids
+caso "hilo: --transcript con guardia" journal-emit.py m_hilo.py $T "--transcript a mano pasa por la misma guardia de fecha" liga-sin-guardia
 
 echo "Contrato de check-project-dir-fallback.py (2.41.4): cada pieza, rota, tumba su aserto"
 caso "verde respaldo" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " respaldo: exit 0" r1-sin-quitar-forma

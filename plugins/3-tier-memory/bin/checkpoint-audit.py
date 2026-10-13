@@ -1406,7 +1406,10 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         af = _afines_mod()
         orden = af.hilo(texto, os.path.join(memory_dir, "_pendientes.md"), slug, ref)
         rango = {p["id"]: (af.PRIORIDAD_HILO[p["prio"]], p["grupo"]) for p in orden}
-        citados = set(ID_PENDIENTE.findall(pp))
+        # El id del paso es el PRIMERO que cita la linea: un paso es una accion (marco de Victor,
+        # 2026-10-13), y nombrar al de mayor rango de pasada ("hacer p-baja, no p-alta") no lo
+        # convierte en el paso (adversario externo, ronda 1 de 2.57.0).
+        citados = ID_PENDIENTE.findall(pp)[:1]
         caso1 = {s for s in af.anclas(pp)[1] & planes_laxo if plan_activo(memory_dir, s)}
         if caso1:
             h.append(Hallazgo(HECHO, "snippet.hilo", "caso 1 (plan activo): va antes que el hilo"))
@@ -1424,7 +1427,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                 h.append(Hallazgo(SALTADO, "snippet.hilo",
                                   "`Proximo paso:` no es el primero del hilo",
                                   [f"el primero es {primero['id']} ({primero['prio']}, {motivo})"
-                                   + (f"; el paso cita {', '.join(sorted(citados))}" if citados
+                                   + (f"; el paso cita primero {citados[0]}" if citados
                                       else "; el paso no cita ningun pendiente del hilo")],
                                   corrige=f"cita {primero['id']} en `Proximo paso:` (Step 8, caso 2: "
                                           "el primero que imprime pendientes_afines.py --hilo)"))

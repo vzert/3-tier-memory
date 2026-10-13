@@ -112,6 +112,10 @@ HOME="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memo
   --type pendiente.add --text "de otra sesion" --prioridad Media --origen "[[sessions/2026-10-14-otra]]" >/dev/null 2>&1
 chk "ficha sellada con otro session_id: sin liga" "-" "$(evento_rel)"
 rm -rf "$M/.journal"
+python3 "$BIN/journal-emit.py" --memory-dir "$M" --transcript "$T/home/.claude/projects/-tmp-proyecto/$SID.jsonl" \
+  --type pendiente.add --text "de backfill con ruta" --prioridad Media --origen "[[sessions/2026-09-01-vieja]]" >/dev/null 2>&1
+chk "--transcript a mano pasa por la misma guardia de fecha" "-" "$(evento_rel)"
+rm -rf "$M/.journal"
 ficha 2026-10-14-hoy "Proximo paso: x." "hilo_paso: p-dddddddddd"
 HOME="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
   --type pendiente.add --text "nuevo" --prioridad Media --origen "[[sessions/2026-10-14-hoy]]" >/dev/null 2>&1
@@ -129,6 +133,8 @@ chk "hilo_paso" "1" "$(printf '%s' "$FM" | grep -c '^hilo_paso: p-aaaaaaaaaa$')"
 chk "hilo_heredados: paso + extras + quedan" "1" "$(printf '%s' "$FM" | grep -c '^hilo_heredados: p-aaaaaaaaaa, p-bbbbbbbbbb, p-cccccccccc$')"
 chk "hilo_saltos: el de ayer + 1; el paso no cuenta; uno que ya no vino se olvida" "1" "$(printf '%s' "$FM" | grep -c '^hilo_saltos: p-bbbbbbbbbb=2, p-cccccccccc=1$')"
 chk "no pisa un sello ya puesto" "sellado=0 motivo=ya-sellada" "$(python3 "$BIN/stamp-hilo.py" "$M/sessions/2026-10-14-hoy.md" --transcript "$T/t.jsonl")"
+ficha 2026-09-01-vieja "Proximo paso: z."
+chk "no sella una ficha de otra fecha" "sellado=0 motivo=la-ficha-no-es-de-esa-transcripcion" "$(python3 "$BIN/stamp-hilo.py" "$M/sessions/2026-09-01-vieja.md" --transcript "$T/t.jsonl")"
 
 # El hilo de las pruebas 2, 4 y 5: la ficha de hoy recibio p-aaaaaaaaaa (Alta, de ayer, sin cerrar y
 # sin ninguna liga) y escribe como paso p-1111111111 (Alta, nuevo). p-2222222222 (Media) cita a
@@ -199,6 +205,8 @@ ficha 2026-10-14-hoy "Proximo paso: la media (p-2222222222)."
 pend Alta p-1111111111 "el alta nueva" 2026-10-14-hoy
 pend Media p-2222222222 "la media nueva" 2026-10-14-hoy
 chk "una Media nueva de paso con una Alta nueva abierta: SALTADO" "1" "$(audit | grep -c 'el primero es p-1111111111 (Alta')"
+ficha 2026-10-14-hoy "Proximo paso: la media (p-2222222222), no la alta (p-1111111111)."
+chk "nombrar al Alta de pasada no lo vuelve el paso: SALTADO" "1" "$(audit | grep -c 'el primero es p-1111111111 (Alta')"
 chk "el orden lo imprime --hilo para el Step 8" "p-1111111111" "$(python3 "$BIN/pendientes_afines.py" "$M/sessions/2026-10-14-hoy.md" --hilo --hoy 2026-10-14 | head -1 | cut -d' ' -f1)"
 
 echo

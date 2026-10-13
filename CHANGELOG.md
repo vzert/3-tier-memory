@@ -14,7 +14,8 @@ hermanos se separaban (61 de 119 sesiones) y la linea de afines de 2.55.0 depend
   ids del `Proximo paso` que la sesion recibio en su snippet `Retomamos:` y lo avisa por stderr. El
   agente no decide nada. Lee el sello de la ficha de `--origen` o, si todavia no hay sello, la
   transcripcion de `CLAUDE_CODE_SESSION_ID` (o `--transcript`). La transcripcion solo cuenta si la
-  ficha existe, no esta sellada con otro `session_id` y su fecha cae dentro de la transcripcion.
+  ficha existe, no esta sellada con otro `session_id` y su fecha cae dentro de la transcripcion
+  (tambien con `--transcript`, y tambien en stamp-hilo.py).
   Asi `/backfill-3t` y las pruebas no heredan el snippet de la sesion donde corren.
 - **`bin/stamp-hilo.py`** (checkpoint Step 5c-bis): lee una vez el primer mensaje de la
   transcripcion y sella en el frontmatter de la ficha `hilo_retoma`, `hilo_paso`, `hilo_heredados`
@@ -29,7 +30,8 @@ hermanos se separaban (61 de 119 sesiones) y la linea de afines de 2.55.0 depend
   futura en el texto). `pendientes_afines.py FICHA --hilo` lo imprime en orden para el Step 8.
 - **(3) Orden y `snippet.hilo`.** Primero va la prioridad. En empate va el nuevo antes que el
   heredado, salvo el heredado con `hilo_saltos` de 2 o mas, que va primero. `checkpoint-audit.py`
-  marca SALTADO en `snippet.hilo` un `Proximo paso` que cite uno de menor rango (prioridad, grupo).
+  marca SALTADO en `snippet.hilo` un `Proximo paso` cuyo primer id sea de menor rango (prioridad,
+  grupo).
   Entre dos del mismo rango elige el agente. El caso 1 (plan activo citado) va antes que el hilo.
   Solo aplica a fichas desde el 2026-10-13.
 - **(4)** El paso recibido que no se cerro sigue en el hilo como heredado, aunque nada lo ligue.
@@ -54,8 +56,11 @@ hermanos se separaban (61 de 119 sesiones) y la linea de afines de 2.55.0 depend
   `m_relacionado.py` reescritas para el codigo nuevo.
 
 ### Limites
-- Sin `CLAUDE_CODE_SESSION_ID` (variable no documentada) no hay sello ni liga, y el hilo queda en lo
-  nacido en la sesion y lo ligado al paso, como en 2.55.0 mas lo nacido.
+- En el checkpoint, sin `CLAUDE_CODE_SESSION_ID` (variable no documentada) no hay sello ni liga (el
+  Step 5c-bis no corre stamp-hilo.py, y journal-emit no encuentra la transcripcion). El hilo queda
+  en lo nacido en la sesion y lo ligado al paso. `--transcript` da la ruta a mano y pasa por la
+  misma guardia de ficha y fecha.
+- `snippet.hilo` toma como id del paso el primero que cita la linea `Proximo paso:`.
 - `hilo_saltos` cuenta "no fue el paso", no "perdio un empate". Solo cambia el orden dentro de la
   misma prioridad.
 - Falta medir si `quedan N` hace que los pendientes vuelvan (lo pide p-b282a8cfc4).
