@@ -33,6 +33,10 @@ import os
 import re
 import sys
 
+for _flujo in (sys.stdout, sys.stderr):
+    if hasattr(_flujo, "reconfigure"):
+        _flujo.reconfigure(encoding="utf-8")
+
 PRIORIDAD = {"Alta": 0, "Media": 1}
 MAX_AFINES = 2
 TEXTO_MAX = 90
