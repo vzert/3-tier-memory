@@ -1,6 +1,45 @@
 # Changelog
 
 
+## [2.56.0] - 2026-10-13
+Origen: Victor recibio en otro proyecto snippets de cierre que mandaban a la sesion siguiente a hacer
+algo que solo se podia hacer otro dia. Dos casos del 2026-10-13: (1) `Proximo paso: Fase actual: 1 —
+… APLICADOS; falta medir. El 2026-10-14 despues de las 11:51 UTC: medir el respaldo…`; (2) la linea de
+afines sumo un pendiente Alta (revision a 24 h desde el 2026-10-14) y otro (va despues de
+esa revision), y el agente que retomo dijo que ninguno se podia hacer ese dia. Revisadas las fichas
+de ese proyecto del 2026-09-15 al 2026-10-13: 9 `Proximo paso` con fecha futura en el texto, y 52 de
+184 que empiezan por `Fase actual: N — <estado>`.
+
+### Fixed
+- **La linea de afines ya no suma un pendiente que espera una fecha futura sin `_revisar`.**
+  `pendientes_afines.fecha_futura`: una fecha `AAAA-MM-DD` posterior a hoy en el texto del
+  pendiente lo excluye, salvo un plazo ("antes del", "a mas tardar", "vence", "limite", "plazo").
+  No toca fechas pasadas ni slugs de ficha. Es un chequeo de formato; el campo `_revisar` sigue
+  siendo la via principal.
+- **`checkpoint-audit.py` (`snippet.proximo_paso`) marca `SALTADO` un `Proximo paso` con fecha
+  futura** respecto a la ficha, con la misma funcion, en los casos 1-3. Antes el caso 1 (`Fase
+  actual: …` con plan enlazado) no tenia que citar un id, y los chequeos de `_revisar` y
+  `_bloqueado` solo miran ids citados: sin id no habia nada que chequear, y el caso (1) pasaba.
+  `ninguno …` y `nada accionable …` siguen pasando.
+- **El caso 1 empieza por la accion, no por `Fase actual: N — <estado>`.** La fase ya va en
+  `Retomamos:`. El audit reconoce el caso 1 por el `plan-<slug>` enlazado que cita la linea, y
+  marca `SALTADO` el prefijo `Fase actual:` en fichas desde el 2026-10-13 (`DESDE_PASO_ACCION`;
+  las viejas siguen valiendo).
+
+### Changed
+- **Step 8, caso 1:** la variante de fecha futura ya no exige que la accion sea "integramente
+  esperar": basta con que espere una fecha. Ese trabajo se registra con `--revisar <fecha>` y su
+  recordatorio de calendario lleva en `Comprueba:` lo que el snippet habria dicho; el snippet dice
+  `ninguno — … bloqueada hasta <fecha>` u otro paso accionable hoy.
+- **Plantilla `## Estado` del plan:** `Proxima accion` ya no invita a poner "fecha si ya se acordo";
+  si espera una fecha, va en `AAAA-MM-DD` y con pendiente `--revisar`.
+
+### Limites conocidos
+- Una espera sin fecha ISO ("manana", "14-oct", "despues de esa revision", como otro) no
+  la ve ningun chequeo: depende de que el pendiente nazca con `--revisar` o `_bloqueado:`.
+- Un pendiente que cita una fecha futura solo como contexto, sin ser plazo, queda fuera de los
+  afines (falso positivo aceptado).
+
 ## [2.55.0] - 2026-10-13
 Origen: Victor pregunto (via `/goalspec:interview`) si los pendientes se relacionaban para volver
 en el snippet `Como retomar` y si la jerarquia de planes padre/hijo/hermano funcionaba. Medido

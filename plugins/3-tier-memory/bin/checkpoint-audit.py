@@ -140,6 +140,9 @@ DESDE_BUGS_CIERRE = "2026-09-23"
 # `bugs.veredicto_break` (2.42.0): desde aqui un `break` del adversario tiene que salir en
 # `## Bugs fixed` con cualquier snippet, no solo con `Proximo paso: ninguno` (8-sexies).
 DESDE_BUGS_BREAK = "2026-09-30"
+# `snippet.proximo_paso` (2.56.0): desde aqui el caso 1 ya no empieza por `Fase actual:` (el estado
+# de la fase va en `Retomamos:`); se reconoce por el `plan-<slug>` enlazado que cita la linea.
+DESDE_PASO_ACCION = "2026-10-13"
 # Tercer cierre de un defecto (2.53.0): el usuario decidio en Step 3b no abrirle pendiente.
 DESCARTADO_BUG = re.compile(r"_descartado:\s*(.*?)_(?=\s|$|[.,;:)\]—])", re.S)
 # `pendientes.candidatos` (2.53.0): desde aqui cada pendiente nuevo sale en `## Candidatos a
@@ -478,6 +481,17 @@ def _commit_mod():
     import importlib.util
     spec = importlib.util.spec_from_file_location(
         "_cc", os.path.join(os.path.dirname(os.path.abspath(__file__)), "checkpoint-commit.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _afines_mod():
+    """pendientes_afines.py como modulo: la MISMA `fecha_futura` que filtra la linea de afines, para
+    que el audit y el snippet no lean la fecha de dos formas (2.56.0)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "_af", os.path.join(os.path.dirname(os.path.abspath(__file__)), "pendientes_afines.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -1233,7 +1247,8 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     # sesion 5790b9f2 cometio en su propio cierre, medidos sobre la LINEA, no sobre el bloque:
     #   (a) caso 4 generico: "revisar _pendientes.md y proponer siguiente prioridad". El caso se
     #       quito del template; su texto literal en esta linea es SALTADO siempre.
-    #   (b) sin `_id`: fuera del caso 1 (`Fase actual:` con un plan enlazado en `## Plans`) y del
+    #   (b) sin `_id`: fuera del caso 1 (cita un `plan-<slug>` enlazado en `## Plans`; antes de
+    #       DESDE_PASO_ACCION, `Fase actual:` con un plan enlazado) y del
     #       caso 5 (`ninguno — …`), el paso es un pendiente de los casos 2-3, y un pendiente tiene
     #       id. Un paso sin id es trabajo que NUNCA se registro — el mismo hueco que dejo el
     #       defecto hallado en vivo fuera de la escalera. Exigir el id obliga a registrarlo.
@@ -1242,6 +1257,9 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     #       deteccion es SOLO por esos campos estructurados, nunca por el texto (regla 216).
     #   (d) `ninguno` teniendo trabajo propio: un pendiente de esta ficha abierto, sin
     #       `_bloqueado` y sin `_revisar` futuro, es un candidato real de los casos 2-3.
+    #   (e) 2.56.0: una fecha `AAAA-MM-DD` posterior a la ficha en la linea (casos 1-3): ese trabajo
+    #       es del recordatorio de calendario. Chequeo de FORMATO, compartido con la linea de
+    #       afines (pendientes_afines.fecha_futura); y el caso 1 ya no empieza por `Fase actual:`.
     # Una linea que empieza por `ninguno` puede citar ids como MOTIVO ("lo unico propio espera a
     # otra instalacion, p-…") — por eso (b) y (c) no miran esa forma; la mira (d).
     bloqueados = bloqueados_abiertos(memory_dir)
@@ -1284,7 +1302,23 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                              "siguiente prioridad\"), quitado en 2.33.0: o hay un candidato real "
                              "de los casos 1-3, o es el caso 5 (`ninguno — …`)")
         elif not es_ninguno:
-            es_caso1 = pp.lower().startswith("fase actual") and bool(planes_laxo)
+            af = _afines_mod()
+            # Caso 1: cita un plan enlazado en `## Plans` (2.56.0), o la forma vieja `Fase actual:`
+            # en una ficha anterior a DESDE_PASO_ACCION.
+            fase_prefijo = pp.lower().startswith("fase actual")
+            legado = bool(fecha_ficha) and fecha_ficha < DESDE_PASO_ACCION
+            es_caso1 = bool(planes_laxo) and (bool(af.anclas(pp)[1] & planes_laxo)
+                                              or (fase_prefijo and legado))
+            if fase_prefijo and not legado:
+                problemas.append("empieza por `Fase actual:`: el estado de la fase ya va en "
+                                 "`Retomamos:`; el paso empieza por la accion y cita el "
+                                 "`plan-<slug>` (Step 8, caso 1)")
+            futura = af.fecha_futura(pp, ref)
+            if futura:
+                problemas.append(f"nombra una fecha futura ({futura}): eso no se puede hacer en la "
+                                 "sesion siguiente. Va en su recordatorio de calendario (pendiente "
+                                 "con `--revisar`), y el paso es otro accionable hoy o "
+                                 f"`nada accionable hasta {futura} — …`")
             if not ids_pp and not es_caso1:
                 problemas.append("no cita el `_id` de ningun pendiente: si es trabajo real, "
                                  "proponlo al usuario en Step 3b y, si lo guarda, cita su id; si "

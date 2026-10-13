@@ -133,6 +133,20 @@ emit --type pendiente.relate --id "$A2" --sin-relacion >/dev/null
 emit --type pendiente.relate --id "$M6" --sin-relacion >/dev/null
 compact --quiet >/dev/null
 
+echo "== B1c. 2.56.0: un extra cuyo texto espera una fecha futura no entra aunque no traiga _revisar =="
+# Caso real (otro proyecto, 2026-10-13): un pendiente Alta, "revision a 24 h desde el 2026-10-14", sin
+# `_revisar`, salio como extra y el agente que retomo no pudo hacerlo ese dia.
+X1=$(emit --type pendiente.add --text "revision a 24 h desde el 2099-10-14 ~17:05 UTC" --prioridad Alta --origen "[[sessions/2026-10-13-hoy]]" --creado 2020-01-01 --relacionado "$A")
+X2=$(emit --type pendiente.add --text "indice CREADO el 2020-01-02: medir ya" --prioridad Alta --origen "[[sessions/2026-10-13-hoy]]" --creado 2020-01-02 --relacionado "$A")
+X3=$(emit --type pendiente.add --text "renovar el certificado antes del 2099-12-01" --prioridad Alta --origen "[[sessions/2026-10-13-hoy]]" --creado 2020-01-03 --relacionado "$A")
+compact --quiet >/dev/null
+AF=$(python3 "$BIN/print-como-retomar.py" "$F" | grep '^Si ese paso es corto' || true)
+chk "el que espera una fecha futura no entra (sin el filtro iria primero)" "0" "$(printf '%s' "$AF" | grep -c "$X1")"
+chk "una fecha pasada en el texto no lo saca: va primero" "$X2" "$(printf '%s' "$AF" | grep -o 'p-[0-9a-f]\{10\}' | head -1)"
+chk "un plazo futuro ('antes del') tampoco lo saca" "1" "$(printf '%s' "$AF" | grep -c "$X3")"
+for i in "$X1" "$X2" "$X3"; do emit --type pendiente.relate --id "$i" --sin-relacion >/dev/null; done
+compact --quiet >/dev/null
+
 echo "== B2. direccion inversa: el ancla cita a la media =="
 emit --type pendiente.relate --id "$A" --relacionado "$M3" >/dev/null
 emit --type pendiente.relate --id "$M1" --sin-relacion >/dev/null

@@ -1132,6 +1132,44 @@ import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
 open(p,"w",encoding="utf-8").write(t.replace("## Plans\n- Ninguno","## Plans\n- [[plans/plan-demo]]"))
 PYX
 chk "Fase actual CON plan enlazado: HECHO (caso 1)" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.proximo_paso')"
+
+echo "== 2.56.0: fecha futura en el texto de Proximo paso (caso real de otro proyecto, 2026-10-13) =="
+# La ficha es del 2026-09-19: el 2026-09-20 es "manana", como el 2026-10-14 del caso real.
+M="$T/mD1"; ficha_pp "$M" - "Proximo paso: El 2026-09-20 despues de las 11:51 UTC: medir los 2 respaldos _id: p-1234567890_." ""
+pend_linea "$M" p-1234567890 "medir los respaldos" ""
+chk "fecha futura sin _revisar: SALTADO" "1" "$(pp_out "$M" | grep -c 'nombra una fecha futura (2026-09-20)')"
+M="$T/mD2"; ficha_pp "$M" - "Proximo paso: medir hoy lo aplicado el 2026-09-19 _id: p-1234567890_." ""
+pend_linea "$M" p-1234567890 "medir lo aplicado" ""
+chk "fecha de hoy en el texto: HECHO" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.proximo_paso')"
+M="$T/mD3"; ficha_pp "$M" - "Proximo paso: preparar el informe antes del 2026-09-30 _id: p-1234567890_." ""
+pend_linea "$M" p-1234567890 "preparar el informe" ""
+chk "plazo futuro ('antes del'): HECHO" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.proximo_paso')"
+M="$T/mD4"; ficha_pp "$M" - "Proximo paso: nada accionable hasta 2026-09-20 — p-1234567890 ya tiene su recordatorio." ""
+pend_linea "$M" p-1234567890 "medir los respaldos" " — _revisar: 2026-09-20_"
+chk "'nada accionable hasta <fecha futura>': HECHO" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.proximo_paso')"
+M="$T/mD5"; ficha_pp "$M" - "Proximo paso: Fase actual: 1 — compresion APLICADA; falta medir. El 2026-09-20 medir (plan-demo)." ""
+python3 - "$M/sessions/2026-09-19-demo.md" <<'PYX'
+import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+open(p,"w",encoding="utf-8").write(t.replace("## Plans\n- Ninguno","## Plans\n- [[plans/plan-demo]]"))
+PYX
+chk "caso 1 con fecha futura: SALTADO (antes lo eximia 'Fase actual')" "1" "$(pp_out "$M" | grep -c 'nombra una fecha futura (2026-09-20)')"
+
+echo "== 2.56.0: el caso 1 empieza por la accion, no por 'Fase actual:' (fichas desde 2026-10-13) =="
+ficha_nueva() {   # $1 memoria, $2 linea Proximo paso: la ficha pasa a ser del 2026-10-13, con plan-demo enlazado
+  ficha_pp "$1" - "$2" ""
+  python3 - "$1/sessions/2026-09-19-demo.md" <<'PYX'
+import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+t=t.replace("date: 2026-09-19","date: 2026-10-13").replace("## Plans\n- Ninguno","## Plans\n- [[plans/plan-demo]]")
+open(p,"w",encoding="utf-8").write(t)
+PYX
+}
+pp_out_n() { $AUD "$1" --session-file "$1/sessions/2026-09-19-demo.md" --no-git --hoy 2026-10-13 --solo-snippet 2>&1; }
+M="$T/mE1"; ficha_nueva "$M" "Proximo paso: Fase actual: 1 — compresion APLICADA; falta medir (plan-demo)."
+chk "ficha nueva con 'Fase actual:': SALTADO" "1" "$(pp_out_n "$M" | grep -c 'empieza por `Fase actual:`')"
+M="$T/mE2"; ficha_nueva "$M" "Proximo paso: medir duracion y CPU del respaldo de anoche (plan-demo)."
+chk "ficha nueva, accion + plan enlazado sin id: HECHO (caso 1)" "1" "$(pp_out_n "$M" | grep -c 'HECHO .*snippet.proximo_paso')"
+M="$T/mE3"; ficha_nueva "$M" "Proximo paso: medir duracion y CPU del respaldo de anoche (plan-otro)."
+chk "ficha nueva, plan citado NO enlazado y sin id: SALTADO" "1" "$(pp_out_n "$M" | grep -c 'no cita el `_id`')"
 M="$T/mA8"; ficha_pp "$M" - "Proximo paso: arreglar el parser _id: p-1234567890_.\n\nNo repitas: revisar _pendientes.md y proponer siguiente prioridad no sirve." ""
 pend_linea "$M" p-1234567890 "arreglar el parser" ""
 chk "caso 4 dentro de 'No repitas:' no cuenta: HECHO" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.proximo_paso')"

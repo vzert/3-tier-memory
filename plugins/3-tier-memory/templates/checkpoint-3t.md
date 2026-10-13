@@ -978,10 +978,15 @@ re-derivarla de 300 líneas de prosa.
 ## Estado
 
 Fase actual: <N> — <nombre corto de la fase>
-Próxima acción: <lo más concreto posible — qué, con qué criterio o fecha si ya se acordó>
+Próxima acción: <lo más concreto posible — qué, con qué criterio>
 Bloqueado por: <qué lo detiene, o "nada">
 Actualizado: <DATE>
 ```
+
+**Si la próxima acción espera una fecha futura** (medir mañana, revisar a 24 h), escríbela con la
+fecha en formato `AAAA-MM-DD` (`El 2026-10-14 después de las 11:51 UTC: …`) y registra el pendiente
+con `--revisar <fecha>` en Step 3b. Step 8 la manda al recordatorio de calendario de ese día, no al
+snippet de la sesión siguiente (2.56.0).
 
 Actualízalo en CADA checkpoint que toque este plan — es el único campo de todo el plan que se
 reescribe en vez de acumularse; el historial de cómo llegó ahí ya vive en la narrativa de abajo,

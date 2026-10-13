@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-3-tier-memory plugin (2.55.0): pendientes AFINES al `Proximo paso:` de una ficha.
+3-tier-memory plugin (2.55.0, 2.56.0): pendientes AFINES al `Proximo paso:` de una ficha.
 
 Por que existe: hasta 2.54 el snippet `Como retomar` llevaba un solo item. Un Media que la sesion
 dejaba junto a un Alta no volvia a ningun snippet salvo que venciera su `_revisar` (medido sobre
@@ -16,12 +16,18 @@ slugs `plan-…`) y devuelve hasta 2 pendientes abiertos Alta o Media ligados a 
 Sin importar de que sesion vengan: el arrastre entre sesiones es justo el punto.
 
 Nunca devuelve uno con `_bloqueado:`, uno con `_revisar` futuro (ya tiene su recordatorio de
-calendario), uno que vence hoy (lo muestra la capa 🔔 de print-pendiente-opcional.py) ni uno que
-ya cita el `Proximo paso:`. Orden: Alta antes que Media; dentro, el `_creado` mas viejo primero
-(el que mas tiempo lleva esperando); a igual fecha, la fila mas arriba. Todo sale de campos
-estructurados: nada se decide leyendo el texto (regla 216). En particular NO decide si el paso
-es "corto": eso no esta en ningun campo, asi que la linea lo deja dicho como condicion para
-quien retoma ("si ese paso es corto").
+calendario), uno que vence hoy (lo muestra la capa 🔔 de print-pendiente-opcional.py), uno cuyo
+texto nombra una fecha ISO posterior a hoy (ver `fecha_futura`) ni uno que ya cita el `Proximo
+paso:`. Orden: Alta antes que Media; dentro, el `_creado` mas viejo primero (el que mas tiempo
+lleva esperando); a igual fecha, la fila mas arriba. Todo lo demas sale de campos estructurados
+(regla 216). En particular NO decide si el paso es "corto": eso no esta en ningun campo, asi que
+la linea lo deja dicho como condicion para quien retoma ("si ese paso es corto").
+
+La excepcion de la fecha (2.56.0) es un chequeo de FORMATO, no de significado: una fecha
+`AAAA-MM-DD` posterior a hoy en el texto. Caso real (otro proyecto, 2026-10-13): la linea sumo
+un pendiente Alta, "revision a 24 h desde el 2026-10-14", sin `_revisar`; el agente que retomo no
+pudo hacerlo ese dia. El campo `_revisar` sigue siendo la via principal (Step 3b lo exige); esto
+es la red para cuando falta.
 
 Lo usa print-como-retomar.py (la linea `Si ese paso es corto, suma…` dentro del snippet).
 
@@ -48,6 +54,26 @@ CREADO = re.compile(r"_creado:\s*(\d{4}-\d{2}-\d{2})_")
 BLOQUEADO = re.compile(r"—\s*_bloqueado:")
 RELACIONADO = re.compile(r"—\s*_relacionado:\s*([^—]*?)_?\s*(?=—|$)")
 METADATO = re.compile(r"\s+—\s+_[a-z]+:")
+# Una fecha ISO suelta: no la de un slug de ficha (`2026-10-14-algo`) ni parte de un numero mayor.
+FECHA_ISO = re.compile(r"(?<![\d-])(\d{4}-\d{2}-\d{2})(?!\d)(?!-[0-9A-Za-z])")
+# Un plazo ("antes del 2026-12-01") se puede cumplir hoy: no es una espera.
+PLAZO = re.compile(r"(?:antes\s+del?|a\s+m[aá]s\s+tardar(?:\s+el)?|vence(?:\s+el)?|"
+                   r"l[ií]mite:?|plazo:?|deadline:?)\s*$", re.I)
+
+
+def fecha_futura(texto, hoy):
+    """La primera fecha `AAAA-MM-DD` de `texto` posterior a `hoy` que no es un plazo, o None.
+
+    Es la red de 2.56.0 para el trabajo que espera una fecha y no trae `_revisar`. La usan la
+    linea de afines (excluye el pendiente) y checkpoint-audit.py (`snippet.proximo_paso`). No ve
+    fechas escritas de otra forma ("manana", "14-oct", "tras la revision"): esas siguen
+    dependiendo de que el pendiente nazca con `--revisar` o `_bloqueado:`."""
+    texto = texto or ""
+    for m in FECHA_ISO.finditer(texto):
+        f = m.group(1)
+        if f > hoy and not PLAZO.search(texto[max(0, m.start() - 25):m.start()]):
+            return f
+    return None
 
 
 def proximo_paso(ficha_texto):
@@ -155,6 +181,8 @@ def afines(ficha_texto, pend_path, hoy=None):
             continue
         if p["revisar"] and p["revisar"] >= hoy:
             continue   # futuro: su recordatorio de calendario; hoy: la capa 🔔
+        if fecha_futura(p["texto"], hoy):
+            continue   # espera una fecha que no esta en `_revisar`: hoy no se puede hacer
         if (p["rel"] & anclas_todas) or p["id"] in citados_por_ancla:
             elegibles.append(p)
     elegibles.sort(key=lambda p: (PRIORIDAD[p["prio"]], p["creado"], p["fila"]))

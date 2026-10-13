@@ -65,23 +65,38 @@ Reglas para llenar los slots:
   esos son los que el lector necesita para actuar hoy.
 - `<next-step>`: la accion mas inmediata pendiente, en orden de preferencia:
   1. **Si esta sesion toco un plan `active` que tiene bloque `## Estado`** (ver Step 5), el
-     `<next-step>` es `Fase actual: <N> — <nombre>. <Proxima accion del bloque>`, ya actualizado
-     con lo que esta sesion resolvio — NO el pendiente suelto de mayor prioridad, aunque exista
-     uno. Por que va primero: medido 2026-09-14, un pendiente suelto relacionado con un plan de
-     fases es casi siempre UN PASO de la fase, no la fase completa — anteponerlo pierde el orden
+     `<next-step>` es `<Proxima accion del bloque> (plan-<slug>)`, ya actualizado con lo que esta
+     sesion resolvio — NO el pendiente suelto de mayor prioridad, aunque exista uno. **Empieza por
+     el verbo de la accion** (`Medir…`, `Correr…`), nunca por `Fase actual: <N> — <estado>`: la fase
+     ya esta en `Retomamos:` (mas arriba), y repetirla con su estado ("APLICADOS; falta medir")
+     delante hacia que la primera palabra del paso fuera estado y no accion (52 de 184 snippets de
+     otro proyecto, 2026-09-15 a 2026-10-13). Cita el `plan-<slug>`: es lo que `checkpoint-audit.py`
+     usa para reconocer el caso 1 desde 2.56.0 (antes, el prefijo `Fase actual`). Por que va
+     primero: medido 2026-09-14, un pendiente suelto relacionado con un plan de fases es casi siempre UN PASO de la fase, no la fase completa — anteponerlo pierde el orden
      que el plan ya tiene. Si el plan no tiene `## Estado` todavia (uno viejo, sin retro-adaptar),
      cae al caso 2 como cualquier sesion sin plan.
 
-     **Si la `Proxima accion` del `## Estado` es integramente esperar a una fecha que Step 8c ya
-     reservo para su propio recordatorio de calendario** (el plan no tiene nada que hacer HOY,
-     solo una revision futura), NO la repitas verbatim como `<next-step>`: el texto del slot pasa
-     a `ninguno — <plan> Fase <N> esta bloqueada hasta <fecha>, ver Recordatorios de calendario`
+     **Si la `Proxima accion` del `## Estado` no se puede empezar hoy porque espera una fecha
+     futura** (nombra un dia posterior a hoy, o una hora de un dia posterior: "el 2026-10-14
+     despues de las 11:51 UTC"), aunque traiga mas cosas que hacer ese dia: ese trabajo es del
+     recordatorio de calendario, no del snippet. (1) Si no hay ya un pendiente con `_revisar` en
+     esa fecha, registralo en Step 3b con `--revisar <fecha>` y `--relacionado plan-<slug>`, para
+     que Step 8c genere su recordatorio; su `Comprueba:` lleva lo que el `<next-step>` habria
+     dicho (que medir, contra que, el criterio de `Terminas cuando` y lo que `No repitas` habria
+     avisado), asi el prompt del evento es el snippet completo de ese dia. (2) El slot NO repite
+     esa accion: pasa a `ninguno — <plan> Fase <N> esta bloqueada hasta <fecha>, ver Recordatorios de calendario`
      (mismo formato de media linea que ya usa la variante de casos 2-3 mas abajo). La regla de mas
      abajo ("la escalera descarta candidatos con `_revisar` futuro") se escribio pensando en casos
      2-3 y nunca se extendio a este caso 1 — medido en `claude-vzert` (2026-09-18 y 2026-09-21, dos
      sesiones reales): el caso 1 imprimio integro el texto de una `Proxima accion` fechada a futuro
      (el script exacto a correr, la fecha, el criterio), y el snippet pensado para "copia y arranca
      AHORA" termino siendo una copia del recordatorio que Step 8c ya iba a mandar por separado.
+     Volvio a pasar el 2026-10-13 (otro proyecto) con una accion mixta
+     ("APLICADOS; falta medir. El 2026-10-14 despues de las 11:51 UTC: medir el respaldo…"): la regla
+     decia "integramente esperar" y la accion no lo era. Desde 2.56.0 basta con que la accion
+     espere una fecha futura, y `checkpoint-audit.py` marca `SALTADO` un `Proximo paso` que nombre
+     una fecha `AAAA-MM-DD` posterior a la de la ficha (salvo `ninguno`/`nada accionable` y un
+     plazo como "antes del …"). Escribe la fecha en ese formato: "manana" o "14-oct" no los ve.
 
      **Esto es una variante MAS del caso 5, no un mecanismo nuevo de colapso** — mismo principio
      que la variante ya documentada para casos 2-3 mas abajo ("Tambien aplica cuando..."): si,
@@ -143,7 +158,10 @@ Reglas para llenar los slots:
   retomar.py` mete debajo, en vivo, `Si ese paso es corto, suma en la misma sesion: …` con hasta 2
   Alta/Media abiertos ligados por `_relacionado:` (Step 3b, `--relacionado`), de esta sesion o de
   cualquier otra. Asi un Media que una sesion dejo junto a un Alta vuelve en el snippet siguiente
-  sin depender de que alguien se acuerde. Si quieres que un pendiente viejo entre, ligalo en Step
+  sin depender de que alguien se acuerde. Nunca suma uno con `_bloqueado:`, con `_revisar` de hoy
+  o futuro, ni (2.56.0) uno cuyo texto nombra una fecha `AAAA-MM-DD` posterior a hoy: eso no se
+  puede hacer en la sesion siguiente (caso real: un pendiente Alta, "revision a 24 h desde el
+  2026-10-14", sumado el 2026-10-13). Si quieres que un pendiente viejo entre, ligalo en Step
   3a con `pendiente.relate`; no lo agregues a mano al snippet. Quien retoma decide si el paso es
   corto: ningun campo lo dice, y el script no lo adivina por el texto (regla 216).
 
@@ -197,8 +215,7 @@ Reglas para llenar los slots:
      de SQL-LIVE y la confirmacion de N8n-Crons ya tienen su propio recordatorio (09-16, 09-20)`.
 
      **Tambien aplica, por la misma razon, cuando el candidato es el caso 1** (plan activo con
-     `## Estado`) y su `Proxima accion` es integramente esperar una fecha ya cubierta por el
-     calendario, sin ningun otro pendiente propio de esta sesion que se pueda hacer ya — ver el
+     `## Estado`) y su `Proxima accion` espera una fecha futura ya cubierta por el calendario, sin ningun otro pendiente propio de esta sesion que se pueda hacer ya — ver el
      parrafo de esa variante en el caso 1, arriba, para el detalle y el ejemplo real.
 
      **Antes de declarar este caso, relee la seccion `## Pendientes` que este mismo Step ya
@@ -226,10 +243,11 @@ Reglas para llenar los slots:
   linea queda como siempre, sin la segunda clausula.
 
   **En los casos 2 y 3, la linea `Proximo paso:` cita el `_id: p-…_` del pendiente** (desde
-  2.33.0). Fuera del caso 1 (`Fase actual: …` con el plan enlazado en `## Plans`) y del caso 5
+  2.33.0). Fuera del caso 1 (cita un `plan-<slug>` enlazado en `## Plans`) y del caso 5
   (`ninguno — …`), un paso sin id es trabajo que nunca se registro. `checkpoint-audit.py` lo
   marca `SALTADO` en `snippet.proximo_paso`, igual que un id que no esta abierto en
-  `_pendientes.md`, uno con `_revisar` futuro y uno con `_bloqueado:`. Tambien marca `ninguno`
+  `_pendientes.md`, uno con `_revisar` futuro, uno con `_bloqueado:` y (2.56.0) un paso que nombra
+  una fecha `AAAA-MM-DD` posterior a la de la ficha, en cualquier caso, el 1 incluido. Tambien marca `ninguno`
   cuando la ficha deja un pendiente propio abierto, sin `_bloqueado` ni `_revisar` futuro.
 
   **Antes de fijar cualquier candidato de los casos 2 o 3 como `<next-step>`, hazte la
