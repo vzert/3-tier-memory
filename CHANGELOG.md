@@ -45,14 +45,16 @@ hermanos se separaban (61 de 119 sesiones) y la linea de afines de 2.55.0 depend
 - `tools/run-tests.sh` quita `CLAUDE_CODE_SESSION_ID` antes de correr las suites.
 
 ### Tests
-- `test-hilo-pendientes.sh` (31 asertos), una seccion por pieza. Cada una entra por un script que
+- `test-hilo-pendientes.sh` (34 asertos), una seccion por pieza. Cada una entra por un script que
   ya existia (journal-emit, print-como-retomar, checkpoint-audit), mas stamp-hilo. Contra 2.56.1
-  salen 23 de 27 en rojo (los 4 que pasan son controles); contra 2.57.0, todos en verde.
+  salen 28 de 34 en rojo. Los 6 que pasan son controles negativos (algo que no debe pasar y que
+  tampoco pasaba antes: sin `Retomamos` no hay liga, el suelto no entra, etc.). Contra 2.57.0, los
+  34 en verde.
 - `test-pendiente-relacionado.sh` seccion B: la ficha es de otra sesion que la de origen de sus
   pendientes, porque lo nacido en la sesion ya entra al hilo por haber nacido ahi.
   `test-checkpoint-close-guard.sh`: el Alta de la memoria de prueba nace en una sesion previa, porque
   si no el hilo agregaria una linea que las respuestas reales de 2.32.0 no traen.
-- `tools/mutation-check.sh`: 13 mutaciones nuevas (`m_hilo.py`), una por pieza, y 3 de
+- `tools/mutation-check.sh`: 16 mutaciones nuevas (`m_hilo.py`), una por pieza, y 3 de
   `m_relacionado.py` reescritas para el codigo nuevo.
 
 ### Limites
