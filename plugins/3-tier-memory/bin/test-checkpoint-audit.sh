@@ -1162,6 +1162,7 @@ import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
 t=t.replace("date: 2026-09-19","date: 2026-10-13").replace("## Plans\n- Ninguno","## Plans\n- [[plans/plan-demo]]")
 open(p,"w",encoding="utf-8").write(t)
 PYX
+  mkdir -p "$1/plans"; printf -- '---\nstatus: %s\n---\n# Demo\n\n## Estado\n\nFase actual: 1 — medir\n' "${3:-active}" > "$1/plans/plan-demo.md"
 }
 pp_out_n() { $AUD "$1" --session-file "$1/sessions/2026-09-19-demo.md" --no-git --hoy 2026-10-13 --solo-snippet 2>&1; }
 M="$T/mE1"; ficha_nueva "$M" "Proximo paso: Fase actual: 1 — compresion APLICADA; falta medir (plan-demo)."
@@ -1170,6 +1171,10 @@ M="$T/mE2"; ficha_nueva "$M" "Proximo paso: medir duracion y CPU del respaldo de
 chk "ficha nueva, accion + plan enlazado sin id: HECHO (caso 1)" "1" "$(pp_out_n "$M" | grep -c 'HECHO .*snippet.proximo_paso')"
 M="$T/mE3"; ficha_nueva "$M" "Proximo paso: medir duracion y CPU del respaldo de anoche (plan-otro)."
 chk "ficha nueva, plan citado NO enlazado y sin id: SALTADO" "1" "$(pp_out_n "$M" | grep -c 'no cita el `_id`')"
+M="$T/mE4"; ficha_nueva "$M" "Proximo paso: enviar el correo (plan-demo)." completed
+chk "ficha nueva, plan enlazado pero completed y sin id: SALTADO (no es caso 1)" "1" "$(pp_out_n "$M" | grep -c 'no cita el `_id`')"
+M="$T/mD6"; ficha_pp "$M" - "Proximo paso: nada accionable hasta 2026-09-20 — la medicion es manana." ""
+chk "'nada accionable hasta <fecha>' sin pendiente con _revisar ni recordatorio: SALTADO" "1" "$(pp_out "$M" | grep -c 'nada se puede hacer hasta 2026-09-20')"
 M="$T/mA8"; ficha_pp "$M" - "Proximo paso: arreglar el parser _id: p-1234567890_.\n\nNo repitas: revisar _pendientes.md y proponer siguiente prioridad no sirve." ""
 pend_linea "$M" p-1234567890 "arreglar el parser" ""
 chk "caso 4 dentro de 'No repitas:' no cuenta: HECHO" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.proximo_paso')"

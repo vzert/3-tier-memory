@@ -144,7 +144,17 @@ AF=$(python3 "$BIN/print-como-retomar.py" "$F" | grep '^Si ese paso es corto' ||
 chk "el que espera una fecha futura no entra (sin el filtro iria primero)" "0" "$(printf '%s' "$AF" | grep -c "$X1")"
 chk "una fecha pasada en el texto no lo saca: va primero" "$X2" "$(printf '%s' "$AF" | grep -o 'p-[0-9a-f]\{10\}' | head -1)"
 chk "un plazo futuro ('antes del') tampoco lo saca" "1" "$(printf '%s' "$AF" | grep -c "$X3")"
-for i in "$X1" "$X2" "$X3"; do emit --type pendiente.relate --id "$i" --sin-relacion >/dev/null; done
+X4=$(emit --type pendiente.add --text "revisar el backup_2099-10-14_full y la ventana del 2020-01-01 al 2099-01-01" --prioridad Alta --origen "[[sessions/2026-10-13-hoy]]" --creado 2020-01-04 --relacionado "$A")
+compact --quiet >/dev/null
+X4R=$(python3 -c '
+import importlib.util, os, sys
+s = importlib.util.spec_from_file_location("af", os.path.join(sys.argv[1], "pendientes_afines.py"))
+af = importlib.util.module_from_spec(s); s.loader.exec_module(af)
+ps = {p["id"]: p for p in af.pendientes(os.path.join(sys.argv[2], "_pendientes.md"))}
+print("fuera" if af.fecha_futura(ps[sys.argv[3]]["texto"], "2026-10-13") else "dentro")
+' "$BIN" "$M" "$X4")
+chk "un slug con _fecha_ y un rango ya abierto no lo sacan de los afines" "dentro" "$X4R"
+for i in "$X1" "$X2" "$X3" "$X4"; do emit --type pendiente.relate --id "$i" --sin-relacion >/dev/null; done
 compact --quiet >/dev/null
 
 echo "== B2. direccion inversa: el ancla cita a la media =="

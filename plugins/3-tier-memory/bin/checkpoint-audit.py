@@ -486,6 +486,17 @@ def _commit_mod():
     return mod
 
 
+def plan_activo(memory_dir, slug):
+    """True si el plan esta `active`: su fila de _plans-index.md (columna Status) o, sin fila, el
+    `status:` de su frontmatter (2.56.0, caso 1 de `snippet.proximo_paso`)."""
+    for f in filas_tabla(os.path.join(memory_dir, "_plans-index.md")):
+        if f and len(f) > 1 and re.search(r"\[\[plans/" + re.escape(slug) + r"(?:\||\]\])", f[0]):
+            return f[1].strip().lower().startswith("active")
+    ruta = os.path.join(memory_dir, "plans", slug + ".md")
+    m = re.search(r"^status:\s*(\S+)", leer(ruta), re.M) if os.path.exists(ruta) else None
+    return bool(m) and m.group(1).lower().startswith("active")
+
+
 def _afines_mod():
     """pendientes_afines.py como modulo: la MISMA `fecha_futura` que filtra la linea de afines, para
     que el audit y el snippet no lean la fecha de dos formas (2.56.0)."""
@@ -1307,8 +1318,11 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             # en una ficha anterior a DESDE_PASO_ACCION.
             fase_prefijo = pp.lower().startswith("fase actual")
             legado = bool(fecha_ficha) and fecha_ficha < DESDE_PASO_ACCION
-            es_caso1 = bool(planes_laxo) and (bool(af.anclas(pp)[1] & planes_laxo)
-                                              or (fase_prefijo and legado))
+            # Desde 2.56.0 el plan citado tiene que estar `active` (su fila de _plans-index.md, o
+            # `status:` en su frontmatter): un plan cerrado no tiene `Proxima accion` que seguir.
+            activos = {s for s in af.anclas(pp)[1] & planes_laxo
+                       if plan_activo(memory_dir, s)}
+            es_caso1 = bool(planes_laxo) and (bool(activos) or (fase_prefijo and legado))
             if fase_prefijo and not legado:
                 problemas.append("empieza por `Fase actual:`: el estado de la fase ya va en "
                                  "`Retomamos:`; el paso empieza por la accion y cita el "
@@ -1336,6 +1350,17 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                     problemas.append(f"{i} tiene `_revisar: {rev_por_id[i]}` futuro: ya sale en "
                                      "`## Recordatorios de calendario`")
         if es_ninguno:
+            # 2.56.0: "nada accionable hasta <fecha>" promete un recordatorio para esa fecha. Tiene
+            # que existir: un bloque de calendario de esta ficha para esa fecha, o un pendiente
+            # abierto con `_revisar` en esa fecha (su recordatorio puede vivir en otra ficha).
+            futura_n = _afines_mod().fecha_futura(pp, ref)
+            if futura_n and futura_n not in set(rev_por_id.values()) \
+                    and not re.search(r"^###\s+" + futura_n + r"\b", _sec_cal, re.M) \
+                    and futura_n not in {f for _p, f in YA_AGENDADO.findall(_sec_cal)}:
+                problemas.append(f"dice que nada se puede hacer hasta {futura_n}, pero ningun "
+                                 f"pendiente abierto tiene `_revisar: {futura_n}` ni hay "
+                                 "recordatorio para esa fecha: registra el trabajo con "
+                                 f"`--revisar {futura_n}` (Step 3b) para que Step 8c lo agende")
             # Solo los que SIGUEN abiertos en `_pendientes.md`: uno ya cerrado no es trabajo. En
             # el cierre real son todos; importa al re-auditar una ficha vieja (falso positivo
             # medido en `remedicion-goalspec-precondicion-no-cumplida`).

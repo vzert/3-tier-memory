@@ -69,11 +69,12 @@ Reglas para llenar los slots:
      sesion resolvio — NO el pendiente suelto de mayor prioridad, aunque exista uno. **Empieza por
      el verbo de la accion** (`Medir…`, `Correr…`), nunca por `Fase actual: <N> — <estado>`: la fase
      ya esta en `Retomamos:` (mas arriba), y repetirla con su estado ("APLICADOS; falta medir")
-     delante hacia que la primera palabra del paso fuera estado y no accion (52 de 184 snippets de
-     otro proyecto, 2026-09-15 a 2026-10-13). Cita el `plan-<slug>`: es lo que `checkpoint-audit.py`
-     usa para reconocer el caso 1 desde 2.56.0 (antes, el prefijo `Fase actual`). Por que va
-     primero: medido 2026-09-14, un pendiente suelto relacionado con un plan de fases es casi siempre UN PASO de la fase, no la fase completa — anteponerlo pierde el orden
-     que el plan ya tiene. Si el plan no tiene `## Estado` todavia (uno viejo, sin retro-adaptar),
+     delante hacia que la primera palabra del paso fuera estado y no accion (forma comun en otro
+     proyecto, medida 2026-10-13). Cita el `plan-<slug>`: es lo que `checkpoint-audit.py` usa para
+     reconocer el caso 1 desde 2.56.0, si el plan esta `active` (antes, el prefijo `Fase actual`).
+     Por que va primero: medido 2026-09-14, un pendiente suelto relacionado con un plan de fases es
+     casi siempre UN PASO de la fase, no la fase completa — anteponerlo pierde el orden que el plan
+     ya tiene. Si el plan no tiene `## Estado` todavia (uno viejo, sin retro-adaptar),
      cae al caso 2 como cualquier sesion sin plan.
 
      **Si la `Proxima accion` del `## Estado` no se puede empezar hoy porque espera una fecha
@@ -96,7 +97,9 @@ Reglas para llenar los slots:
      decia "integramente esperar" y la accion no lo era. Desde 2.56.0 basta con que la accion
      espere una fecha futura, y `checkpoint-audit.py` marca `SALTADO` un `Proximo paso` que nombre
      una fecha `AAAA-MM-DD` posterior a la de la ficha (salvo `ninguno`/`nada accionable` y un
-     plazo como "antes del …"). Escribe la fecha en ese formato: "manana" o "14-oct" no los ve.
+     plazo como "antes del …"). Escribe la fecha en ese formato: "manana" o "14-oct" no los ve. Y
+     si escribes `ninguno …`/`nada accionable hasta <fecha>`, el audit exige un pendiente abierto
+     con `_revisar: <fecha>` o un recordatorio para esa fecha en la ficha.
 
      **Esto es una variante MAS del caso 5, no un mecanismo nuevo de colapso** — mismo principio
      que la variante ya documentada para casos 2-3 mas abajo ("Tambien aplica cuando..."): si,

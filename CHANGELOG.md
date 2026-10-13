@@ -6,23 +6,27 @@ Origen: Victor recibio en otro proyecto snippets de cierre que mandaban a la ses
 algo que solo se podia hacer otro dia. Dos casos del 2026-10-13: (1) `Proximo paso: Fase actual: 1 —
 … APLICADOS; falta medir. El 2026-10-14 despues de las 11:51 UTC: medir el respaldo…`; (2) la linea de
 afines sumo un pendiente Alta (revision a 24 h desde el 2026-10-14) y otro (va despues de
-esa revision), y el agente que retomo dijo que ninguno se podia hacer ese dia. Revisadas las fichas
-de ese proyecto del 2026-09-15 al 2026-10-13: 9 `Proximo paso` con fecha futura en el texto, y 52 de
-184 que empiezan por `Fase actual: N — <estado>`.
+esa revision), y el agente que retomo dijo que ninguno se podia hacer ese dia. Una revision de las
+fichas de ese proyecto (privadas, no estan en este repo) encontro mas pasos con fecha futura en el
+texto y muchos que empezaban por `Fase actual: N — <estado>` en vez de por la accion.
 
 ### Fixed
 - **La linea de afines ya no suma un pendiente que espera una fecha futura sin `_revisar`.**
   `pendientes_afines.fecha_futura`: una fecha `AAAA-MM-DD` posterior a hoy en el texto del
-  pendiente lo excluye, salvo un plazo ("antes del", "a mas tardar", "vence", "limite", "plazo").
-  No toca fechas pasadas ni slugs de ficha. Es un chequeo de formato; el campo `_revisar` sigue
+  pendiente lo excluye, salvo un plazo ("antes del", "a mas tardar", "vence", "limite", "plazo") o
+  el final de un rango que ya empezo ("del <pasada> al <futura>"). No toca fechas pasadas ni fechas
+  dentro de un slug (`2026-10-14-algo`, `backup_2026-10-14_x`); un timestamp (`…T09:00Z`) si cuenta. Es un chequeo de formato; el campo `_revisar` sigue
   siendo la via principal.
 - **`checkpoint-audit.py` (`snippet.proximo_paso`) marca `SALTADO` un `Proximo paso` con fecha
   futura** respecto a la ficha, con la misma funcion, en los casos 1-3. Antes el caso 1 (`Fase
   actual: …` con plan enlazado) no tenia que citar un id, y los chequeos de `_revisar` y
   `_bloqueado` solo miran ids citados: sin id no habia nada que chequear, y el caso (1) pasaba.
-  `ninguno …` y `nada accionable …` siguen pasando.
+  `ninguno …` y `nada accionable …` siguen pasando, pero si nombran una fecha futura tiene que
+  haber un pendiente abierto con `_revisar` en esa fecha o un recordatorio para ella en la ficha:
+  sin eso, el trabajo de ese dia no llega a ningun calendario.
 - **El caso 1 empieza por la accion, no por `Fase actual: N — <estado>`.** La fase ya va en
-  `Retomamos:`. El audit reconoce el caso 1 por el `plan-<slug>` enlazado que cita la linea, y
+  `Retomamos:`. El audit reconoce el caso 1 por el `plan-<slug>` enlazado y `active` (fila de
+  `_plans-index.md` o `status:` del plan) que cita la linea, y
   marca `SALTADO` el prefijo `Fase actual:` en fichas desde el 2026-10-13 (`DESDE_PASO_ACCION`;
   las viejas siguen valiendo).
 
@@ -42,8 +46,12 @@ de ese proyecto del 2026-09-15 al 2026-10-13: 9 `Proximo paso` con fecha futura 
 - En el audit, un plazo escrito despues de la fecha ("2026-09-25 es fecha limite", "caduca el
   2026-11-01 como tarde") o una fecha futura dentro de un comando (`--since …`) tambien marca
   `SALTADO`: obliga a reescribir la linea, no rompe nada.
-- El caso 1 se reconoce por citar un plan enlazado, asi que un paso sin `_id` que solo menciona un
-  plan enlazado ya no da "no cita el `_id`" (4 fichas viejas de este repo pasan de SALTADO a HECHO).
+- El caso 1 se reconoce por citar un plan enlazado y activo, asi que un paso sin `_id` que solo
+  menciona un plan activo enlazado ya no da "no cita el `_id`". Sobre las 133 fichas de este repo,
+  el veredicto de `snippet.proximo_paso` no cambia en ninguna respecto a 2.55.0.
+- Que el `Comprueba:` del recordatorio lleve lo que el snippet habria dicho es una instruccion de
+  Step 8, no un chequeo: el audit comprueba que el recordatorio (o el `_revisar`) exista para esa
+  fecha, no lo que dice.
 
 ## [2.55.0] - 2026-10-13
 Origen: Victor pregunto (via `/goalspec:interview`) si los pendientes se relacionaban para volver

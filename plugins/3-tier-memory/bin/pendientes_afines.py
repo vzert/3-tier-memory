@@ -54,8 +54,12 @@ CREADO = re.compile(r"_creado:\s*(\d{4}-\d{2}-\d{2})_")
 BLOQUEADO = re.compile(r"—\s*_bloqueado:")
 RELACIONADO = re.compile(r"—\s*_relacionado:\s*([^—]*?)_?\s*(?=—|$)")
 METADATO = re.compile(r"\s+—\s+_[a-z]+:")
-# Una fecha ISO suelta: no la de un slug de ficha (`2026-10-14-algo`) ni parte de un numero mayor.
-FECHA_ISO = re.compile(r"(?<![\d-])(\d{4}-\d{2}-\d{2})(?!\d)(?!-[0-9A-Za-z])")
+# Una fecha ISO suelta: no la de un slug (`2026-10-14-algo`, `backup_2026-10-14_x`) ni parte de
+# un numero mayor. La `T` de un timestamp (`2026-10-14T09:00Z`) si cuenta.
+FECHA_ISO = re.compile(r"(?<![\w-])(\d{4}-\d{2}-\d{2})(?![\d_])(?![A-SU-Za-z])(?!-[0-9A-Za-z])")
+# El final de un rango ("del 2026-10-01 al 2026-10-14") cuyo inicio ya llego: la ventana esta
+# abierta hoy, no es una espera.
+INICIO_RANGO = re.compile(r"(\d{4}-\d{2}-\d{2})\s*(?:al|a|hasta|–|—|-)\s*$", re.I)
 # Un plazo ("antes del 2026-12-01") se puede cumplir hoy: no es una espera.
 PLAZO = re.compile(r"(?:antes\s+del?|a\s+m[aá]s\s+tardar(?:\s+el)?|vence(?:\s+el)?|"
                    r"l[ií]mite:?|plazo:?|deadline:?)\s*$", re.I)
@@ -71,7 +75,9 @@ def fecha_futura(texto, hoy):
     texto = texto or ""
     for m in FECHA_ISO.finditer(texto):
         f = m.group(1)
-        if f > hoy and not PLAZO.search(texto[max(0, m.start() - 25):m.start()]):
+        antes = texto[max(0, m.start() - 25):m.start()]
+        rango = INICIO_RANGO.search(antes)
+        if f > hoy and not PLAZO.search(antes) and not (rango and rango.group(1) <= hoy):
             return f
     return None
 
