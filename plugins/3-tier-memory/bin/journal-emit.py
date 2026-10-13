@@ -18,8 +18,8 @@ Tipos de evento:
                     instalacion, un peer, un PR ajeno; checkpoint-audit.py rechaza un
                     `Proximo paso:` que cite un id con `_bloqueado:`)
                     [--relacionado p-<10 hex>|plan-<slug>]...  (repetible, 2.55.0: otro
-                    pendiente o un plan con el que este va junto; lo lee la capa 🔗 de
-                    print-pendiente-opcional.py para sumar afines al `Proximo paso`)
+                    pendiente o un plan con el que este va junto; lo lee pendientes_afines.py,
+                    que print-como-retomar.py usa para sumar afines al `Proximo paso`)
                     Imprime el id (p-<10 hex>) por stdout.                              (Fase 1)
   pendiente.resolve --id ID --estado resolved|superseded|abandoned [--sesion S] [--nota N]
   pendiente.update  --id ID [--text T] [--prioridad Alta|Media|Baja] [--text-prefix P]
@@ -39,10 +39,10 @@ Tipos de evento:
   pendiente.block   --id ID (--bloqueado-por "QUE" | --desbloquear)
                     Pone, cambia o quita `_bloqueado: QUE_` en un pendiente VIVO. Existe para
                     marcar en Step 3a uno que nacio sin el campo; no cambia el id.
+                    [--text-prefix P]  (si no se da, se toma del archivo si la linea existe)
   pendiente.relate  --id ID (--relacionado X [--relacionado Y ...] | --sin-relacion)
                     Pone (reemplaza) o quita `_relacionado: X, Y_` en un pendiente VIVO
                     (2.55.0). Mismo patron que pendiente.block; no cambia el id.
-                    [--text-prefix P]  (si no se da, se toma del archivo si la linea existe)
   session.add       --slug DATE-SLUG --date D --status ST --summary R [--commit C]      (Fase 2)
                     Fila en _session-index.md (arriba de la tabla). Si la fila del slug ya
                     existe, rellena status/summary/commit con lo que se pase. Imprime s-<slug>.

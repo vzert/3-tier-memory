@@ -68,8 +68,10 @@ def orden_subplanes(plan_path):
             continue
         celda = l.strip().strip("|").split("|")[0]
         s = re.search(r"plan-([A-Za-z0-9][A-Za-z0-9._-]*[A-Za-z0-9])", celda)
-        if s and s.group(1) not in out:
-            out.append(s.group(1))
+        # `[[plans/plan-x.md|X]]` es la misma fila que `[[plans/plan-x]]`: el indice no lleva `.md`.
+        slug = re.sub(r"\.md$", "", s.group(1)) if s else None
+        if slug and slug not in out:
+            out.append(slug)
     return out
 
 

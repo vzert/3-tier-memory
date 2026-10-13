@@ -1300,7 +1300,7 @@ def relacionado_malformado(v):
     if not isinstance(v, list):
         return "'relacionado' no es una lista"
     for x in v:
-        if not isinstance(x, str) or not RELACIONADO_VALOR_RE.match(x):
+        if not isinstance(x, str) or not RELACIONADO_VALOR_RE.fullmatch(x):
             return f"'relacionado' con un valor que no es p-<10 hex> ni plan-<slug>: {x!r}"
     return None
 

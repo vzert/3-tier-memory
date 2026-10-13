@@ -71,6 +71,12 @@ printf '{"v":1,"type":"pendiente.relate","ts":1,"session_id":"t","agent_id":"t",
 compact --quiet >/dev/null 2>&1
 chk "un relacionado con texto libre va a cuarentena" "1" "$(cuarentena)"
 chk "y la linea no cambio" "0" "$(linea "$CON" | grep -c '_relacionado:')"
+rm -f "$M/.journal/quarantine"/*
+printf '{"v":1,"type":"pendiente.relate","ts":2,"session_id":"t","agent_id":"t","payload":{"id":"%s","relacionado":["plan-x\\n"]}}\n' "$CON" \
+  > "$M/.journal/pending/0000000000000000002-t-1-0.json"
+compact --quiet >/dev/null 2>&1
+chk "un relacionado con salto de linea final va a cuarentena" "1" "$(cuarentena)"
+chk "y no parte la linea" "0" "$(grep -c '^_$' "$M/_pendientes.md")"
 
 echo "== B. afines en el snippet =="
 fixture
@@ -174,6 +180,10 @@ H() { python3 "$BIN/plan-siguiente-hermano.py" --memory-dir "$M" --plan "$1"; }
 chk "sin ## Sub-planes y dos abiertos: SIN-ORDEN" "1" "$(H hijo-a | grep -c '^SIN-ORDEN plan-padre: 2 hijos abiertos')"
 printf -- '# Padre\n\n## Sub-planes\n\n| Sub-plan | Estado | Fase actual |\n|---|---|---|\n| [[plans/plan-hijo-a]] | completed | - |\n| [[plans/plan-hijo-c]] | active | 1 |\n| [[plans/plan-hijo-b]] | active | 1 |\n' > "$M/plans/plan-padre.md"
 chk "con tabla: sigue la fila mas arriba abierta" "SIGUIENTE plan-hijo-c (active) — hermano en plan-padre" "$(H hijo-a | head -1)"
+printf -- '# Padre\n\n## Sub-planes\n\n| Sub-plan | Estado | Fase actual |\n|---|---|---|\n| [[plans/plan-hijo-c.md|C]] | active | 1 |\n| [[plans/plan-hijo-b]] | active | 1 |\n' > "$M/plans/plan-padre.md"
+chk "una fila escrita plan-x.md cuenta como plan-x" "SIGUIENTE plan-hijo-c (active) — hermano en plan-padre" "$(H hijo-a | head -1)"
+chk "y no le pone la nota agregalo" "0" "$(H hijo-a | grep -c 'hijo-c.*agregalo')"
+printf -- '# Padre\n\n## Sub-planes\n\n| Sub-plan | Estado | Fase actual |\n|---|---|---|\n| [[plans/plan-hijo-a]] | completed | - |\n| [[plans/plan-hijo-c]] | active | 1 |\n| [[plans/plan-hijo-b]] | active | 1 |\n' > "$M/plans/plan-padre.md"
 chk "con prefijo plan- tambien" "SIGUIENTE plan-hijo-c (active) — hermano en plan-padre" "$(H plan-hijo-a | head -1)"
 emit --type plan.upsert --slug hijo-aa --title hijo-aa --status draft --date 2026-10-02 --parent padre >/dev/null 2>&1
 compact --quiet >/dev/null

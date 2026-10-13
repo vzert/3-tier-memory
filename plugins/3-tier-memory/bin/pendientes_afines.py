@@ -4,7 +4,7 @@
 
 Por que existe: hasta 2.54 el snippet `Como retomar` llevaba un solo item. Un Media que la sesion
 dejaba junto a un Alta no volvia a ningun snippet salvo que venciera su `_revisar` (medido sobre
-las 8 ultimas fichas de este repo y de claude-vzert: p-f667380493, p-95d33b9363, p-b0b80cfb23 y
+las 8 ultimas fichas de este repo y de otro proyecto: p-f667380493, p-95d33b9363, p-b0b80cfb23 y
 p-564b0bdc82 no volvieron nunca). Y un Alta corta no traia nada con que completar la sesion.
 
 Que hace: toma los anclas que cita la linea `Proximo paso:` de `## Como retomar` (ids `p-…` y
