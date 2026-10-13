@@ -20,6 +20,10 @@ VERBOSE=0
 [ "${1:-}" = "-v" ] && VERBOSE=1
 
 BIN="plugins/3-tier-memory/bin"
+# 2.57.0: journal-emit liga un pendiente nuevo al paso del snippet con el que arranco la sesion de
+# Claude Code donde corre. Las suites no son esa sesion: sin esto, correr el runner desde Claude Code
+# dependeria de como arranco la sesion de quien lo corre.
+unset CLAUDE_CODE_SESSION_ID
 FALLOS=0
 TOTAL=0
 LENTAS=""

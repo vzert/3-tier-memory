@@ -1,0 +1,46 @@
+import io, sys
+# El hilo de pendientes (2.57.0, p-b282a8cfc4). Cada mutacion apaga una pieza de la regla de Victor
+# y su aserto de test-hilo-pendientes.sh tiene que caer: (1) la liga al nacer y su guardia contra
+# fichas de otra sesion; el sello (campo partido, snippet pegado, saltos); (2) el cierre recursivo;
+# (3) el empate nuevo/heredado y el heredado saltado, y el chequeo del audit; (4) el paso recibido
+# en el hilo; (5) la Baja solo sin Alta ni Media, y `quedan N`.
+#
+# Uso: m_hilo.py <fichero> <mutacion>
+# Patrones de una sola linea, sin "\n": el checkout de Windows trae CRLF (regla 322).
+# Cada sustitucion tiene que calzar EXACTAMENTE una vez; si no, imprime 0 -> SIN PROBAR.
+M = {
+    # journal-emit.py
+    "liga-sin-auto": [("auto = [x for x in paso_recibido(origen, memory_dir, a.transcript)",
+                       "auto = [x for x in []")],
+    "liga-sin-guardia": [("if not af.ficha_de_la_sesion(ficha, transcript, sid):", "if False:")],
+    # pendientes_afines.py
+    "campo-una-linea": [("if not sig.strip() or ETIQUETA.match(sig):", "if True:")],
+    "pasted-sin-quitar": [('texto = PASTED.sub("", texto).strip()', "texto = texto.strip()")],
+    "hilo-sin-cierre": [('if p["id"] not in miembros and ids_rel & miembros:', "if False:")],
+    "hilo-sin-recibido": [('miembros = set(heredados) | nuevos | ids_pp | {x for x in paso_rec if x.startswith("p-")}',
+                           "miembros = nuevos | ids_pp")],
+    "empate-sin-nuevo": [('return 1 if p["id"] in nuevos else 2', "return 2")],
+    "empate-sin-saltos": [('if p["id"] not in nuevos and salt.get(p["id"], 0) >= 2:', "if False:")],
+    "baja-con-alta": [("extras = (altas_medias or resto)[:MAX_AFINES]", "extras = resto[:MAX_AFINES]")],
+    "sin-quedan": [("    if quedan:", "    if False:")],
+    # stamp-hilo.py
+    "saltos-sin-previo": [("salt = {i: previos.get(i, 0) + 1", "salt = {i: 0 + 1")],
+    # print-como-retomar.py
+    "print-sin-slug": [("                                        slug=slug)", "                                        slug=None)")],
+    # checkpoint-audit.py
+    "audit-sin-hilo": [('if mejor is not None and mejor <= rango[primero["id"]]:', "if True:")],
+}
+
+p, nombre = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""
+if nombre not in M:
+    print(f"0 sust: mutacion desconocida «{nombre}»")
+    sys.exit(0)
+s = io.open(p, encoding="utf-8", newline="").read()
+cuentas = [s.count(viejo) for viejo, _ in M[nombre]]
+if cuentas != [1] * len(cuentas):
+    print(f"0 sust de {nombre} (cada sustitucion calza {cuentas} veces; se exige 1)")
+    sys.exit(0)
+for viejo, nuevo in M[nombre]:
+    s = s.replace(viejo, nuevo)
+io.open(p, "w", encoding="utf-8", newline="").write(s)
+print(f"{len(cuentas)} sust de {nombre}")

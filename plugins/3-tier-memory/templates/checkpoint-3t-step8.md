@@ -154,14 +154,21 @@ Reglas para llenar los slots:
      vez de escoger uno sin decirlo: una eleccion no determinista silenciosa es peor que admitir que
      falta el criterio. (El breadcrumb "hijo de <padre>" para este mismo plan ya se resuelve en la
      regla de `<contexto-1-linea>`, arriba — no se repite aqui.)
-  2. El pendiente nuevo de mayor prioridad creado en Step 3b de esta sesion.
-  3. Si no hay nuevo, el pendiente existente de mayor prioridad relacionado con el trabajo de la sesion.
+  2. **El primero del hilo** (2.57.0, p-b282a8cfc4, regla de Victor del 2026-10-13). Correlo:
+     `python3 "$JBIN/pendientes_afines.py" "$SESSION_FILE" --hilo`. El hilo es lo que la sesion
+     recibio en su snippet (sello de 5c-bis), lo que nacio en ella y lo que esta ligado a eso por
+     `_relacionado`, en cualquier direccion y a cualquier distancia; solo lo que se puede hacer hoy.
+     Orden: prioridad; en empate el nuevo antes que el heredado, salvo un heredado que lleva 2
+     sesiones seguidas sin ser el paso, que va primero. El paso recibido que no cerraste sigue ahi.
+     `checkpoint-audit.py` (`snippet.hilo`) marca `SALTADO` un paso que cite otro de menor rango.
+  3. **(Absorbido por el 2 en 2.57.0.)** "El existente de mayor prioridad relacionado con el trabajo"
+     es ahora el hilo: si el hilo esta vacio, no hay caso 3; es el caso 5.
 
-  **Afines (2.55.0): no los escribas tu.** `<next-step>` sigue siendo UN item. Cuando su linea cita
-  un `p-…` (casos 2-3) o un `plan-<slug>` (caso 1: cita el slug del plan en la linea), `print-como-
-  retomar.py` mete debajo, en vivo, `Si ese paso es corto, suma en la misma sesion: …` con hasta 2
-  Alta/Media abiertos ligados por `_relacionado:` (Step 3b, `--relacionado`), de esta sesion o de
-  cualquier otra. Asi un Media que una sesion dejo junto a un Alta vuelve en el snippet siguiente
+  **Extras del hilo (2.55.0, 2.57.0): no los escribas tu.** `<next-step>` sigue siendo UN item.
+  `print-como-retomar.py` mete debajo, en vivo, `Si ese paso es corto, suma en la misma sesion: …`
+  con hasta 2 del hilo fuera del paso (Alta > Media > Baja; la Baja solo si no queda Alta ni
+  Media) y, si queda mas, `quedan N en el hilo: <ids>`. Esa linea la lee el sello de la sesion
+  siguiente: lo que no entro vuelve por ahi, no por una lista que escribas. Asi un Media que una sesion dejo junto a un Alta vuelve en el snippet siguiente
   sin depender de que alguien se acuerde. Nunca suma uno con `_bloqueado:`, con `_revisar` de hoy
   o futuro, ni (2.56.0) uno cuyo texto nombra una fecha `AAAA-MM-DD` posterior a hoy: eso no se
   puede hacer en la sesion siguiente (caso real: un pendiente Alta, "revision a 24 h desde el

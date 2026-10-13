@@ -143,6 +143,9 @@ DESDE_BUGS_BREAK = "2026-09-30"
 # `snippet.proximo_paso` (2.56.0): desde aqui el caso 1 ya no empieza por `Fase actual:` (el estado
 # de la fase va en `Retomamos:`); se reconoce por el `plan-<slug>` enlazado que cita la linea.
 DESDE_PASO_ACCION = "2026-10-13"
+# Desde 2.57.0 (p-b282a8cfc4) el `Proximo paso` de los casos 2-3 es el primero del hilo
+# (pendientes_afines.hilo). Las fichas anteriores se escribieron con otra regla.
+DESDE_HILO = "2026-10-13"
 # Tercer cierre de un defecto (2.53.0): el usuario decidio en Step 3b no abrirle pendiente.
 DESCARTADO_BUG = re.compile(r"_descartado:\s*(.*?)_(?=\s|$|[.,;:)\]—])", re.S)
 # `pendientes.candidatos` (2.53.0): desde aqui cada pendiente nuevo sale en `## Candidatos a
@@ -1393,6 +1396,38 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         else:
             h.append(Hallazgo(HECHO, "snippet.proximo_paso",
                               "`Proximo paso:` es caso 1, 5, o un pendiente registrado e inmediato"))
+
+    # 8-ter-bis. El paso es el primero del hilo (2.57.0, p-b282a8cfc4, regla 3 de Victor): el de
+    # mayor prioridad; en empate el nuevo antes que el heredado, salvo el heredado que lleva 2
+    # sesiones seguidas saltado (`hilo_saltos`). Solo cuenta (prioridad, grupo): entre dos del mismo
+    # rango el agente elige. El caso 1 (plan activo citado) va antes que el hilo. Todo sale de
+    # campos (el sello, `_origen`, `_relacionado`, `_bloqueado`, `_revisar`), no del texto.
+    if pp is not None and "```" in sec_retomar and fecha_ficha and fecha_ficha >= DESDE_HILO:
+        af = _afines_mod()
+        orden = af.hilo(texto, os.path.join(memory_dir, "_pendientes.md"), slug, ref)
+        rango = {p["id"]: (af.PRIORIDAD_HILO[p["prio"]], p["grupo"]) for p in orden}
+        citados = set(ID_PENDIENTE.findall(pp))
+        caso1 = {s for s in af.anclas(pp)[1] & planes_laxo if plan_activo(memory_dir, s)}
+        if caso1:
+            h.append(Hallazgo(HECHO, "snippet.hilo", "caso 1 (plan activo): va antes que el hilo"))
+        elif not orden:
+            h.append(Hallazgo(HECHO, "snippet.hilo", "el hilo no tiene nada que se pueda hacer hoy"))
+        else:
+            primero = orden[0]
+            mejor = min((rango[i] for i in citados if i in rango), default=None)
+            if mejor is not None and mejor <= rango[primero["id"]]:
+                h.append(Hallazgo(HECHO, "snippet.hilo",
+                                  f"`Proximo paso:` es el primero del hilo ({len(orden)} hacibles)"))
+            else:
+                motivo = {0: "heredado saltado 2 sesiones seguidas", 1: "nacido en esta sesion",
+                          2: "heredado"}[primero["grupo"]]
+                h.append(Hallazgo(SALTADO, "snippet.hilo",
+                                  "`Proximo paso:` no es el primero del hilo",
+                                  [f"el primero es {primero['id']} ({primero['prio']}, {motivo})"
+                                   + (f"; el paso cita {', '.join(sorted(citados))}" if citados
+                                      else "; el paso no cita ningun pendiente del hilo")],
+                                  corrige=f"cita {primero['id']} en `Proximo paso:` (Step 8, caso 2: "
+                                          "el primero que imprime pendientes_afines.py --hilo)"))
 
     # 8-quinquies. Cada defecto de `## Bugs fixed` declara su cierre (2.34.0, p-272254efc5). La
     # salida que 2.33.0 dejo abierta: un defecto hallado en vivo y "arreglado" solo con prosa

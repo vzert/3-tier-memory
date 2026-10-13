@@ -18,10 +18,11 @@ M = {
     # pendientes_afines.py
     "afines-con-bloqueados": [('or p["bloqueado"]:', ":")],
     "afines-con-vence-hoy": [('if p["revisar"] and p["revisar"] >= hoy:', 'if p["revisar"] and p["revisar"] > hoy:')],
-    "afines-sin-inversa": [('or p["id"] in citados_por_ancla', "or False")],
-    "afines-sin-prioridad": [('elegibles.sort(key=lambda p: (PRIORIDAD[p["prio"]], p["creado"], p["fila"]))',
-                              'elegibles.sort(key=lambda p: (p["creado"], p["fila"]))')],
-    "afines-sin-tope": [("return elegibles[:MAX_AFINES]", "return elegibles")],
+    # 2.57.0: el hilo sustituyo al filtro de afines; las mismas piezas, en su codigo nuevo.
+    "afines-sin-inversa": [('if p["id"] in miembros and not ids_rel <= miembros:', "if False:")],
+    "afines-sin-prioridad": [('out.sort(key=lambda p: (PRIORIDAD_HILO[p["prio"]], p["grupo"], p["creado"], p["fila"]))',
+                              'out.sort(key=lambda p: (p["creado"], p["fila"]))')],
+    "afines-sin-tope": [("extras = (altas_medias or resto)[:MAX_AFINES]", "extras = (altas_medias or resto)")],
     # plan-siguiente-hermano.py
     "hermano-fuera-primero": [("for s in en_tabla + fuera:", "for s in fuera + en_tabla:")],
 }

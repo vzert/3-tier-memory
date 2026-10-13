@@ -20,6 +20,9 @@ Tipos de evento:
                     [--relacionado p-<10 hex>|plan-<slug>]...  (repetible, 2.55.0: otro
                     pendiente o un plan con el que este va junto; lo lee pendientes_afines.py,
                     que print-como-retomar.py usa para sumar afines al `Proximo paso`)
+                    (2.57.0) Ademas se liga SOLO a los ids del `Proximo paso` que la sesion
+                    recibio (sello `hilo_paso` de la ficha de --origen, o la transcripcion:
+                    [--transcript RUTA] o la de CLAUDE_CODE_SESSION_ID). Lo avisa por stderr.
                     Imprime el id (p-<10 hex>) por stdout.                              (Fase 1)
   pendiente.resolve --id ID --estado resolved|superseded|abandoned [--sesion S] [--nota N]
   pendiente.update  --id ID [--text T] [--prioridad Alta|Media|Baja] [--text-prefix P]
@@ -463,6 +466,40 @@ def limpiar_relacionados(valores, propio=None):
     return out
 
 
+def paso_recibido(origen, memory_dir, transcript=None):
+    """Pieza 1 del hilo (2.57.0, p-b282a8cfc4): los ids del `Proximo paso` que esta sesion recibio
+    en su snippet `Retomamos:`. Un pendiente que nace aqui se liga a ellos solo, sin criterio del
+    agente (decision de Victor, 2026-10-13: `_relacionado` estaba en 3 de 617 pendientes cuando
+    dependia de que el agente lo pusiera).
+
+    Fuente: el sello `hilo_paso` de la ficha de `--origen` (stamp-hilo.py) y, si no esta, la
+    transcripcion: `--transcript`, o la de `CLAUDE_CODE_SESSION_ID`. Si no hay ninguna, [] y el
+    pendiente nace como antes: nunca falla un `pendiente.add` por esto."""
+    import importlib.util
+    try:
+        ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pendientes_afines.py")
+        spec = importlib.util.spec_from_file_location("pendientes_afines", ruta)
+        af = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(af)
+        m = re.search(r"\[\[sessions/([^\]|]+)", origen or "")
+        ficha = os.path.join(memory_dir, "sessions", m.group(1).strip() + ".md") if m else None
+        # La transcripcion de la sesion en curso, solo si la ficha de --origen existe (Step 2 la
+        # escribe antes de Step 3b) y puede ser de esa sesion (ficha_de_la_sesion): un
+        # `pendiente.add` suelto, el de una ficha vieja (/backfill-3t) o el de una prueba corrida
+        # dentro de una sesion de Claude Code no hereda el snippet de esa sesion.
+        if not transcript and ficha and os.path.isfile(ficha):
+            dirs = [os.environ.get("CLAUDE_PROJECT_DIR"), os.getcwd(),
+                    os.path.dirname(os.path.abspath(memory_dir))]
+            sid = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+            transcript = af.transcripcion_de(sid, dirs)
+            if not af.ficha_de_la_sesion(ficha, transcript, sid):
+                transcript = None
+        return [x for x in af.paso_recibido_de(ficha, transcript) if RELACIONADO_RE.match(x)]
+    except Exception as exc:   # la liga es un extra: un fallo aqui no pierde el evento
+        print(f"journal-emit: aviso: no se pudo leer el paso recibido ({exc})", file=sys.stderr)
+        return []
+
+
 def strip_meta(text):
     # Las mismas claves que `META_RE` en repair-dualwrite.py, que re-deriva este hash para
     # detectar ids inventados. Si divergen, todo pendiente con la clave que falte se reporta
@@ -666,6 +703,7 @@ def main():
     ap.add_argument("--desbloquear", action="store_true")
     ap.add_argument("--relacionado", action="append", default=[])   # pendiente.add / .relate
     ap.add_argument("--sin-relacion", dest="sin_relacion", action="store_true")
+    ap.add_argument("--transcript")   # pendiente.add: de donde leer el paso recibido (2.57.0)
     # pendiente.resolve
     ap.add_argument("--id")
     ap.add_argument("--estado")
@@ -756,6 +794,12 @@ def main():
         bloqueado = limpiar_bloqueado(a.bloqueado_por)
         # `relacionado` tampoco: es un enlace, no la identidad.
         relacionado = limpiar_relacionados(a.relacionado, pid)
+        # Pieza 1 del hilo: se suma el paso recibido a lo que el agente haya pasado.
+        auto = [x for x in paso_recibido(origen, memory_dir, a.transcript)
+                if x != pid and x not in relacionado]
+        if auto:
+            relacionado += auto
+            print("journal-emit: ligado al paso recibido: " + ", ".join(auto), file=sys.stderr)
         base["payload"] = {"id": pid, "text": text, "prioridad": prio,
                            "origen": origen, "creado": creado, "revisar": revisar}
         if bloqueado:

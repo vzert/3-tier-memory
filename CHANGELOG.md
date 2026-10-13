@@ -1,6 +1,65 @@
 # Changelog
 
 
+## [2.57.0] - 2026-10-13
+Origen: p-b282a8cfc4. Victor decidio el 2026-10-13 la regla del hilo de pendientes sobre la medicion
+de `research/hilo-pendientes-relacionados-medicion` (este repo y otro proyecto, 2026-09-01..10-13).
+El paso elegido ya era el de mayor prioridad en 86-90 % de las sesiones. Lo que se perdia era lo
+demas: el paso recibido que no se cerraba se caia del snippet siguiente y no volvia (8 casos), los
+hermanos se separaban (61 de 119 sesiones) y la linea de afines de 2.55.0 dependia de
+`_relacionado`, que estaba en 3 de 617 pendientes.
+
+### Added
+- **(1) Liga al nacer.** `journal-emit.py --type pendiente.add` liga solo el pendiente nuevo a los
+  ids del `Proximo paso` que la sesion recibio en su snippet `Retomamos:` y lo avisa por stderr. El
+  agente no decide nada. Lee el sello de la ficha de `--origen` o, si todavia no hay sello, la
+  transcripcion de `CLAUDE_CODE_SESSION_ID` (o `--transcript`). La transcripcion solo cuenta si la
+  ficha existe, no esta sellada con otro `session_id` y su fecha cae dentro de la transcripcion.
+  Asi `/backfill-3t` y las pruebas no heredan el snippet de la sesion donde corren.
+- **`bin/stamp-hilo.py`** (checkpoint Step 5c-bis): lee una vez el primer mensaje de la
+  transcripcion y sella en el frontmatter de la ficha `hilo_retoma`, `hilo_paso`, `hilo_heredados`
+  (los ids del paso, de la linea de extras y de `quedan N`) y `hilo_saltos` (cuantas sesiones
+  seguidas lleva cada heredado sin ser el paso). Quita el envoltorio `<pasted_content>` y lee cada
+  campo hasta la siguiente etiqueta o linea en blanco. `print-como-retomar.py` y `checkpoint-audit.py`
+  leen solo el sello, porque el hook de cierre los vuelve a correr en otro entorno.
+- **(2) El hilo** (`pendientes_afines.hilo`): lo recibido, lo nacido en la sesion (`_origen`) y el
+  paso que escribe la ficha, cerrado por `_relacionado` en las dos direcciones y sin limite de
+  distancia. Por `plan-…` da un solo salto, para que un plan grande no meta el backlog entero. Solo
+  entra lo que se puede hacer hoy (sin `_bloqueado`, sin `_revisar` de hoy o futuro, sin fecha
+  futura en el texto). `pendientes_afines.py FICHA --hilo` lo imprime en orden para el Step 8.
+- **(3) Orden y `snippet.hilo`.** Primero va la prioridad. En empate va el nuevo antes que el
+  heredado, salvo el heredado con `hilo_saltos` de 2 o mas, que va primero. `checkpoint-audit.py`
+  marca SALTADO en `snippet.hilo` un `Proximo paso` que cite uno de menor rango (prioridad, grupo).
+  Entre dos del mismo rango elige el agente. El caso 1 (plan activo citado) va antes que el hilo.
+  Solo aplica a fichas desde el 2026-10-13.
+- **(4)** El paso recibido que no se cerro sigue en el hilo como heredado, aunque nada lo ligue.
+- **(5) Extras y `quedan N`.** La linea `Si ese paso es corto, suma…` sale del hilo: hasta 2 fuera
+  del paso, Alta > Media > Baja, y la Baja solo cuando no queda Alta ni Media. Debajo va `quedan N en
+  el hilo: <ids>` con el resto. Esa linea la lee el sello de la sesion siguiente.
+
+### Changed
+- Step 8, escalera del `Proximo paso`: el caso 2 es "el primero del hilo" y absorbe el caso 3.
+  Step 3b explica la liga automatica.
+- `tools/run-tests.sh` quita `CLAUDE_CODE_SESSION_ID` antes de correr las suites.
+
+### Tests
+- `test-hilo-pendientes.sh` (31 asertos), una seccion por pieza. Cada una entra por un script que
+  ya existia (journal-emit, print-como-retomar, checkpoint-audit), mas stamp-hilo. Contra 2.56.1
+  salen 23 de 27 en rojo (los 4 que pasan son controles); contra 2.57.0, todos en verde.
+- `test-pendiente-relacionado.sh` seccion B: la ficha es de otra sesion que la de origen de sus
+  pendientes, porque lo nacido en la sesion ya entra al hilo por haber nacido ahi.
+  `test-checkpoint-close-guard.sh`: el Alta de la memoria de prueba nace en una sesion previa, porque
+  si no el hilo agregaria una linea que las respuestas reales de 2.32.0 no traen.
+- `tools/mutation-check.sh`: 13 mutaciones nuevas (`m_hilo.py`), una por pieza, y 3 de
+  `m_relacionado.py` reescritas para el codigo nuevo.
+
+### Limites
+- Sin `CLAUDE_CODE_SESSION_ID` (variable no documentada) no hay sello ni liga, y el hilo queda en lo
+  nacido en la sesion y lo ligado al paso, como en 2.55.0 mas lo nacido.
+- `hilo_saltos` cuenta "no fue el paso", no "perdio un empate". Solo cambia el orden dentro de la
+  misma prioridad.
+- Falta medir si `quedan N` hace que los pendientes vuelvan (lo pide p-b282a8cfc4).
+
 ## [2.56.1] - 2026-10-13
 Origen: issue #11. En una memoria con `.journal/applied/` versionado desde antes de que su
 `.gitignore` lo ignorara (checkpoints de antes de 2.23.0), `checkpoint-commit.py` salia siempre
