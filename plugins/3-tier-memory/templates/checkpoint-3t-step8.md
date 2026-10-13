@@ -160,7 +160,7 @@ Reglas para llenar los slots:
      `_relacionado`, en cualquier direccion y a cualquier distancia; solo lo que se puede hacer hoy.
      Orden: prioridad; en empate el nuevo antes que el heredado, salvo un heredado que lleva 2
      sesiones seguidas sin ser el paso, que va primero. El paso recibido que no cerraste sigue ahi.
-     `checkpoint-audit.py` (`snippet.hilo`) marca `SALTADO` un paso que cite otro de menor rango.
+     `checkpoint-audit.py` (`snippet.hilo`) marca `SALTADO` un paso cuyo primer id sea de menor rango.
   3. **(Absorbido por el 2 en 2.57.0.)** "El existente de mayor prioridad relacionado con el trabajo"
      es ahora el hilo: si el hilo esta vacio, no hay caso 3; es el caso 5.
 
