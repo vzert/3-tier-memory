@@ -15,7 +15,7 @@ hermanos se separaban (61 de 119 sesiones) y la linea de afines de 2.55.0 depend
   agente no decide nada. Lee el sello de la ficha de `--origen` o, si todavia no hay sello, la
   transcripcion de `CLAUDE_CODE_SESSION_ID` (o `--transcript`). La transcripcion solo cuenta si la
   ficha existe, no esta sellada con otro `session_id`, su fecha cae dentro de la transcripcion y la
-  transcripcion la escribio (Write, Edit o un Bash que redirige a ella; leerla no cuenta). Vale
+  transcripcion la escribio (Write, Edit o un Bash que redirige a `.../sessions/<ficha>`; leerla no cuenta). Vale
   tambien con `--transcript` y en stamp-hilo.py.
   Asi `/backfill-3t` y las pruebas no heredan el snippet de la sesion donde corren.
 - **`bin/stamp-hilo.py`** (checkpoint Step 5c-bis): lee una vez el primer mensaje de la
@@ -46,16 +46,16 @@ hermanos se separaban (61 de 119 sesiones) y la linea de afines de 2.55.0 depend
 - `tools/run-tests.sh` quita `CLAUDE_CODE_SESSION_ID` antes de correr las suites.
 
 ### Tests
-- `test-hilo-pendientes.sh` (36 asertos), una seccion por pieza. Cada una entra por un script que
+- `test-hilo-pendientes.sh` (37 asertos), una seccion por pieza. Cada una entra por un script que
   ya existia (journal-emit, print-como-retomar, checkpoint-audit), mas stamp-hilo. Contra 2.56.1
-  salen 29 de 36 en rojo. Los 7 que pasan son controles negativos (algo que no debe pasar y que
+  salen 29 de 37 en rojo. Los 8 que pasan son controles negativos (algo que no debe pasar y que
   tampoco pasaba antes: sin `Retomamos` no hay liga, el suelto no entra, etc.). Contra 2.57.0, los
-  36 en verde.
+  37 en verde.
 - `test-pendiente-relacionado.sh` seccion B: la ficha es de otra sesion que la de origen de sus
   pendientes, porque lo nacido en la sesion ya entra al hilo por haber nacido ahi.
   `test-checkpoint-close-guard.sh`: el Alta de la memoria de prueba nace en una sesion previa, porque
   si no el hilo agregaria una linea que las respuestas reales de 2.32.0 no traen.
-- `tools/mutation-check.sh`: 18 casos nuevos con 17 mutaciones (`m_hilo.py`), al menos uno por pieza, y 3 de
+- `tools/mutation-check.sh`: 19 casos nuevos con 18 mutaciones (`m_hilo.py`), al menos uno por pieza, y 3 de
   `m_relacionado.py` reescritas para el codigo nuevo.
 
 ### Limites
