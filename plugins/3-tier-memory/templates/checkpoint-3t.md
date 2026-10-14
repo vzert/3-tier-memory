@@ -98,7 +98,12 @@ del reporte ("Recuperacion post-compactacion: FALLO — hubo compactacion y no s
 tramo (<error>); lo compactado puede faltar en esta ficha"). Si ademas trae `restos=N`, quedaron N
 archivos que el script no pudo borrar ni vaciar (pueden tener texto crudo de la sesion): agrega a esa
 linea "quedan N archivo(s) en <out> que pueden tener texto crudo — borralos a mano". En todo `recover=0`, borra el
-directorio: `rm -rf "<RECOVER_DIR impreso arriba>"`. Nunca detengas el checkpoint por esto.
+directorio con una llamada Bash PROPIA cuyo comando entero sea `rm -rf <ruta>`, con la ruta absoluta
+LITERAL que imprimio `RECOVER_DIR=` (p. ej. `rm -rf /var/folders/ab/xyz/T/3t-recover.Ab12Cd`): sin
+`$RECOVER_DIR` ni otra variable, sin comillas, sin glob, sin `2>/dev/null` ni otra redireccion, y sin
+`;`, `&&` o `|` ni ningun otro comando antes o despues (tampoco los de Step 3-pre). Un guardian de
+permisos (goalspec 0.55.0+) solo deja pasar el borrado de una carpeta temporal propia en esa forma
+exacta; cualquier otra lo niega. Nunca detengas el checkpoint por esto.
 
 `recover=1` solo vale si la comprobacion del tramo da `verificado=1`. Una linea `recover=1` cortada
 (o pegada a un `recover=0`) no prueba que los bloques sigan ahi. Antes de lanzar subagentes, corre:
@@ -155,7 +160,9 @@ miles de caracteres cada uno.
    Y pendientes / Z planes-research recuperados."
 
 5. Borra el directorio temporal en cuanto tengas los candidatos (el texto crudo puede traer
-   secretos; lo que pase al session file lo cubre Step 5d): `rm -rf "<RECOVER_DIR impreso arriba>"`.
+   secretos; lo que pase al session file lo cubre Step 5d), en una llamada Bash PROPIA cuyo comando
+   entero sea `rm -rf <ruta absoluta literal que imprimio RECOVER_DIR=>`: sin variable, sin comillas,
+   sin redireccion y sin nada encadenado antes o despues (la misma forma exacta que en `recover=0`).
    Nunca copies un `chunk-NN.md` dentro de `memory/`.
 
 ## Step 1: Session slug
