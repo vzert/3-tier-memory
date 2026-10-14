@@ -52,11 +52,12 @@ Tipos de evento:
                     al journal): sin id ningun otro evento lo encuentra. Despues, update/resolve
                     normales. El id es el CANONICO de la linea, sha1(texto+creado+origen), el
                     mismo que pone `enrich-memory.py --only creado,id` (la linea queda byte a byte
-                    igual, salvo una fecha imposible en el slug, que enrich escribe y aqui no),
-                    asi que repair-dualwrite no lo ve como inventado. Si falta `_creado` se
-                    escribe tambien (fecha del slug de _origen, `date:` del fichero al que
-                    enlaza, o mtime de _pendientes.md: el orden de enrich). Enrich salta los
-                    items con sangria; adopt no. --id acepta el id sintetico de /triage-3t. El
+                    igual), asi que repair-dualwrite no lo ve como inventado. Si falta `_creado`
+                    se escribe tambien, con la derivacion de enrich (la llama, no la copia): slug
+                    de _origen, `date:` del fichero al que enlaza, mtime de _pendientes.md.
+                    Diferencias con enrich: los items con sangria (enrich los salta, adopt y
+                    repair-dualwrite no) y un `_id:p-…_` mal espaciado (enrich lo da por id y no
+                    lo toca; adopt lo reespacia). --id acepta el id sintetico de /triage-3t. El
                     evento lleva la linea VERBATIM, espacios incluidos: si cambio antes del
                     compactado, se salta con aviso. Mismo id
                     dos veces (lineas identicas, o copia de un pendiente que ya tiene id) = el
@@ -543,7 +544,6 @@ ID_CANONICO_RE = re.compile(r"_id: (p-[0-9a-f]{10})_")        # = journal-compac
 ID_MAL_ESPACIADO_RE = re.compile(r"_id:\s*(p-[0-9a-f]{10})_")
 ORIGEN_LINK_RE = re.compile(r"_origen:\s*\[\[[^\]]+\]\]_")    # = enrich-memory.ORIGEN_RE
 CREADO_LINEA_RE = re.compile(r"_creado:\s*(\d{4}-\d{2}-\d{2})")
-FECHA_EN_ORIGEN_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")       # = enrich-memory.DATE_RE
 
 
 def abierta_sin_id(line):
@@ -583,31 +583,22 @@ def _enriquecedor():
 
 
 def creado_para(memory_dir, line, hoy):
-    """La fecha `_creado` de una linea que no la tiene, con el orden de enrich-memory: la fecha
-    del slug de `_origen`, la `date:` del fichero al que enlaza, y si no, el mtime de
-    `_pendientes.md` (la misma funcion de enrich). `hoy` solo si enrich no esta al lado.
+    """La fecha `_creado` de una linea que no la tiene: `enrich-memory.derivar_creado` (slug de
+    `_origen`, o `date:` del fichero al que enlaza) y si no, el mtime de `_pendientes.md` con la
+    misma funcion de enrich. Es LA MISMA derivacion que `enrich-memory.py --only creado`, llamada,
+    no copiada. `hoy` solo si enrich-memory.py no esta al lado.
 
     Hace falta ESCRIBIRLA al adoptar, no solo usarla para el hash: si la linea quedara sin
     `_creado`, un enrich posterior le pondria uno, el texto+creado+origen de la linea ya no daria
     el id adoptado, `ids_invented` lo contaria y `--fix-ids --apply` lo renombraria — rompiendo
     las citas del id, que es justo lo que adoptarlo viene a permitir.
-
-    UNA divergencia con enrich, a proposito: una fecha imposible en el slug (`2026-02-30`) enrich
-    la escribe tal cual, y aqui se salta al siguiente recurso. Escribirla haria reventar a quien
-    la parsea (triage-scan, expire-pendientes).
     """
     enr = _enriquecedor()
-    mo = ORIGEN_LINK_RE.search(line)
-    if mo:
-        md = FECHA_EN_ORIGEN_RE.search(mo.group(0))
-        if md and fecha_real(md.group(1)):
-            return md.group(1)
-        d = enr.linked_file_date(memory_dir, mo.group(0)) if enr else None
-        if d and fecha_real(d):
-            return d
-    if enr:
-        return enr.mtime_date(os.path.join(memory_dir, "_pendientes.md"))
-    return hoy
+    if enr is None:
+        return hoy
+    mo = enr.ORIGEN_RE.search(line)
+    d = enr.derivar_creado(memory_dir, mo.group(1)) if mo else None
+    return d or enr.mtime_date(os.path.join(memory_dir, "_pendientes.md"))
 
 
 def linea_adoptada(line, pid, creado_nuevo=""):

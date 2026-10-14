@@ -1390,8 +1390,9 @@ def apply_adopt(mem, p):
         if r is not None and r[1] != pid:
             raise Quarantine(f"malformed: adopt {pid} no es el id que la linea ya lleva ({r[1]})")
         dato = {"id": pid, "text": text, "creado": creado or nuevo, "origen": origen or "—"}
-        # Igualdad EXACTA (read_lines ya quito el `\r` de un fichero CRLF): un cambio de un
-        # espacio tambien es un cambio, y no se adopta lo que el emisor no vio.
+        # Igualdad EXACTA, salvo el `\r` final de un fichero CRLF (read_lines parte por `\n` y
+        # el emisor lee en modo texto): un cambio de un espacio tambien es un cambio, y no se
+        # adopta lo que el emisor no vio.
         casan = [k for k, ln in enumerate(lines)
                  if je.abierta_sin_id(ln) and ln.rstrip("\r") == verb.rstrip("\r")]
         ya = find_id_line(lines, pid)
@@ -1442,6 +1443,14 @@ def apply_adopt(mem, p):
     # escritos, el replay encuentra la linea ya adoptada y aun asi crea la fila que faltaba.
     for dato, prio in para_tier3:
         if find_monthly_row(mem, dato["id"]):
+            continue
+        cita = fila_mensual_que_cita(mem, dato["id"])
+        if cita:
+            # Una fila escrita a mano con este id y DESPUES la cita de otro: find_monthly_row (que
+            # toma el ultimo id de la celda, la forma que escriben add y adopt) no la reconoce.
+            # Anadir otra daria dos filas del mismo pendiente; no se anade, se avisa.
+            log(f"WARN adopt: {dato['id']} ya sale en una fila de {cita} que no termina en su "
+                f"id; no se anade otra (revisala a mano: resolve no la encontrara)")
             continue
         if not dato["creado"]:
             log(f"WARN adopt: {dato['id']} no tiene _creado; sin fila de Tier 3 (enrich-memory "
@@ -1720,6 +1729,19 @@ def find_monthly_row(mem, pid):
             ids = MID_RE.findall(cells[COL_TEXT])
             if ids and ids[-1] == pid:
                 return path, lines, i, cells, cmap
+    return None
+
+
+def fila_mensual_que_cita(mem, pid):
+    """Nombre del mensual con una fila cuya celda de texto lleva `_id: pid_` en CUALQUIER sitio."""
+    d = os.path.join(mem, "pendientes")
+    if not os.path.isdir(d):
+        return None
+    for fn in sorted(os.listdir(d)):
+        if re.match(r"^\d{4}-\d{2}\.md$", fn):
+            for _i, cells, _c in monthly_rows(read_lines(os.path.join(d, fn))):
+                if pid in MID_RE.findall(cells[COL_TEXT]):
+                    return fn
     return None
 
 

@@ -5,7 +5,8 @@
 # escrito a mano, o anterior al journal, no lo lleva, y la unica forma de corregirlo o cerrarlo era
 # editar `_pendientes.md` a mano y re-sellar las huellas (pasado dos veces en claude-vzert).
 #
-#  1. El id adoptado es el MISMO que pone enrich-memory --only creado,id (byte a byte la linea),
+#  1. El id adoptado es el MISMO que pone enrich-memory --only creado,id (byte a byte la linea, en
+#     los items sin sangria, que son los unicos que enrich toca),
 #     y despues de adoptar, update y resolve funcionan sobre ese id, con su fila de Tier 3.
 #  2. repair-dualwrite no lo cuenta como inventado y --fix-ids no lo renombra.
 #  3. Replay idempotente; linea cambiada entre emision y compactado: aviso, ni cuarentena ni perdida.
@@ -67,14 +68,14 @@ chk "avisa de los gemelos" "1" "$(printf '%s' "$ERR" | grep -c 'DUPLICADO (2 cop
 compact --quiet >/dev/null
 chk "sin cuarentena" "0" "$(cuarentena)"
 chk "lineas identicas a las de enrich (sin gemelos)" "" \
-  "$(diff <(grep '^- \[ \]' "$M/_pendientes.md" | grep -v 'gemelo\|slug imposible') <(grep '^- \[ \]' "$T/enr/_pendientes.md" | grep -v 'gemelo\|slug imposible'))"
+  "$(diff <(grep '^- \[ \]' "$M/_pendientes.md" | grep -v gemelo) <(grep '^- \[ \]' "$T/enr/_pendientes.md" | grep -v gemelo))"
 chk "los gemelos siguen sin id" "2" "$(grep -c '^- \[ \] gemelo exacto — _creado: 2026-09-02_$' "$M/_pendientes.md")"
 chk "texto repetido con otro origen = dos ids distintos" "2" \
   "$(grep '^- \[ \] texto repetido' "$M/_pendientes.md" | grep -o '_id: p-[0-9a-f]*_' | sort -u | wc -l | tr -d ' ')"
 chk "creado sacado del slug de _origen" "1" \
   "$(grep -c '^- \[ \] sin creado con origen — _origen: \[\[sessions/2026-09-01-vieja\]\]_ — _creado: 2026-09-01_ — _id: p-' "$M/_pendientes.md")"
 chk "sin origen ni creado: creado = mtime de _pendientes.md" "1" "$(grep -c "^- \[ \] a pelo sin nada — _creado: 2020-01-15_ — _id: p-" "$M/_pendientes.md")"
-chk "fecha imposible en el slug: no se escribe, va al mtime" "1" "$(grep -c "^- \[ \] slug imposible — _origen: \[\[sessions/2026-02-30-x\]\]_ — _creado: 2020-01-15_ — _id: p-" "$M/_pendientes.md")"
+chk "fecha imposible en el slug: no se escribe, va al mtime (enrich igual)" "1" "$(grep -c "^- \[ \] slug imposible — _origen: \[\[sessions/2026-02-30-x\]\]_ — _creado: 2020-01-15_ — _id: p-" "$M/_pendientes.md")"
 ID1=$(grep '^- \[ \] arreglar foo' "$M/_pendientes.md" | grep -o 'p-[0-9a-f]\{10\}')
 chk "fila de Tier 3 de cada adoptado" "6" "$(cat "$M"/pendientes/*.md | grep -c '_id: p-')"
 chk "Tier 3 lleva la prioridad de su seccion" "1" "$(grep "_id: ${ID1}_" "$M/pendientes/2026-09.md" | grep -c '| Alta |')"
@@ -198,6 +199,15 @@ chk "un _id: en prosa no borra texto" "1" "$(grep -c "^- \[ \] revisar la tabla 
 chk "esas dos lineas, igual que enrich" "" "$(diff <(grep '^- \[ \] \(id raro\|revisar la tabla\)' "$M/_pendientes.md") <(grep '^- \[ \] \(id raro\|revisar la tabla\)' "$T/enr2/_pendientes.md"))"
 chk "_id:p-…_ mal espaciado conserva su id" "p-0123456789" "$IDM"
 chk "y queda bien espaciado, una sola vez" "1" "$(grep -c '^- \[ \] mal espaciado — _creado: 2026-09-03_ — _id: p-0123456789_$' "$M/_pendientes.md")"
+
+echo "== 8b. una fila mensual a mano que lleva el id y despues cita otro: no se duplica =="
+fixture "$M"
+IDF=$(emit --type pendiente.adopt --text-prefix "arreglar foo")
+printf -- '# 2026-09\n\n| # | Pendiente | Prioridad | Creado | Origen | Resuelto | Sesion resolucion |\n|---|---|---|---|---|---|---|\n| 1 | arreglar foo legacy _id: %s_ ver tambien _id: p-9999999999_ | Alta | 2026-09-01 | x | | |\n' "$IDF" > "$M/pendientes/2026-09.md"
+O=$(compact 2>&1)
+chk "no anade una segunda fila" "1" "$(grep -c "_id: ${IDF}_" "$M/pendientes/2026-09.md")"
+chk "y avisa" "1" "$(printf '%s' "$O" | grep -c "WARN adopt: $IDF ya sale en una fila de 2026-09.md")"
+chk "la linea de Tier 2 si queda adoptada" "1" "$(grep -c "_id: ${IDF}_" "$M/_pendientes.md")"
 
 echo "== 9. payload incoherente: cuarentena =="
 fixture "$M"

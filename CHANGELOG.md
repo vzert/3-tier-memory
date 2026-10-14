@@ -15,11 +15,11 @@ re-sellar las huellas (`--reseal`), y en claude-vzert ya habia pasado dos veces.
 - El id es el **canonico** de la linea, `sha1(texto+creado+origen)`. La linea queda byte a byte
   como la dejaria `enrich-memory.py --only creado,id`, asi que `repair-dualwrite` no lo cuenta como
   inventado y `--fix-ids` no lo renombra. Si falta `_creado`, se escribe tambien, con el orden de
-  enrich (fecha del slug de `_origen`, `date:` del fichero al que enlaza, mtime de
-  `_pendientes.md`, con la misma funcion de enrich). Sin escribirlo, un enrich posterior pondria
-  un `_creado` y el id dejaria de ser canonico. Dos diferencias con enrich, a proposito: una fecha
-  imposible en el slug (`2026-02-30`) enrich la escribe y adopt pasa al siguiente recurso, y los
-  items con sangria enrich los salta y adopt no (repair-dualwrite tambien los lee).
+  enrich, que adopt LLAMA (`enrich-memory.derivar_creado` + `mtime_date`), no copia: fecha del
+  slug de `_origen`, `date:` del fichero al que enlaza, mtime de `_pendientes.md`. Sin escribirlo,
+  un enrich posterior pondria un `_creado` y el id dejaria de ser canonico. Dos diferencias con
+  enrich: los items con sangria (enrich los salta; adopt y repair-dualwrite no) y un `_id:p-…_` mal
+  espaciado (enrich lo da por id y no lo toca; adopt lo reespacia).
 - Crea la fila de Tier 3 que falte, con la prioridad de la seccion. Tambien en el replay, por si
   la pasada murio entre los dos escritos.
 - Guarda contra la actualizacion perdida: el evento lleva la linea VERBATIM y el compactador solo
@@ -32,23 +32,32 @@ re-sellar las huellas (`--reseal`), y en claude-vzert ya habia pasado dos veces.
 - Un `_id: p-<10 hex>_` mal espaciado (`_id:p-…_`) es un id que repair-dualwrite y enrich ya
   reconocen y `find_id_line` no: adopt lo reespacia y CONSERVA ese id, que puede estar citado.
   Cualquier otro `_id:` (8 hex, o prosa) no se toca, como hace enrich: el canonico va al final.
+- Si una fila mensual escrita a mano ya lleva el id pero no al final de la celda, adopt no anade
+  otra: avisa (resolve no la encontrara, ver Known).
 - La cuarentena `unknown-id` de `pendiente.update` sugiere adoptar la linea. `checkpoint-3t` (Step
   3a) y `triage-3t` lo explican.
 
+### Fixed
+- `enrich-memory.py --only creado` escribia tal cual una fecha imposible del slug de `_origen`
+  (`sessions/2026-02-30-x` daba `_creado: 2026-02-30_`), o de la `date:` del fichero enlazado, y
+  eso revienta a quien la parsea (triage-scan, expire-pendientes). Ahora pasa al siguiente recurso.
+  La derivacion vive en `derivar_creado`, que tambien usa adopt.
+
 ### Tests
-- `test-pendiente-adopt.sh` (47 asertos): igualdad con enrich (con un mtime viejo, para que el
+- `test-pendiente-adopt.sh` (50 asertos): igualdad con enrich (con un mtime viejo, para que el
   respaldo de la fecha no se confunda con hoy), update y resolve tras adoptar, `ids_invented=0`,
   `--fix-ids` no toca nada, adopt y update en el mismo compactado, replay idempotente, linea
   cambiada (tambien por un espacio), duplicados con y sin `--colapsar`, selectores, `_id:` raros,
-  payload incoherente. Siete mutaciones ad hoc la tumban (creado, guarda, mtime, `_id:` raro,
-  duplicados, Tier 3, coherencia).
+  fila mensual a mano que cita el id, payload incoherente. Nueve mutaciones ad hoc la tumban
+  (creado, guarda, mtime, `_id:` raro, duplicados, Tier 3, coherencia, fecha imposible, fila que
+  cita el id).
 
 ### Known
 - Un `_id:` no canonico que ya tuviera fila en Tier 3 deja esa fila huerfana: adopt crea la del id
   canonico. `--colapsar` guarda la copia entera pero no la seccion de la que salia.
 - `find_monthly_row` toma el ULTIMO `_id:` de la celda de texto (la forma que escriben add y adopt).
-  Una fila escrita a mano con el id propio y despues la cita de otro no se reconoce, y adopt, como
-  add, crea una segunda. Es el mismo criterio que ya usaban add, update y resolve; no cambia aqui.
+  Una fila escrita a mano con el id propio y despues la cita de otro no la reconocen add, update ni
+  resolve; adopt la detecta y no duplica, pero no la arregla. El criterio no cambia aqui.
 
 ## [2.57.1] - 2026-10-14
 Origen: el CI de 2.56.1 salio rojo en Windows (macOS y Linux verdes). El caso del issue #11 seguia
