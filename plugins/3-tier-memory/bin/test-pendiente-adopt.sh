@@ -222,5 +222,5 @@ chk "id que no es el de su linea: cuarentena" "1" "$(cuarentena)"
 chk "y la linea queda sin tocar" "1" "$(grep -c '^- \[ \] a pelo sin nada$' "$M/_pendientes.md")"
 
 echo
-echo "pendiente-adopt: $pass ok, $fail fallas"
+echo "RESULTADO: $pass ok, $fail fallas"
 [ "$fail" -eq 0 ]
