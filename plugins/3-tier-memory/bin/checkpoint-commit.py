@@ -221,9 +221,13 @@ def main():
                 return ad.returncode != 0
             time.sleep(min(0.25 * (2 ** intento), 2.0))
         return False
-    r = subprocess.run(["git", "-c", "core.quotePath=false", "-C", repo, "check-ignore", "--no-index", "--stdin"],
-                       input="\n".join(rutas), capture_output=True, text=True, encoding="utf-8", errors="replace")
-    ignoradas = {l for l in r.stdout.splitlines() if l.strip() and add_rechaza(l)}
+    # -z: en Windows, Python en modo texto escribe cada "\n" de la entrada como "\r\n", git leia
+    # `memory/.journal/applied\r` y no casaba con nada (medido en CI de 2.56.1: check-ignore rc=1 y
+    # salida vacia desde Python, la misma ruta marcada desde bash). Con NUL no hay traduccion, y
+    # git tampoco pone comillas a un nombre con `"`.
+    r = subprocess.run(["git", "-c", "core.quotePath=false", "-C", repo, "check-ignore", "--no-index", "-z", "--stdin"],
+                       input="\0".join(rutas) + "\0", capture_output=True, text=True, encoding="utf-8", errors="replace")
+    ignoradas = {l for l in r.stdout.split("\0") if l.strip() and add_rechaza(l)}
     rutas = [p for p in rutas if p not in ignoradas]
     propias = [p for p in propias if p not in ignoradas]
     if not rutas:

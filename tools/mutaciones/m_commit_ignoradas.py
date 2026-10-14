@@ -7,7 +7,7 @@ import io, sys
 p, modo = sys.argv[1], sys.argv[2]
 s = io.open(p, encoding="utf-8").read()
 if modo == "sin-no-index":
-    viejo, nuevo = '"check-ignore", "--no-index", "--stdin"', '"check-ignore", "--stdin"'
+    viejo, nuevo = '"check-ignore", "--no-index", "-z", "--stdin"', '"check-ignore", "-z", "--stdin"'
 elif modo == "sin-add-n":
     viejo, nuevo = "if l.strip() and add_rechaza(l)}", "if l.strip()}"
 elif modo == "sin-reintento":

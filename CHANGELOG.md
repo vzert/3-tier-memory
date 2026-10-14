@@ -1,6 +1,30 @@
 # Changelog
 
 
+## [2.57.1] - 2026-10-14
+Origen: el CI de 2.56.1 salio rojo en Windows (macOS y Linux verdes). El caso del issue #11 seguia
+dando `commit-fallo` alli, y la prueba de worktree de `test-checkpoint-commit.sh` caia tambien.
+
+### Fixed
+- **El filtro de rutas ignoradas de `checkpoint-commit.py` no veia nada en Windows.** Le pasaba las
+  rutas a `git check-ignore --stdin` separadas por `\n` desde Python en modo texto, y en Windows
+  ese modo escribe `\r\n`: git leia `memory/.journal/applied\r`, que no casa con ningun patron.
+  Medido en un CI de diagnostico en Windows (git 2.55.0.windows.5): desde bash la ruta salia
+  marcada; desde Python, `check-ignore` salia rc=1 con la salida vacia, y el `git add` real fallaba
+  con "The following paths are ignored". El fallo ya estaba en el filtro de antes de 2.56.1; solo
+  pasaba de largo porque la unica prueba de rutas ignoradas tenia la ruta ignorada al final de la
+  lista, sin `\r`. Ahora va con `-z` (rutas separadas por NUL, sin traduccion y sin comillas).
+- El `commit-fallo` de Windows mostraba un aviso de fin de linea (`LF will be replaced by CRLF`)
+  como motivo: el script imprime la ultima linea de stderr, y git escribe esos avisos despues del
+  error real. No se cambia aqui; queda anotado para leer bien el proximo `commit-fallo`.
+
+### Tests
+- `test-checkpoint-commit.sh`: la seccion del issue #11 usaba `$TMP/r4`, el mismo directorio que la
+  seccion de worktree, que entonces reutilizaba ese repo (`re-init`) y en Windows caia. Ahora usa
+  `$TMP/applied-issue11` y variables propias.
+- No hay mutacion para `-z`: el fallo solo existe en Windows, y en macOS/Linux una mutacion que lo
+  quite no tumbaria nada (el arnes la daria por vacua). Lo vigila el job de Windows del CI.
+
 ## [2.57.0] - 2026-10-13
 Origen: p-b282a8cfc4. Victor decidio el 2026-10-13 la regla del hilo de pendientes sobre la medicion
 de `research/hilo-pendientes-relacionados-medicion` (este repo y otro proyecto, 2026-09-01..10-13).
