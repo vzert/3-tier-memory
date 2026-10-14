@@ -1384,11 +1384,16 @@ def apply_adopt(mem, p):
         if creado and nuevo:
             raise Quarantine(f"malformed: adopt de {pid} trae creado_nuevo y la linea ya tiene "
                              "_creado")
-        if je.pendiente_id(text, creado or nuevo, origen) != pid:
+        r = je.reespaciar_id(verb)
+        if r is None and je.pendiente_id(text, creado or nuevo, origen) != pid:
             raise Quarantine(f"malformed: adopt {pid} no es el id canonico de su linea")
+        if r is not None and r[1] != pid:
+            raise Quarantine(f"malformed: adopt {pid} no es el id que la linea ya lleva ({r[1]})")
         dato = {"id": pid, "text": text, "creado": creado or nuevo, "origen": origen or "—"}
+        # Igualdad EXACTA (read_lines ya quito el `\r` de un fichero CRLF): un cambio de un
+        # espacio tambien es un cambio, y no se adopta lo que el emisor no vio.
         casan = [k for k, ln in enumerate(lines)
-                 if je.abierta_sin_id(ln) and ln.strip() == verb.strip()]
+                 if je.abierta_sin_id(ln) and ln.rstrip("\r") == verb.rstrip("\r")]
         ya = find_id_line(lines, pid)
         if not casan:
             if ya is None:
@@ -1419,7 +1424,14 @@ def apply_adopt(mem, p):
                 para_tier3.append((dato, seccion_de(lines, find_id_line(lines, pid))))
                 continue
         k = casan[0]
-        lines[k] = je.linea_adoptada(lines[k], pid, nuevo)
+        r = je.reespaciar_id(lines[k])
+        if r:      # `_id:p-…_` mal espaciado: el id se conserva (puede estar citado)
+            if r[1] != pid or nuevo:
+                raise Quarantine(f"malformed: adopt de una linea con id mal espaciado "
+                                 f"{r[1]} trae otro id ({pid}) o un creado nuevo")
+            lines[k] = r[0]
+        else:
+            lines[k] = je.linea_adoptada(lines[k], pid, nuevo)
         if f"_id: {pid}_" not in lines[k] or find_id_line(lines, pid) != k:
             raise Quarantine(f"rebuild-lost-id: la linea adoptada de {pid} no se encuentra por id")
         para_tier3.append((dato, seccion_de(lines, k)))
@@ -1430,6 +1442,10 @@ def apply_adopt(mem, p):
     # escritos, el replay encuentra la linea ya adoptada y aun asi crea la fila que faltaba.
     for dato, prio in para_tier3:
         if find_monthly_row(mem, dato["id"]):
+            continue
+        if not dato["creado"]:
+            log(f"WARN adopt: {dato['id']} no tiene _creado; sin fila de Tier 3 (enrich-memory "
+                f"--only creado y luego repair-dualwrite.py la crean)")
             continue
         if prio is None:
             log(f"WARN adopt: {dato['id']} vive fuera de los headers de prioridad; sin fila de "

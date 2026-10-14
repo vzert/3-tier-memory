@@ -26,7 +26,6 @@ emit() { python3 "$BIN/journal-emit.py" --memory-dir "$M" "$@"; }
 compact() { python3 "$BIN/journal-compact.py" --memory-dir "$M" "$@"; }
 linea() { grep -m1 "_id: $1_" "$M/_pendientes.md" || true; }
 cuarentena() { ls "$M/.journal/quarantine" 2>/dev/null | grep -c '\.json$' | tr -d ' '; }
-HOY=$(python3 -c 'from datetime import date; print(date.today().isoformat())')
 
 fixture() {
   rm -rf "$1"; mkdir -p "$1/pendientes" "$1/sessions"
@@ -45,6 +44,7 @@ type: index
 
 - [ ] sin creado con origen — _origen: [[sessions/2026-09-01-vieja]]_
 - [ ] a pelo sin nada
+- [ ] slug imposible — _origen: [[sessions/2026-02-30-x]]_
 - [ ] texto repetido — _origen: [[sessions/2026-09-01-vieja]]_ — _creado: 2026-09-01_
 - [ ] texto repetido — _origen: [[sessions/2026-09-02-otra]]_ — _creado: 2026-09-02_
 
@@ -57,22 +57,26 @@ EOF
 
 echo "== 1. adopt --todas da la misma linea que enrich-memory, salvo los gemelos =="
 fixture "$M"; fixture "$T/enr"
+# mtime viejo: el ultimo recurso de la fecha es el mtime de _pendientes.md, como en enrich. Con el
+# fichero recien creado ese mtime es hoy y la prueba no distinguiria "mtime" de "hoy".
+touch -t 202001150000 "$M/_pendientes.md" "$T/enr/_pendientes.md"
 python3 "$BIN/enrich-memory.py" "$T/enr" --apply --only creado,id >/dev/null
 ERR=$(emit --type pendiente.adopt --todas 2>&1 >"$T/ids")
-chk "emite 5 ids (los gemelos se apartan)" "5" "$(wc -l < "$T/ids" | tr -d ' ')"
+chk "emite 6 ids (los gemelos se apartan)" "6" "$(wc -l < "$T/ids" | tr -d ' ')"
 chk "avisa de los gemelos" "1" "$(printf '%s' "$ERR" | grep -c 'DUPLICADO (2 copias identicas): - \[ \] gemelo')"
 compact --quiet >/dev/null
 chk "sin cuarentena" "0" "$(cuarentena)"
 chk "lineas identicas a las de enrich (sin gemelos)" "" \
-  "$(diff <(grep '^- \[ \]' "$M/_pendientes.md" | grep -v gemelo) <(grep '^- \[ \]' "$T/enr/_pendientes.md" | grep -v gemelo))"
+  "$(diff <(grep '^- \[ \]' "$M/_pendientes.md" | grep -v 'gemelo\|slug imposible') <(grep '^- \[ \]' "$T/enr/_pendientes.md" | grep -v 'gemelo\|slug imposible'))"
 chk "los gemelos siguen sin id" "2" "$(grep -c '^- \[ \] gemelo exacto — _creado: 2026-09-02_$' "$M/_pendientes.md")"
 chk "texto repetido con otro origen = dos ids distintos" "2" \
   "$(grep '^- \[ \] texto repetido' "$M/_pendientes.md" | grep -o '_id: p-[0-9a-f]*_' | sort -u | wc -l | tr -d ' ')"
 chk "creado sacado del slug de _origen" "1" \
   "$(grep -c '^- \[ \] sin creado con origen — _origen: \[\[sessions/2026-09-01-vieja\]\]_ — _creado: 2026-09-01_ — _id: p-' "$M/_pendientes.md")"
-chk "sin origen ni creado: creado = hoy" "1" "$(grep -c "^- \[ \] a pelo sin nada — _creado: ${HOY}_ — _id: p-" "$M/_pendientes.md")"
+chk "sin origen ni creado: creado = mtime de _pendientes.md" "1" "$(grep -c "^- \[ \] a pelo sin nada — _creado: 2020-01-15_ — _id: p-" "$M/_pendientes.md")"
+chk "fecha imposible en el slug: no se escribe, va al mtime" "1" "$(grep -c "^- \[ \] slug imposible — _origen: \[\[sessions/2026-02-30-x\]\]_ — _creado: 2020-01-15_ — _id: p-" "$M/_pendientes.md")"
 ID1=$(grep '^- \[ \] arreglar foo' "$M/_pendientes.md" | grep -o 'p-[0-9a-f]\{10\}')
-chk "fila de Tier 3 de cada adoptado" "5" "$(cat "$M"/pendientes/*.md | grep -c '_id: p-')"
+chk "fila de Tier 3 de cada adoptado" "6" "$(cat "$M"/pendientes/*.md | grep -c '_id: p-')"
 chk "Tier 3 lleva la prioridad de su seccion" "1" "$(grep "_id: ${ID1}_" "$M/pendientes/2026-09.md" | grep -c '| Alta |')"
 
 echo "== 2. repair-dualwrite: nada inventado, nada que renombrar =="
@@ -130,6 +134,11 @@ O=$(compact 2>&1)
 chk "no va a cuarentena" "0" "$(cuarentena)"
 chk "avisa" "1" "$(printf '%s' "$O" | grep -c "WARN adopt: la linea de $IDB ya no esta tal cual")"
 chk "la linea editada queda intacta y sin id" "1" "$(grep -c '^- \[ \] sin creado con origen EDITADO — _origen: \[\[sessions/2026-09-01-vieja\]\]_$' "$M/_pendientes.md")"
+IDC=$(emit --type pendiente.adopt --text-prefix "a pelo")
+printf '%s\n' "$(cat "$M/_pendientes.md")" | sed 's/^- \[ \] a pelo sin nada$/- [ ] a pelo sin nada /' > "$T/p.md" && cat "$T/p.md" > "$M/_pendientes.md"
+O=$(compact 2>&1)
+chk "un espacio de mas tambien es un cambio" "1" "$(printf '%s' "$O" | grep -c "WARN adopt: la linea de $IDC ya no esta tal cual")"
+chk "y la linea sigue sin id" "1" "$(grep -c '^- \[ \] a pelo sin nada $' "$M/_pendientes.md")"
 
 echo "== 7. duplicados =="
 fixture "$M"
@@ -175,11 +184,20 @@ emit --type pendiente.adopt --id "p-0123456789" >/dev/null 2>&1; RC=$?
 chk "--id p-… sale 1 (ya esta adoptado)" "1" "$RC"
 LIN=$(linea "$IDS")
 chk "--line de una linea ya adoptada imprime su id" "$IDS" "$(emit --type pendiente.adopt --line "$LIN")"
-printf -- '- [ ] id raro — _creado: 2026-09-03_ — _id: p-1234abcd_\n' >> "$M/_pendientes.md"
+printf -- '- [ ] id raro — _id: p-1234abcd_ — _creado: 2026-09-03_\n' >> "$M/_pendientes.md"
+printf -- '- [ ] revisar la tabla — _id: de usuario_ debe ser unico — _creado: 2026-09-03_\n' >> "$M/_pendientes.md"
+printf -- '- [ ] mal espaciado — _creado: 2026-09-03_ — _id:p-0123456789_\n' >> "$M/_pendientes.md"
+cp -R "$M" "$T/enr2"
+python3 "$BIN/enrich-memory.py" "$T/enr2" --apply --only id >/dev/null
 IDR=$(emit --type pendiente.adopt --text-prefix "id raro")
+IDP=$(emit --type pendiente.adopt --text-prefix "revisar la tabla")
+IDM=$(emit --type pendiente.adopt --text-prefix "mal espaciado")
 compact --quiet >/dev/null
-chk "un _id: no canonico se reemplaza, no se duplica" "1" "$(grep '^- \[ \] id raro' "$M/_pendientes.md" | grep -o '_id:' | wc -l | tr -d ' ')"
-chk "por el canonico" "1" "$(grep -c "^- \[ \] id raro — _creado: 2026-09-03_ — _id: ${IDR}_$" "$M/_pendientes.md")"
+chk "un _id: de 8 hex se queda y el canonico va al final" "1" "$(grep -c "^- \[ \] id raro — _id: p-1234abcd_ — _creado: 2026-09-03_ — _id: ${IDR}_$" "$M/_pendientes.md")"
+chk "un _id: en prosa no borra texto" "1" "$(grep -c "^- \[ \] revisar la tabla — _id: de usuario_ debe ser unico — _creado: 2026-09-03_ — _id: ${IDP}_$" "$M/_pendientes.md")"
+chk "esas dos lineas, igual que enrich" "" "$(diff <(grep '^- \[ \] \(id raro\|revisar la tabla\)' "$M/_pendientes.md") <(grep '^- \[ \] \(id raro\|revisar la tabla\)' "$T/enr2/_pendientes.md"))"
+chk "_id:p-…_ mal espaciado conserva su id" "p-0123456789" "$IDM"
+chk "y queda bien espaciado, una sola vez" "1" "$(grep -c '^- \[ \] mal espaciado — _creado: 2026-09-03_ — _id: p-0123456789_$' "$M/_pendientes.md")"
 
 echo "== 9. payload incoherente: cuarentena =="
 fixture "$M"

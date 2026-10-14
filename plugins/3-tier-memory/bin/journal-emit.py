@@ -52,15 +52,19 @@ Tipos de evento:
                     al journal): sin id ningun otro evento lo encuentra. Despues, update/resolve
                     normales. El id es el CANONICO de la linea, sha1(texto+creado+origen), el
                     mismo que pone `enrich-memory.py --only creado,id` (la linea queda byte a byte
-                    igual), asi que repair-dualwrite no lo ve como inventado. Si falta `_creado`
-                    se escribe tambien (fecha del slug de _origen, o del fichero al que enlaza, o
-                    hoy). --id acepta el id sintetico que muestra /triage-3t. El evento lleva la
-                    linea VERBATIM: si cambio antes del compactado, se salta con aviso. Mismo id
+                    igual, salvo una fecha imposible en el slug, que enrich escribe y aqui no),
+                    asi que repair-dualwrite no lo ve como inventado. Si falta `_creado` se
+                    escribe tambien (fecha del slug de _origen, `date:` del fichero al que
+                    enlaza, o mtime de _pendientes.md: el orden de enrich). Enrich salta los
+                    items con sangria; adopt no. --id acepta el id sintetico de /triage-3t. El
+                    evento lleva la linea VERBATIM, espacios incluidos: si cambio antes del
+                    compactado, se salta con aviso. Mismo id
                     dos veces (lineas identicas, o copia de un pendiente que ya tiene id) = el
                     mismo pendiente: se niega; --colapsar deja una y guarda las copias enteras en
                     .journal/adopt-colapsados.log. --todas adopta todas en un evento y aparta
-                    los duplicados. Imprime el id (uno por linea con --todas). Una linea con un
-                    `_id:` no canonico (`p-1234abcd`) cuenta como sin id: se reemplaza.
+                    los duplicados. Imprime el id (uno por linea con --todas). Un
+                    `_id: p-<10 hex>_` mal espaciado (`_id:p-…_`) se reespacia y CONSERVA su id;
+                    otro `_id:` no canonico (`p-1234abcd`, prosa) se deja y el canonico va al final.
   session.add       --slug DATE-SLUG --date D --status ST --summary R [--commit C]      (Fase 2)
                     Fila en _session-index.md (arriba de la tabla). Si la fila del slug ya
                     existe, rellena status/summary/commit con lo que se pase. Imprime s-<slug>.
@@ -533,7 +537,10 @@ def strip_meta(text):
 # ninguna herramienta lo ve como inventado y `--fix-ids` no lo renombra. Estas funciones las
 # importa journal-compact.py: una sola definicion de como se lee la linea y como queda adoptada.
 ID_CANONICO_RE = re.compile(r"_id: (p-[0-9a-f]{10})_")        # = journal-compact.ID_RE
-ID_RARO_RE = re.compile(r"\s*—\s*_id:[^—]*")                  # cualquier `_id:` de una linea sin id
+# Un `_id: p-<10 hex>_` con otro espaciado (`_id:p-…_`, `_id:  p-…_`): es un id de verdad que
+# repair-dualwrite y enrich ya reconocen (ID_RE con `\s*`) y find_id_line no. Se reespacia y se
+# CONSERVA el id: puede estar citado. Cualquier otro `_id:` (8 hex, prosa) no se toca.
+ID_MAL_ESPACIADO_RE = re.compile(r"_id:\s*(p-[0-9a-f]{10})_")
 ORIGEN_LINK_RE = re.compile(r"_origen:\s*\[\[[^\]]+\]\]_")    # = enrich-memory.ORIGEN_RE
 CREADO_LINEA_RE = re.compile(r"_creado:\s*(\d{4}-\d{2}-\d{2})")
 FECHA_EN_ORIGEN_RE = re.compile(r"(\d{4}-\d{2}-\d{2})")       # = enrich-memory.DATE_RE
@@ -577,37 +584,51 @@ def _enriquecedor():
 
 def creado_para(memory_dir, line, hoy):
     """La fecha `_creado` de una linea que no la tiene, con el orden de enrich-memory: la fecha
-    del slug de `_origen`, la `date:` del fichero al que enlaza, y si no hay ninguna, `hoy`.
+    del slug de `_origen`, la `date:` del fichero al que enlaza, y si no, el mtime de
+    `_pendientes.md` (la misma funcion de enrich). `hoy` solo si enrich no esta al lado.
 
     Hace falta ESCRIBIRLA al adoptar, no solo usarla para el hash: si la linea quedara sin
     `_creado`, un enrich posterior le pondria uno, el texto+creado+origen de la linea ya no daria
     el id adoptado, `ids_invented` lo contaria y `--fix-ids --apply` lo renombraria — rompiendo
-    las citas del id, que es justo lo que adoptarlo viene a permitir. (El ultimo recurso de enrich
-    es el mtime de `_pendientes.md`, que el compactador reescribe a diario: en la practica es hoy.)
+    las citas del id, que es justo lo que adoptarlo viene a permitir.
+
+    UNA divergencia con enrich, a proposito: una fecha imposible en el slug (`2026-02-30`) enrich
+    la escribe tal cual, y aqui se salta al siguiente recurso. Escribirla haria reventar a quien
+    la parsea (triage-scan, expire-pendientes).
     """
+    enr = _enriquecedor()
     mo = ORIGEN_LINK_RE.search(line)
     if mo:
         md = FECHA_EN_ORIGEN_RE.search(mo.group(0))
         if md and fecha_real(md.group(1)):
             return md.group(1)
-        enr = _enriquecedor()
         d = enr.linked_file_date(memory_dir, mo.group(0)) if enr else None
         if d and fecha_real(d):
             return d
+    if enr:
+        return enr.mtime_date(os.path.join(memory_dir, "_pendientes.md"))
     return hoy
 
 
 def linea_adoptada(line, pid, creado_nuevo=""):
     """La linea con su `_id:` (y su `_creado:` si le faltaba), byte a byte como la dejaria
     `enrich-memory.py --only creado,id`: el creado va justo detras del `_origen:` (o al final si no
-    hay), y el id al final. Un `_id:` no canonico (`_id: p-1234abcd_`, `_id:p-…_`) se quita: ningun
-    evento lo encuentra, y dejarlo daria dos `_id:` en la misma linea."""
-    out = ID_RARO_RE.sub("", line.rstrip("\r\n"))
+    hay), y el id al final. No se borra nada de la linea: un `_id:` que no es canonico (`p-1234abcd`,
+    prosa) se queda donde esta, como lo deja enrich, y sigue a la vista quien lo cite."""
+    out = line.rstrip("\r\n")
     if creado_nuevo:
         campo = f" — _creado: {creado_nuevo}_"
         mo = ORIGEN_LINK_RE.search(out)
         out = out[:mo.end()] + campo + out[mo.end():] if mo else out + campo
     return out.rstrip() + f" — _id: {pid}_"
+
+
+def reespaciar_id(line):
+    """(linea, id) si la linea lleva un `_id: p-<10 hex>_` mal espaciado; si no, None."""
+    m = ID_MAL_ESPACIADO_RE.search(line)
+    if not m or ID_CANONICO_RE.search(line):
+        return None
+    return line[:m.start()] + f"_id: {m.group(1)}_" + line[m.end():], m.group(1)
 
 
 def id_de_adopcion(line, creado_nuevo=""):
@@ -688,6 +709,10 @@ def candidatas_adopt(memory_dir, a, hoy):
 
     out = []
     for ln in elegidas:
+        r = reespaciar_id(ln)
+        if r:                    # ya tiene id, mal espaciado: se conserva, sin _creado nuevo
+            out.append((ln.rstrip("\r"), r[1], ""))
+            continue
         _t, creado, _o = datos_linea(ln)
         nuevo = "" if creado else creado_para(memory_dir, ln, hoy)
         out.append((ln.rstrip("\r"), id_de_adopcion(ln, nuevo), nuevo))
