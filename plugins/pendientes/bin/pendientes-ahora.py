@@ -42,7 +42,7 @@ FICHA_FECHA = re.compile(r"^(\d{4}-\d{2}-\d{2})")
 
 
 def version(path):
-    m = re.search(r"/(\d+)\.(\d+)\.(\d+)/bin/", path)
+    m = re.search(r"[\\/](\d+)\.(\d+)\.(\d+)[\\/]bin[\\/]", path)
     return tuple(int(x) for x in m.groups()) if m else (-1,)
 
 
@@ -203,11 +203,25 @@ def textos_de_persona(ruta):
             continue
         if d.get("type") != "user" or d.get("isMeta"):
             continue
+        # Solo lo que escribio la persona. Las filas nuevas lo dicen en origin.kind ("human" frente
+        # a "task-notification"); las viejas no traen origin, y ahi los avisos de tareas y los
+        # mensajes de otros agentes se reconocen por su cabecera.
+        origen = d.get("origin")
+        if isinstance(origen, dict) and origen.get("kind") != "human":
+            continue
         c = (d.get("message") or {}).get("content")
         if isinstance(c, str):
-            textos.append(c)
+            partes = [c]
         elif isinstance(c, list):
-            textos.extend(b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text")
+            partes = [b.get("text", "") for b in c if isinstance(b, dict) and b.get("type") == "text"]
+        else:
+            partes = []
+        for t in partes:
+            cabeza = t.lstrip()[:300]
+            if cabeza.startswith("<task-notification") or "teammate-message" in cabeza \
+                    or "Another Claude session sent a message" in cabeza:
+                continue
+            textos.append(t)
     return textos
 
 

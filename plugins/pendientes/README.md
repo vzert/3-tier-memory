@@ -7,24 +7,24 @@ instead of the whole inventory.
 
 ```
 SIGUIENTE
-▌ Implementar liga automática de pendientes
-▌ Alta · p-b282a8 · de hoy
+▌ Add retry to the export job
+▌ Alta · p-1a2b3c · de hoy
 
 RELACIONADO AL TRABAJO ACTUAL                 2
-  Decidir aviso de esperas de decisión
-  Media · p-3d1c7a · hace 3 d
+  Document the export flags
+  Media · p-4d5e6f · hace 3 d
 
 VENCEN                                    2 de 6
-  Verificar 2.52.1 con sesiones vivas    ● hoy
-  Alta · p-dfc87d · hace 6 d
+  Check last week's backup                ● hoy
+  Alta · p-7a8b9c · hace 6 d
 
 ALTA PRIORIDAD                            2 de 7
-  Probar /migrate-learnings-3t de punta a punta
-  Alta · p-0983ca · hace 6 d
+  Fix the flaky login test
+  Alta · p-0d1e2f · hace 6 d
 
 EN CURSO                                      1
-  Revisar negativas de learning.update  ◐ otra sesión hace 11 min · 1 commit
-  Media · p-ce00d6 · hace 20 d
+  Migrate the settings file   ◐ otra sesión hace 11 min · 1 commit
+  Media · p-3a4b5c · hace 20 d
 
 +9 más · 157 abiertos · clic: al prompt   r: actualizar
 ```
@@ -36,8 +36,8 @@ EN CURSO                                      1
 - **The 3-tier-memory plugin**, installed and set up in the project (`memory/_pendientes.md`
   exists). This mod reuses its parser (`bin/pendientes_afines.py`); it finds it in the project's
   `plugins/3-tier-memory/bin`, in `$THREE_TIER_BIN`, or in the newest installed copy under
-  `~/.claude/plugins/cache/`. With 3-tier-memory older than 2.57.0 the "related to the current
-  work" group is empty (only the next step shows).
+  `~/.claude/plugins/cache/`. With 3-tier-memory older than 2.57.0 the RELACIONADO AL TRABAJO
+  ACTUAL group stays empty; SIGUIENTE, VENCEN and ALTA PRIORIDAD still show.
 - `python3` and `git` on `PATH`.
 
 ## Install
@@ -81,13 +81,18 @@ The pane fills the height it has; `+N más` expands the rest.
 
 ## Costs and privacy
 
-- **Model calls:** short titles are written by Haiku (`$.model.complete`), once per pendiente and
-  again only when its text changes, all in one call, cached in the mod's store. Until the title
-  arrives, and if the call fails, an automatic cut of the text is shown. This uses your Claude
+- **Model calls:** short titles are written by Haiku (`$.model.complete`), in batches of 12, and
+  cached in the mod's store. Each pendiente is asked once per text: a title that comes back
+  unusable is replaced by the automatic cut and not asked again, and a changed text is asked
+  again. If a call fails (no answer, unreadable reply), no titles are asked for 30 minutes. Until
+  a title arrives, an automatic cut of the text is shown. This uses your Claude
   account like any other request and sends those pendiente texts to the model.
 - **Local reads only:** to detect "en curso" the mod reads `git log` and the transcripts of this
   project under `~/.claude/projects/` (the first 256 KB and the last 512 KB of each, only the
-  prompts you typed). Nothing of that leaves the machine.
+  prompts you typed: rows marked as yours; task notifications and messages from other agents are
+  skipped). Nothing of that leaves the machine.
+- **Projects without 3-tier-memory:** if `memory/_pendientes.md` does not exist the mod shows
+  nothing and starts no process.
 
 ## Develop
 

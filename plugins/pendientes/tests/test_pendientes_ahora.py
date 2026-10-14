@@ -167,6 +167,14 @@ def main():
                                 u([{"type": "tool_result", "content": "p-9999999999 p-0000000000"}]),
                                 u("p-0000000000 meta", meta=True)], hace=60)
         transcripcion("vieja", [u("p-6666666666")], hace=3 * 3600)
+        # Filas que no escribio la persona: aviso de tarea (origin.kind) y mensaje de otro agente
+        # en formato viejo (sin origin). Ninguna pone su id en curso; una humana con origin si.
+        aviso = u("Tarea terminada: p-4444444444")  # solo origin.kind lo delata
+        aviso["origin"] = {"kind": "task-notification"}
+        humano = u("y ahora p-2222222222")
+        humano["origin"] = {"kind": "human"}
+        transcripcion("avisos", [aviso, u("Another Claude session sent a message: p-6666666666"),  # sin origin: lo delata la cabecera
+                                 humano], hace=120)
         dc = correr(mem, lib, "--session-id", "esta", "--projects-root", raiz, "--max", "20")
         ec = {i["id"]: i["en_curso"] for i in dc["items"] + dc["resto"]}
         check("en curso: commit tras la ficha", ec.get("p-4444444444") == {"donde": "commits", "n": 1})
@@ -175,6 +183,8 @@ def main():
         check("en curso: el paso de un Retomamos al principio de un archivo grande",
               (ec.get("p-5555555555") or {}).get("donde") == "otra sesion")
         check("no cuentan: los extras de un Retomamos", ec.get("p-0000000000") is None)
+        check("no cuentan: avisos de tareas ni mensajes de otros agentes",
+              (ec.get("p-4444444444") or {}).get("donde") == "commits" and ec.get("p-6666666666") is None)
         check("no cuentan: tool_result, meta, sesion vieja, commit anterior a la ficha",
               all(ec.get(i) is None for i in ("p-9999999999", "p-0000000000", "p-6666666666")))
         sin = correr(mem, lib, "--projects-root", os.path.join(tmp, "nada"))

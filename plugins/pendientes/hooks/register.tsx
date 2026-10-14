@@ -6,6 +6,10 @@ import type { Ahora, Pendiente, Titulos } from '../types'
 const PANE = 'pendientes-ahora'
 const TITULO = 'Qué hago ahora'
 const STORE_TITULOS = 'titulos'
+const STORE_FALLO = 'titulos_fallo'
+const ESPERA_FALLO_MS = 30 * 60 * 1000
+const FALLO_NINGUNO = -1
+const TANDA = 12
 const ANCHO_TARJETA = 64
 const BANDA_ANCHO = 44
 const ahora = atom({ plugin: 'pendientes', key: 'ahora' } as const, null as Ahora | null)
@@ -87,6 +91,12 @@ async function refrescar($: EngineInterface): Promise<void> {
   let valor: Ahora
   try {
     const raiz = await $.session.root()
+    // Sin memoria 3-tier no hay nada que mostrar: ni python ni banda, en cada turno.
+    const pendientesMd = `${raiz}/memory/_pendientes.md`
+    if (!(await $.fs.exists(pendientesMd))) {
+      await update($, ahora, () => ({ ok: false, error: `no hay ${pendientesMd}` }))
+      return
+    }
     const sesion = await $.session.id()
     const corrida = await $.process.run(
       [
@@ -117,7 +127,10 @@ async function refrescar($: EngineInterface): Promise<void> {
 }
 
 // Pide a Haiku un titulo corto para los pendientes que no lo tienen (o cuyo texto cambio),
-// todos en una sola llamada, y los guarda por id en $.store. Si falla, queda el corte automatico.
+// todos en una sola llamada, y los guarda por id en $.store. Cada pendiente se pide UNA vez por
+// texto: un titulo que no sirve (vacio, > 80 caracteres, ausente) se guarda como el corte
+// automatico y no se vuelve a pedir. Si la llamada entera falla (sin respuesta, JSON roto), no se
+// reintenta hasta pasados ESPERA_FALLO_MS: sin eso, cada fin de turno volveria a llamar al modelo.
 export async function titular($: EngineInterface): Promise<void> {
   if (generando) return
   generando = true
@@ -126,8 +139,15 @@ export async function titular($: EngineInterface): Promise<void> {
     const a = await read($, ahora)
     const todos = [...(a?.items ?? []), ...(a?.resto ?? [])]
     const faltan = todos.filter(p => p.texto && guardados[p.id]?.h !== huella(p.texto))
-    if (faltan.length > 0) {
-      const lista = faltan.map(p => `${p.id}\t${p.texto}`).join('\n')
+    const ahoraMs = await $.clock.now()
+    // Sin fallo guardado (ausente o borrado) no hay espera: un reloj que empieza en 0 no es un fallo.
+    const fallo = await $.store.get(STORE_FALLO)
+    const enEspera = typeof fallo === 'number' && fallo !== FALLO_NINGUNO && ahoraMs - fallo < ESPERA_FALLO_MS
+    // En tandas de TANDA: una respuesta larga se cortaria y su JSON no se podria leer. Cada tanda
+    // que llega se guarda; la primera que falla para todo y abre la espera.
+    for (let i = 0; i < faltan.length && !enEspera; i += TANDA) {
+      const tanda = faltan.slice(i, i + TANDA)
+      const lista = tanda.map(p => `${p.id}\t${p.texto}`).join('\n')
       const r = await $.model.complete({
         model: 'haiku',
         system:
@@ -138,17 +158,25 @@ export async function titular($: EngineInterface): Promise<void> {
         maxTokens: 900,
         timeoutMs: 30000,
       })
+      let nuevos: Record<string, unknown> | null = null
       if (r.isAnswered) {
-        const json = r.text.slice(r.text.indexOf('{'), r.text.lastIndexOf('}') + 1)
-        const nuevos = JSON.parse(json) as Record<string, unknown>
-        for (const p of faltan) {
-          const t = nuevos[p.id]
-          if (typeof t === 'string' && t.trim().length > 0 && t.length <= 80) {
-            guardados[p.id] = { h: huella(p.texto), t: t.trim() }
-          }
+        try {
+          nuevos = JSON.parse(r.text.slice(r.text.indexOf('{'), r.text.lastIndexOf('}') + 1)) as Record<string, unknown>
+        } catch {
+          nuevos = null
         }
-        await $.store.set(STORE_TITULOS, guardados)
       }
+      if (nuevos === null) {
+        await $.store.set(STORE_FALLO, ahoraMs)
+        break
+      }
+      for (const p of tanda) {
+        const t = nuevos[p.id]
+        const sirve = typeof t === 'string' && t.trim().length > 0 && t.length <= 80
+        guardados[p.id] = { h: huella(p.texto), t: sirve ? t.trim() : p.titulo_auto || p.texto }
+      }
+      await $.store.set(STORE_TITULOS, guardados)
+      await $.store.set(STORE_FALLO, FALLO_NINGUNO)
     }
     await update($, titulos, () => ({ ...guardados }))
   } catch {

@@ -30,10 +30,11 @@ const AHORA = {
 
 type Visto = { fills: string[]; argv: string[][]; prompts: string[]; abiertos: number; status: number }
 
-function motor(on: On, salida: string, exitCode = 0, respuesta = '{}'): Visto {
+function motor(on: On, salida: string, exitCode = 0, respuesta: string | string[] = '{}', hayMemoria = true): Visto {
   const visto: Visto = { fills: [], argv: [], prompts: [], abiertos: 0, status: 0 }
   let paneles: { id: string }[] = []
   on('session.root', () => ({ value: '/proyecto' }))
+  on('fs.exists', () => ({ value: hayMemoria }))
   on('session.id', () => ({ value: 'sesion-x' }))
   on('process.run', (_$, e) => {
     visto.argv.push([...e.argv])
@@ -61,7 +62,8 @@ function motor(on: On, salida: string, exitCode = 0, respuesta = '{}'): Visto {
   })
   on('model.complete', (_$, e) => {
     visto.prompts.push(e.prompt)
-    return { value: { isAnswered: true, text: respuesta, usage: { input_tokens: 1, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 } } }
+    const text = Array.isArray(respuesta) ? (respuesta[visto.prompts.length - 1] ?? '{}') : respuesta
+    return { value: { isAnswered: true, text, usage: { input_tokens: 1, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 } } }
   })
   on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
     const { Box } = $.ui.resolve(e)
@@ -165,7 +167,7 @@ test('la banda: solo con el panel cerrado, muestra el nombre, los abiertos y los
   expect(await otraVez.find({ key: 'abrir' })).toBeDefined()
 })
 
-test('el titulo del modelo sustituye al corte automatico y se guarda; solo se piden los que faltan', async ($, on) => {
+test('el titulo del modelo sustituye al corte automatico; cada pendiente se pide una sola vez', async ($, on) => {
   const reloj = mock.clock(on)
   mock.store(on)
   const largo = 'x'.repeat(90)
@@ -182,21 +184,34 @@ test('el titulo del modelo sustituye al corte automatico y se guarda; solo se pi
   // Un titulo de mas de 80 caracteres se descarta: queda el corte automatico.
   expect(await ui.find({ text: /Una Alta libre/ })).toBeDefined()
 
+  // Siguiente refresco: todos quedaron guardados (los que no sirvieron, como corte automatico):
+  // no se vuelve a llamar al modelo.
   await $.command.run({ command: 'pendientes-ahora' })
   await $.command.run({ command: 'pendientes-ahora' })
   await reloj.advance(1)
-  expect(visto.prompts.length).toBeGreaterThanOrEqual(2)
-  expect(visto.prompts.at(-1)).not.toContain('p-aaaaaaaaaa')
+  expect(visto.prompts).toHaveLength(1)
 })
 
-test('si el modelo falla, el panel sigue con el corte automatico', async ($, on) => {
+test('si el modelo falla, el panel sigue con el corte automatico y no reintenta hasta 30 min despues', async ($, on) => {
   const reloj = mock.clock(on)
   mock.store(on)
-  motor(on, JSON.stringify(AHORA), 0, 'no es json')
+  const visto = motor(on, JSON.stringify(AHORA), 0, 'no es json')
   await $.command.run({ command: 'pendientes-ahora' })
   await reloj.advance(1)
+  expect(visto.prompts).toHaveLength(1)
   const ui = await $.ui.mount({ ...pane(40), surface: 'terminal' })
   expect(await ui.find({ text: /Paso del hilo largo/ })).toBeDefined()
+
+  await $.command.run({ command: 'pendientes-ahora' })
+  await $.command.run({ command: 'pendientes-ahora' })
+  await reloj.advance(10 * 60 * 1000)
+  expect(visto.prompts).toHaveLength(1)
+
+  await reloj.advance(21 * 60 * 1000)
+  await $.command.run({ command: 'pendientes-ahora' })
+  await $.command.run({ command: 'pendientes-ahora' })
+  await reloj.advance(1)
+  expect(visto.prompts).toHaveLength(2)
 })
 
 test('un estado de la version anterior (sin titulo_auto) no rompe el dibujo', async ($, on) => {
@@ -210,14 +225,30 @@ test('un estado de la version anterior (sin titulo_auto) no rompe el dibujo', as
   expect(await ui.find({ text: /Texto viejo/ })).toBeDefined()
 })
 
-test('sin memoria 3-tier no hay banda ni status line', async ($, on) => {
+test('sin memoria 3-tier no hay banda ni status line, y no se lanza python', async ($, on) => {
   const reloj = mock.clock(on)
   mock.store(on)
-  const visto = motor(on, JSON.stringify({ ok: false, error: 'no hay /proyecto/memory/_pendientes.md' }))
+  const visto = motor(on, JSON.stringify(AHORA), 0, '{}', false)
   await $.command.run({ command: 'pendientes-ahora' })
   await $.command.run({ command: 'pendientes-ahora' })
   await reloj.advance(1)
   const banda = await $.ui.mount({ ...BANDA, surface: 'terminal' })
   expect(await banda.find({ key: 'abrir' })).toBeUndefined()
   expect(visto.status).toBe(0)
+  expect(visto.argv).toHaveLength(0)
+})
+
+test('los titulos se piden en tandas de 12; una tanda rota guarda las anteriores y para', async ($, on) => {
+  const reloj = mock.clock(on)
+  mock.store(on)
+  const muchos = { ...AHORA, items: Array.from({ length: 30 }, (_, i) => it(`p-${String(i).padStart(10, 'a')}`, 'alta', 'Alta libre', { prio: 'Alta', titulo_auto: `Auto ${i}` })), resto: [] }
+  const primera = JSON.stringify(Object.fromEntries(muchos.items.slice(0, 12).map(p => [p.id, `Hecho ${p.id}`])))
+  const visto = motor(on, JSON.stringify(muchos), 0, [primera, 'cortado {"p-'])
+  await $.command.run({ command: 'pendientes-ahora' })
+  await reloj.advance(1)
+  expect(visto.prompts).toHaveLength(2)
+  expect(visto.prompts[0]?.split('\n')).toHaveLength(13)
+  const ui = await $.ui.mount({ ...pane(80), surface: 'terminal' })
+  expect(await ui.find({ text: /Hecho p-aaaaaaaaa0/ })).toBeDefined()
+  expect(await ui.find({ text: /Auto 12/ })).toBeDefined()
 })
