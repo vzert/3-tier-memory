@@ -46,7 +46,8 @@ FICHA = "# b\n\n## Como retomar\n\n```\nRetomamos: x\nProximo paso: implementar 
 
 def correr(mem, lib, *extra):
     out = subprocess.run([sys.executable, "-I", SCRIPT, "--memory-dir", mem, "--hoy", "2026-10-13",
-                          "--lib", lib, *extra], capture_output=True, text=True)
+                          "--lib", lib, *extra], capture_output=True, text=True,
+                         encoding="utf-8")  # el script escribe UTF-8; Windows decodificaria en cp1252
     assert out.returncode == 0, out.stderr
     assert out.stderr == "", out.stderr
     return json.loads(out.stdout)
