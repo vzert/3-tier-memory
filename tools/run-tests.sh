@@ -50,6 +50,10 @@ RESUMEN_FORMAS=(
   'OK: ningun fichero trackeado esta excluido por \.gitignore'  # tools/check-ignored-tracked.sh
   'LAS EVALUABLES DISCRIMINAN \(de [0-9]+\)'          # tools/mutation-check.sh
   'docs [0-9]+, clases de fallo 0'                      # tools/oraculo-rewrite-rule.py (con markdown-it-py)
+  'OK [0-9]+'                                           # plugins/pendientes/tests/test_pendientes_ahora.py
+  # claude plugin test: su ultima linea no cuenta fallos (va en la de antes); un fallo sale rc=1.
+  # [1-9] para que "Ran 0 tests" (carpeta sin pruebas) no pase por verde.
+  'Ran [1-9][0-9]* tests? across [0-9]+ files?\. \[[0-9.]+m?s\]'  # plugins/pendientes (pane.test.tsx)
 )
 RESUMEN="^[[:space:]]*($(IFS='|'; echo "${RESUMEN_FORMAS[*]}"))[[:space:]]*\$"
 
@@ -136,6 +140,18 @@ echo "Suites del plugin"
 for t in $(ls "$BIN"/test-*.sh | sort); do
   correr "$(basename "$t" .sh)" bash "$t"
 done
+
+echo
+echo "Suites del mod pendientes"
+# El mod lee la memoria con la biblioteca de ESTE repo: --lib es su bin/, no un plugin instalado.
+correr "pendientes-ahora" python3 -I plugins/pendientes/tests/test_pendientes_ahora.py --lib "$BIN"
+# Las pruebas del panel corren dentro del binario de Claude Code. Sin el CLI (los runners de GitHub
+# no lo traen) salen SKIP, no verde.
+if command -v claude >/dev/null 2>&1; then
+  correr "pendientes-pane" claude plugin test plugins/pendientes
+else
+  correr "pendientes-pane" echo "SKIP: sin el CLI de claude no corre claude plugin test"
+fi
 
 echo
 echo "------------------------------------------------------------"
