@@ -1,6 +1,41 @@
 # Changelog
 
 
+## [2.58.0] - 2026-10-14
+Origen: encargo de Victor via la sesion de claude-vzert (2026-10-14). Un pendiente sin `_id:` no lo
+alcanza ningun evento: `find_id_line` exige `_id: p-…_` en la linea, asi que update, resolve,
+expire, block y relate no lo encuentran. La unica salida era editar `_pendientes.md` a mano y
+re-sellar las huellas (`--reseal`), y en claude-vzert ya habia pasado dos veces.
+
+### Added
+- **Evento `pendiente.adopt`**: le pone su `_id:` a una linea que no lo tiene. Despues, update y
+  resolve normales sobre ese id. Selectores: `--text-prefix P`, `--line "<linea entera>"`,
+  `--id sin-id-<10 hex>[-N]` (el id sintetico que muestra `/triage-3t`) o `--todas` (todas las
+  lineas sin id en un solo evento y un solo escrito de `_pendientes.md`).
+- El id es el **canonico** de la linea, `sha1(texto+creado+origen)`. La linea queda byte a byte
+  como la dejaria `enrich-memory.py --only creado,id`, asi que `repair-dualwrite` no lo cuenta como
+  inventado y `--fix-ids` no lo renombra. Si falta `_creado`, se escribe tambien, con el orden de
+  enrich (fecha del slug de `_origen`, `date:` del fichero al que enlaza, hoy). Sin escribirlo, un
+  enrich posterior pondria un `_creado` y el id dejaria de ser canonico.
+- Crea la fila de Tier 3 que falte, con la prioridad de la seccion. Tambien en el replay, por si
+  la pasada murio entre los dos escritos.
+- Guarda contra la actualizacion perdida: el evento lleva la linea VERBATIM y el compactador solo
+  casa por ella. Si otra sesion la cambio o la cerro, se salta con aviso; no hay cuarentena ni
+  perdida, y un `--todas` grande no se cae por una linea.
+- Duplicados: dos lineas con el mismo id canonico (mismo texto, creado y origen), o una linea sin
+  id que repite un pendiente que ya lo tiene, son el mismo pendiente. Se niegan; `--colapsar` deja
+  una y guarda cada copia entera en `.journal/adopt-colapsados.log`. Mismo texto con otro creado u
+  origen da otro id y se adopta normal.
+- Un `_id:` no canonico en la linea (`_id: p-1234abcd_`, sin espacio) cuenta como sin id y se
+  reemplaza por el canonico, en vez de dejar dos `_id:`.
+- La cuarentena `unknown-id` de `pendiente.update` sugiere adoptar la linea. `checkpoint-3t` (Step
+  3a) y `triage-3t` lo explican.
+
+### Tests
+- `test-pendiente-adopt.sh` (41 asertos): igualdad con enrich, update y resolve tras adoptar,
+  `ids_invented=0`, `--fix-ids` no toca nada, adopt y update en el mismo compactado, replay
+  idempotente, linea cambiada, duplicados con y sin `--colapsar`, selectores, payload incoherente.
+
 ## [2.57.1] - 2026-10-14
 Origen: el CI de 2.56.1 salio rojo en Windows (macOS y Linux verdes). El caso del issue #11 seguia
 dando `commit-fallo` alli, y la prueba de worktree de `test-checkpoint-commit.sh` caia tambien.

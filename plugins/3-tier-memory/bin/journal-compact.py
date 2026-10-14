@@ -1327,6 +1327,118 @@ def apply_relate(mem, p):
     return True
 
 
+
+def _emisor():
+    """journal-emit.py vecino: `datos_linea`, `linea_adoptada` y `pendiente_id` salen de ALLI.
+    Releerlos aqui seria una segunda copia de como se lee una linea y como se hashea, y dos copias
+    de una regla se desincronizan en silencio (learning 150). Sin el emisor no se adopta nada."""
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "journal-emit.py")
+    if not os.path.isfile(path):
+        raise Quarantine("no-emitter: falta journal-emit.py junto al compactador; sin el no se "
+                         "puede comprobar el id de una adopcion")
+    spec = importlib.util.spec_from_file_location("je_adopt", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def anotar_colapsado(mem, pid, linea):
+    """Guarda entera una copia que `pendiente.adopt --colapsar` quita. Ruta relativa o None."""
+    try:
+        d = os.path.join(mem, ".journal")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "adopt-colapsados.log"), "a",
+                  encoding="utf-8", newline="\n") as fh:
+            fh.write("\t".join(campo_log(c) for c in
+                               (date.today().isoformat(), pid, linea)) + "\n")
+        return ".journal/adopt-colapsados.log"
+    except Exception:
+        return None
+
+
+def apply_adopt(mem, p):
+    """Le pone su `_id:` a lineas de Tier 2 que no lo tienen (2.58.0), y su fila de Tier 3.
+
+    Sin id, ningun evento encuentra la linea (find_id_line busca `_id: p-…_`), asi que un
+    pendiente escrito a mano o anterior al journal no se podia corregir ni cerrar sin editar
+    `_pendientes.md` a mano. Despues de esto, update/resolve/expire/block/relate funcionan.
+
+    Cada linea del evento se casa por su texto VERBATIM, nunca por posicion: es el guardian
+    contra la actualizacion perdida. Si la linea ya no esta asi (otra sesion la cambio o la
+    cerro), se salta con aviso y no se escribe nada de ella: no hay dato que perder, y un
+    `--todas` de mil lineas no se cae entero por una. Lo que si va a cuarentena es un payload
+    incoherente: un id que no es el hash canonico de la linea que acompana.
+    """
+    je = _emisor()
+    path = os.path.join(mem, "_pendientes.md")
+    if not os.path.isfile(path):
+        raise Quarantine("no-index: _pendientes.md no existe")
+    lines = read_lines(path)
+    colapsar = bool(p.get("colapsar"))
+    cambio = False
+    para_tier3 = []
+    for item in p["lineas"]:
+        verb, pid, nuevo = item["line"], item["id"], item.get("creado_nuevo") or ""
+        text, creado, origen = je.datos_linea(verb)
+        if creado and nuevo:
+            raise Quarantine(f"malformed: adopt de {pid} trae creado_nuevo y la linea ya tiene "
+                             "_creado")
+        if je.pendiente_id(text, creado or nuevo, origen) != pid:
+            raise Quarantine(f"malformed: adopt {pid} no es el id canonico de su linea")
+        dato = {"id": pid, "text": text, "creado": creado or nuevo, "origen": origen or "—"}
+        casan = [k for k, ln in enumerate(lines)
+                 if je.abierta_sin_id(ln) and ln.strip() == verb.strip()]
+        ya = find_id_line(lines, pid)
+        if not casan:
+            if ya is None:
+                log(f"WARN adopt: la linea de {pid} ya no esta tal cual en _pendientes.md (otra "
+                    f"sesion la cambio o la cerro); no se adopta: {verb.strip()[:80]}")
+            else:
+                para_tier3.append((dato, seccion_de(lines, ya)))   # replay: ya adoptada
+            continue
+        if ya is not None or len(casan) > 1:
+            if not colapsar:
+                log(f"WARN adopt: {pid} esta duplicado en _pendientes.md; no se adopta sin "
+                    f"--colapsar: {verb.strip()[:80]}")
+                continue
+            quitar = casan if ya is not None else casan[1:]
+            for k in quitar:
+                destino = anotar_colapsado(mem, pid, lines[k])
+                if destino is None:
+                    raise Quarantine(f"no-log: no se pudo guardar la copia de {pid} antes de "
+                                     "quitarla; no se quita nada")
+            for k in sorted(quitar, reverse=True):
+                del lines[k]
+                if 0 < k < len(lines) - 1 and lines[k].strip() == "" and lines[k - 1].strip() == "":
+                    del lines[k]
+            log(f"adopt: {pid} — {len(quitar)} copia(s) quitada(s), guardadas en "
+                f".journal/adopt-colapsados.log")
+            cambio = True
+            if ya is not None:
+                para_tier3.append((dato, seccion_de(lines, find_id_line(lines, pid))))
+                continue
+        k = casan[0]
+        lines[k] = je.linea_adoptada(lines[k], pid, nuevo)
+        if f"_id: {pid}_" not in lines[k] or find_id_line(lines, pid) != k:
+            raise Quarantine(f"rebuild-lost-id: la linea adoptada de {pid} no se encuentra por id")
+        para_tier3.append((dato, seccion_de(lines, k)))
+        cambio = True
+    if cambio:
+        atomic_write(path, lines)
+    # Tier 3 despues de Tier 2, y tambien en el replay: si la pasada murio entre los dos
+    # escritos, el replay encuentra la linea ya adoptada y aun asi crea la fila que faltaba.
+    for dato, prio in para_tier3:
+        if find_monthly_row(mem, dato["id"]):
+            continue
+        if prio is None:
+            log(f"WARN adopt: {dato['id']} vive fuera de los headers de prioridad; sin fila de "
+                f"Tier 3 (repair-dualwrite.py la adopta y la crea)")
+            continue
+        apply_add_monthly(mem, dict(dato, prioridad=prio.capitalize()))
+        cambio = True
+    return cambio
+
 def seccion_de(lines, i):
     """Clave de prioridad ('alta'|'media'|'baja') de la seccion donde vive la linea i, o None."""
     for k in range(i, -1, -1):
@@ -1378,7 +1490,8 @@ def apply_update_index(mem, p):
                 f"cerrado. Si hay que reabrirlo es pendiente.reopen, no esto.")
             return False
         raise Quarantine(f"unknown-id: {p['id']} no esta abierto en _pendientes.md ni aparece "
-                         "cerrado en el historial")
+                         "cerrado en el historial (si la linea no lleva `_id:`, adoptala antes: "
+                         "journal-emit.py --type pendiente.adopt)")
     linea = lines[i].rstrip("\n")
     nuevo = normalize_text(p.get("text") or "")
     if nuevo:
@@ -3907,6 +4020,25 @@ def validate(ev):
         motivo = relacionado_malformado(p.get("relacionado", []))
         if motivo:
             raise Quarantine(f"malformed: pendiente.relate con {motivo}")
+    elif t == "pendiente.adopt":
+        lineas = p.get("lineas")
+        if not isinstance(lineas, list) or not lineas:
+            raise Quarantine("malformed: pendiente.adopt sin 'lineas'")
+        for it in lineas:
+            if not isinstance(it, dict):
+                raise Quarantine("malformed: pendiente.adopt con una linea que no es objeto")
+            ln = it.get("line")
+            if not isinstance(ln, str) or "\n" in ln or not ln.lstrip().startswith("- [ ]"):
+                raise Quarantine("malformed: pendiente.adopt con 'line' que no es un `- [ ]`")
+            if not re.match(r"^p-[0-9a-f]{10}$", str(it.get("id", ""))):
+                raise Quarantine(f"malformed: pendiente.adopt con id '{it.get('id')}' invalido")
+            c = it.get("creado_nuevo") or ""
+            if c:
+                try:
+                    date.fromisoformat(str(c))
+                except (TypeError, ValueError):
+                    raise Quarantine(f"malformed: pendiente.adopt con creado_nuevo {c!r} irreal")
+        return t, p
     elif t == "session.add":
         for k in ("slug", "date"):
             if not p.get(k):
@@ -4131,6 +4263,8 @@ def apply_event(mem, ev):
         return apply_block(mem, p)
     if t == "pendiente.relate":
         return apply_relate(mem, p)
+    if t == "pendiente.adopt":
+        return apply_adopt(mem, p)
     if t == "session.add":
         return apply_session_add(mem, p)
     if t == "session.amend":

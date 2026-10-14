@@ -463,6 +463,13 @@ seccion si cambio la prioridad, actualiza las celdas Pendiente/Prioridad de la f
 `repair-dualwrite.py` que el `_id:` es el hash de NACIMIENTO y no uno inventado: sin ella,
 `--fix-ids --apply` lo renombraria y romperia las citas igual que `superseded` + `add`.
 
+Un item **sin `_id:`** (escrito a mano, o anterior al journal) no lo alcanza ni `resolve` ni
+`update`. Adoptalo primero — le pone su id canonico y su fila de Tier 3 — y usa el id que imprime:
+
+```bash
+python3 "$JBIN/journal-emit.py" --type pendiente.adopt --text-prefix "<inicio del texto>"
+```
+
 The compactor (Step 3c) removes the line from `_pendientes.md` (**Tier 2**) and fills `Resuelto`
 with today's date and `Sesion resolucion` with `<sesion> — <estado> — <nota>` in the monthly row
 that carries the same id (**Tier 3**). Legacy items (created before 2.12.0) have no id in their
