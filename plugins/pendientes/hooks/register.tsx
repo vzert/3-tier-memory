@@ -186,8 +186,20 @@ export async function titular($: EngineInterface): Promise<void> {
   }
 }
 
+// Lo que pega el clic: el pendiente y, debajo, que leer para retomarlo (como el Retomamos de una
+// ficha). Un estado de una version anterior (sin origen ni relacionado) pega solo id y texto.
+export function textoAlPrompt(p: Pendiente): string {
+  const extra: string[] = []
+  const origen = p.origen ?? []
+  if (origen.length > 0) extra.push(`Lee ${origen.join(', ')} para el contexto.`)
+  else if (p.origen_texto) extra.push(`Origen: ${p.origen_texto}`)
+  if ((p.relacionado ?? []).length > 0) extra.push(`Relacionado: ${(p.relacionado ?? []).join(', ')}`)
+  const cabeza = `${p.id}: ${p.texto}`
+  return extra.length > 0 ? `${cabeza}\n\n${extra.join('\n')}` : cabeza
+}
+
 async function rellenar($: EngineInterface, p: Pendiente): Promise<void> {
-  const hecho = await $.prompt.fill({ text: `${p.id}: ${p.texto}`, mode: 'insert' })
+  const hecho = await $.prompt.fill({ text: textoAlPrompt(p), mode: 'insert' })
   if (!hecho.isFilled) $.ui.toast(`No pude escribir en el prompt (${hecho.cause ?? 'sin motivo'}).`)
 }
 

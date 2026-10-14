@@ -61,6 +61,16 @@ re-sellar las huellas (`--reseal`), y en esa instalacion ya habia pasado dos vec
   Una fila escrita a mano con el id propio y despues la cita de otro no la reconocen add, update ni
   resolve; adopt la detecta y no duplica, pero no la arregla. El criterio no cambia aqui.
 
+## [2.57.2] - 2026-10-14
+Origen: goalspec 0.55.0+ deja de negar el borrado de una carpeta mktemp propia, pero solo si el
+comando es exactamente `rm -rf <ruta absoluta literal>`. De 7 negaciones medidas en el Step 0b, 4
+encadenaban el `rm -rf` con comandos de Step 3-pre y 3 usaban `"$RD"`.
+
+### Changed
+- **Step 0b de `/checkpoint-3t` pide el borrado de `RECOVER_DIR` en su propia llamada Bash.** Las
+  dos frases (caso `recover=0` y punto 5) piden `rm -rf <ruta>` con la ruta literal que imprimio
+  `RECOVER_DIR=`: sin variable, comillas, glob ni redireccion, y sin otro comando antes o despues.
+
 ## [2.57.1] - 2026-10-14
 Origen: el CI de 2.56.1 salio rojo en Windows (macOS y Linux verdes). El caso del issue #11 seguia
 dando `commit-fallo` alli, y la prueba de worktree de `test-checkpoint-commit.sh` caia tambien.

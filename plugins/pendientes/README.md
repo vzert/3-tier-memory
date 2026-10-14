@@ -58,8 +58,12 @@ Inside Claude Code: `/plugin install pendientes@3-tier-memory-marketplace`, then
 - `/pendientes-ahora` opens or closes the pane.
 - While the pane is closed, a small card above the prompt shows `Pendientes 3-tier`, the open
   count, and how many are due today or overdue. Click it to open the pane.
-- Click a title to put `<id>: <full text>` in the prompt, at the cursor. Nothing is sent: you
-  decide whether to submit it. The mod never writes your memory.
+- Click a title to put `<id>: <full text>` in the prompt, at the cursor, followed by what to read
+  to pick it up, like the `Retomamos` snippet of a session note:
+  `Lee memory/sessions/<note>.md para el contexto.` for each file its `_origen` names that exists
+  (a session note, a plan, a research file), or `Origen: <text>` when it names none, and
+  `Relacionado: <ids, plans>` from its `_relacionado`. Lines without data are left out. Nothing
+  is sent: you decide whether to submit it. The mod never writes your memory.
 - The list refreshes at session start, after every turn, and with `r` (pane focused) or the
   `actualizar` button.
 
