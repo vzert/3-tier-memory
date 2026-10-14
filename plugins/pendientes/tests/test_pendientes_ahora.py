@@ -22,9 +22,9 @@ PEND = """# Pendientes
 - [ ] Alta bloqueada — _creado: 2026-10-01_ — _id: p-1111111111_ — _bloqueado: espera una decision_
 - [ ] Alta con recordatorio futuro — _creado: 2026-10-01_ — _id: p-2222222222_ — _revisar: 2026-10-20_
 - [ ] Alta que espera al 2026-11-02 para medir — _creado: 2026-10-01_ — _id: p-3333333333_
-- [ ] Alta libre uno — _creado: 2026-09-01_ — _id: p-4444444444_
-- [ ] Alta libre dos — _creado: 2026-09-02_ — _id: p-5555555555_
-- [ ] Alta libre tres — _creado: 2026-09-03_ — _id: p-6666666666_
+- [ ] Alta libre uno — _origen: barrido A04_ — _creado: 2026-09-01_ — _id: p-4444444444_
+- [ ] Alta libre dos — _origen: [[sessions/2026-01-01-borrada]]_ — _creado: 2026-09-02_ — _id: p-5555555555_
+- [ ] Alta libre tres — _origen: [[plans/plan-x|el plan]], sessions/2026-10-12-a_ — _creado: 2026-09-03_ — _id: p-6666666666_ — _relacionado: p-dddddddddd, plan-x_
 - [ ] Alta que vence hoy — _creado: 2026-09-03_ — _id: p-7777777777_ — _revisar: 2026-10-13_
 
 ## Media prioridad
@@ -64,6 +64,9 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         mem = os.path.join(tmp, "memory")
         os.makedirs(os.path.join(mem, "sessions"))
+        os.makedirs(os.path.join(mem, "plans"))
+        with open(os.path.join(mem, "plans", "plan-x.md"), "w", encoding="utf-8") as fh:
+            fh.write("# plan x\n")
         with open(os.path.join(mem, "_pendientes.md"), "w", encoding="utf-8") as fh:
             fh.write(PEND)
         for nombre, texto in (("2026-10-12-a.md", FICHA_VIEJA), ("2026-10-13-b.md", FICHA)):
@@ -73,6 +76,20 @@ def main():
         d = correr(mem, lib)
         ids = [i["id"] for i in d["items"]]
         check("ok", d["ok"] is True)
+        # Contexto del clic (0.2.1): no depende de la version de la biblioteca.
+        todos = {i["id"]: i for i in d["items"] + d["resto"]}
+        ctx = {k: (v.get("origen"), v.get("origen_texto"), v.get("relacionado")) for k, v in todos.items()}
+        check("contexto: ficha de _origen y _relacionado",
+              ctx.get("p-aaaaaaaaaa") == (["memory/sessions/2026-10-13-b.md"], None, ["p-bbbbbbbbbb"]))
+        check("contexto: plan con alias y ruta suelta, los dos si existen",
+              ctx.get("p-6666666666") == (["memory/plans/plan-x.md", "memory/sessions/2026-10-12-a.md"], None,
+                                          ["p-dddddddddd", "plan-x"]))
+        check("contexto: origen en texto libre va tal cual",
+              ctx.get("p-4444444444") == ([], "barrido A04", []))
+        check("contexto: una ficha que ya no existe no se pega como ruta",
+              ctx.get("p-5555555555") == ([], "[[sessions/2026-01-01-borrada]]", []))
+        check("contexto: sin _origen ni _relacionado, vacio",
+              ctx.get("p-7777777777") == ([], None, []))
         if not d["lib"]["hilo"]:
             # 3-tier-memory < 2.57.0 (sin hilo() ni recibido()): el mod degrada a "solo el paso".
             # Se prueba ese modo y nada mas; el resto de la suite pide 2.57.0+.

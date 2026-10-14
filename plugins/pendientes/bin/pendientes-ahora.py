@@ -18,8 +18,14 @@ commit posterior a la ultima ficha, o en un prompt de la persona en esta sesion 
 en otra sesion viva del proyecto (transcripcion con actividad en 2 h). De un `Retomamos:`, solo
 el Proximo paso.
 
+Contexto del clic: cada elegido lleva `origen` (rutas memory/... que existen, de su `_origen`),
+`origen_texto` (el `_origen` tal cual si no nombra ningun archivo que exista; si no, null) y
+`relacionado` (los valores de su `_relacionado`), para que el pendiente pegado al prompt diga que
+leer.
+
 No escribe nada. No copia el parser: importa pendientes_afines.py del plugin 3-tier-memory
-(--lib, o $THREE_TIER_BIN, o el repo del proyecto, o la version mas alta del cache).
+(--lib, o $THREE_TIER_BIN, o el repo del proyecto, o la version mas alta del cache). La excepcion
+son `_origen` y `_relacionado`, que lee de la linea (ver contexto_por_id).
 Si algo falla, sale 0 con {"ok": false, "error": ...}: el mod lo pinta en vez de callar.
 """
 import datetime
@@ -130,8 +136,47 @@ def dias_vencido(revisar, hoy):
     return (datetime.date.fromisoformat(hoy) - a).days
 
 
-def item(p, grupo, motivo, pa, hoy):
+# Contexto que el clic pega con el pendiente: la ficha (o plan, research) de _origen y los ids/planes
+# de _relacionado. Se leen de la linea, no de la biblioteca: la de 3-tier-memory < 2.57.0 no trae
+# `origen`, y la de 2.57.0 solo lo trae si es una ficha de sessions/.
+CAMPO = r"—\s*_{}:\s*(.*?)_?\s*(?=—|$)"
+ORIGEN_CAMPO = re.compile(CAMPO.format("origen"))
+RELACIONADO_CAMPO = re.compile(CAMPO.format("relacionado"))
+# [[sessions/x]], [[plans/plan-x|alias]] o una ruta suelta sessions/x(.md)
+DESTINO = re.compile(r"\[\[([^\]|#]+)|(?<![\w/])((?:sessions|plans|research)/[\w.-]+)")
+ID_LINEA = re.compile(r"_id:\s*(p-[0-9a-f]{10})")
+
+
+def contexto_por_id(pend_path, memory_dir):
+    """{id: {"origen": [rutas memory/... que existen], "relacionado": [...]}} de _pendientes.md."""
+    out = {}
+    with open(pend_path, encoding="utf-8") as fh:
+        for linea in fh:
+            s = linea.strip()
+            m = ID_LINEA.search(s) if s.startswith("- [") else None
+            if not m:
+                continue
+            origen = []
+            mo = ORIGEN_CAMPO.search(s)
+            for a, b in DESTINO.findall(mo.group(1)) if mo else []:
+                rel = (a or b).strip()
+                rel = rel if rel.endswith(".md") else rel + ".md"
+                ruta = "memory/" + rel
+                if ruta not in origen and os.path.isfile(os.path.join(memory_dir, rel)):
+                    origen.append(ruta)
+            mr = RELACIONADO_CAMPO.search(s)
+            relacionado = [x.strip() for x in mr.group(1).split(",") if x.strip()] if mr else []
+            # Sin archivo que exista ("barrido A04", una ficha borrada): el texto tal cual, que
+            # sigue siendo una pista. Con archivo, el texto sobra.
+            crudo = mo.group(1).strip() if mo and not origen else ""
+            out[m.group(1)] = {"origen": origen, "origen_texto": crudo or None,
+                               "relacionado": relacionado}
+    return out
+
+
+def item(p, grupo, motivo, pa, hoy, ctx=None):
     texto = " ".join(p["texto"].split())
+    c = (ctx or {}).get(p["id"], {})
     return {
         "etiqueta": etiqueta_y_resto(texto)[0],
         "titulo_auto": titulo_auto(texto),
@@ -145,6 +190,9 @@ def item(p, grupo, motivo, pa, hoy):
         "motivo": motivo,
         "revisar": p.get("revisar"),
         "creado": p.get("creado"),
+        "origen": c.get("origen", []),
+        "origen_texto": c.get("origen_texto"),
+        "relacionado": c.get("relacionado", []),
     }
 
 
@@ -309,13 +357,14 @@ def calcular(memory_dir, hoy, maximo, lib=None, session_id=None, projects_root=N
     pa = cargar(bin_dir)
     todos = pa.pendientes(pend_path)
     por_id = {p["id"]: p for p in todos if p.get("id")}
+    ctx = contexto_por_id(pend_path, memory_dir)
 
     elegidos, vistos = [], set()
 
     def poner(p, grupo, motivo):
         if p.get("id") and p["id"] not in vistos:
             vistos.add(p["id"])
-            elegidos.append(item(p, grupo, motivo, pa, hoy))
+            elegidos.append(item(p, grupo, motivo, pa, hoy, ctx))
 
     ficha = ultima_ficha(memory_dir)
     paso_texto = None

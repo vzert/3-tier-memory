@@ -252,3 +252,29 @@ test('los titulos se piden en tandas de 12; una tanda rota guarda las anteriores
   expect(await ui.find({ text: /Hecho p-aaaaaaaaa0/ })).toBeDefined()
   expect(await ui.find({ text: /Auto 12/ })).toBeDefined()
 })
+
+test('el clic pega tambien que leer: la ficha de origen, o su texto, y lo relacionado', async ($, on) => {
+  const reloj = mock.clock(on)
+  mock.store(on)
+  const conContexto = {
+    ...AHORA,
+    items: [
+      it('p-aaaaaaaaaa', 'alta', 'Alta libre', { prio: 'Alta', texto: 'Con ficha', origen: ['memory/sessions/2026-10-13-b.md'], origen_texto: null, relacionado: ['p-bbbbbbbbbb', 'plan-x'] }),
+      it('p-cccccccccc', 'alta', 'Alta libre', { prio: 'Alta', texto: 'Sin archivo', origen: [], origen_texto: 'barrido A04', relacionado: [] }),
+      it('p-dddddddddd', 'alta', 'Alta libre', { prio: 'Alta', texto: 'Sin nada', origen: [], origen_texto: null, relacionado: [] }),
+    ],
+    resto: [],
+  }
+  const visto = motor(on, JSON.stringify(conContexto))
+  await $.command.run({ command: 'pendientes-ahora' })
+  await reloj.advance(1)
+  const ui = await $.ui.mount({ ...pane(40), surface: 'terminal' })
+  await ui.press({ key: 'p-aaaaaaaaaa' })
+  await ui.press({ key: 'p-cccccccccc' })
+  await ui.press({ key: 'p-dddddddddd' })
+  expect(visto.fills).toEqual([
+    'p-aaaaaaaaaa: Con ficha\n\nLee memory/sessions/2026-10-13-b.md para el contexto.\nRelacionado: p-bbbbbbbbbb, plan-x',
+    'p-cccccccccc: Sin archivo\n\nOrigen: barrido A04',
+    'p-dddddddddd: Sin nada',
+  ])
+})
