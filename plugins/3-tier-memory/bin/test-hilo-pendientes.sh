@@ -20,6 +20,8 @@ pass=0; fail=0
 chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: esperaba '$2', salio '$3'"; fi; }
 # Nada de la sesion de Claude Code donde corra la prueba: cada caso pone lo suyo.
 unset CLAUDE_CODE_SESSION_ID CLAUDE_PROJECT_DIR
+# El home de mentira va en HOME y en USERPROFILE: en Windows, os.path.expanduser de Python lee
+# USERPROFILE y no HOME, y sin el buscaria la transcripcion en el perfil real del runner.
 
 M="$T/memory"
 SID=11111111-2222-3333-4444-555555555555
@@ -91,28 +93,28 @@ SNIP='Retomamos: demo.\n\nLee memory/sessions/2026-10-13-ayer.md para el context
 echo "== 1. liga al nacer: pendiente.add se liga solo al Proximo paso recibido =="
 memoria; ficha 2026-10-14-hoy "Proximo paso: x."
 transcripcion "$T/home/.claude/projects/-tmp-proyecto/$SID.jsonl" "$SNIP"
-HOME="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
+HOME="$T/home" USERPROFILE="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
   --type pendiente.add --text "nuevo de hoy" --prioridad Media --origen "[[sessions/2026-10-14-hoy]]" >/dev/null 2>"$T/err1"
 chk "el evento trae _relacionado al paso recibido, campo en 2 lineas" "p-aaaaaaaaaa" "$(evento_rel)"
 chk "lo avisa por stderr" "1" "$(grep -c 'ligado al paso recibido: p-aaaaaaaaaa' "$T/err1")"
 rm -rf "$M/.journal"
-HOME="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
+HOME="$T/home" USERPROFILE="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
   --type pendiente.add --text "otro" --prioridad Alta --origen "[[sessions/2026-10-14-hoy]]" --relacionado plan-foo >/dev/null 2>&1
 chk "suma el paso recibido a un --relacionado explicito" "plan-foo,p-aaaaaaaaaa" "$(evento_rel)"
 rm -rf "$M/.journal"
 transcripcion "$T/home/.claude/projects/-tmp-proyecto/$SID.jsonl" 'hola, arreglemos el parser (p-aaaaaaaaaa)'
-HOME="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
+HOME="$T/home" USERPROFILE="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
   --type pendiente.add --text "nuevo" --prioridad Media --origen "[[sessions/2026-10-14-hoy]]" >/dev/null 2>&1
 chk "sesion que no arranco con Retomamos: sin liga" "-" "$(evento_rel)"
 rm -rf "$M/.journal"
 transcripcion "$T/home/.claude/projects/-tmp-proyecto/$SID.jsonl" "$SNIP"
 ficha 2026-09-01-vieja "Proximo paso: x."
-HOME="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
+HOME="$T/home" USERPROFILE="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
   --type pendiente.add --text "de backfill" --prioridad Media --origen "[[sessions/2026-09-01-vieja]]" >/dev/null 2>&1
 chk "ficha de otra fecha, backfill: no hereda el snippet de la sesion en curso" "-" "$(evento_rel)"
 rm -rf "$M/.journal"
 ficha 2026-10-14-otra "Proximo paso: x." "session_id: 99999999-2222-3333-4444-555555555555"
-HOME="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
+HOME="$T/home" USERPROFILE="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
   --type pendiente.add --text "de otra sesion" --prioridad Media --origen "[[sessions/2026-10-14-otra]]" >/dev/null 2>&1
 chk "ficha sellada con otro session_id: sin liga" "-" "$(evento_rel)"
 rm -rf "$M/.journal"
@@ -121,23 +123,23 @@ python3 "$BIN/journal-emit.py" --memory-dir "$M" --transcript "$T/home/.claude/p
 chk "--transcript a mano pasa por la misma guardia de fecha" "-" "$(evento_rel)"
 rm -rf "$M/.journal"
 ficha 2026-10-14-leida "Proximo paso: x."
-HOME="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
+HOME="$T/home" USERPROFILE="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
   --type pendiente.add --text "de la ficha leida" --prioridad Media --origen "[[sessions/2026-10-14-leida]]" >/dev/null 2>&1
 chk "ficha del mismo dia, sin sello, que la sesion solo leyo: sin liga" "-" "$(evento_rel)"
 rm -rf "$M/.journal"
 transcripcion "$T/home/.claude/projects/-tmp-proyecto/$SID.jsonl" "$SNIP" 2026-10-14-leida.md
-HOME="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
+HOME="$T/home" USERPROFILE="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
   --type pendiente.add --text "de la ficha escrita" --prioridad Media --origen "[[sessions/2026-10-14-leida]]" >/dev/null 2>&1
 chk "la misma ficha, si la sesion la escribio: liga" "p-aaaaaaaaaa" "$(evento_rel)"
 rm -rf "$M/.journal"
 transcripcion "$T/home/.claude/projects/-tmp-proyecto/$SID.jsonl" "$SNIP" "../not-sessions/2026-10-14-leida.md"
-HOME="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
+HOME="$T/home" USERPROFILE="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
   --type pendiente.add --text "casi la ruta" --prioridad Media --origen "[[sessions/2026-10-14-leida]]" >/dev/null 2>&1
 chk "escribir not-sessions/<ficha> no es escribir la ficha" "-" "$(evento_rel)"
 transcripcion "$T/home/.claude/projects/-tmp-proyecto/$SID.jsonl" "$SNIP"
 rm -rf "$M/.journal"
 ficha 2026-10-14-hoy "Proximo paso: x." "hilo_paso: p-dddddddddd"
-HOME="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
+HOME="$T/home" USERPROFILE="$T/home" CLAUDE_CODE_SESSION_ID=$SID python3 "$BIN/journal-emit.py" --memory-dir "$M" \
   --type pendiente.add --text "nuevo" --prioridad Media --origen "[[sessions/2026-10-14-hoy]]" >/dev/null 2>&1
 chk "el sello de la ficha gana a la transcripcion" "p-dddddddddd" "$(evento_rel)"
 
