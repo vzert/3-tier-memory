@@ -16,3 +16,7 @@ tools/recall-bench/resultado-*.json
 # ... salvo el corpus neutro del banco, que se publica (reglas genericas, sin datos de nadie)
 !tools/recall-bench/corpus-neutro/memory/
 !tools/recall-bench/corpus-neutro-enriquecido/memory/
+
+# tipos y tsconfig que el motor de mods escribe junto a un mod al cargarlo (se regeneran)
+plugins/pendientes/.claude-plugin/types/
+plugins/pendientes/tsconfig.json
