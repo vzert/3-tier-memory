@@ -2,10 +2,10 @@
 
 
 ## [2.58.0] - 2026-10-14
-Origen: encargo de Victor via la sesion de claude-vzert (2026-10-14). Un pendiente sin `_id:` no lo
+Origen: encargo de Victor desde otro proyecto (2026-10-14). Un pendiente sin `_id:` no lo
 alcanza ningun evento: `find_id_line` exige `_id: p-…_` en la linea, asi que update, resolve,
 expire, block y relate no lo encuentran. La unica salida era editar `_pendientes.md` a mano y
-re-sellar las huellas (`--reseal`), y en claude-vzert ya habia pasado dos veces.
+re-sellar las huellas (`--reseal`), y en esa instalacion ya habia pasado dos veces.
 
 ### Added
 - **Evento `pendiente.adopt`**: le pone su `_id:` a una linea que no lo tiene. Despues, update y
@@ -19,7 +19,9 @@ re-sellar las huellas (`--reseal`), y en claude-vzert ya habia pasado dos veces.
   slug de `_origen`, `date:` del fichero al que enlaza, mtime de `_pendientes.md`. Sin escribirlo,
   un enrich posterior pondria un `_creado` y el id dejaria de ser canonico. Dos diferencias con
   enrich: los items con sangria (enrich los salta; adopt y repair-dualwrite no) y un `_id:p-…_` mal
-  espaciado (enrich lo da por id y no lo toca; adopt lo reespacia).
+  espaciado (enrich lo da por id y no lo toca; adopt lo reespacia). El id se calcula sobre la
+  linea YA con su `_creado` insertado, como en enrich: con un `_origen:` que no va detras de una
+  raya, el `— _creado:` insertado se lleva como metadato el texto que le sigue.
 - Crea la fila de Tier 3 que falte, con la prioridad de la seccion. Tambien en el replay, por si
   la pasada murio entre los dos escritos.
 - Guarda contra la actualizacion perdida: el evento lleva la linea VERBATIM y el compactador solo

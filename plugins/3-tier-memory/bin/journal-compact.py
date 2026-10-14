@@ -1385,10 +1385,13 @@ def apply_adopt(mem, p):
             raise Quarantine(f"malformed: adopt de {pid} trae creado_nuevo y la linea ya tiene "
                              "_creado")
         r = je.reespaciar_id(verb)
-        if r is None and je.pendiente_id(text, creado or nuevo, origen) != pid:
+        if r is None and je.id_de_adopcion(verb, nuevo) != pid:
             raise Quarantine(f"malformed: adopt {pid} no es el id canonico de su linea")
         if r is not None and r[1] != pid:
             raise Quarantine(f"malformed: adopt {pid} no es el id que la linea ya lleva ({r[1]})")
+        # El texto de la fila es el de la linea YA adoptada: es el que el id hashea (ver
+        # journal-emit.id_de_adopcion) y el que la linea mostrara.
+        text = je.datos_linea(je.linea_adoptada(verb, pid, nuevo))[0] if r is None else text
         dato = {"id": pid, "text": text, "creado": creado or nuevo, "origen": origen or "—"}
         # Igualdad EXACTA, salvo el `\r` final de un fichero CRLF (read_lines parte por `\n` y
         # el emisor lee en modo texto): un cambio de un espacio tambien es un cambio, y no se

@@ -205,7 +205,9 @@ identidad. El propio enriquecedor rellena `_creado` en la misma pasada, asi que 
 suele bastar una.
 
 Con otras sesiones escribiendo la memoria a la vez, o para UN item concreto, usa el evento del
-journal en vez del enriquecedor (2.58.0): da el mismo id, crea la fila de Tier 3 y no pisa a nadie.
+journal en vez del enriquecedor (2.58.0): da el mismo id que el enriquecedor en los items que este
+toca, crea la fila de Tier 3 y no pisa a nadie. Ademas adopta los items con sangria, que el
+enriquecedor salta.
 
 ```bash
 python3 "$JBIN/journal-emit.py" --type pendiente.adopt --id sin-id-xxxxxxxxxx   # el de este barrido

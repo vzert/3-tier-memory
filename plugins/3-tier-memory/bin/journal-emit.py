@@ -623,9 +623,15 @@ def reespaciar_id(line):
 
 
 def id_de_adopcion(line, creado_nuevo=""):
-    """El id canonico que recibe la linea al adoptarla (None si no hay creado de donde sacarlo)."""
+    """El id canonico que recibe la linea al adoptarla (None si no hay creado de donde sacarlo).
+
+    Se lee de la linea YA con su `_creado:` insertado, como lo lee enrich (su pasada de id corre
+    sobre lo que dejo la de creado): si el `_origen:` no va detras de una raya (`- [ ] _origen:
+    [[…]]_ texto`), el `— _creado: …_` insertado se lleva como metadato el texto que le sigue, y
+    hashear la linea original daria otro id que el de enrich."""
+    if creado_nuevo:
+        line = linea_adoptada(line, "x", creado_nuevo).rsplit(" — _id: x_", 1)[0]
     text, creado, origen = datos_linea(line)
-    creado = creado or creado_nuevo
     if not creado:
         return None
     return pendiente_id(text, creado, origen)

@@ -3,7 +3,7 @@
 #
 # Por que existe: update/resolve/expire/block/relate buscan `_id: p-…_` en la linea. Un pendiente
 # escrito a mano, o anterior al journal, no lo lleva, y la unica forma de corregirlo o cerrarlo era
-# editar `_pendientes.md` a mano y re-sellar las huellas (pasado dos veces en claude-vzert).
+# editar `_pendientes.md` a mano y re-sellar las huellas (pasado dos veces en una instalacion real).
 #
 #  1. El id adoptado es el MISMO que pone enrich-memory --only creado,id (byte a byte la linea, en
 #     los items sin sangria, que son los unicos que enrich toca),
@@ -46,6 +46,7 @@ type: index
 - [ ] sin creado con origen — _origen: [[sessions/2026-09-01-vieja]]_
 - [ ] a pelo sin nada
 - [ ] slug imposible — _origen: [[sessions/2026-02-30-x]]_
+- [ ] _origen: [[sessions/sin-fecha]]_ empieza por metadato
 - [ ] texto repetido — _origen: [[sessions/2026-09-01-vieja]]_ — _creado: 2026-09-01_
 - [ ] texto repetido — _origen: [[sessions/2026-09-02-otra]]_ — _creado: 2026-09-02_
 
@@ -63,7 +64,7 @@ fixture "$M"; fixture "$T/enr"
 touch -t 202001150000 "$M/_pendientes.md" "$T/enr/_pendientes.md"
 python3 "$BIN/enrich-memory.py" "$T/enr" --apply --only creado,id >/dev/null
 ERR=$(emit --type pendiente.adopt --todas 2>&1 >"$T/ids")
-chk "emite 6 ids (los gemelos se apartan)" "6" "$(wc -l < "$T/ids" | tr -d ' ')"
+chk "emite 7 ids (los gemelos se apartan)" "7" "$(wc -l < "$T/ids" | tr -d ' ')"
 chk "avisa de los gemelos" "1" "$(printf '%s' "$ERR" | grep -c 'DUPLICADO (2 copias identicas): - \[ \] gemelo')"
 compact --quiet >/dev/null
 chk "sin cuarentena" "0" "$(cuarentena)"
@@ -77,7 +78,7 @@ chk "creado sacado del slug de _origen" "1" \
 chk "sin origen ni creado: creado = mtime de _pendientes.md" "1" "$(grep -c "^- \[ \] a pelo sin nada — _creado: 2020-01-15_ — _id: p-" "$M/_pendientes.md")"
 chk "fecha imposible en el slug: no se escribe, va al mtime (enrich igual)" "1" "$(grep -c "^- \[ \] slug imposible — _origen: \[\[sessions/2026-02-30-x\]\]_ — _creado: 2020-01-15_ — _id: p-" "$M/_pendientes.md")"
 ID1=$(grep '^- \[ \] arreglar foo' "$M/_pendientes.md" | grep -o 'p-[0-9a-f]\{10\}')
-chk "fila de Tier 3 de cada adoptado" "6" "$(cat "$M"/pendientes/*.md | grep -c '_id: p-')"
+chk "fila de Tier 3 de cada adoptado" "7" "$(cat "$M"/pendientes/*.md | grep -c '_id: p-')"
 chk "Tier 3 lleva la prioridad de su seccion" "1" "$(grep "_id: ${ID1}_" "$M/pendientes/2026-09.md" | grep -c '| Alta |')"
 
 echo "== 2. repair-dualwrite: nada inventado, nada que renombrar =="
