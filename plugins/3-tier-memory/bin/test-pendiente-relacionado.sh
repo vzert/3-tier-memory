@@ -16,6 +16,9 @@ set -u
 BIN="$(cd "$(dirname "$0")" && pwd)"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 pass=0; fail=0
+# 2.57.0: journal-emit liga un pendiente nuevo al paso del snippet con el que arranco la sesion de
+# Claude Code donde corre (CLAUDE_CODE_SESSION_ID). Estas fichas de mentira no son de esa sesion.
+unset CLAUDE_CODE_SESSION_ID
 chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: esperaba '$2', salio '$3'"; fi; }
 
 M="$T/memory"
@@ -89,7 +92,10 @@ M4=$(emit --type pendiente.add --text "media ligada pero bloqueada" --prioridad 
 M5=$(emit --type pendiente.add --text "media ligada con ventana futura" --prioridad Media --origen "[[sessions/2026-10-13-hoy]]" --creado 2026-08-02 --relacionado "$A" --revisar 2099-01-01)
 B1=$(emit --type pendiente.add --text "baja ligada" --prioridad Baja --origen "[[sessions/2026-10-13-hoy]]" --creado 2026-08-03 --relacionado "$A")
 compact --quiet >/dev/null
-F="$M/sessions/2026-10-13-hoy.md"
+# 2.57.0: la ficha es de OTRA sesion que la de origen de estos pendientes. Si fuera la de
+# `2026-10-13-hoy`, todos los nacidos en ella entrarian al hilo por haber nacido ahi (regla 2), y
+# esta seccion mide la liga por `_relacionado`; lo nacido en la sesion lo mide test-hilo-pendientes.sh.
+F="$M/sessions/2026-10-13-retoma.md"
 cat > "$F" <<EOF
 # hoy
 

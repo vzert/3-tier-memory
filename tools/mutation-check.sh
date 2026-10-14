@@ -134,6 +134,26 @@ caso "afines en direccion inversa" pendientes_afines.py m_relacionado.py $T "la 
 caso "afines Alta primero" pendientes_afines.py m_relacionado.py $T "el Alta ligado va primero aunque sea mas nuevo" afines-sin-prioridad
 caso "afines tope de 2" pendientes_afines.py m_relacionado.py $T "con 3 elegibles salen solo 2" afines-sin-tope
 caso "hermano de la tabla primero" plan-siguiente-hermano.py m_relacionado.py $T "y no desplaza a la fila de la tabla" hermano-fuera-primero
+T=test-hilo-pendientes.sh
+caso "hilo: liga al nacer" journal-emit.py m_hilo.py $T "el evento trae _relacionado al paso recibido, campo en 2 lineas" liga-sin-auto
+caso "hilo: liga no hereda en backfill" journal-emit.py m_hilo.py $T "ficha de otra fecha, backfill: no hereda el snippet de la sesion en curso" liga-sin-guardia
+caso "hilo: campo en varias lineas" pendientes_afines.py m_hilo.py $T "hilo_paso" campo-una-linea
+caso "hilo: snippet pegado como bloque" pendientes_afines.py m_hilo.py $T "sella" pasted-sin-quitar
+caso "hilo: cierre recursivo" pendientes_afines.py m_hilo.py $T "p-3333333333, el nieto, esta en el snippet" hilo-sin-cierre
+caso "hilo: paso recibido sigue" pendientes_afines.py m_hilo.py $T "p-aaaaaaaaaa vuelve como extra" hilo-sin-recibido
+caso "hilo: empate, nuevo primero" pendientes_afines.py m_hilo.py $T "empate Alta/Alta, el paso cita al heredado: SALTADO" empate-sin-nuevo
+caso "hilo: heredado saltado 2" pendientes_afines.py m_hilo.py $T "heredado saltado 2 sesiones y el paso cita al nuevo: SALTADO" empate-sin-saltos
+caso "hilo: Baja solo sin Alta ni Media" pendientes_afines.py m_hilo.py $T "con una Media fuera del paso, la Baja no entra como extra aunque sobre un hueco" baja-con-alta
+caso "hilo: quedan N" pendientes_afines.py m_hilo.py $T "quedan N con el resto, solo ids" sin-quedan
+caso "hilo: saltos acumulan" stamp-hilo.py m_hilo.py $T "hilo_saltos: el de ayer mas 1; el paso no cuenta; uno que ya no vino se olvida" saltos-sin-previo
+caso "hilo: print ve los nacidos" print-como-retomar.py m_hilo.py $T "quedan N con el resto, solo ids" print-sin-slug
+caso "hilo: audit snippet.hilo" checkpoint-audit.py m_hilo.py $T "empate Alta/Alta, el paso cita al heredado: SALTADO" audit-sin-hilo
+caso "hilo: sello solo de su sesion" stamp-hilo.py m_hilo.py $T "no sella una ficha de otra fecha" sello-sin-guardia
+caso "hilo: el paso es su primer id" checkpoint-audit.py m_hilo.py $T "nombrar al Alta de pasada no lo vuelve el paso: SALTADO" audit-todos-los-ids
+caso "hilo: la sesion escribio la ficha" pendientes_afines.py m_hilo.py $T "ficha del mismo dia, sin sello, que la sesion solo leyo: sin liga" guardia-sin-escritura
+caso "hilo: sessions/ es un componente entero" pendientes_afines.py m_hilo.py $T "escribir not-sessions/<ficha> no es escribir la ficha" ruta-por-sufijo
+caso "hilo: leer no es escribir" pendientes_afines.py m_hilo.py $T "no sella una ficha del mismo dia que la sesion solo leyo" leer-cuenta-como-escribir
+caso "hilo: --transcript con guardia" journal-emit.py m_hilo.py $T "--transcript a mano pasa por la misma guardia de fecha" liga-sin-guardia
 
 echo "Contrato de check-project-dir-fallback.py (2.41.4): cada pieza, rota, tumba su aserto"
 caso "verde respaldo" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " respaldo: exit 0" r1-sin-quitar-forma

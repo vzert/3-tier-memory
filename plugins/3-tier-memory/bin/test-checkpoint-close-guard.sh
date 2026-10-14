@@ -20,12 +20,15 @@ chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$(
 armar() {
   local M="$1"; shift; local SN="$1"; shift
   rm -rf "$M"; mkdir -p "$M/sessions" "$M/pendientes"
+  # 2.57.0: p-daf3051915 nace en una sesion previa. Si naciera en la ficha demo, el hilo lo sumaria al
+  # snippet como extra y las respuestas reales de los turnos 1813/2071 (de 2.32.0) no traerian esa
+  # linea: el guard diria "no pegado" por una linea que entonces no existia.
   cat > "$M/_pendientes.md" <<'EOF'
 # Pendientes
 
 ## Alta prioridad
 
-- [ ] Resolver de raiz los 4 defectos — _origen: [[sessions/2026-09-22-demo]]_ — _creado: 2026-09-22_ — _id: p-daf3051915_
+- [ ] Resolver de raiz los 4 defectos — _origen: [[sessions/2026-09-21-previa]]_ — _creado: 2026-09-22_ — _id: p-daf3051915_
 
 ## Media prioridad
 

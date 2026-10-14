@@ -31,7 +31,11 @@ es la red para cuando falta.
 
 Lo usa print-como-retomar.py (la linea `Si ese paso es corto, suma…` dentro del snippet).
 
-Uso directo (diagnostico):  pendientes_afines.py SESSION_FILE [--hoy YYYY-MM-DD]
+Uso directo:  pendientes_afines.py SESSION_FILE [--hoy YYYY-MM-DD]   (las lineas del snippet)
+              pendientes_afines.py SESSION_FILE --hilo [--hoy …]   (el hilo en orden, Step 8)
+
+2.57.0: la linea de afines sale del HILO entero (ver "El hilo", mas abajo), no solo de
+`_relacionado` al paso, y lleva debajo `quedan N en el hilo: <ids>`.
 """
 # sella-huellas: no (solo lee _pendientes.md y la ficha; no escribe nada)
 import datetime
@@ -52,6 +56,7 @@ PLAN_CUALQUIERA = re.compile(r"(?<![0-9A-Za-z-])plan-[A-Za-z0-9][A-Za-z0-9._-]*"
 REVISAR = re.compile(r"_revisar:\s*(\d{4}-\d{2}-\d{2})_")
 CREADO = re.compile(r"_creado:\s*(\d{4}-\d{2}-\d{2})_")
 BLOQUEADO = re.compile(r"—\s*_bloqueado:")
+ORIGEN = re.compile(r"_origen:\s*\[\[sessions/([^\]|]+)")
 RELACIONADO = re.compile(r"—\s*_relacionado:\s*([^—]*?)_?\s*(?=—|$)")
 METADATO = re.compile(r"\s+—\s+_[a-z]+:")
 # Una fecha ISO suelta: no la de un slug (`2026-10-14-algo`, `backup_2026-10-14_x`) ni parte de
@@ -138,7 +143,7 @@ def anclas(linea):
 
 
 def pendientes(path):
-    """[{id, texto, prio, creado, revisar, bloqueado, rel, fila}] de las lineas `- [ ]`."""
+    """[{id, texto, prio, creado, revisar, bloqueado, rel, origen, fila}] de las lineas `- [ ]`."""
     out, prio = [], None
     with open(path, encoding="utf-8") as fh:
         for n, l in enumerate(fh):
@@ -157,42 +162,341 @@ def pendientes(path):
                 continue
             m_rel = RELACIONADO.search(s)
             rel = {x.strip() for x in m_rel.group(1).split(",") if x.strip()} if m_rel else set()
-            rev, cre = REVISAR.search(s), CREADO.search(s)
+            rev, cre, ori = REVISAR.search(s), CREADO.search(s), ORIGEN.search(s)
             out.append({"id": m_id.group(1), "texto": METADATO.split(s[5:].strip(), 1)[0].strip(),
                         "prio": prio, "creado": cre.group(1) if cre else "9999-99-99",
                         "revisar": rev.group(1) if rev else None,
-                        "bloqueado": bool(BLOQUEADO.search(s)), "rel": rel, "fila": n})
+                        "bloqueado": bool(BLOQUEADO.search(s)), "rel": rel,
+                        "origen": ori.group(1).strip() if ori else None, "fila": n})
     return out
 
 
-def afines(ficha_texto, pend_path, hoy=None):
-    """Hasta MAX_AFINES pendientes (dicts de `pendientes`) afines al `Proximo paso:`. [] si la
-    ficha no cita nada, si no hay `_pendientes.md` o si nada esta ligado."""
+# --- El hilo (2.57.0, p-b282a8cfc4) -----------------------------------------------------------
+# Decidido por Victor el 2026-10-13 sobre la medicion de research/hilo-pendientes-relacionados-
+# medicion: la linea de afines de 2.55.0 dependia solo de `_relacionado`, y ese campo estaba en 3 de
+# 617 pendientes. Lo que se perdia no era el paso: era el paso recibido que no se cerraba (se caia
+# del snippet siguiente y no volvia, 8 casos), los hermanos que se separaban (61 de 119 sesiones) y
+# las Bajas (57-73 % nunca volvian). Las cinco piezas:
+#   (1) liga al nacer: journal-emit `pendiente.add` liga cada pendiente nuevo a los ids del
+#       `Proximo paso` que la sesion recibio (`paso_recibido_de`), sin criterio del agente;
+#   (2) hilo = lo que la sesion recibio + lo que nacio en ella + el paso que escribe, cerrado por
+#       `_relacionado` en las dos direcciones (los `plan-…`, un solo salto: un plan con 30
+#       pendientes volveria el hilo el backlog entero);
+#   (3) orden: prioridad; en empate el nuevo antes que el heredado, salvo el heredado que lleva 2
+#       sesiones seguidas saltado (`hilo_saltos` del sello), que va antes que todos;
+#   (4) el paso recibido que no se cerro sigue en el hilo (es un heredado mas);
+#   (5) hasta 2 extras (Alta > Media > Baja; la Baja solo cuando no queda Alta ni Media) y una linea
+#       `quedan N en el hilo: <ids>` con el resto.
+# Lo que la sesion recibio NO se lee aqui de la transcripcion: se lee del sello que stamp-hilo.py
+# deja en el frontmatter de la ficha (`hilo_paso`, `hilo_heredados`, `hilo_saltos`). El hook de
+# cierre vuelve a correr print-como-retomar.py en otro entorno; si esto leyera la transcripcion, su
+# salida podria no ser la del Step 8b.
+
+PRIORIDAD_HILO = {"Alta": 0, "Media": 1, "Baja": 2}
+EXTRAS_PREFIJO = "Si ese paso es corto, suma"
+QUEDAN = re.compile(r"^quedan\s+\d+\s+en\s+el\s+hilo\b", re.I)
+# Las etiquetas del snippet de Step 8a. Un campo va desde su etiqueta hasta la siguiente o hasta
+# una linea en blanco: los snippets viejos parten el `Proximo paso` en varias lineas (medido: 4 de
+# los 10 pasos "mas cortos" eran cortes si se leia solo la primera).
+ETIQUETA = re.compile(r"^\s*\**\s*(retomamos:|lee\s|pr[oó]ximo paso:|pr[oó]xima acci[oó]n:|"
+                      r"no repitas:|terminas cuando:|antes de actuar|si ese paso es corto|"
+                      r"quedan\s+\d+\s+en\s+el\s+hilo)", re.I)
+LEE_FICHA = re.compile(r"memory/sessions/([^\s`)\]]+?)\.md")
+
+
+def campo(snippet, inicio):
+    """El texto del campo cuya etiqueta empieza por `inicio` (minusculas), o None."""
+    lineas = (snippet or "").splitlines()
+    for i, l in enumerate(lineas):
+        s = l.strip().strip("*").strip().lower()
+        if not s.startswith(inicio):
+            continue
+        out = [l.strip()]
+        for sig in lineas[i + 1:]:
+            if not sig.strip() or ETIQUETA.match(sig):
+                break
+            out.append(sig.strip())
+        return " ".join(out)
+    return None
+
+
+def recibido(snippet):
+    """Lo que trae un snippet `Retomamos:`: {paso, heredados, retoma}.
+
+    paso      = ids `p-…` y `plan-…` (canonicos) del `Proximo paso` (o `Proxima accion`);
+    heredados = ids `p-…` del paso, de la linea de extras y de la linea `quedan N en el hilo`;
+    retoma    = el slug de la ficha que el snippet manda leer (la sesion que lo escribio); lo usa
+                stamp-hilo.py para leer los `hilo_saltos` de esa ficha."""
+    paso = campo(snippet, "proximo paso:") or campo(snippet, "próximo paso:") \
+        or campo(snippet, "proxima accion:") or campo(snippet, "próxima acción:")
+    ids_paso, planes = anclas(paso)
+    planes_c = sorted({canonica(x) for x in planes if canonica(x)})
+    heredados = set(ids_paso)
+    for inicio in ("si ese paso es corto", "quedan"):
+        heredados |= anclas(campo(snippet, inicio))[0]
+    m = LEE_FICHA.search(snippet or "")
+    return {"paso": sorted(ids_paso) + planes_c, "heredados": sorted(heredados),
+            "retoma": m.group(1) if m else None}
+
+
+def frontmatter(texto):
+    """{clave: valor} del frontmatter `---` de una ficha ({} si no tiene)."""
+    if not (texto or "").startswith("---"):
+        return {}
+    fin = texto.find("\n---", 3)
+    if fin == -1:
+        return {}
+    out = {}
+    for l in texto[3:fin].splitlines():
+        if ":" in l and not l.startswith((" ", "\t")):
+            k, v = l.split(":", 1)
+            out[k.strip()] = v.strip()
+    return out
+
+
+def lista(valor):
+    return [x.strip() for x in (valor or "").split(",") if x.strip()]
+
+
+def saltos(valor):
+    """`p-a=1, p-b=2` → {p-a: 1, p-b: 2}."""
+    out = {}
+    for x in lista(valor):
+        k, _, n = x.partition("=")
+        if n.strip().isdigit():
+            out[k.strip()] = int(n)
+    return out
+
+
+def sello(ficha_texto):
+    """El sello de stamp-hilo.py: (paso, heredados, saltos). Vacio si la ficha no lo tiene."""
+    fm = frontmatter(ficha_texto)
+    return lista(fm.get("hilo_paso")), lista(fm.get("hilo_heredados")), saltos(fm.get("hilo_saltos"))
+
+
+def hacible(p, hoy):
+    """Se puede hacer en la sesion siguiente: sin `_bloqueado`, sin `_revisar` de hoy o futuro
+    (tiene su recordatorio) y sin una fecha `AAAA-MM-DD` futura en el texto."""
+    if p["prio"] not in PRIORIDAD_HILO or p["bloqueado"]:
+        return False
+    if p["revisar"] and p["revisar"] >= hoy:
+        return False
+    return not fecha_futura(p["texto"], hoy)
+
+
+def hilo(ficha_texto, pend_path, slug=None, hoy=None):
+    """Los pendientes hacibles del hilo de la ficha, en el orden de la regla (3). [] sin datos."""
     hoy = hoy or datetime.date.today().isoformat()
-    ids, planes = anclas(proximo_paso(ficha_texto))
-    if not (ids or planes) or not os.path.isfile(pend_path):
+    if not os.path.isfile(pend_path):
         return []
     todos = pendientes(pend_path)
+    paso_rec, heredados, salt = sello(ficha_texto)
+    ids_pp, planes_pp = anclas(proximo_paso(ficha_texto))
+    nuevos = {p["id"] for p in todos if slug and p["origen"] == slug}
+    miembros = set(heredados) | nuevos | ids_pp | {x for x in paso_rec if x.startswith("p-")}
     por_id = {p["id"]: p for p in todos}
-    # Lo que citan los pendientes ancla: sus enlaces directos y sus planes.
-    citados_por_ancla = set()
-    for i in ids:
+    # Los planes: los del paso que la ficha escribe, los del paso recibido y los que citan las
+    # semillas. Un solo salto: no se expande por los planes de los que entran despues.
+    planes = set(planes_pp) | {x for x in paso_rec if x.startswith("plan-")}
+    for i in miembros:
         if i in por_id:
-            citados_por_ancla |= por_id[i]["rel"]
-    planes_ancla = planes | {x for x in citados_por_ancla if x.startswith("plan-")}
-    anclas_todas = ids | planes_ancla
-    elegibles = []
+            planes |= {x for x in por_id[i]["rel"] if x.startswith("plan-")}
+    planes = {canonica(x) or x for x in planes}
     for p in todos:
-        if p["id"] in ids or p["prio"] not in PRIORIDAD or p["bloqueado"]:
-            continue
-        if p["revisar"] and p["revisar"] >= hoy:
-            continue   # futuro: su recordatorio de calendario; hoy: la capa 🔔
-        if fecha_futura(p["texto"], hoy):
-            continue   # espera una fecha que no esta en `_revisar`: hoy no se puede hacer
-        if (p["rel"] & anclas_todas) or p["id"] in citados_por_ancla:
-            elegibles.append(p)
-    elegibles.sort(key=lambda p: (PRIORIDAD[p["prio"]], p["creado"], p["fila"]))
-    return elegibles[:MAX_AFINES]
+        if {canonica(x) or x for x in p["rel"] if x.startswith("plan-")} & planes:
+            miembros.add(p["id"])
+    cambio = True
+    while cambio:
+        cambio = False
+        for p in todos:
+            ids_rel = {x for x in p["rel"] if x.startswith("p-")}
+            if p["id"] in miembros and not ids_rel <= miembros:
+                miembros |= ids_rel
+                cambio = True
+            if p["id"] not in miembros and ids_rel & miembros:
+                miembros.add(p["id"])
+                cambio = True
+
+    def grupo(p):
+        if p["id"] not in nuevos and salt.get(p["id"], 0) >= 2:
+            return 0
+        return 1 if p["id"] in nuevos else 2
+
+    out = [p for p in todos if p["id"] in miembros and hacible(p, hoy)]
+    for p in out:
+        # 0 = heredado saltado 2+ sesiones, 1 = nuevo, 2 = heredado (lo lee checkpoint-audit.py)
+        p["grupo"] = grupo(p)
+    out.sort(key=lambda p: (PRIORIDAD_HILO[p["prio"]], p["grupo"], p["creado"], p["fila"]))
+    return out
+
+
+PASTED = re.compile(r"</?pasted_content[^>]*>")
+RUIDO = re.compile(r"<(system-reminder|local-command-caveat|command-name|command-message|"
+                   r"command-args|local-command-stdout)>.*?</\1>", re.S)
+
+
+def _texto_usuario(contenido):
+    if isinstance(contenido, str):
+        return contenido
+    if isinstance(contenido, list):
+        if any(isinstance(b, dict) and b.get("type") == "tool_result" for b in contenido):
+            return ""
+        return "\n".join(b.get("text", "") for b in contenido
+                         if isinstance(b, dict) and b.get("type") == "text")
+    return ""
+
+
+def snippet_de_transcripcion(ruta):
+    """El snippet `Retomamos:` con el que arranco una sesion, o None.
+
+    Es el PRIMER mensaje de usuario con texto (sin los avisos del harness, sin `isMeta`, sin
+    resultados de herramientas). Si ese no empieza por `Retomamos:`, la sesion no retomo nada: no
+    se busca un `Retomamos:` mas abajo (seria un snippet pegado para otra cosa). El envoltorio
+    `<pasted_content …>` se quita: asi llega un snippet pegado como bloque."""
+    import json
+    try:
+        fh = open(ruta, encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    with fh:
+        for linea in fh:
+            try:
+                d = json.loads(linea)
+            except ValueError:
+                continue
+            if d.get("type") != "user" or d.get("isMeta"):
+                continue
+            texto = RUIDO.sub("", _texto_usuario((d.get("message") or {}).get("content")))
+            texto = PASTED.sub("", texto).strip()
+            if not texto:
+                continue
+            return texto if texto.startswith("Retomamos:") else None
+    return None
+
+
+def transcripcion_de(session_id, dirs_proyecto=(), projects_root=None):
+    """La ruta del `.jsonl` de `session_id`, o None. Mira primero el directorio de cada proyecto
+    (codificado como Claude Code: todo lo que no es alfanumerico pasa a `-`) y luego
+    `<projects_root>/*/<id>.jsonl` si es unico (un id en dos proyectos no identifica nada)."""
+    import glob
+    if not session_id or not re.match(r"^[0-9A-Za-z-]{8,64}$", session_id):
+        return None
+    root = projects_root or os.path.join(os.path.expanduser("~"), ".claude", "projects")
+    for d in dirs_proyecto:
+        if d:
+            r = os.path.join(root, re.sub(r"[^A-Za-z0-9]", "-", d), session_id + ".jsonl")
+            if os.path.isfile(r):
+                return r
+    hits = glob.glob(os.path.join(glob.escape(root), "*", glob.escape(session_id) + ".jsonl"))
+    return hits[0] if len(hits) == 1 else None
+
+
+ESCRIBE = ("Write", "Edit", "MultiEdit")
+
+
+def escribio_la_ficha(transcripcion, nombre):
+    """Si la transcripcion tiene una herramienta que ESCRIBIO `sessions/<nombre>`: Write, Edit o
+    MultiEdit con ese `file_path`, o un Bash que redirige (`>`, `>>`, `tee`) a esa ruta. Leerla no
+    cuenta: la sesion que retoma lee la ficha anterior, y esa es justo la ajena."""
+    import json
+    # `sessions/` tiene que ser un componente entero de la ruta: `not-sessions/<nombre>` no es la
+    # ficha (adversario externo, ronda 3 de 2.57.0).
+    redir = re.compile(r"(?:>{1,2}|\btee\s+(?:-a\s+)?)\s*['\"]?(?:[^\s'\"]*/)?sessions/"
+                       + re.escape(nombre) + r"(?![\w.-])")
+    try:
+        fh = open(transcripcion, encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    with fh:
+        for linea in fh:
+            if nombre not in linea:
+                continue
+            try:
+                d = json.loads(linea)
+            except ValueError:
+                continue
+            if d.get("type") != "assistant":
+                continue
+            for b in (d.get("message") or {}).get("content") or []:
+                if not isinstance(b, dict) or b.get("type") != "tool_use":
+                    continue
+                inp = b.get("input") or {}
+                ruta = str(inp.get("file_path") or "").replace("\\", "/")
+                if b.get("name") in ESCRIBE and (ruta == "sessions/" + nombre
+                                                 or ruta.endswith("/sessions/" + nombre)):
+                    return True
+                if b.get("name") == "Bash" and redir.search(str(inp.get("command") or "")):
+                    return True
+    return False
+
+
+def ficha_de_la_sesion(ficha_path, transcripcion, session_id):
+    """Si la ficha es de la sesion de esa transcripcion: no esta sellada con OTRO `session_id`, su
+    fecha (la del nombre) cae dentro de las fechas de la transcripcion, con un dia de margen (los
+    `timestamp` son UTC), y la transcripcion la ESCRIBIO (`escribio_la_ficha`; sin esto, una ficha
+    del mismo dia de otra sesion pasaba: adversario externo, ronda 2 de 2.57.0). Falla cerrado.
+
+    Existe para que un `pendiente.add` con `--origen` de OTRA sesion (`/backfill-3t` reconstruye
+    pendientes de fichas viejas, una prueba crea fichas de mentira) no herede el snippet de la
+    sesion de Claude Code donde corre."""
+    if not (ficha_path and transcripcion and os.path.isfile(ficha_path)):
+        return False
+    with open(ficha_path, encoding="utf-8", errors="replace") as fh:
+        sello_sid = frontmatter(fh.read()).get("session_id")
+    if sello_sid and sello_sid != session_id:
+        return False
+    m = re.match(r"(\d{4}-\d{2}-\d{2})", os.path.basename(ficha_path))
+    if not m:
+        return False
+    import json
+    fechas = []
+    try:
+        with open(transcripcion, encoding="utf-8", errors="replace") as fh:
+            for linea in fh:
+                try:
+                    ts = str(json.loads(linea).get("timestamp") or "")
+                except (ValueError, AttributeError):
+                    continue
+                if re.match(r"\d{4}-\d{2}-\d{2}", ts):
+                    fechas.append(ts[:10])
+    except OSError:
+        return False
+    if not fechas:
+        return False
+    try:
+        f = datetime.date.fromisoformat(m.group(1))
+        a = datetime.date.fromisoformat(min(fechas)) - datetime.timedelta(days=1)
+        b = datetime.date.fromisoformat(max(fechas)) + datetime.timedelta(days=1)
+    except ValueError:
+        return False
+    return a <= f <= b and escribio_la_ficha(transcripcion, os.path.basename(ficha_path))
+
+
+def paso_recibido_de(ficha_path=None, transcripcion=None):
+    """Los ids del `Proximo paso` que la sesion recibio (pieza 1). Primero el sello de la ficha
+    (`hilo_paso`, si stamp-hilo.py ya corrio); si no, la transcripcion. [] si nada."""
+    if ficha_path and os.path.isfile(ficha_path):
+        with open(ficha_path, encoding="utf-8", errors="replace") as fh:
+            fm = frontmatter(fh.read())
+        if "hilo_paso" in fm:
+            return lista(fm["hilo_paso"])
+    snip = snippet_de_transcripcion(transcripcion) if transcripcion else None
+    return recibido(snip)["paso"] if snip else []
+
+
+def extras_y_quedan(ficha_texto, pend_path, slug=None, hoy=None):
+    """(extras, quedan): hasta MAX_AFINES del hilo fuera del paso, y el resto."""
+    ids_pp = anclas(proximo_paso(ficha_texto))[0]
+    resto = [p for p in hilo(ficha_texto, pend_path, slug, hoy) if p["id"] not in ids_pp]
+    altas_medias = [p for p in resto if p["prio"] in PRIORIDAD]
+    extras = (altas_medias or resto)[:MAX_AFINES]
+    vistos = {p["id"] for p in extras}
+    return extras, [p for p in resto if p["id"] not in vistos]
+
+
+def afines(ficha_texto, pend_path, hoy=None, slug=None):
+    """Los extras del hilo (la linea `Si ese paso es corto…`). Se queda el nombre de 2.55.0."""
+    return extras_y_quedan(ficha_texto, pend_path, slug, hoy)[0]
 
 
 def corto(texto):
@@ -200,13 +504,17 @@ def corto(texto):
     return t if len(t) <= TEXTO_MAX else t[:TEXTO_MAX - 1].rstrip() + "…"
 
 
-def linea_snippet(ficha_texto, pend_path, hoy=None):
-    """La linea que print-como-retomar.py mete en el snippet, o None si no hay afines."""
-    elegidos = afines(ficha_texto, pend_path, hoy)
-    if not elegidos:
-        return None
-    partes = [f"{p['id']} ({p['prio']}) — {corto(p['texto'])}" for p in elegidos]
-    return "Si ese paso es corto, suma en la misma sesion: " + "; ".join(partes) + "."
+def linea_snippet(ficha_texto, pend_path, hoy=None, slug=None):
+    """Las lineas que print-como-retomar.py mete en el snippet (extras y `quedan N en el hilo`),
+    separadas por una linea en blanco, o None si el hilo no tiene nada fuera del paso."""
+    extras, quedan = extras_y_quedan(ficha_texto, pend_path, slug, hoy)
+    lineas = []
+    if extras:
+        partes = [f"{p['id']} ({p['prio']}) — {corto(p['texto'])}" for p in extras]
+        lineas.append(EXTRAS_PREFIJO + " en la misma sesion: " + "; ".join(partes) + ".")
+    if quedan:
+        lineas.append(f"quedan {len(quedan)} en el hilo: " + ", ".join(p["id"] for p in quedan) + ".")
+    return "\n\n".join(lineas) or None
 
 
 def main():
@@ -216,14 +524,24 @@ def main():
         i = args.index("--hoy")
         hoy = args[i + 1]
         del args[i:i + 2]
+    ver_hilo = "--hilo" in args
+    args = [a for a in args if a != "--hilo"]
     if len(args) != 1:
-        print("uso: pendientes_afines.py SESSION_FILE [--hoy YYYY-MM-DD]", file=sys.stderr)
+        print("uso: pendientes_afines.py SESSION_FILE [--hilo] [--hoy YYYY-MM-DD]", file=sys.stderr)
         return 2
     ficha = os.path.abspath(args[0])
     memory_dir = os.path.dirname(os.path.dirname(ficha))
     with open(ficha, encoding="utf-8") as fh:
         texto = fh.read()
-    l = linea_snippet(texto, os.path.join(memory_dir, "_pendientes.md"), hoy)
+    slug = os.path.splitext(os.path.basename(ficha))[0]
+    pend = os.path.join(memory_dir, "_pendientes.md")
+    if ver_hilo:
+        # Step 8, casos 2-3: el primero es el `Proximo paso`.
+        etiqueta = {0: "heredado, saltado 2+ sesiones", 1: "nuevo", 2: "heredado"}
+        for p in hilo(texto, pend, slug, hoy):
+            print(f"{p['id']} ({p['prio']}, {etiqueta[p['grupo']]}) — {corto(p['texto'])}")
+        return 0
+    l = linea_snippet(texto, pend, hoy, slug)
     if l:
         print(l)
     return 0

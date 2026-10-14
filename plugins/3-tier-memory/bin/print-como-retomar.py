@@ -32,6 +32,10 @@ Alta/Media ligados por `_relacionado:` (pendientes_afines.py). Se calcula EN VIV
 `_pendientes.md`, igual que el bloque de Step 8e: no se guarda en la ficha, y el hook de cierre,
 que vuelve a correr este script, compara contra el estado real. Si la ficha ya trae esa linea
 (escrita a mano), no se duplica.
+Hilo (2.57.0, p-b282a8cfc4): los extras ya no salen solo de `_relacionado` sino del hilo entero
+(lo que la sesion recibio, sellado por stamp-hilo.py; lo que nacio en ella; y su cierre por
+`_relacionado`), y debajo va `quedan N en el hilo: <ids>` con lo que no entro. Ver
+pendientes_afines.py, "El hilo".
 Si la seccion esta vacia o dice solo el placeholder (`<filled in Step 8>`), no imprime nada y
 sale con codigo 1 — Step 8a todavia no corrio.
 
@@ -93,11 +97,14 @@ def _afines():
 
 def con_afines(inner, text, path):
     """`inner` con la linea de afines metida tras `Proximo paso:` (y su linea en blanco)."""
-    if AFINES_PREFIJO.lower() in inner.lower():
+    if AFINES_PREFIJO.lower() in inner.lower() or re.search(r"(?im)^quedan\s+\d+\s+en\s+el\s+hilo",
+                                                              inner):
         return inner
     memory_dir = os.path.dirname(os.path.dirname(os.path.abspath(path)))
+    slug = os.path.splitext(os.path.basename(path))[0]
     try:
-        linea = _afines().linea_snippet(text, os.path.join(memory_dir, "_pendientes.md"))
+        linea = _afines().linea_snippet(text, os.path.join(memory_dir, "_pendientes.md"),
+                                        slug=slug)
     except (OSError, UnicodeDecodeError) as exc:
         print(f"⚠ print-como-retomar.py: afines no calculados ({exc})", file=sys.stderr)
         return inner

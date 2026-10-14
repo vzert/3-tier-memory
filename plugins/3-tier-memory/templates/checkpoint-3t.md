@@ -639,10 +639,18 @@ sin preguntar al usuario (es un dato, no una decision):
   mayor prioridad, toma el id que imprime y pasalo como `--relacionado` en los demas;
 - el pendiente es un paso de un plan: `--relacionado plan-<slug>`;
 - el pendiente continua uno que ya existe (otra sesion): `--relacionado <su id>`.
+**La liga al paso recibido la pone `journal-emit.py` solo (2.57.0, p-b282a8cfc4)**: si esta sesion
+arranco con un snippet `Retomamos:`, todo `pendiente.add` queda ligado a los ids de su `Proximo
+paso`, y lo avisa por stderr (`ligado al paso recibido: …`). No lo pases tu ni lo quites: es la
+decision de Victor del 2026-10-13 (sin ella, `_relacionado` estaba en 3 de 617 pendientes). Lo lee
+del sello de la ficha (5c-bis) o, antes de sellar, de la transcripcion de `CLAUDE_CODE_SESSION_ID`.
+Los `--relacionado` de abajo se suman a esa liga.
 El compactador anade `— _relacionado: X, Y_` a la linea de Tier 2 (no a la fila mensual, igual que
 `_bloqueado`). No cambia el id. Consumidor: `print-como-retomar.py` mete en el snippet de Step 8 una
-linea `Si ese paso es corto, suma en la misma sesion: …` con hasta 2 Alta/Media abiertos ligados
-al `Proximo paso:`, de cualquier sesion y en cualquier direccion (`pendientes_afines.py`). Sin el
+linea `Si ese paso es corto, suma en la misma sesion: …` con hasta 2 del hilo fuera del paso
+(Alta > Media > Baja; la Baja solo si no queda Alta ni Media), y debajo `quedan N en el hilo: <ids>`
+(2.57.0, `pendientes_afines.py`). El hilo incluye lo ligado al `Proximo paso:`, de cualquier sesion
+y en cualquier direccion. Sin el
 campo, un Media dejado junto a un Alta no vuelve a ningun snippet salvo que venza (medido en las 8
 ultimas fichas de dos proyectos, 2026-10-13). Para ligar uno que ya existe:
 `journal-emit.py --type pendiente.relate --id p-… --relacionado X [--relacionado Y]` (reemplaza la
@@ -1245,6 +1253,22 @@ else
   echo "stamped=0 reason=sin-STAMP-o-sin-CLAUDE_CODE_SESSION_ID"
 fi
 ```
+
+**Despues, sella lo que la sesion recibio (2.57.0, p-b282a8cfc4).** Mismo `$JSONL_DIR`, mismo id:
+
+```bash
+HILO="$(dirname "$STAMP")/stamp-hilo.py"
+if [ -f "$HILO" ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+  python3 "$HILO" "$SESSION_FILE" --session-id "$CLAUDE_CODE_SESSION_ID" --jsonl-dir "$JSONL_DIR"
+fi
+```
+
+Lee el primer mensaje de la transcripcion; si es un snippet `Retomamos:`, escribe en el
+frontmatter `hilo_paso`, `hilo_heredados` (los ids del paso, de la linea de extras y
+de `quedan N en el hilo`) y `hilo_saltos` (cuantas sesiones seguidas lleva cada heredado sin ser el
+paso). Es lo que leen `print-como-retomar.py` y `checkpoint-audit.py` (`snippet.hilo`) en el Step 8:
+una sola lectura de la transcripcion, para que el hook de cierre, que vuelve a correr esos scripts,
+vea lo mismo. Sin `Retomamos:` no sella nada (`sellado=0`), y no pisa un sello ya puesto.
 
 `CLAUDE_CODE_SESSION_ID` **no esta documentada**. Se midio en esta instalacion (2026-09-12: su
 valor coincide con el nombre del `.jsonl` en curso) y no se ha comprobado en otras versiones, en
