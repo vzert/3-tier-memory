@@ -14,6 +14,11 @@ export type Pendiente = {
   motivo: string
   revisar: string | null
   creado: string | null
+  // Que leer para retomarlo: rutas memory/... de su _origen que existen; si ninguna, el _origen
+  // tal cual; y los valores de su _relacionado. Opcionales: un estado anterior a 0.2.1 no los trae.
+  origen?: string[]
+  origen_texto?: string | null
+  relacionado?: string[]
 }
 
 export type Ahora = {
