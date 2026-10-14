@@ -32,7 +32,8 @@ PEND = """# Pendientes
 - [ ] Ligado al paso — _creado: 2026-10-10_ — _id: p-bbbbbbbbbb_
 - [ ] Media vencida nueva — _creado: 2026-09-01_ — _id: p-9999999999_ — _revisar: 2026-10-10_
 - [ ] Media vencida vieja — _creado: 2026-09-01_ — _id: p-8888888888_ — _revisar: 2026-09-20_
-- [ ] Media vencida otra — _creado: 2026-09-01_ — _id: p-0000000000_ — _revisar: 2026-10-11_
+- [ ] Media vencida otra — _origen: [[../fuera]], foo — bar_ — _creado: 2026-09-01_ — _id: p-0000000000_ — _revisar: 2026-10-11_
+- [x] Media vencida otra, cerrada — _origen: [[sessions/2026-10-13-b]]_ — _id: p-0000000000_ — _relacionado: p-aaaaaaaaaa_
 
 ## Baja prioridad
 
@@ -65,6 +66,8 @@ def main():
         mem = os.path.join(tmp, "memory")
         os.makedirs(os.path.join(mem, "sessions"))
         os.makedirs(os.path.join(mem, "plans"))
+        with open(os.path.join(tmp, "fuera.md"), "w", encoding="utf-8") as fh:
+            fh.write("# fuera de memory/\n")
         with open(os.path.join(mem, "plans", "plan-x.md"), "w", encoding="utf-8") as fh:
             fh.write("# plan x\n")
         with open(os.path.join(mem, "_pendientes.md"), "w", encoding="utf-8") as fh:
@@ -88,6 +91,8 @@ def main():
               ctx.get("p-4444444444") == ([], "barrido A04", []))
         check("contexto: una ficha que ya no existe no se pega como ruta",
               ctx.get("p-5555555555") == ([], "[[sessions/2026-01-01-borrada]]", []))
+        check("contexto: fuera de memory/ no es ruta; la raya dentro del valor no lo corta; un [x] no pisa",
+              ctx.get("p-0000000000") == ([], "[[../fuera]], foo — bar", []))
         check("contexto: sin _origen ni _relacionado, vacio",
               ctx.get("p-7777777777") == ([], None, []))
         if not d["lib"]["hilo"]:

@@ -139,7 +139,9 @@ def dias_vencido(revisar, hoy):
 # Contexto que el clic pega con el pendiente: la ficha (o plan, research) de _origen y los ids/planes
 # de _relacionado. Se leen de la linea, no de la biblioteca: la de 3-tier-memory < 2.57.0 no trae
 # `origen`, y la de 2.57.0 solo lo trae si es una ficha de sessions/.
-CAMPO = r"—\s*_{}:\s*(.*?)_?\s*(?=—|$)"
+# El campo acaba donde empieza el siguiente ("— _nombre:"), no en cualquier raya: un valor puede
+# llevar una.
+CAMPO = r"—\s*_{}:\s*(.*?)_?\s*(?=—\s*_[^\s_:]+:|$)"
 ORIGEN_CAMPO = re.compile(CAMPO.format("origen"))
 RELACIONADO_CAMPO = re.compile(CAMPO.format("relacionado"))
 # [[sessions/x]], [[plans/plan-x|alias]] o una ruta suelta sessions/x(.md)
@@ -150,10 +152,12 @@ ID_LINEA = re.compile(r"_id:\s*(p-[0-9a-f]{10})")
 def contexto_por_id(pend_path, memory_dir):
     """{id: {"origen": [rutas memory/... que existen], "relacionado": [...]}} de _pendientes.md."""
     out = {}
+    raiz = os.path.realpath(memory_dir)
     with open(pend_path, encoding="utf-8") as fh:
         for linea in fh:
             s = linea.strip()
-            m = ID_LINEA.search(s) if s.startswith("- [") else None
+            # Solo abiertos: un "- [x]" con el mismo id no pisa el contexto del abierto.
+            m = ID_LINEA.search(s) if s.startswith("- [ ]") else None
             if not m:
                 continue
             origen = []
@@ -161,8 +165,12 @@ def contexto_por_id(pend_path, memory_dir):
             for a, b in DESTINO.findall(mo.group(1)) if mo else []:
                 rel = (a or b).strip()
                 rel = rel if rel.endswith(".md") else rel + ".md"
-                ruta = "memory/" + rel
-                if ruta not in origen and os.path.isfile(os.path.join(memory_dir, rel)):
+                # Solo archivos dentro de memory/: un [[../x]] o una ruta absoluta van como texto.
+                real = os.path.realpath(os.path.join(raiz, rel))
+                if os.path.commonpath([raiz, real]) != raiz or not os.path.isfile(real):
+                    continue
+                ruta = "memory/" + os.path.relpath(real, raiz).replace(os.sep, "/")
+                if ruta not in origen:
                     origen.append(ruta)
             mr = RELACIONADO_CAMPO.search(s)
             relacionado = [x.strip() for x in mr.group(1).split(",") if x.strip()] if mr else []
