@@ -718,7 +718,7 @@ SIN=$(corre "$T/t.jsonl" false -)
 chk "el archivo es igual al aviso de antes (fuera de git va entero en el reason)" "1" "$(python3 -c '
 import json,sys
 a=json.loads(sys.argv[1])["reason"]; b=json.loads(sys.argv[2])["reason"]
-print(int(a.rstrip("\n")==b))' "$O" "$SIN")"
+print(int(a==b))' "$O" "$SIN")"
 chk "fuera de git el aviso entero sigue en el reason" "9" "$(razon_corta "$SIN" | grep -cE '^[1-9]\. ')"
 echo "== 2.59.0: el Stop reentrante borra el archivo solo con la revision contestada =="
 corre_en "$T/t.jsonl" true - "$R" >/dev/null

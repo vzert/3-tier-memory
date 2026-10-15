@@ -924,7 +924,7 @@ else:
     try:
         aviso, corto = ruta_aviso()
         with open(aviso, "w", encoding="utf-8") as f:
-            f.write(completo + "\n")
+            f.write(completo)
         n = len(problemas)
         que = [f"{n} problema(s) del cierre"] if n else []
         que += ["la revision del cierre"] if pedir_revision else []
