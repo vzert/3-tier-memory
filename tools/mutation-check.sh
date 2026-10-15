@@ -26,7 +26,51 @@ SRC="plugins/3-tier-memory/bin"
 MUT="tools/mutaciones"
 PEND=0; TOTAL=0
 
+# Tandas en paralelo (MUT_JOBS=N). Por que: con 227 casos en serie el arnes paso de ~2,5 min a 41 min
+# en ubuntu y 2 h en Windows: era el 90 % del CI (corrida 38614552222, 2026-10-14). Cada caso ya
+# trabaja en su propio mktemp, asi que se reparten por turno: la tanda k corre los casos k, k+N...
+# Sin MUT_JOBS (o con 1) corre en serie, como siempre. Los titulos de seccion salen una vez por tanda.
+JOBS="${MUT_JOBS:-1}"
+case "$JOBS" in ''|*[!0-9]*|0) JOBS=1 ;; esac
+if [ "$JOBS" -gt 1 ] && [ -z "${MUT_SHARD:-}" ]; then
+  W=$(mktemp -d); k=0
+  while [ "$k" -lt "$JOBS" ]; do
+    MUT_SHARD="$k/$JOBS" bash "$0" > "$W/$k" 2>&1 &
+    k=$(( k + 1 ))
+  done
+  wait
+  P=0; T=0; k=0; MALAS=0
+  while [ "$k" -lt "$JOBS" ]; do
+    echo "== tanda $(( k + 1 )) de $JOBS =="
+    ult=$(tail -1 "$W/$k" | tr -d '\r')
+    sed '$d' "$W/$k"
+    # La ultima linea de cada tanda es su resumen. Otra cosa = la tanda murio a mitad: FALLA.
+    if n=$(printf '%s' "$ult" | sed -nE 's/^LAS EVALUABLES DISCRIMINAN \(de ([0-9]+)\)$/\1/p') && [ -n "$n" ]; then
+      T=$(( T + n ))
+    elif printf '%s' "$ult" | grep -qE '^SIN ACLARAR: [0-9]+ de [0-9]+$'; then
+      P=$(( P + $(printf '%s' "$ult" | sed -E 's/^SIN ACLARAR: ([0-9]+) de.*/\1/') ))
+      T=$(( T + $(printf '%s' "$ult" | sed -E 's/.* de ([0-9]+)$/\1/') ))
+    else
+      echo "  !! la tanda $(( k + 1 )) no termino con su resumen: «$ult»"; MALAS=$(( MALAS + 1 ))
+    fi
+    k=$(( k + 1 ))
+  done
+  rm -rf "$W"
+  echo
+  if [ "$MALAS" -gt 0 ]; then echo "TANDAS ROTAS: $MALAS de $JOBS"; exit 1; fi
+  if [ "$P" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $T)"; else echo "SIN ACLARAR: $P de $T"; fi
+  exit $(( P > 0 ))
+fi
+IDX=-1
+# Dentro de una tanda: 0 si este caso le toca, 1 si es de otra.
+mio() {
+  IDX=$(( IDX + 1 ))
+  [ -z "${MUT_SHARD:-}" ] && return 0
+  [ $(( IDX % ${MUT_SHARD#*/} )) -eq "${MUT_SHARD%/*}" ]
+}
+
 caso() {  # etiqueta | fichero a mutar | mutador | suite | aserto que DEBE caer | [arg del mutador]
+  mio || return 0
   local et="$1" f="$2" m="$3" suite="$4" espera="$5" arg="${6:-}"
   local D; D=$(mktemp -d)/bin; mkdir -p "$D"; cp "$SRC"/* "$D/" 2>/dev/null
   # templates/ y commands/ junto a bin/, como en el plugin: test-project-dir-fallback.sh recorre el
@@ -67,6 +111,7 @@ caso() {  # etiqueta | fichero a mutar | mutador | suite | aserto que DEBE caer 
 # Igual que caso(), pero para un script de tools/ (no de bin/): muta una copia de tools/<f> y corre
 # la suite de tools/ con RUN_TESTS apuntando a la copia.
 caso_tools() {  # etiqueta | fichero de tools/ | mutador | suite de tools/ | aserto | arg
+  mio || return 0
   local et="$1" f="$2" m="$3" suite="$4" espera="$5" arg="${6:-}"
   local D; D=$(mktemp -d); cp "tools/$f" "$D/$f"
   TOTAL=$(( TOTAL + 1 ))

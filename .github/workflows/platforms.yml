@@ -1,0 +1,55 @@
+name: platforms
+
+# macOS y Windows, separados de tests.yml el 2026-10-14. Encuentran lo que ubuntu no ve (acentos
+# rotos en Windows, rutas MSYS, bash 3.2 en macOS), pero cada corrida tardaba 1,5-2,5 h y hoy hubo
+# 6 merges a main. Corren cuando sale una version (un push a main que cambia plugin.json o
+# marketplace.json) y a mano: Actions -> platforms -> Run workflow, o
+#   gh workflow run platforms.yml --ref <rama>
+# Lanzalo a mano en un PR que toque rutas, codificacion o hooks antes del merge.
+#
+# Sin tools/mutation-check.sh (RUN_MUTATION=0): mide si los asertos discriminan, y eso ya lo mide
+# ubuntu. Sale como saltado en el resumen, no como verde.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.claude-plugin/marketplace.json'
+      - 'plugins/*/.claude-plugin/plugin.json'
+  workflow_dispatch:
+
+concurrency:
+  group: platforms-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  suites:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false   # que una plataforma no oculte el resultado de la otra
+      matrix:
+        # Windows corre con Git Bash, y sus 3 casos no construibles alli (las ACL de NTFS frente a
+        # `chmod`, un `bash.exe` sin sus DLL, el pty) se SALTAN Y SE CUENTAN, no se dan por buenos.
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: version de las herramientas
+        shell: bash
+        run: |
+          uname -s
+          bash --version | head -1
+          python3 --version
+          git --version
+      - name: oraculo (markdown-it-py)
+        shell: bash
+        run: |
+          python3 -m pip install --user markdown-it-py \
+            || python3 -m pip install --user --break-system-packages markdown-it-py
+          python3 -c "import markdown_it; print('markdown-it-py', markdown_it.__version__)"
+      - name: suites
+        shell: bash
+        env:
+          RUN_MUTATION: '0'
+        run: bash tools/run-tests.sh
