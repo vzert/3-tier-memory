@@ -15,6 +15,9 @@ on:
     paths:
       - '.claude-plugin/marketplace.json'
       - 'plugins/*/.claude-plugin/plugin.json'
+  # Un PR que edita este workflow lo ve correr: workflow_dispatch solo existe una vez en main.
+  pull_request:
+    paths: ['.github/workflows/platforms.yml']
   workflow_dispatch:
 
 concurrency:
