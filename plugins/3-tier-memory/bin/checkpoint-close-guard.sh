@@ -835,6 +835,42 @@ if pedir_revision and reentrante and not revision_contestada():
                      + str(len(REVISION_ITEMS)) + " lineas). Preguntale al agente \"¿falto algo de "
                      "tu checkpoint?\" antes de dar el cierre por bueno.")
 
+def ruta_aviso():
+    """(absoluta, relativa a la raiz) del archivo con el aviso completo (2.59.0). Siempre DENTRO del
+    proyecto: un Read fuera de los directorios de trabajo pide permiso, o se niega con
+    `blockReadsOutsideWorkingDirectories` (adversarios de 2.59.0; la primera version lo dejaba junto
+    al transcript). En un checkout normal va en `.git/`, que git no versiona. En un worktree su
+    `.git` es un archivo y su git-dir vive fuera, asi que va en la raiz del worktree y se excluye
+    en `info/exclude` (comun a todos los worktrees). Sin git, lanza: el aviso vuelve entero."""
+    def git(*a):
+        return subprocess.run(["git", "-C", cwd, *a], capture_output=True, text=True,
+                              timeout=10, check=True).stdout.strip()
+    raiz = os.path.realpath(git("rev-parse", "--show-toplevel"))
+    gdir = os.path.realpath(git("rev-parse", "--absolute-git-dir"))
+    nombre = "3t-revision-cierre-" + (re.sub(r"[^A-Za-z0-9_-]", "-", SID)[:12] or "sin-sesion") + ".md"
+    if gdir.startswith(raiz + os.sep):
+        return os.path.join(gdir, nombre), os.path.relpath(os.path.join(gdir, nombre), raiz)
+    excl = git("rev-parse", "--git-path", "info/exclude")
+    excl = excl if os.path.isabs(excl) else os.path.join(raiz, excl)
+    patron = "/.3t-revision-cierre-*.md"
+    try:
+        actual = open(excl, encoding="utf-8").read()
+    except FileNotFoundError:
+        actual = ""
+    if patron not in actual.splitlines():
+        os.makedirs(os.path.dirname(excl), exist_ok=True)
+        with open(excl, "a", encoding="utf-8") as f:
+            f.write(("" if not actual or actual.endswith("\n") else "\n") + patron + "\n")
+    return os.path.join(raiz, "." + nombre), "." + nombre
+
+
+if reentrante:
+    # El aviso de 2.59.0 ya tuvo su turno para leerse: se borra, para no dejar uno por sesion.
+    try:
+        os.remove(ruta_aviso()[0])
+    except Exception:
+        pass
+
 if not problemas and not (pedir_revision and not reentrante):
     sys.exit(0)
 
@@ -873,16 +909,14 @@ else:
     completo = "\n\n".join(partes)
     # El aviso completo va a un archivo y el `reason` solo lo senala (2.59.0). Un Stop no tiene
     # campo que separe lo que ve el humano de lo que ve el modelo: `reason` y `additionalContext`
-    # salen enteros en la terminal como "Stop hook feedback", y eran ~2.000 caracteres en cada
-    # /checkpoint-3t. El bloqueo se queda en el Stop a proposito: la revision funciona porque
+    # salen enteros en la terminal como "Stop hook feedback", y eran ~2.000-2.800 caracteres en
+    # cada /checkpoint-3t. El bloqueo se queda en el Stop a proposito: la revision funciona porque
     # llega como turno nuevo (ver arriba, 62 de 66), y entregarla antes, a mitad del turno, es el
-    # antiguo Step 7b que se contestaba como tramite. El archivo vive junto al transcript (el
-    # STATE_DIR de rule-reinject-count.sh): por maquina, nunca se commitea, uno por sesion. Si no
-    # se puede escribir, el aviso entero vuelve a `reason`, como antes: nunca se pierde.
+    # antiguo Step 7b que se contestaba como tramite. Si no se puede escribir, el aviso entero
+    # vuelve a `reason`, como antes: nunca se pierde.
     reason = completo
     try:
-        sid = re.sub(r"[^A-Za-z0-9_-]", "-", SID) or "sin-sesion"
-        aviso = os.path.join(os.path.dirname(os.path.abspath(tpath)), f".revision-cierre-{sid}.md")
+        aviso, corto = ruta_aviso()
         with open(aviso, "w", encoding="utf-8") as f:
             f.write(completo + "\n")
         n = len(problemas)
@@ -890,8 +924,13 @@ else:
         que += ["la revision del cierre"] if pedir_revision else []
         reason = (f"/checkpoint-3t: falta {' y '.join(que)}. Lee con Read `{aviso}` y haz lo que "
                   "dice antes de terminar.")
+        if len(reason) > 300:
+            # Una ruta de proyecto muy larga: la forma relativa a la raiz del repo mantiene el aviso
+            # corto (adversario externo de 2.59.0: 469 caracteres con una ruta larga).
+            reason = (f"/checkpoint-3t: falta {' y '.join(que)}. Lee con Read `{corto}` (desde la "
+                      "raiz del repo) y haz lo que dice antes de terminar.")
     except Exception:
-        pass
+        reason = completo
     print(json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False))
 sys.exit(0)
 PY

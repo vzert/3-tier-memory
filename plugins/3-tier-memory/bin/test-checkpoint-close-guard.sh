@@ -128,13 +128,14 @@ corre() {   # $1 transcript, $2 reentrante (true|false), $3 last_assistant_messa
 # sigue midiendo el texto que recibe el agente, y `razon_corta` mide lo que ve el humano. Si el
 # puntero no casa, el reason se queda corto y los asertos de contenido fallan (no pasa en silencio).
 expande() { python3 -c '
-import json,re,sys
+import json,os,re,sys
 d=sys.stdin.read()
 if not d.strip(): sys.exit(0)
 j=json.loads(d)
 m=re.search(r"Lee con Read `([^`]+)`", j.get("reason") or "") if j.get("decision")=="block" else None
 if m:
-    j["puntero"]=j["reason"]; j["reason"]=open(m.group(1),encoding="utf-8").read()
+    ruta=m.group(1) if os.path.isabs(m.group(1)) else os.path.join(os.environ.get("RAIZ_EXP",""),m.group(1))
+    j["puntero"]=j["reason"]; j["reason"]=open(ruta,encoding="utf-8").read()
 print(json.dumps(j,ensure_ascii=False))'; }
 bloquea() { printf '%s' "$1" | grep -c '"decision": "block"' || true; }
 
@@ -674,7 +675,7 @@ fecha30() { python3 -c 'import sys;p=sys.argv[1];t=open(p,encoding="utf-8").read
 corre_en() {   # $1 transcript, $2 reentrante, $3 fichero de last_assistant_message ("-"), $4 cwd
   local LAM=""; [ "$3" != "-" ] && LAM="$(cat "$3")"
   python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":sys.argv[2]=="true","last_assistant_message":sys.argv[3],"cwd":sys.argv[4]}))' "$1" "$2" "$LAM" "$4" \
-    | bash "$HOOK" 2>/dev/null | expande
+    | bash "$HOOK" 2>/dev/null | RAIZ_EXP="$4" expande
 }
 razon() { printf '%s' "$1" | python3 -c 'import json,sys;d=sys.stdin.read();j=json.loads(d) if d.strip() else {};print(j.get("reason") or j.get("systemMessage") or "")'; }
 # Lo que ve el humano en la terminal (2.59.0): el `reason` tal como lo imprimio el hook.
@@ -701,17 +702,48 @@ chk "con la cabecera de la revision" "1" "$(razon "$O" | grep -c '^REVISION DEL 
 chk "con sus 9 lineas numeradas" "9" "$(razon "$O" | grep -cE '^[1-9]\. ')"
 chk "dice que ninguno vale" "1" "$(razon "$O" | grep -c 'no inventes para llenar')"
 chk "trae la lista de lo que no cuenta" "1" "$(razon "$O" | grep -c 'No cuenta como falta')"
-echo "== 2.59.0: lo que ve el humano es una linea; el aviso completo esta en el archivo =="
+echo "== 2.59.0: en un repo git, lo que ve el humano es una linea; el aviso completo esta en .git/ =="
+# Las rutas se comparan por el NOMBRE del archivo: en Windows el hook las escribe normalizadas
+# (C:\...) y $T es /tmp/... (ver mas abajo, CI de f795efc).
+R="$T/repo"; mkdir -p "$R"; git -C "$R" init -q
+O=$(corre_en "$T/t.jsonl" false - "$R")
+chk "bloquea" "1" "$(bloquea "$O")"
 chk "el reason visible mide 300 caracteres o menos" "1" "$(razon_corta "$O" | python3 -c 'import sys;print(int(len(sys.stdin.read().strip())<=300))')"
 chk "el reason visible no trae la lista" "0" "$(razon_corta "$O" | grep -c 'No cuenta como falta')"
-chk "el reason visible senala el archivo junto al transcript" "1" "$(razon_corta "$O" | grep -cF "Lee con Read \`$T/.revision-cierre-")"
-chk "el archivo trae el cierre al final" "1" "$(razon "$O" | grep -c 'termina tu respuesta con el cierre')"
+chk "el reason visible senala el archivo en .git" "1" "$(razon_corta "$O" | grep -cE 'Lee con Read `[^`]*[\\/]\.git[\\/]3t-revision-cierre-sin-sesion\.md`')"
+chk "el archivo existe en .git del repo" "1" "$([ -f "$R/.git/3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
+chk "el archivo trae la revision y el cierre al final" "2" "$(razon "$O" | grep -cE '^REVISION DEL CIERRE:$|termina tu respuesta con el cierre')"
+# C1': el archivo trae, byte a byte, lo que el reason traia antes (el mismo turno fuera de git).
+SIN=$(corre "$T/t.jsonl" false -)
+chk "el archivo es igual al aviso de antes (fuera de git va entero en el reason)" "1" "$(python3 -c '
+import json,sys
+a=json.loads(sys.argv[1])["reason"]; b=json.loads(sys.argv[2])["reason"]
+print(int(a.rstrip("\n")==b))' "$O" "$SIN")"
+chk "fuera de git el aviso entero sigue en el reason" "9" "$(razon_corta "$SIN" | grep -cE '^[1-9]\. ')"
+echo "== 2.59.0: el Stop reentrante borra el archivo =="
+corre_en "$T/t.jsonl" true - "$R" >/dev/null
+chk "borrado" "0" "$([ -f "$R/.git/3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
+echo "== 2.59.0: en un worktree va en su raiz y queda excluido de git =="
+git -C "$R" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
+WT="$T/wt"; git -C "$R" worktree add -q "$WT" -b wt-prueba
+O=$(corre_en "$T/t.jsonl" false - "$WT")
+chk "el archivo esta en la raiz del worktree" "1" "$([ -f "$WT/.3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
+chk "git no lo ve (info/exclude)" "0" "$(git -C "$WT" status --porcelain | grep -c 3t-revision)"
+chk "el reason senala el archivo del worktree" "1" "$(razon_corta "$O" | grep -c '\.3t-revision-cierre-sin-sesion\.md`')"
+corre_en "$T/t.jsonl" false - "$WT" >/dev/null
+chk "info/exclude no repite el patron" "1" "$(grep -c '^/\.3t-revision-cierre-\*\.md$' "$R/.git/info/exclude")"
+echo "== 2.59.0: con una ruta de proyecto muy larga, la forma relativa mantiene el aviso corto =="
+L="$T/$(python3 -c 'print("/".join(["directorio-con-nombre-largo-%02d" % i for i in range(8)]))')"
+mkdir -p "$L"; git -C "$L" init -q
+O=$(corre_en "$T/t.jsonl" false - "$L")
+chk "ruta larga: reason de 300 o menos" "1" "$(razon_corta "$O" | python3 -c 'import sys;print(int(len(sys.stdin.read().strip())<=300))')"
+chk "ruta larga: usa la ruta relativa a la raiz" "1" "$(razon_corta "$O" | grep -c 'desde la raiz del repo')"
 echo "== 2.59.0: si el archivo no se puede escribir, el aviso entero vuelve al reason =="
-rm -f "$T/.revision-cierre-sin-sesion.md"; mkdir "$T/.revision-cierre-sin-sesion.md"
-O2=$(corre "$T/t.jsonl" false -)
+mkdir "$R/.git/3t-revision-cierre-sin-sesion.md"
+O2=$(corre_en "$T/t.jsonl" false - "$R")
 chk "bloquea igual" "1" "$(bloquea "$O2")"
 chk "el reason trae la revision entera" "9" "$(razon_corta "$O2" | grep -cE '^[1-9]\. ')"
-rmdir "$T/.revision-cierre-sin-sesion.md"
+rmdir "$R/.git/3t-revision-cierre-sin-sesion.md"
 echo "== 2.42.0: la vuelta siguiente (stop_hook_active) sin el bloque contestado: avisa al usuario, no bloquea =="
 O=$(corre "$T/t.jsonl" true -)
 chk "no bloquea" "0" "$(bloquea "$O")"
