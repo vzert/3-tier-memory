@@ -37,6 +37,17 @@ M = {
     # checkpoint-audit.py
     "audit-todos-los-ids": [("citados = ID_PENDIENTE.findall(pp)[:1]", "citados = ID_PENDIENTE.findall(pp)")],
     "audit-sin-hilo": [('if mejor is not None and mejor <= rango[primero["id"]]:', "if True:")],
+    # El marco del Proximo paso (2.60.0): pendientes_afines.senales_marco, el audit y el hook.
+    "marco-sin-espera": [("m = ESPERA_AJENA.search(_sin_tildes(paso))", "m = None")],
+    "marco-sin-ids": [("    if len(ids) >= 2:", "    if len(ids) >= 99:")],
+    "marco-con-ver-tambien": [('ids = sorted(set(ID_P.findall(VER_TAMBIEN.sub("", paso))))', "ids = sorted(set(ID_P.findall(paso)))")],
+    "marco-sin-lista": [("if len(set(ITEM_LISTA.findall(paso))) >= 2:", "if False:")],
+    "marco-sin-largo": [("    if len(paso) > LARGO_AVISO:", "    if False:")],
+    "marco-con-tildes": [("m = ESPERA_AJENA.search(_sin_tildes(paso))", "m = ESPERA_AJENA.search(paso)")],
+    "marco-primera-linea": [("senales = af.senales_marco(entero)", "senales = af.senales_marco(pp)")],
+    "marco-saltado": [('h.append(Hallazgo(DISENO, "snippet.marco",', 'h.append(Hallazgo(SALTADO, "snippet.marco",')],
+    "marco-con-ninguno": [('            and not pp.lower().startswith(("ninguno", "nada accionable")):', "            and True:")],
+    "guard-sin-marco": [("        if avisos_marco:", "        if False:")],
 }
 
 p, nombre = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""

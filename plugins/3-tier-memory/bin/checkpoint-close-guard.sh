@@ -397,6 +397,10 @@ REVISION_CABECERA = "REVISION DEL CIERRE:"
 # reentrante los mide solo en el texto posterior a `REVISION DEL CIERRE:`.
 cierre_final = []   # lo que la revision pide pegar al final (primer cierre)
 anexo = []          # lo que falto al final, para mostrarselo al usuario (cierre reentrante)
+# Avisos `snippet.marco` del audit (2.60.0): POR-DISENO, no bloquean por si solos. Viajan dentro de
+# la revision del cierre, que ya bloquea una vez, para que el agente rehaga el `Proximo paso` o diga
+# por que se queda. Sin esto nadie los leia: Step 8 escribe el snippet despues de Step 7a.
+avisos_marco = []
 presentes = []      # (orden, lineas, texto) de cada bloque del cierre, para medir orden y cola
 # Texto tolerado DESPUES del ultimo bloque del cierre: los separadores `───` que imprimen los
 # scripts y una linea corta. Mas que eso ya empuja el cierre hacia arriba (adversario de 2.43.0:
@@ -659,6 +663,8 @@ def revisar(ficha):
             if x.get("estado") == "SALTADO":
                 detalle = "; ".join(x.get("lineas") or []) or x.get("detalle", "")
                 problemas.append(pref + f"checkpoint-audit.py {x['clave']}: {x['detalle']} — {detalle}")
+            elif x.get("clave") == "snippet.marco" and x.get("estado") != "HECHO":
+                avisos_marco.extend(pref + l for l in (x.get("lineas") or [x.get("detalle", "")]))
     except Exception:
         pass
 
@@ -904,6 +910,12 @@ else:
             + REVISION_CABECERA + "\n"
             + "\n".join(f"{n}. {t}:" for n, t in enumerate(REVISION_ITEMS, 1))
             + "\nNo cuenta como falta (lo ordena el skill): " + POR_DISENO + ".")
+        if avisos_marco:
+            partes.append(
+                "Avisos del marco del `Proximo paso` (checkpoint-audit.py snippet.marco; no bloquean, "
+                "son redes de formato y pueden fallar). Para cada uno, rehaz el paso en la ficha y en "
+                "el snippet, o di en la linea " + str(len(REVISION_ITEMS)) + " de la revision por que "
+                "se queda asi:\n" + "\n".join(f"- {a}" for a in avisos_marco))
         if cierre_final:
             # Al final y una sola vez: se generan DESPUES de la revision, asi que ya reflejan lo que
             # corregiste en ella, y quedan como lo ultimo que ve el usuario.

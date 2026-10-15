@@ -1245,5 +1245,31 @@ txr "$T/tr.jsonl" "ck:Uno,ck:Uno"
 chk "re-checkpoint con el mismo encabezado en los dos checkpoints: no lo reclama" "0" "$(corre "$T/tr.jsonl" false - | grep -c 'candidatos_pregunta')"
 mv "$FC.bak" "$FC"
 
+echo "== 2.60.0: los avisos snippet.marco viajan en la revision del cierre, sin bloquear por si solos =="
+# marco_ficha PASO: la ficha demo con fecha 2026-10-14 (DESDE_MARCO) y ese `Proximo paso`.
+marco_ficha() {
+  printf 'Retomamos: demo.\n\nLee memory/sessions/2026-09-22-demo.md para el contexto completo.\n\nProximo paso: %s\n\nAntes de actuar, dime en 3 lineas donde quedamos.\n' "$1" > "$T/sn-marco.txt"
+  armar "$M" "$T/sn-marco.txt"
+  python3 -c 'import sys;p=sys.argv[1];t=open(p,encoding="utf-8").read();open(p,"w",encoding="utf-8").write(t.replace("date: 2026-09-22","date: 2026-10-14",1))' "$F"
+  tx "$T/t.jsonl" skill "$F" - -
+}
+# En un repo git, como en una sesion real: la revision (con los avisos) va al archivo de 2.59.0 y
+# el reason visible solo lo senala. `corre` usa cwd=/tmp, fuera de git, donde el aviso entero se
+# queda en el reason: ese camino es el respaldo y se mide aparte al final.
+RM="$T/repo-marco"; rm -rf "$RM"; mkdir -p "$RM"; git -C "$RM" init -q
+AM="$RM/.git/3t-revision-cierre-sin-sesion.md"
+marco_ficha "resolver de raiz si Victor lo decide (p-daf3051915)."
+OJ=$(corre_en "$T/t.jsonl" false - "$RM")
+chk "el reason visible senala el archivo y no trae los avisos" "1 0" "$(razon_corta "$OJ" | grep -c 'Lee con Read') $(razon_corta "$OJ" | grep -c 'Avisos del marco')"
+chk "el archivo de la revision trae el bloque de avisos del marco" "1" "$(grep -c '^Avisos del marco del `Proximo paso`' "$AM" 2>/dev/null)"
+chk "con la senal concreta" "1" "$(grep -c '^- espera una decision o accion de fuera de la sesion ("si Victor lo decide")' "$AM" 2>/dev/null)"
+chk "y no la cuenta como falta del cierre" "0" "$(grep -c 'checkpoint-audit.py snippet.marco:' "$AM" 2>/dev/null)"
+chk "remite a la ultima linea de la revision" "1" "$(grep -c 'di en la linea 9 de la revision' "$AM" 2>/dev/null)"
+marco_ficha "resolver de raiz (p-daf3051915)."
+corre_en "$T/t.jsonl" false - "$RM" >/dev/null
+chk "paso limpio: el archivo existe y no trae bloque de avisos" "1 0" "$([ -f "$AM" ] && echo 1 || echo 0) $(grep -c 'Avisos del marco' "$AM" 2>/dev/null)"
+marco_ficha "resolver de raiz si Victor lo decide (p-daf3051915)."
+chk "fuera de git (respaldo): los avisos van en el reason" "1" "$(razon "$(corre "$T/t.jsonl" false -)" | grep -c '^Avisos del marco del `Proximo paso`')"
+
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
