@@ -1670,10 +1670,15 @@ def apply_reopen(mem, p):
     path = os.path.join(mem, "_pendientes.md")
     lines = read_lines(path)
     viva = find_id_line(lines, p["id"]) is not None
-    if ya_anotado and not viva:
+    # `reanuda`: este reopen ya anoto como revertido EL MISMO cierre que sigue archivado, o sea una
+    # pasada anterior murio entre anotar y escribir el indice (kill, corte, OOM: escribir_anotado
+    # solo anula ante una excepcion). Hay que terminarla, no archivarla como replay: eso perdia el
+    # reopen dado por aplicado (adversario de 2.58.1, ronda 2; 2.58.0 si lo reabria).
+    reanuda = ya_anotado and fue_revertido(mem, p["id"], ev_archivado)
+    if ya_anotado and not viva and not reanuda:
         # Replay de este reopen despues de un cierre NUEVO del mismo pendiente: la linea archivada
-        # es la de ese cierre. Sin esto se reabria en silencio (p-c577d64793). Mismo guardia que
-        # apply_plan_reopen.
+        # es la de ese cierre, que este reopen no revirtio. Sin esto se reabria en silencio
+        # (p-c577d64793). Mismo guardia que apply_plan_reopen.
         return False
     # Comparar por ORDEN con el cierre archivado (su ts va en `_ev:`): un cierre POSTERIOR a este
     # reopen es una decision mas nueva que la de reabrir, y el reopen no la deshace. Cubre tambien
@@ -1725,7 +1730,12 @@ def apply_reopen(mem, p):
         lines.insert(at, verbatim)
         if at + 1 < len(lines) and lines[at + 1].startswith("## "):
             lines.insert(at + 1, "")
-        escribir_anotado(mem, anotaciones, path, lines)
+        # Al reanudar, las anotaciones ya estan vivas: no se repiten (y si la escritura vuelve a
+        # fallar no se anulan, porque no son de esta pasada).
+        if reanuda:
+            atomic_write(path, lines)
+        else:
+            escribir_anotado(mem, anotaciones, path, lines)
 
     # Releer antes de borrar: entre medias pudo escribir otro. La entrada SALE del archivo —el
     # invariante que la bateria de expire/reopen defiende es que tras un reopen el item vive en

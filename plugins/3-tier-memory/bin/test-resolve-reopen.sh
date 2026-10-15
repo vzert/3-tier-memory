@@ -355,6 +355,28 @@ chk "no repite la anotacion del reopen" "1" "$(vivas "reopen-$ID")"
 chk "ni la del cierre" "1" "$(vivas "$ID")"
 chk "sin cuarentena" "0" "$(cuar)"
 
+echo "== 23. una pasada que murio ENTRE anotar y escribir el indice: el reintento reabre =="
+# Un kill no lanza excepcion: escribir_anotado no llega a anular, y las dos anotaciones quedan
+# vivas con el indice sin la linea. El reintento tiene que reconocer que el cierre archivado es el
+# MISMO que este reopen anoto como revertido y terminar, no archivarse como replay (adversario de
+# 2.58.1, ronda 2). Se simula escribiendo las dos anotaciones a mano antes de compactar.
+fixture; cerrar
+emit_cap --type pendiente.reopen --id "$ID"; REOPEN=$EV
+TSR=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["ts"])' "$REOPEN")
+C1=$(sed -n "s/.*_id: ${ID}_.*_ev: \([0-9]*\)_.*/\1/p" "$M/pendientes/_resueltos.md")
+mkdir -p "$M/.journal"
+printf '%s\t%s\t2026-10-14\n%s\t%s\t2026-10-14\n' "$ID" "$C1" "reopen-$ID" "$TSR" >> "$M/.journal/reabiertos.log"
+compact --quiet >/dev/null 2>&1 || true
+chk "el reintento reabre, byte a byte" "$L0" "$(linea "$ID")"
+chk "sale del archivo" "0" "$(arch "$ID")"
+chk "la fila mensual vuelve identica" "$F0" "$(fila "$ID")"
+chk "no repite la anotacion del reopen" "1" "$(vivas "reopen-$ID")"
+chk "ni la del cierre" "1" "$(vivas "$ID")"
+chk "sin cuarentena" "0" "$(cuar)"
+cerrar
+replay "$REOPEN"
+chk "y su replay tras un cierre nuevo sigue siendo noop" "0" "$(printf '%s' "$(linea "$ID")" | grep -c .)"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
