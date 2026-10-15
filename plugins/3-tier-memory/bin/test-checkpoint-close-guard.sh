@@ -742,8 +742,9 @@ chk "el reason senala el archivo del worktree" "1" "$(razon_corta "$O" | grep -c
 corre_en "$T/t.jsonl" false - "$WT" >/dev/null
 chk "info/exclude no repite el patron" "1" "$(grep -c '^\.3t-revision-cierre-\*\.md$' "$R/.git/info/exclude")"
 echo "== 2.59.0: con una ruta de proyecto muy larga, la forma relativa mantiene el aviso corto =="
-# La ruta crece hasta que la forma absoluta pase de 300 caracteres, y no mas: Windows no entra en
-# directorios de mas de ~260 (CI de 2.59.0: `fatal: cannot change to` con 8 niveles).
+# La ruta crece hasta que la forma absoluta pase de 300 caracteres, y no mas: en el runner
+# windows-latest del CI, sin rutas largas activadas (`LongPathsEnabled`, `core.longpaths`), git no
+# entro con 8 niveles (`fatal: cannot change to`, corrida 38684828958 de 2.59.0).
 L=$(python3 -c '
 import sys
 b = sys.argv[1]; i = 0
