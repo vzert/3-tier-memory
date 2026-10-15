@@ -155,7 +155,8 @@ Reglas para llenar los slots:
      falta el criterio. (El breadcrumb "hijo de <padre>" para este mismo plan ya se resuelve en la
      regla de `<contexto-1-linea>`, arriba — no se repite aqui.)
   2. **El primero del hilo** (2.57.0, p-b282a8cfc4, regla de Victor del 2026-10-13). Correlo:
-     `python3 "$JBIN/pendientes_afines.py" "$SESSION_FILE" --hilo`. El hilo es lo que la sesion
+     `python3 "$JBIN/pendientes_afines.py" "$SESSION_FILE" --hilo` (desde 2.61.0 marca
+     `[no va de extra: <motivo>]` lo que no saldra en la linea de extras; ver abajo). El hilo es lo que la sesion
      recibio en su snippet (sello de 5c-bis), lo que nacio en ella y lo que esta ligado a eso por
      `_relacionado`, en cualquier direccion y a cualquier distancia; solo lo que se puede hacer hoy.
      Orden: prioridad; en empate el nuevo antes que el heredado, salvo un heredado que lleva 2
@@ -172,7 +173,15 @@ Reglas para llenar los slots:
   sin depender de que alguien se acuerde. Nunca suma uno con `_bloqueado:`, con `_revisar` de hoy
   o futuro, ni (2.56.0) uno cuyo texto nombra una fecha `AAAA-MM-DD` posterior a hoy: eso no se
   puede hacer en la sesion siguiente (caso real: un pendiente Alta, "revision a 24 h desde el
-  2026-10-14", sumado el 2026-10-13). Si quieres que un pendiente viejo entre, ligalo en Step
+  2026-10-14", sumado el 2026-10-13). **Desde 2.61.0 tampoco suma de extra** (va a `quedan N`):
+  un id que tu snippet cita en `Terminas cuando:` o `No repitas:` (ya le diste un papel: "va
+  aparte", "va en la siguiente supervision"), una prueba que solo pasa en uso real ("confirmar en
+  vivo", "verificar en una instalacion real", "tras /reload-plugins") y uno que espera un OK o una
+  decision ("falta OK de Victor", "cuando Victor decida", "pedir permiso"). Es una red de formato
+  por palabras, decidida por Victor el 2026-10-15 sobre 35 extras medidos: los que se cerraron eran
+  todos tareas de codigo o doc, y los de espera o en vivo no cerraron ninguno y causaron las
+  preguntas. La via que cuenta sigue siendo el campo: `_bloqueado:` o `--revisar` al crearlo
+  (Step 3b). Si quieres que un pendiente viejo entre, ligalo en Step
   3a con `pendiente.relate`; no lo agregues a mano al snippet. Quien retoma decide si el paso es
   corto: ningun campo lo dice, y el script no lo adivina por el texto (regla 216).
 
