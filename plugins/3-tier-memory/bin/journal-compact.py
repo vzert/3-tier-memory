@@ -54,7 +54,7 @@ Fase 2 (sesiones, reglas, planes, research) — mismo principio, anclas de tabla
                    .journal/reabiertos.log ANTES de tocar el indice. Un plan.upsert que
                    retroceda el status (cerrado -> no cerrado) es noop con WARN, y el replay de
                    un cierre anterior al reopen tambien: reabrir solo se hace con este evento.
-                   Fila ya podada (2.60.3): la poda anota `poda-plan-<slug>` en reabiertos.log;
+                   Fila ya podada (2.61.1): la poda anota `poda-plan-<slug>` en reabiertos.log;
                    un plan.upsert con status no cerrado, sin fila, con ese registro y con el
                    frontmatter de plans/plan-<slug>.md en cerrado es noop con WARN. Para
                    reabrirlo se pone 'status: active' en el frontmatter y se reemite el upsert.
@@ -1013,7 +1013,7 @@ def anotar_reabierto(mem, pid, ev, que="la reapertura"):
     - `promote-<slug>` (planes, `plan.upsert --promote`): el ts del evento que promovio la fila
       (inline) del plan. `promote_inline_row` lo busca por igualdad: el replay de esa promocion,
       cuando la fila ya no esta, sigue como upsert normal en vez de ir a cuarentena.
-    - `poda-plan-<slug>` (planes, 2.60.3): el ts del evento cuya escritura podo la fila del plan
+    - `poda-plan-<slug>` (planes, 2.61.1): el ts del evento cuya escritura podo la fila del plan
       (0 si no traia). Solo cuenta que exista: `apply_plan_upsert` frena un upsert no cerrado sin
       fila si el plan tiene este registro Y su frontmatter dice cerrado (p-fb70d4600d).
 
@@ -3629,7 +3629,7 @@ def apply_plan_upsert(mem, p):
         anotaciones.append((f"promote-{slug}", ts, "la promocion"))
     # La poda deja registro (p-fb70d4600d): sin el, "no hay fila" no distingue un plan podado de uno
     # que aun no se registro, y el guardian de la fila podada frenaba el primer upsert de un plan
-    # creado y cerrado en el mismo lote (adversario de 2.60.3, ronda 1). Las filas (inline) no
+    # creado y cerrado en el mismo lote (adversario de 2.61.1, ronda 1). Las filas (inline) no
     # tienen slug y no se anotan.
     anotaciones += [(f"poda-plan-{s}", ts, "la poda") for s in podados]
     if anotaciones:

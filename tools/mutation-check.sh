@@ -181,7 +181,7 @@ caso "afines en direccion inversa" pendientes_afines.py m_relacionado.py $T "la 
 caso "afines Alta primero" pendientes_afines.py m_relacionado.py $T "el Alta ligado va primero aunque sea mas nuevo" afines-sin-prioridad
 caso "afines tope de 2" pendientes_afines.py m_relacionado.py $T "con 3 elegibles salen solo 2" afines-sin-tope
 caso "hermano de la tabla primero" plan-siguiente-hermano.py m_relacionado.py $T "y no desplaza a la fila de la tabla" hermano-fuera-primero
-# Fila de plan podada (2.60.3, p-fb70d4600d): el frontmatter del plan frena el replay viejo.
+# Fila de plan podada (2.61.1, p-fb70d4600d): el frontmatter del plan frena el replay viejo.
 caso "poda sin guardian"   journal-compact.py m_plan_poda.py test-plan-reopen.sh "el replay active NO reinserta la fila" sin-guardian
 caso "poda sin comillas"   journal-compact.py m_plan_poda.py test-plan-reopen.sh "frontmatter CRLF, con comillas" sin-comillas
 caso "poda solo completed" journal-compact.py m_plan_poda.py test-plan-reopen.sh "abandoned en el frontmatter tambien frena" solo-completed
@@ -217,6 +217,13 @@ caso "marco: campo entero" checkpoint-audit.py m_hilo.py $T "dos pendientes, el 
 caso "marco: aviso, no falta" checkpoint-audit.py m_hilo.py $T "y no lo vuelve SALTADO" marco-saltado
 caso "marco: caso 5 fuera" checkpoint-audit.py m_hilo.py $T "caso 5 \(ninguno\): el marco no aplica" marco-con-ninguno
 caso "marco: el hook lo pone en la revision" checkpoint-close-guard.sh m_hilo.py test-checkpoint-close-guard.sh "el archivo de la revision trae el bloque de avisos del marco" guard-sin-marco
+caso "extras: citado en Terminas" pendientes_afines.py m_hilo.py $T "el citado en Terminas cuando no va de extra" extras-sin-citados
+caso "extras: citado en No repitas" pendientes_afines.py m_hilo.py $T "el citado en No repitas no va de extra" extras-sin-no-repitas
+caso "extras: prueba en vivo" pendientes_afines.py m_hilo.py $T "pruebas en vivo y esperas de OK fuera: el unico extra es la tarea de codigo" extras-sin-vivo
+caso "extras: espera un OK" pendientes_afines.py m_hilo.py $T "pruebas en vivo y esperas de OK fuera: el unico extra es la tarea de codigo" extras-sin-ok
+caso "extras: en vivo pegado al verbo" pendientes_afines.py m_hilo.py $T "lo ya verificado y las decisiones del agente siguen siendo extra" extras-vivo-laxo
+caso "extras: no ESPERA_AJENA" pendientes_afines.py m_hilo.py $T "lo ya verificado y las decisiones del agente siguen siendo extra" extras-ok-con-ajena
+caso "extras: filtrados van a quedan" pendientes_afines.py m_hilo.py $T "las siete van a quedan" extras-filtra-quedan
 
 echo "Contrato de check-project-dir-fallback.py (2.41.4): cada pieza, rota, tumba su aserto"
 caso "verde respaldo" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " respaldo: exit 0" r1-sin-quitar-forma

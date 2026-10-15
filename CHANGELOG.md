@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.60.3] - 2026-10-15
+## [2.61.1] - 2026-10-15
 Origen: p-fb70d4600d, el limite declarado en 2.37.0. La poda de `_plans-index.md` guarda solo los 5
 planes cerrados mas recientes. Si ya quito la fila de un plan cerrado, el replay de un
 `plan.upsert --status active` viejo la volvia a insertar como `active`: el guardian de reversa solo
@@ -45,9 +45,74 @@ miraba filas que existen.
 - Un frontmatter con un status fuera de `completed|abandoned|superseded` (`cerrado-por-medicion`,
   `implementado — ...`) no protege: cuenta solo la primera palabra, igual que la poda y el guardian
   de la fila. Tampoco un plan cerrado en el indice cuyo archivo nadie paso a cerrado.
+- Un registro `poda-plan-<slug>` no caduca. Si un plan NUEVO reutiliza el slug de uno podado y se crea
+  y se cierra en el mismo lote de pending/ (el archivo ya dice cerrado), su primer upsert se toma
+  por replay y se pierden su fecha de creacion y su `(fase de plan-X)`: la misma perdida de la
+  ronda 1, que aqui pide las dos condiciones a la vez (lo encontro el adversario de la ronda 2).
 - La cuarentena `titulo-ambiguo` se evalua antes que este guardian: un replay viejo sobre un indice
   con una fila del mismo titulo sin wikilink va a cuarentena en vez de a noop. Igual que antes.
 
+## [2.61.0] - 2026-10-15
+Origen: Victor (via `/goalspec:interview`) pego un snippet de otro proyecto cuya linea `Si ese paso
+es corto, suma…` sugeria un pendiente mientras el `Terminas cuando` del MISMO snippet lo mandaba a
+otra sesion; el agente tuvo que senalar el choque y Victor preguntar que era. Medido sobre las 22
+sesiones que recibieron la linea (35 extras, 2026-10-13..15, en varios proyectos): el agente
+cerro 7 de 32 con resultado (22 %), todos tareas de codigo o doc; difirio
+12 sin costo; 7 causaron friccion. Los 11 extras que esperaban un OK, una decision, una prueba en vivo
+o una sesion real no cerraron ninguno y dieron 5 de esas 7. En 3 snippets la linea contradecia
+directamente al `Terminas cuando`. Victor eligio filtrar la linea (no quitarla). Efecto sobre esa
+muestra, con el texto que cada pendiente tenia cuando arranco su sesion (reconstruido del journal;
+varios se reescribieron despues): el filtro saca 9 de 35 extras, entre ellos 3 de las 7 fricciones
+(las dos del snippet que lo disparo y un cambio de produccion que "falta OK de Victor") y 1 de los
+7 cerrados (uno que el `No repitas` de su snippet mandaba a "PR aparte" y el agente hizo igual). Las
+otras 4 fricciones (una revision a 24 h, un texto cortado, un pendiente que otra sesion ya habia
+cerrado, un cambio de produccion ordenado tras otro) este filtro no las ve: su texto no dice que
+espera ni que es una prueba en vivo, y no estan citadas en el `Terminas cuando` ni en el `No
+repitas`. No se probo otro detector para ellas. Muestra chica (tres dias), clasificacion a mano de un
+solo juez; la evidencia por extra, con su linea de transcripcion, esta en la research.
+
+### Changed
+- **`pendientes_afines.extras_y_quedan` deja fuera de la linea de extras** (van a `quedan N en el
+  hilo`, en el orden del hilo): (1) un id que el snippet de la ficha cita en `Terminas cuando:` o
+  `No repitas:`; (2) un pendiente cuyo texto es una prueba que solo pasa en uso real (`EN_VIVO`:
+  "confirmar en vivo", "verificar en una instalacion real", "en una sesion nueva", "tras
+  /reload-plugins", "en el proximo cierre real"); (3) uno que espera un OK o una decision de otro
+  (`ESPERA_OK`: "falta OK de Victor", "cuando Victor decida", "pedir permiso", "pendiente de
+  decision", "a la espera de la aprobacion", "depende de que Victor apruebe"). El hueco lo toma el
+  siguiente elegible del hilo.
+- **`pendientes_afines.py --hilo` marca `[no va de extra: <motivo>]`** (`motivo_no_extra`): el
+  agente que escribe el snippet en Step 8 ve que pendiente del hilo no saldra de extra y por que.
+- No cambia el hilo: `checkpoint-audit.py` (`snippet.hilo`) sigue viendo el mismo orden y el paso
+  puede seguir siendo cualquiera del hilo.
+- Step 8 y Step 3a (`pendiente.relate`) lo documentan.
+
+### Known
+- (2) y (3) son una red de formato por palabras (como la de fechas de 2.56.0), no la via que
+  cuenta: esa sigue siendo `_bloqueado:` o `--revisar` al crear el pendiente. Calibrada contra los
+  1423 pendientes abiertos de 7 proyectos (13 archivos `_pendientes.md`): deja fuera 52 (26 en vivo,
+  26 espera). Sobre los 35 extras medidos, el filtro por texto no saca ninguno de los 7 cerrados (el
+  cerrado que sale lo saca la cita en `No repitas`); de las 11 apariciones de espera o en vivo saca
+  6 (5 por texto, 1 por cita). Se mide sobre el texto del pendiente en la fecha de la sesion, cortado
+  en su primer campo `— _x:` como lo lee `pendientes()`: un `_bloqueado:` no cuenta como texto.
+  No ve un cambio en produccion que espera su ventana sin decirlo con esas palabras ("aplicar en
+  madrugada", "en la misma ventana de reinicio": la palabra "ventana" daba 16 coincidencias, casi
+  todas falsas), ni una espera escrita de otra forma ("Victor tiene que decidir", "verificar el
+  despliegue del servicio en produccion en vivo": el verbo queda a mas de 3 palabras).
+- `citados_fuera_del_paso` lee la etiqueta como `campo()`: plana, en negrita entera
+  (`**Terminas cuando:**`), con tilde o en mayusculas. No ve `**Terminas cuando**:` ni una vineta
+  (`- Terminas cuando:`); ninguna de las dos aparece en los snippets medidos.
+- Falsos positivos vistos al calibrar: un texto que cita entre comillas "pedir aprobacion", "cuando
+  se decida" dicho de algo que ya esta disponible. Esos van a `quedan N`, no se pierden.
+
+### Tests
+- `test-hilo-pendientes.sh` seccion 7: 11 asertos (7 rojos contra 2.60.1): citado en Terminas y en
+  No repitas, siete textos de espera o en vivo contra uno de codigo, la marca de `--hilo`, y dos que
+  NO deben salir (texto que cuenta algo ya verificado en vivo; una decision que toma el agente y la
+  cita de una ya tomada).
+- `tools/mutation-check.sh`: 7 mutaciones nuevas en `m_hilo.py` (sin citados, sin `No repitas`, sin
+  `EN_VIVO`, sin `ESPERA_OK`, `EN_VIVO` con la holgura vieja, `ESPERA_OK` con `ESPERA_AJENA`, los
+  filtrados fuera de `quedan`); `baja-con-alta` y `afines-sin-tope` se reescriben sobre la linea nueva
+  (sin eso no se aplicaban: "SIN PROBAR").
 ## [2.60.2] - 2026-10-15
 Origen: p-19f90435f1 y p-240bbd4b2f. `/migrate-learnings-3t` corrido en el repo del plugin bajo el
 banco de recall local de 7/15 a 6/15 en prompt@4: el caso que pidio en prosa "¿hago las dos cosas?"
