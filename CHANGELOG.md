@@ -1,5 +1,69 @@
 # Changelog
 
+## [2.60.1] - 2026-10-15
+Origen: Fase 3 de la familia de correccion y reversa del journal (p-c577d64793). `pendiente.reopen`
+tenia el hueco que 2.37.0 cerro para planes: el reopen solo anotaba el cierre que revertia, no su
+propio ts. El replay de un reopen viejo, despues de un cierre NUEVO del mismo pendiente, encontraba
+la linea archivada de ese cierre nuevo y la reabria en silencio, y ademas vaciaba la fecha de cierre
+de la fila mensual. Con un arreglo mas de la misma sesion: p-f127ef9d9c (repair-dualwrite).
+
+### Added
+- **`repair-dualwrite.py` cuenta las lineas sin `_id:`** (`sin_id=N`, siempre en la linea de
+  resumen) y, si hay, imprime un AVISO con sus numeros de linea y el comando
+  `journal-emit.py --type pendiente.adopt --todas` ya con las rutas. Antes `parse_tier2` se las
+  saltaba en silencio y una sesion de otra instalacion creyo que el informe ya las cubria. La cuenta
+  usa `abierta_sin_id` del emisor, la misma prueba que adopt (sangradas si, `[x]` no).
+  test-repair-dualwrite.sh caso 22. checkpoint-3t y audit-3t documentan el campo.
+
+### Fixed
+- **El replay de un `pendiente.reopen` ya no reabre un cierre posterior.** El reopen anota su propio
+  ts con la clave `reopen-<id>` en `.journal/reabiertos.log`; su replay, con la linea no viva, es
+  noop, como `plan.reopen`. La clave `<id>` sigue guardando el ts del cierre revertido: dos
+  significados, dos claves.
+- **Orden contra el cierre archivado.** Si el `_ev:` de la linea archivada es mayor que el ts del
+  reopen, el cierre es mas nuevo que la decision de reabrir: noop con WARN. Cubre el reopen que
+  aplico un compactador anterior (sin clave `reopen-<id>`) y vuelve a entrar. Un cierre sin ts
+  (`_ev: 0`) no tiene orden y el reopen sigue, como antes.
+- **El reopen escribe el indice con `escribir_anotado`.** Si `_pendientes.md` no se puede escribir,
+  las dos anotaciones se anulan y el reintento aplica, en vez de archivarse como su propio replay.
+- **Dos muertes a medias se terminan en el reintento** (las demas, ver Known):
+  - despues de escribir el indice y antes de sacar la linea del archivo: con la linea viva y
+    archivada, el reintento saca la linea del archivo y limpia la fila mensual sin reescribir el
+    indice. Anota las dos claves si faltan (pasada de un compactador anterior) y no las repite si
+    ya estan. (Adversario, ronda 1: la primera version lo archivaba como replay.)
+  - entre anotar y escribir el indice: un kill no lanza excepcion, asi que `escribir_anotado` no
+    anula. Si el cierre archivado es el MISMO que este reopen anoto como revertido
+    (`fue_revertido`), el reintento reabre sin repetir las anotaciones; si es otro cierre, es
+    replay. (Adversario, ronda 2: era una regresion frente a 2.58.0, que aqui si reabria.)
+- **Un reopen cuya linea ya vive pero cuya fila mensual sigue cerrada** va a cuarentena
+  `mensual-cerrada` con el motivo cierto. Antes decia "se cerro antes de 2.31.0" y aconsejaba un
+  `pendiente.add`, que duplicaria la linea viva. (Adversario, ronda 3.)
+- `fue_revertido` descuenta las anulaciones (`-ts`) igual que `ts_registrados`; con `startswith`
+  un cierre cuya reversa se anulo seguia contado como revertido.
+- `test-resolve-reopen.sh` casos 16-25: replay tras un cierre nuevo (resolve y expire), orden
+  contra `_ev:`, reopen sin ts, fallo de escritura del indice, cierre sin ts, las muertes a medias y
+  el motivo de `mensual-cerrada`; el caso 15 cuenta ya por clave entera. Contra 2.41.0 y 2.58.0
+  fallan 24 asertos, de los casos 15 a 25. Cada guarda tiene una mutacion que algun caso tumba.
+
+### Changed
+- **Un `pendiente.reopen` sin `ts` va a cuarentena** (`malformed ... sin 'ts'`), como `plan.reopen`.
+  `journal-emit.py` siempre lo pone: solo alcanza a un evento escrito a mano. Antes se aplicaba.
+
+### Known
+- `checkpoint-audit.py` no lee todavia `sin_id`: el aviso sale en la salida de repair-dualwrite,
+  no en el bloque de hallazgos del cierre.
+- Residuos de muerte del proceso que ya estaban en 2.58.0 y siguen abiertos (se deciden en
+  p-c103c7df05, paso 3 de la Fase 3):
+  - muerte entre sacar la linea del archivo y limpiar la fila mensual: el reintento va a la
+    cuarentena `mensual-cerrada` y la fila se limpia a mano;
+  - muerte despues de escribir el indice seguida de un cierre NUEVO: quedan dos entradas archivadas
+    y el reintento lee la primera (la vieja), asi que reabre y deshace ese cierre.
+- Dos cierres SIN ts (`_ev: 0`) del mismo pendiente no se distinguen: el replay de un reopen que
+  revirtio el primero, despues del segundo, reabre. Ya pasaba con `fue_revertido` antes de esta
+  version; journal-emit siempre pone el ts, asi que solo alcanza a eventos escritos a mano.
+- Si el reloj de la maquina que emite un reopen va por detras del de la que cerro, la guarda de
+  orden lo descarta con WARN y hay que volver a emitirlo.
+
 
 ## [2.60.0] - 2026-10-15
 Origen: p-88a7cc28c2 y p-3d1c7ab131. Victor acepto el 2026-10-13 el marco del `Proximo paso`

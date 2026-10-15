@@ -37,7 +37,7 @@ Tipos de evento:
                     sesiones: si no se pasa, se toma de la linea viva. Exige --text y/o
                     --prioridad. Sobre un pendiente ya cerrado o caducado no hace nada.
   pendiente.expire  --id ID --dias N [--line "<linea verbatim>"]   (caducidad por edad)
-  pendiente.reopen  --id ID [--prioridad P]                        (reversa de expire)
+  pendiente.reopen  --id ID [--prioridad P]             (reversa de expire y de resolve)
   pendiente.window  --id ID --revisar YYYY-MM-DD                  (pone/actualiza la ventana)
   pendiente.block   --id ID (--bloqueado-por "QUE" | --desbloquear)
                     Pone, cambia o quita `_bloqueado: QUE_` en un pendiente VIVO. Existe para
