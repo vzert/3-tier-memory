@@ -85,7 +85,7 @@ Uso: repair-dualwrite.py MEMORY_DIR [--apply] [--fix-pipes] [--quiet] [--budget 
   Sin --apply solo informa (dry-run): lista los ids con el mes donde iria cada fila y avisa
   de las filas con `|` crudo y de los ids que no son el sha1 de su contenido. Salida:
   `adopted=N rows_added=N pipes_broken=N pipes_fixed=N unaligned_rows=N unrepairable=N
-  odd_values=N header_issues=N ids_invented=N missing_data=N`. En dry-run
+  odd_values=N header_issues=N ids_invented=N ids_actualizados=N missing_data=N sin_id=N`. En dry-run
   `pipes_fixed` es 0 por construccion: lo que hay que leer es `pipes_broken`.
   Codigos: 0 ok (o lock ocupado); 1 error de entorno (sin _pendientes.md o sin journal-compact).
 
@@ -136,6 +136,33 @@ def load_compactor(bin_dir):
         return jc
     except Exception:
         return None
+
+
+def load_emitter(bin_dir):
+    """Modulo journal-emit.py del directorio vecino; None si no esta. Se usa su `abierta_sin_id`
+    para contar las lineas sin id: es la misma prueba que `pendiente.adopt --todas`, asi que la
+    cuenta es lo que ese comando adoptaria (llamarla, no copiarla)."""
+    path = os.path.join(bin_dir, "journal-emit.py")
+    if not os.path.isfile(path):
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location("je", path)
+        je = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(je)
+        return je
+    except Exception:
+        return None
+
+
+def lineas_sin_id(je, path):
+    """Numeros de linea (desde 1) de los `- [ ]` sin `_id: p-…_` de _pendientes.md, o None si no
+    hay emisor con que medirlo. parse_tier2 se las salta (no hay id que reconciliar), y saltarlas
+    sin contarlas hacia creer que este informe ya las cubria (p-f127ef9d9c)."""
+    if je is None or not hasattr(je, "abierta_sin_id"):
+        return None
+    with open(path, encoding="utf-8") as fh:
+        return [n for n, raw in enumerate(fh, 1)
+                if je.abierta_sin_id(raw.rstrip("\n").rstrip("\r"))]
 
 
 def cell(text):
@@ -802,13 +829,24 @@ def main():
             # aparecer sin haberlos pedido.
             idsuf = (f" ids_fixed={len(ids_fixed)} id_collisions={len(id_collisions)} "
                      f"id_duplicates={len(id_duplicates)}") if a.fix_ids else ""
+            sin_id = lineas_sin_id(load_emitter(os.path.dirname(os.path.abspath(__file__))), idx)
+            sinsuf = f" sin_id={len(sin_id)}" if sin_id is not None else ""
             print(f"adopted={sum(1 for x in adoptados if x[3])} "
                   f"rows_added={added} pipes_broken={len(pipes)} pipes_fixed={fixed} "
                   f"unaligned_rows={len(desalineadas)} unrepairable={len(unrepairable)} "
                   f"odd_values={len(valores_raros)} header_issues={len(cabeceras)} "
                   f"ids_invented={len(inventados)} "
                   f"ids_actualizados={len(actualizados)} "
-                  f"missing_data={len(broken)}{idsuf}{sufijo}")
+                  f"missing_data={len(broken)}{sinsuf}{idsuf}{sufijo}")
+            if sin_id:
+                lns = ", ".join(str(n) for n in sin_id[:10]) + (" …" if len(sin_id) > 10 else "")
+                print(f"  AVISO {len(sin_id)} pendiente(s) de _pendientes.md no llevan `_id:` "
+                      f"(lineas {lns}): ningun evento los alcanza (update, resolve, expire, block, "
+                      f"relate) y aqui no se reconcilian. Dales su id con: python3 "
+                      f"\"{os.path.join(os.path.dirname(os.path.abspath(__file__)), 'journal-emit.py')}\" "
+                      f"--memory-dir \"{mem}\" --type pendiente.adopt --todas")
+            elif sin_id is None:
+                print("  AVISO no se conto `sin_id`: falta journal-emit.py en el mismo bin/")
             if actualizados:
                 print(f"  NOTA {len(actualizados)} pendiente(s) llevan `_actualizado:`: su `_id:` "
                       f"es el hash con el que nacieron, no el de su texto de hoy, porque un "

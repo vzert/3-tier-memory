@@ -5,7 +5,22 @@ Origen: Fase 3 de la familia de correccion y reversa del journal (p-c577d64793).
 tenia el hueco que 2.37.0 cerro para planes: el reopen solo anotaba el cierre que revertia, no su
 propio ts. El replay de un reopen viejo, despues de un cierre NUEVO del mismo pendiente, encontraba
 la linea archivada de ese cierre nuevo y la reabria en silencio, y ademas vaciaba la fecha de cierre
-de la fila mensual.
+de la fila mensual. Con dos arreglos mas de la misma sesion: p-f127ef9d9c (repair-dualwrite) y
+p-292d06c4c0 (temporales de las suites).
+
+### Added
+- **`repair-dualwrite.py` cuenta las lineas sin `_id:`** (`sin_id=N`, siempre en la linea de
+  resumen) y, si hay, imprime un AVISO con sus numeros de linea y el comando
+  `journal-emit.py --type pendiente.adopt --todas` ya con las rutas. Antes `parse_tier2` se las
+  saltaba en silencio y una sesion de otra instalacion creyo que el informe ya las cubria. La cuenta
+  usa `abierta_sin_id` del emisor, la misma prueba que adopt (sangradas si, `[x]` no).
+  test-repair-dualwrite.sh caso 22. checkpoint-3t y audit-3t documentan el campo.
+- **`tools/tmp-propio.sh`**: run-tests y mutation-check crean un temporal propio por corrida
+  (`3tm-tests.<pid>.*`), exportan TMPDIR hacia el y lo borran al salir, tambien si los matan con
+  INT/TERM/HUP. Una suite que muere sin su trap deja su carpeta dentro y se va con el. `mktemp -d`
+  de macOS 26 no lee TMPDIR (medido), asi que se exporta una funcion `mktemp` que anade
+  `-p "$TMPDIR"` a las llamadas sin plantilla. Al final de la corrida avisa, sin borrar, de las
+  carpetas de corridas muertas y de las `tmp.*` de mas de 60 min. Prueba: tools/test-tmp-propio.sh.
 
 ### Fixed
 - **El replay de un `pendiente.reopen` ya no reabre un cierre posterior.** El reopen anota su propio
@@ -42,6 +57,11 @@ de la fila mensual.
   `journal-emit.py` siempre lo pone: solo alcanza a un evento escrito a mano. Antes se aplicaba.
 
 ### Known
+- Un kill -9 del propio runner no limpia su temporal: lo avisa la corrida siguiente. Las 470+
+  carpetas `tmp.*` que ya habia en esta maquina antes del arreglo no se tocan; el aviso da el
+  `find` para revisarlas.
+- `checkpoint-audit.py` no lee todavia `sin_id`: el aviso sale en la salida de repair-dualwrite,
+  no en el bloque de hallazgos del cierre.
 - Residuos de muerte del proceso que ya estaban en 2.58.0 y siguen abiertos (se deciden en
   p-c103c7df05, paso 3 de la Fase 3):
   - muerte entre sacar la linea del archivo y limpiar la fila mensual: el reintento va a la
