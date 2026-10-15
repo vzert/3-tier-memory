@@ -12,9 +12,11 @@ aunque el usuario habia decidido los candidatos (sesion d69ad375, 2026-10-15).
   llega un mensaje de esa misma sesion: el registro que escribe el harness con `origin.kind ==
   "peer"` y su `from` igual al `to` del envio (un `user` isMeta con la sesion ocupada, o un
   `attachment` queued_command con la sesion ociosa). El encabezado es el `summary` del mensaje, y un
-  mensaje con candidatos numerados (`1)`, `2.`) cuenta una pregunta por numero. Sin respuesta, con
-  respuesta de otra sesion, con un mensaje anterior al envio o a un subagente, no cuenta: sin
-  supervisor el cierre sigue exigiendo la pregunta. Medido sobre el transcript real d69ad375, con
+  mensaje con candidatos numerados (`1)`, `2.`) cuenta una pregunta por numero. No cuenta sin
+  respuesta, con respuesta de otra sesion, con un mensaje anterior al envio, con el envio fallido, ni
+  a un subagente: su informe final tambien llega con `kind` peer y `from` = id de la tarea, pero trae
+  `handback`/`senderTaskId` y se descarta (adversario: 27 casos reales de ese par). Sin supervisor el
+  cierre sigue exigiendo la pregunta. Medido sobre el transcript real d69ad375, con
   una COPIA de la memoria cuya ficha cita `pregunta: <summary>` en cada candidato: el hook de 2.60.2
   bloquea por `candidatos_pregunta` y este pasa 7 preguntas y el audit da HECHO. La ficha real de esa
   sesion no lleva `pregunta:` (se escribio antes de esta version) y con ella el cierre sigue
@@ -24,7 +26,9 @@ aunque el usuario habia decidido los candidatos (sesion d69ad375, 2026-10-15).
 
 ### Known
 - El hook no mide que la respuesta del supervisor hable de esos candidatos: cualquier mensaje
-  posterior de esa sesion vale. Vigila el olvido, no a un agente que finge (igual que con
+  posterior de esa sesion vale, de cualquier sesion par (no solo un supervisor lookout), y un mensaje
+  de estado numerado cuenta como preguntas. Citar en cada linea el `summary` de la pregunta sigue
+  frenando el olvido. Vigila el olvido, no a un agente que finge (igual que con
   `AskUserQuestion`, donde no mide que la pregunta describiera bien al candidato).
 
 ## [2.60.2] - 2026-10-15

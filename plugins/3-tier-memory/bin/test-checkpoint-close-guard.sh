@@ -1164,10 +1164,22 @@ if preg.startswith("peer"):
     if preg == "peer-antes":
         peer(SOCK)
     msg = "1) revisar algo\n2) otra cosa" if preg == "peer-dos" else "Candidato: revisar algo. Recomiendo descartar."
+    TAREA = "a1b2c3d4e5f607182"
     a([{"type": "tool_use", "id": "m1", "name": "SendMessage",
-        "input": {"to": "worker" if preg == "peer-sub" else SOCK, "summary": "Uno", "message": msg}}])
-    u([{"type": "tool_result", "tool_use_id": "m1", "content": '{"success":true}'}])
-    if preg in ("peer", "peer-dos", "peer-uno"):
+        "input": {"to": TAREA if preg == "peer-sub" else SOCK, "summary": "Uno", "message": msg}}])
+    if preg == "peer-error":
+        u([{"type": "tool_result", "tool_use_id": "m1", "is_error": True,
+            "content": "<tool_use_error>No agent named x</tool_use_error>"}])
+    else:
+        u([{"type": "tool_result", "tool_use_id": "m1", "content": '{"success":true}'}])
+    if preg == "peer-sub":
+        # El informe final de un subagente: `kind` peer, `from` = id de la tarea, con `handback`
+        # y `senderTaskId` (forma real, transcript d69ad375).
+        R.append({"type": "user", "isMeta": True,
+                  "origin": {"kind": "peer", "from": TAREA, "name": TAREA, "senderTaskId": TAREA,
+                             "handback": True, "handbackReportText": "decision: 1 descartado"},
+                  "message": {"role": "user", "content": "Another Claude session sent a message:\n[Subagent hand-back] ..."}})
+    if preg in ("peer", "peer-dos", "peer-uno", "peer-error"):
         peer(SOCK)
     elif preg == "peer-cola":
         peer(SOCK, cola=True)
@@ -1235,8 +1247,10 @@ txc "$T/tc.jsonl" peer-otro
 chk "la respuesta viene de otra sesion, no del destinatario: lo reclama" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
 txc "$T/tc.jsonl" peer-antes
 chk "un mensaje del supervisor ANTERIOR al envio no es su respuesta: lo reclama" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-error
+chk "un SendMessage que fallo no cuenta aunque luego llegue un mensaje del supervisor: lo reclama" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
 txc "$T/tc.jsonl" peer-sub
-chk "sin supervisor (SendMessage a un subagente, sin mensaje peer): sigue exigiendo la pregunta" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+chk "sin supervisor (SendMessage a un subagente y su informe final): sigue exigiendo la pregunta" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
 cp "$FC" "$FC.bak"
 python3 - "$FC" <<'PY'
 import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()

@@ -215,29 +215,39 @@ def resolver(ruta, base):
 # preguntar por SendMessage; la respuesta del usuario vuelve por el supervisor. Un SendMessage cuenta
 # como pregunta SOLO si despues llega un mensaje de esa misma sesion: el registro lleva
 # `origin.kind == "peer"` con su `from` (un `user` isMeta, o un `attachment` queued_command si llego
-# con la sesion ociosa), escrito por el harness, no por el agente. Sin respuesta, o a un subagente,
-# no llego a nadie y Step 3b sigue exigiendo la pregunta. Encabezado: el `summary`; un mensaje con
+# con la sesion ociosa), escrito por el harness, no por el agente. Sin respuesta, con el envio
+# fallido, o a un subagente (su informe final no cuenta), no llego a nadie y Step 3b sigue
+# exigiendo la pregunta. Encabezado: el `summary`; un mensaje con
 # varios candidatos numerados (`1)`, `2.`) cuenta una pregunta por numero.
 ENUM_CANDIDATO = re.compile(r"^\s*\(?\d+[.)]\s", re.M)
 
 
 def _origen_peer(r):
     for o in (r.get("origin"), (r.get("attachment") or {}).get("origin")):
-        if isinstance(o, dict) and o.get("kind") == "peer":
+        # El informe final de un subagente tambien llega con `kind == "peer"` y su `from` es el id
+        # de la tarea, pero trae `handback`/`senderTaskId`: no es el usuario contestando (adversario
+        # de 2.60.3: 27 casos reales de SendMessage a un subagente seguido de su informe).
+        if isinstance(o, dict) and o.get("kind") == "peer" and not o.get("handback") \
+                and "senderTaskId" not in o:
             return o
     return None
 
 
 pos_envio = {}         # tool_use_id de cada SendMessage -> su posicion en el transcript
+envio_ok = set()       # SendMessage cuyo tool_result volvio sin error (el envio salio)
 respuestas_peer = []   # (posicion, from, name) de cada mensaje que llego de otra sesion
 for _i, r in enumerate(recs):
     _o = _origen_peer(r)
     if _o:
         respuestas_peer.append((_i, str(_o.get("from") or ""), str(_o.get("name") or "")))
-    if r.get("type") == "assistant":
-        for b in (r.get("message") or {}).get("content") or []:
-            if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "SendMessage":
-                pos_envio.setdefault(b.get("id"), _i)
+    for b in (r.get("message") or {}).get("content") or []:
+        if not isinstance(b, dict):
+            continue
+        if r.get("type") == "assistant" and b.get("type") == "tool_use" and b.get("name") == "SendMessage":
+            pos_envio.setdefault(b.get("id"), _i)
+        elif r.get("type") == "user" and b.get("type") == "tool_result" \
+                and b.get("tool_use_id") in pos_envio and not b.get("is_error"):
+            envio_ok.add(b.get("tool_use_id"))
 envios_respondidos = set()  # SendMessage con respuesta posterior de su destinatario
 
 
@@ -245,7 +255,7 @@ def registrar_envio(b):
     inp = b.get("input") or {}
     a_quien = str(inp.get("to") or "").strip()
     pos = pos_envio.get(b.get("id"))
-    if not a_quien or pos is None or not isinstance(inp.get("message"), str):
+    if not a_quien or pos is None or b.get("id") not in envio_ok or not isinstance(inp.get("message"), str):
         return
     if not any(p > pos and a_quien in (de, nom) for p, de, nom in respuestas_peer):
         return

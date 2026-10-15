@@ -85,6 +85,13 @@ M = {
          '    for o in (r.get("origin"),):')],
     "peer-un-numero": [
         ('    n = max(1, len(ENUM_CANDIDATO.findall(inp["message"])))', "    n = 1")],
+    "peer-handback-cuenta": [
+        ('        if isinstance(o, dict) and o.get("kind") == "peer" and not o.get("handback") \\',
+         '        if isinstance(o, dict) and o.get("kind") == "peer" and True \\'),
+        ('                and "senderTaskId" not in o:', "                and True:")],
+    "peer-error-cuenta": [
+        ('    if not a_quien or pos is None or b.get("id") not in envio_ok or not isinstance(inp.get("message"), str):',
+         '    if not a_quien or pos is None or not isinstance(inp.get("message"), str):')],
     "ninguno-ignora-descartado": [
         ("        if veredicto_adv == \"break\" and not vivos and not descartados_bugs:",
          "        if veredicto_adv == \"break\" and not vivos:")],

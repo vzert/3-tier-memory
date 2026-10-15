@@ -408,6 +408,8 @@ caso "peer sin respuesta"      checkpoint-close-guard.sh $L test-checkpoint-clos
 caso "peer respuesta anterior" checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "ANTERIOR al envio" peer-respuesta-anterior
 caso "peer sin cola"           checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "la respuesta llega en cola" peer-sin-cola
 caso "peer un numero"          checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "un SendMessage con dos candidatos numerados" peer-un-numero
+caso "peer handback cuenta"    checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "un subagente y su informe final" peer-handback-cuenta
+caso "peer envio fallido"      checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "un SendMessage que fallo" peer-error-cuenta
 
 # Filtro de ignoradas de checkpoint-commit.py (issue #11): cada pieza del arreglo con su aserto.
 I=m_commit_ignoradas.py; C=test-checkpoint-commit.sh
