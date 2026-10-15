@@ -217,13 +217,13 @@ emit --type pendiente.reopen --id "$ID" >/dev/null
 compact --quiet >/dev/null
 chk "ahora si vuelve, byte a byte" "$L0" "$(linea "$ID")"
 chk "sin cuarentena" "0" "$(cuar)"
-# Por clave entera: desde 2.58.1 cada reopen anota dos claves, `<id>` (el cierre revertido) y
+# Por clave entera: desde 2.59.1 cada reopen anota dos claves, `<id>` (el cierre revertido) y
 # `reopen-<id>` (el propio reopen).
 chk "y la reversa quedo anotada" "1" "$(grep -c "^$ID	" "$M/.journal/reabiertos.log")"
 chk "y el propio reopen tambien" "1" "$(grep -c "^reopen-$ID	" "$M/.journal/reabiertos.log")"
 
 # ---------------------------------------------------------------------------------------------
-# 2.58.1 (p-c577d64793): el replay del PROPIO reopen. Hasta 2.58.0 el reopen solo anotaba el
+# 2.59.1 (p-c577d64793): el replay del PROPIO reopen. Hasta 2.58.0 el reopen solo anotaba el
 # cierre que revertia; su propio ts no quedaba en ningun sitio. El replay de un reopen viejo,
 # despues de un cierre NUEVO del mismo pendiente, encontraba la linea archivada de ese cierre
 # nuevo, la anotaba y la reabria en silencio. Mismo hueco que 2.37.0 cerro para planes
@@ -271,7 +271,7 @@ chk "y en _caducados.md una vez" "1" "$(cad "$ID")"
 chk "sin cuarentena" "0" "$(cuar)"
 
 echo "== 18. un reopen con ts ANTERIOR al cierre archivado no lo deshace (orden) =="
-# El reopen que aplico un compactador anterior a 2.58.1 no tiene clave `reopen-<id>`: si vuelve a
+# El reopen que aplico un compactador anterior a 2.59.1 no tiene clave `reopen-<id>`: si vuelve a
 # entrar, solo el orden contra el `_ev:` del cierre archivado lo frena.
 fixture
 emit_cap --type pendiente.reopen --id "$ID"; VIEJO=$EV
@@ -295,7 +295,7 @@ has "motivo malformed sin ts" "$(motivo)" "sin 'ts'"
 chk "no reabrio" "0" "$(printf '%s' "$(linea "$ID")" | grep -c .)"
 
 echo "== 20. la escritura del indice falla: las anotaciones se anulan y el reintento reabre =="
-# Antes de 2.58.1 el reopen no usaba escribir_anotado: anotaba y, si el indice no se podia
+# Antes de 2.59.1 el reopen no usaba escribir_anotado: anotaba y, si el indice no se podia
 # escribir, la anotacion quedaba viva. Con la clave `reopen-<id>` viva, el reintento se veria como
 # su propio replay y el reopen se perderia contado como aplicado.
 # `chmod 555` sobre memory/ basta en POSIX; Git Bash lo ignora en un directorio, por eso tambien
@@ -338,8 +338,8 @@ chk "sin cuarentena" "0" "$(cuar)"
 echo "== 22. una pasada que murio tras escribir el indice: el reintento termina la limpieza =="
 # El reopen anota `reopen-<id>` ANTES de escribir el indice. Si el proceso muere despues de
 # escribirlo y antes de sacar la linea del archivo y limpiar la fila mensual, el evento sigue en
-# pending/. Una primera version de 2.58.1 veia su ts anotado y lo archivaba como replay: la linea
-# quedaba viva Y archivada para siempre (adversario de 2.58.1). Se simula devolviendo el archivo y
+# pending/. Una primera version de 2.59.1 veia su ts anotado y lo archivaba como replay: la linea
+# quedaba viva Y archivada para siempre (adversario de 2.59.1). Se simula devolviendo el archivo y
 # la mensual a su estado previo y el evento a pending/.
 fixture; cerrar
 cp "$M/pendientes/_resueltos.md" "$T/res.bak"; cp "$M/pendientes/2026-09.md" "$T/mes.bak"
@@ -359,7 +359,7 @@ echo "== 23. una pasada que murio ENTRE anotar y escribir el indice: el reintent
 # Un kill no lanza excepcion: escribir_anotado no llega a anular, y las dos anotaciones quedan
 # vivas con el indice sin la linea. El reintento tiene que reconocer que el cierre archivado es el
 # MISMO que este reopen anoto como revertido y terminar, no archivarse como replay (adversario de
-# 2.58.1, ronda 2). Se simula escribiendo las dos anotaciones a mano antes de compactar.
+# 2.59.1, ronda 2). Se simula escribiendo las dos anotaciones a mano antes de compactar.
 fixture; cerrar
 emit_cap --type pendiente.reopen --id "$ID"; REOPEN=$EV
 TSR=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["ts"])' "$REOPEN")
@@ -378,7 +378,7 @@ replay "$REOPEN"
 chk "y su replay tras un cierre nuevo sigue siendo noop" "0" "$(printf '%s' "$(linea "$ID")" | grep -c .)"
 
 echo "== 24. pasada muerta de un compactador SIN la clave reopen-<id>: el reintento la anota =="
-# Viva y archivada, sin anotaciones (lo que deja un compactador anterior a 2.58.1 que murio tras
+# Viva y archivada, sin anotaciones (lo que deja un compactador anterior a 2.59.1 que murio tras
 # escribir el indice). El reintento completa la limpieza y anota las dos claves: sin ellas, su
 # replay tras un cierre nuevo no se podria frenar.
 fixture; cerrar
