@@ -22,7 +22,7 @@ M = {
     "afines-sin-inversa": [('if p["id"] in miembros and not ids_rel <= miembros:', "if False:")],
     "afines-sin-prioridad": [('out.sort(key=lambda p: (PRIORIDAD_HILO[p["prio"]], p["grupo"], p["creado"], p["fila"]))',
                               'out.sort(key=lambda p: (p["creado"], p["fila"]))')],
-    "afines-sin-tope": [("extras = (altas_medias or resto)[:MAX_AFINES]", "extras = (altas_medias or resto)")],
+    "afines-sin-tope": [("extras = (altas_medias or elegibles)[:MAX_AFINES]", "extras = (altas_medias or elegibles)")],
     # plan-siguiente-hermano.py
     "hermano-fuera-primero": [("for s in en_tabla + fuera:", "for s in fuera + en_tabla:")],
 }
