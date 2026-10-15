@@ -47,8 +47,8 @@ M = {
         ('        raise Quarantine(f"no-anchor: learnings/{topic}.md no tiene frontmatter (--- en la linea 1)")',
          '        lines[0:0] = ["---", "---"]')],
     "lv-ignorado-validador": [
-        ('                or p.get("disparadores") or p.get("last_verified") or p.get("quickref_regla")):',
-         '                or p.get("disparadores") or p.get("quickref_regla")):')],
+        ('                or p.get("disparadores") or p.get("sin_disparadores") or p.get("last_verified")\n',
+         '                or p.get("disparadores") or p.get("sin_disparadores")\n')],
     # journal-emit.py
     "lv-emisor-sin-validar": [("                                  and fecha_real(last_verified)):", "                                  and True):")],
 }

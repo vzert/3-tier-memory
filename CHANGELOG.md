@@ -1,5 +1,31 @@
 # Changelog
 
+## [VERSION-POR-FIJAR] - 2026-10-15
+Origen: p-19f90435f1 y p-240bbd4b2f. `/migrate-learnings-3t` corrido en el repo del plugin bajo el
+banco de recall local de 7/15 a 6/15 en prompt@4: el caso que pidio en prosa "¿hago las dos cosas?"
+al cerrar dejo de recibir su regla. Medido termino a termino, una frase nueva de otra regla ("estoy
+cerrando el checkpoint...") sumaba `cerrar` y `checkpoint` con el peso de disparador y la empujaba
+fuera del top 4. Quitar las frases de esa regla lo recupera (7/15, ningun otro caso cambia), pero el
+journal no tenia forma de quitarlas: `learning.update --text` las conserva y `--disparadores` las
+reemplaza por otras.
+
+### Added
+- **`learning.update --sin-disparadores`** (con `--match-prefix`): quita el comentario
+  `<!-- disparadores: ... -->` entero de una regla y deja su texto y su marcador de retirada. Es la
+  vuelta atras de un juego de frases que hace perder recall. No va con `--disparadores` ni en
+  `learning.add`. El compactador, que es su propia frontera, manda a cuarentena el payload escrito a
+  mano con `sin_disparadores` que no sea `true`, junto a `disparadores`, o sin `match_prefix`. El
+  replay no escribe nada, y quitarlas a una regla que no tenia no escribe ni va a cuarentena.
+  Un evento sin la clave nueva se aplica igual que antes.
+- `/migrate-learnings-3t` explica la vuelta atras: `--sin-disparadores` y despues
+  `learnings-migracion.py --decidir T#N`, para que la siguiente corrida no las vuelva a poner.
+
+### Known
+- Un compactador anterior a esta version que vea un `learning.update` que solo trae `sin_disparadores` lo
+  manda a cuarentena ("sin nada que corregir"): no lo aplica a medias. Se reintenta con esta version.
+- Una decision de dejar una regla sin frases que no este en `.migracion-learnings.json` no la ve la
+  migracion: en el repo del plugin, la de la F7 manual (2026-10-06) solo estaba en
+  `tools/recall-bench/resultado-F7.json`, y la corrida del 2026-10-15 enriquecio esas reglas.
 
 ## [2.59.0] - 2026-10-14
 Origen: pedido de Victor (2026-10-14). La revision del cierre de 2.42.0 funciona, pero su aviso

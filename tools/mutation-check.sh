@@ -270,6 +270,7 @@ caso "disparadores sin peso"    recall_rank.py m_learning_disparadores.py test-l
 caso "frases sin indexar"       build-recall-index.py m_learning_disparadores.py test-learning-disparadores.sh "palabras solo de las frases encuentran" frases-sin-indexar
 caso "comentario a la vista"    build-recall-index.py m_learning_disparadores.py test-learning-disparadores.sh "el texto de la unidad no lleva el comentario" mostrar-comentario
 caso "update pierde frases"     journal-compact.py m_learning_disparadores.py test-learning-disparadores.sh "texto nuevo . mismo comentario" update-pierde-disparadores
+caso "sin-disparadores ignorado" journal-compact.py m_learning_disparadores.py test-learning-disparadores.sh "regla viva: solo el texto" sin-disparadores-ignorado
 caso "compactador sin validar"  journal-compact.py m_learning_disparadores.py test-learning-disparadores.sh "invalido: cuarentena" compactador-sin-validar
 caso "marca detras"             learning_marks.py m_learning_disparadores.py test-learning-disparadores.sh "cuerpo . marcador . comentario" marca-detras
 caso "acepta guiones"           learning_marks.py m_learning_disparadores.py test-learning-disparadores.sh "commit ..amend" acepta-guiones

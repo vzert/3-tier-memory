@@ -40,7 +40,11 @@ CORE RULES:
 - **What this command cannot measure.** Adding trigger phrases can push one rule out of the top 4
   of the recall for a prompt where it used to appear (measured in the plugin's repo: enriching
   every rule lost 2 of 14 recall cases and gained 2 others). The plugin's recall bench lives in the plugin repo, not in your
-  install, so this command cannot detect that here. Say so in the report.
+  install, so this command cannot detect that here. Say so in the report. The way back, for a
+  rule whose new phrases cost a case (since 2.59.0): `journal-emit.py --type learning.update
+  --topic T --match-prefix P --sin-disparadores` removes its phrases (text and marker kept), and
+  `learnings-migracion.py --memory-dir <memory> --decidir T#N` records that the user wants it
+  without phrases, so the next run does not add them again.
 
 ## Step 0: Locate memory directory and scripts, compact
 
@@ -194,4 +198,6 @@ Its last line says `COMMIT hash=...` or `COMMIT skip=<reason>`; report the skip 
 Tell the user: lines linked (agreed by judge and candidate / decided by the user / `ninguna`),
 lines the journal cannot link and why, rules enriched, rules rejected and why, the three criteria
 before and after, `drift rc`, and the limit: this install has no recall bench, so a recall
-regression caused by the new phrases cannot be measured here.
+regression caused by the new phrases cannot be measured here, and how to undo one rule's phrases
+if a regression shows up later (`--sin-disparadores`, then `--decidir`, as in "What this command
+cannot measure").
