@@ -1,6 +1,7 @@
 name: platforms
 
-# macOS y Windows, separados de tests.yml el 2026-10-14. Encuentran lo que ubuntu no ve (acentos
+# Los 3 sistemas al publicar version (ubuntu tambien, para que UNA corrida cubra los 3); macOS y
+# Windows se separaron de tests.yml el 2026-10-14. Encuentran lo que ubuntu no ve (acentos
 # rotos en Windows, rutas MSYS, bash 3.2 en macOS), pero cada corrida tardaba 1,5-2,5 h y hoy hubo
 # 6 merges a main. Corren cuando sale una version (un push a main que cambia plugin.json o
 # marketplace.json) y a mano: Actions -> platforms -> Run workflow, o
@@ -8,7 +9,7 @@ name: platforms
 # Lanzalo a mano en un PR que toque rutas, codificacion o hooks antes del merge.
 #
 # Sin tools/mutation-check.sh (RUN_MUTATION=0): mide si los asertos discriminan, y eso ya lo mide
-# ubuntu. Sale como saltado en el resumen, no como verde.
+# tests.yml en ubuntu. Sale como saltado en el resumen, no como verde.
 on:
   push:
     branches: [main]
@@ -32,7 +33,7 @@ jobs:
       matrix:
         # Windows corre con Git Bash, y sus 3 casos no construibles alli (las ACL de NTFS frente a
         # `chmod`, un `bash.exe` sin sus DLL, el pty) se SALTAN Y SE CUENTAN, no se dan por buenos.
-        os: [macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
         with:
