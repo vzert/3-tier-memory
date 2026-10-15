@@ -747,6 +747,15 @@ corre "$T/t.jsonl" true - >/dev/null
 chk "reentrante sin contestar: se queda" "1" "$([ -f "$SG/.3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
 printf '%s\n' "$REV_OK" > "$T/rev-sg.txt"; corre "$T/t.jsonl" true "$T/rev-sg.txt" >/dev/null
 chk "reentrante contestada: borrado" "0" "$([ -f "$SG/.3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
+# Aviso escrito fuera de git y `git init` antes de contestar: la limpieza borra tambien el del cwd
+# (adversario externo de 2.60.3: `ruta_aviso()` ya apuntaba a .git/ y el del cwd se quedaba).
+GI="$T/git-init-despues"; mkdir -p "$GI"
+O=$(corre_en "$T/t.jsonl" false - "$GI")
+chk "git init despues: el aviso esta en el cwd" "1" "$([ -f "$GI/.3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
+git -C "$GI" init -q
+corre_en "$T/t.jsonl" true "$T/rev-sg.txt" "$GI" >/dev/null
+chk "git init despues: contestada, el del cwd se borra" "0" "$([ -f "$GI/.3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
+chk "git init despues: git add -A no lo ve" "0" "$(git -C "$GI" add -A && git -C "$GI" status --porcelain | grep -c 3t-revision)"
 # Sin git instalado: un PATH con lo que el hook usa, menos git.
 SB="$T/sin-bin"; mkdir -p "$SB"
 for c in bash sh python3 cat dirname basename pwd cd env sed tr head tail grep; do

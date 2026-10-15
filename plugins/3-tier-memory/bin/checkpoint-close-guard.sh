@@ -841,6 +841,8 @@ if pedir_revision and reentrante and not revision_contestada():
                      + str(len(REVISION_ITEMS)) + " lineas). Preguntale al agente \"¿falto algo de "
                      "tu checkpoint?\" antes de dar el cierre por bueno.")
 
+NOMBRE_AVISO = "3t-revision-cierre-" + (re.sub(r"[^A-Za-z0-9_-]", "-", SID)[:12] or "sin-sesion") + ".md"
+
 def ruta_aviso():
     """(absoluta, relativa al directorio de la sesion) del archivo con el aviso completo (2.59.0).
     Siempre DENTRO del directorio de la sesion (`cwd`): un Read fuera de los directorios de trabajo
@@ -857,7 +859,7 @@ def ruta_aviso():
         return subprocess.run(["git", "-C", cwd, *a], capture_output=True, text=True,
                               timeout=10, check=True, env={**os.environ, "LC_ALL": "C"}).stdout.strip()
     base = os.path.realpath(cwd)
-    nombre = "3t-revision-cierre-" + (re.sub(r"[^A-Za-z0-9_-]", "-", SID)[:12] or "sin-sesion") + ".md"
+    nombre = NOMBRE_AVISO
     try:
         raiz = os.path.realpath(git("rev-parse", "--show-toplevel"))
     except FileNotFoundError:
@@ -888,11 +890,14 @@ def ruta_aviso():
 if reentrante and not (pedir_revision and not revision_contestada()):
     # El aviso de 2.59.0 ya se uso (la revision esta contestada, o no se pidio): se borra, para no
     # dejar uno por sesion. Si la revision sigue sin contestar se queda, por si el agente aun lo
-    # lee (adversario externo de 2.59.0); el siguiente bloqueo lo reescribe.
-    try:
-        os.remove(ruta_aviso()[0])
-    except Exception:
-        pass
+    # lee (adversario externo de 2.59.0); el siguiente bloqueo lo reescribe. Tambien el del `cwd`:
+    # si se escribio fuera de git y luego hubo `git init`, `ruta_aviso()` ya apunta a `.git/` y el
+    # del `cwd` quedaria para siempre, listo para un `git add -A` (adversario externo de 2.60.3).
+    for _ruta in (lambda: ruta_aviso()[0], lambda: os.path.join(os.path.realpath(cwd), "." + NOMBRE_AVISO)):
+        try:
+            os.remove(_ruta())
+        except Exception:
+            pass
 
 if not problemas and not (pedir_revision and not reentrante):
     sys.exit(0)

@@ -9,23 +9,24 @@ seguia saliendo en la terminal: `ruta_aviso()` no tenia donde dejar el archivo y
 - **`checkpoint-close-guard.sh` fuera de git escribe el aviso en el directorio de la sesion**, como
   `.3t-revision-cierre-<id>.md` (el mismo nombre que en una subcarpeta o un worktree), y el `reason`
   visible es la linea que lo senala. Sin repo no hay commit en que colarse, y el Stop reentrante lo
-  borra al contestar la revision, como en un repo. Solo cuando git dice `not a git repository (or
+  borra al contestar la revision, como en un repo; tambien si entre medias hubo `git init`, cuando
+  la ruta del aviso ya apunta a `.git/`. Solo cuando git dice `not a git repository (or
   any of the parent directories)` o no esta instalado: si falla por otra cosa (`safe.directory`, o
   un worktree cuyo gitdir ya no existe, que dan error pero SI son un repo donde no se podria excluir
   el archivo), el aviso entero sigue en el `reason`, como antes. Medido con `claude -p
   --permission-mode default` en una carpeta sin git: Read lee el archivo, con la ruta absoluta y la
   relativa, sin pedir permiso (`permission_denials` vacio).
 - `test-checkpoint-close-guard.sh`: `corre` abre la sesion en una carpeta fuera de git del temporal
-  del test, no en `/tmp` (ahi dejaria el archivo). 11 asertos nuevos y 3 cambiados (7 rojos contra
+  del test, no en `/tmp` (ahi dejaria el archivo). 14 asertos nuevos y 3 cambiados (7 rojos contra
   2.60.2): fuera de git una linea y el archivo igual al aviso del repo, limpieza reentrante, sin git
-  instalado, y el respaldo medido con un `git` falso que falla con `dubious ownership` y con un
-  worktree de gitdir roto. 203 → 214.
+  instalado, `git init` antes de contestar, y el respaldo medido con un `git` falso que falla con
+  `dubious ownership` y con un worktree de gitdir roto. 203 → 217.
 
 ### Known
-- Si el usuario hace `git init` y `git add -A` en esa carpeta con una revision aun sin contestar, el
-  archivo entra en el commit: fuera de un repo no hay `info/exclude` donde ponerlo. Se borra al
-  contestar la revision. Con la sesion abierta en `$HOME` sin git, el archivo queda en `$HOME`
-  hasta entonces (nunca en `.claude/`).
+- Fuera de git, un `git init` + `git add -A` hecho mientras la revision sigue sin contestar mete el
+  archivo en el indice: no hay `info/exclude` donde excluirlo. Al contestar se borra del disco, pero
+  si ya estaba anadido hay que sacarlo del indice a mano. En `$HOME` sin git queda en `$HOME` hasta
+  entonces (nunca en `.claude/`).
 
 ## [2.60.2] - 2026-10-15
 Origen: p-19f90435f1 y p-240bbd4b2f. `/migrate-learnings-3t` corrido en el repo del plugin bajo el
