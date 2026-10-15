@@ -727,6 +727,12 @@ a=json.loads(sys.argv[1])["reason"]; b=json.loads(sys.argv[2])["reason"]
 print(int(a==b))' "$O" "$SIN")"
 chk "git falla por otra cosa (safe.directory): el aviso entero sigue en el reason" "9" "$(razon_corta "$SIN" | grep -cE '^[1-9]\. ')"
 chk "git falla por otra cosa: no deja archivo en la carpeta" "0" "$(ls -A "$R" | grep -c 3t-revision)"
+# Un worktree cuyo gitdir ya no existe SI es un repo (`not a git repository: <ruta>`): respaldo, sin
+# dejar un archivo que no se puede excluir (adversario Sonnet 5.5 de 2.60.3).
+WR="$T/wt-roto"; mkdir -p "$WR"; echo "gitdir: $T/no-existe" > "$WR/.git"
+O=$(corre_en "$T/t.jsonl" false - "$WR")
+chk "worktree con gitdir roto: el aviso entero sigue en el reason" "9" "$(razon_corta "$O" | grep -cE '^[1-9]\. ')"
+chk "worktree con gitdir roto: no deja archivo" "0" "$(ls -A "$WR" | grep -c 3t-revision)"
 echo "== p-92aa5de144: fuera de git, lo que ve el humano es una linea; el aviso va en el cwd =="
 rm -f "$SG/.3t-revision-cierre-sin-sesion.md"
 O=$(corre "$T/t.jsonl" false -)

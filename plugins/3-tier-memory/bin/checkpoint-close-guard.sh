@@ -863,7 +863,9 @@ def ruta_aviso():
     except FileNotFoundError:
         return os.path.join(base, "." + nombre), "." + nombre
     except subprocess.CalledProcessError as e:
-        if "not a git repository" not in (e.stderr or ""):
+        # Solo "no hay repo en ninguna carpeta de arriba". `not a git repository: <ruta>` (un
+        # worktree cuyo gitdir ya no existe, o GIT_DIR roto) SI es un repo: respaldo.
+        if "not a git repository (or any" not in (e.stderr or ""):
             raise
         return os.path.join(base, "." + nombre), "." + nombre
     gdir = os.path.realpath(git("rev-parse", "--absolute-git-dir"))
