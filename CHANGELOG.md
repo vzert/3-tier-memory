@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.59.1] - 2026-10-15
+## [2.60.1] - 2026-10-15
 Origen: Fase 3 de la familia de correccion y reversa del journal (p-c577d64793). `pendiente.reopen`
 tenia el hueco que 2.37.0 cerro para planes: el reopen solo anotaba el cierre que revertia, no su
 propio ts. El replay de un reopen viejo, despues de un cierre NUEVO del mismo pendiente, encontraba
@@ -64,6 +64,37 @@ de la fila mensual. Con un arreglo mas de la misma sesion: p-f127ef9d9c (repair-
 - Si el reloj de la maquina que emite un reopen va por detras del de la que cerro, la guarda de
   orden lo descarta con WARN y hay que volver a emitirlo.
 
+
+## [2.60.0] - 2026-10-15
+Origen: p-88a7cc28c2 y p-3d1c7ab131. Victor acepto el 2026-10-13 el marco del `Proximo paso`
+(research `hilo-pendientes-relacionados-medicion`, Anexo 2). Sobre 211 snippets (163 con una segunda respuesta util), lo que se asocia a
+que el usuario tenga que aclarar o corregir es el contenido del paso, no el largo: paso limpio 8 %,
+espera de Victor 27 %, varias tareas 22 %, ramas 67 % (3 casos). El 2026-10-14 decidio que las
+senales de formato avisan y no bloquean.
+
+### Added
+- **Step 8: como se escribe el `<next-step>`.** Siete puntos: una accion de hoy con su id que empieza
+  con un verbo, un solo objetivo, sin ramas, sin historia (va a `## Estado` de la ficha), sin esperas
+  de Victor ni de terceros, palabras simples, unos 300 caracteres como guia.
+- **`checkpoint-audit.py` `snippet.marco`** (desde fichas del 2026-10-14). Avisa como `POR-DISEÑO`,
+  nunca `SALTADO`, cuatro senales del campo entero (no solo de su primera linea): una espera escrita
+  solo en el texto ("si Victor lo decide", "decidir con…", "pedir permiso", "cuando X responda",
+  "revisar si X respondio"), 2 o mas ids sin contar "ver tambien", una lista "(1)… (2)…" y mas de
+  600 caracteres. El detector es `pendientes_afines.senales_marco`. El caso 5 no se mide.
+- **`checkpoint-close-guard.sh` pone esos avisos en la revision del cierre** (desde 2.59.0 en su archivo), que ya bloquea una vez:
+  el agente rehace el paso o dice en la linea 9 por que se queda. Sin esto el aviso no tenia lector:
+  Step 8 escribe el snippet despues de que Step 7a corre el audit, y el hook solo leia `SALTADO`.
+
+### Changed
+- Step 8 (pregunta "¿se puede hacer de inmediato?") y Step 3b (`--bloqueado-por`) nombran la red
+  nueva. El campo `_bloqueado:` sigue siendo la via que el audit hace cumplir (regla 216).
+
+### Tests
+- `test-hilo-pendientes.sh` seccion 6: 12 asertos (10 rojos contra 2.59.0).
+  `test-checkpoint-close-guard.sh`: 7 asertos (4 rojos contra 2.59.0), en un repo git (los avisos
+  dentro del archivo de la revision) y fuera de git (respaldo en el `reason`).
+- `tools/mutation-check.sh`: 10 mutaciones del marco en `m_hilo.py` (cada senal, sin tildes, campo
+  entero, aviso y no falta, caso 5 fuera, el hook).
 
 ## [2.59.0] - 2026-10-14
 Origen: pedido de Victor (2026-10-14). La revision del cierre de 2.42.0 funciona, pero su aviso

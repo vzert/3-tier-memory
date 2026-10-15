@@ -201,6 +201,16 @@ caso "hilo: la sesion escribio la ficha" pendientes_afines.py m_hilo.py $T "fich
 caso "hilo: sessions/ es un componente entero" pendientes_afines.py m_hilo.py $T "escribir not-sessions/<ficha> no es escribir la ficha" ruta-por-sufijo
 caso "hilo: leer no es escribir" pendientes_afines.py m_hilo.py $T "no sella una ficha del mismo dia que la sesion solo leyo" leer-cuenta-como-escribir
 caso "hilo: --transcript con guardia" journal-emit.py m_hilo.py $T "--transcript a mano pasa por la misma guardia de fecha" liga-sin-guardia
+caso "marco: espera de Victor" pendientes_afines.py m_hilo.py $T "espera de Victor sin _bloqueado: POR-DISENO" marco-sin-espera
+caso "marco: varios ids" pendientes_afines.py m_hilo.py $T "dos pendientes, el segundo en otra linea del campo: POR-DISENO" marco-sin-ids
+caso "marco: ver tambien" pendientes_afines.py m_hilo.py $T "ver tambien no cuenta como segundo objetivo: HECHO" marco-con-ver-tambien
+caso "marco: lista" pendientes_afines.py m_hilo.py $T "lista \(1\)… \(2\)…: POR-DISENO" marco-sin-lista
+caso "marco: largo" pendientes_afines.py m_hilo.py $T "mas de 600 caracteres: POR-DISENO" marco-sin-largo
+caso "marco: sin tildes" pendientes_afines.py m_hilo.py $T "revisar si X respondio \(con tilde\): POR-DISENO" marco-con-tildes
+caso "marco: campo entero" checkpoint-audit.py m_hilo.py $T "dos pendientes, el segundo en otra linea del campo: POR-DISENO" marco-primera-linea
+caso "marco: aviso, no falta" checkpoint-audit.py m_hilo.py $T "y no lo vuelve SALTADO" marco-saltado
+caso "marco: caso 5 fuera" checkpoint-audit.py m_hilo.py $T "caso 5 \(ninguno\): el marco no aplica" marco-con-ninguno
+caso "marco: el hook lo pone en la revision" checkpoint-close-guard.sh m_hilo.py test-checkpoint-close-guard.sh "el archivo de la revision trae el bloque de avisos del marco" guard-sin-marco
 
 echo "Contrato de check-project-dir-fallback.py (2.41.4): cada pieza, rota, tumba su aserto"
 caso "verde respaldo" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " respaldo: exit 0" r1-sin-quitar-forma

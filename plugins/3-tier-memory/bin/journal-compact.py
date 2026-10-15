@@ -1002,7 +1002,7 @@ def anotar_reabierto(mem, pid, ev, que="la reapertura"):
       `research-<slug>`. Por celda y no por sesion: con una sola clave, un amend de la Fecha con ts
       anterior a un amend del alias ya aplicado se descartaba como replay sin serlo. Las clases de
       clave no pueden chocar entre si (prefijos distintos; `p-` exige 10 hex).
-    - `reopen-p-<10 hex>` (pendientes, 2.59.1): el ts del propio evento `pendiente.reopen`.
+    - `reopen-p-<10 hex>` (pendientes, 2.60.1): el ts del propio evento `pendiente.reopen`.
       `apply_reopen` lo busca por pertenencia: el replay de ese reopen, despues de un cierre NUEVO
       del mismo pendiente, es noop (p-c577d64793). La clave `p-<id>` sigue guardando el ts del
       cierre revertido; son dos significados y por eso dos claves.
@@ -1664,7 +1664,7 @@ def apply_reopen(mem, p):
             # Vive en el indice y no en el archivo, pero la fila mensual sigue cerrada: una pasada
             # anterior murio entre sacar la linea del archivo y limpiar la mensual. El motivo de
             # abajo ("cerrado antes de 2.31.0, usa pendiente.add") seria falso aqui y su consejo
-            # duplicaria una linea viva (adversario de 2.59.1, ronda 3). Sigue siendo cuarentena:
+            # duplicaria una linea viva (adversario de 2.60.1, ronda 3). Sigue siendo cuarentena:
             # terminar esa pasada es p-c103c7df05.
             raise Quarantine(
                 f"mensual-cerrada: {p['id']} ya vive en _pendientes.md, pero su fila mensual sigue "
@@ -1685,7 +1685,7 @@ def apply_reopen(mem, p):
     # `reanuda`: este reopen ya anoto como revertido EL MISMO cierre que sigue archivado, o sea una
     # pasada anterior murio entre anotar y escribir el indice (kill, corte, OOM: escribir_anotado
     # solo anula ante una excepcion). Hay que terminarla, no archivarla como replay: eso perdia el
-    # reopen dado por aplicado (adversario de 2.59.1, ronda 2; 2.58.0 si lo reabria).
+    # reopen dado por aplicado (adversario de 2.60.1, ronda 2; 2.58.0 si lo reabria).
     reanuda = ya_anotado and fue_revertido(mem, p["id"], ev_archivado)
     if ya_anotado and not viva and not reanuda:
         # Replay de este reopen despues de un cierre NUEVO del mismo pendiente: la linea archivada
@@ -1718,7 +1718,7 @@ def apply_reopen(mem, p):
         # la linea del archivo. No hay escritura que proteger: se completa la limpieza de abajo
         # sin reescribir `_pendientes.md` (su mtime lo lee derivar_creado). Si este reopen ya
         # consta (`ya_anotado`), sus anotaciones las hizo esa pasada y no se repiten; si no, se
-        # anotan aqui. (Adversario de 2.59.1: con el noop por `reopen-<id>` antes de mirar el
+        # anotan aqui. (Adversario de 2.60.1: con el noop por `reopen-<id>` antes de mirar el
         # indice, esa pasada muerta nunca se terminaba.)
         if not ya_anotado:
             for clave, ets, que in anotaciones:
