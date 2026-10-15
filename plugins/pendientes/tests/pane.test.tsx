@@ -30,7 +30,8 @@ const AHORA = {
 
 type Visto = { fills: string[]; argv: string[][]; prompts: string[]; abiertos: number; status: number }
 
-function motor(on: On, salida: string, exitCode = 0, respuesta: string | string[] = '{}', hayMemoria = true): Visto {
+// respuesta Error: $.model.complete rechaza (modelo bloqueado, maxTokens invalido) en vez de contestar.
+function motor(on: On, salida: string, exitCode = 0, respuesta: string | string[] | Error = '{}', hayMemoria = true): Visto {
   const visto: Visto = { fills: [], argv: [], prompts: [], abiertos: 0, status: 0 }
   let paneles: { id: string }[] = []
   on('session.root', () => ({ value: '/proyecto' }))
@@ -62,6 +63,7 @@ function motor(on: On, salida: string, exitCode = 0, respuesta: string | string[
   })
   on('model.complete', (_$, e) => {
     visto.prompts.push(e.prompt)
+    if (respuesta instanceof Error) throw respuesta
     const text = Array.isArray(respuesta) ? (respuesta[visto.prompts.length - 1] ?? '{}') : respuesta
     return { value: { isAnswered: true, text, usage: { input_tokens: 1, output_tokens: 1, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 } } }
   })
@@ -196,6 +198,28 @@ test('si el modelo falla, el panel sigue con el corte automatico y no reintenta 
   const reloj = mock.clock(on)
   mock.store(on)
   const visto = motor(on, JSON.stringify(AHORA), 0, 'no es json')
+  await $.command.run({ command: 'pendientes-ahora' })
+  await reloj.advance(1)
+  expect(visto.prompts).toHaveLength(1)
+  const ui = await $.ui.mount({ ...pane(40), surface: 'terminal' })
+  expect(await ui.find({ text: /Paso del hilo largo/ })).toBeDefined()
+
+  await $.command.run({ command: 'pendientes-ahora' })
+  await $.command.run({ command: 'pendientes-ahora' })
+  await reloj.advance(10 * 60 * 1000)
+  expect(visto.prompts).toHaveLength(1)
+
+  await reloj.advance(21 * 60 * 1000)
+  await $.command.run({ command: 'pendientes-ahora' })
+  await $.command.run({ command: 'pendientes-ahora' })
+  await reloj.advance(1)
+  expect(visto.prompts).toHaveLength(2)
+})
+
+test('si $.model.complete rechaza (modelo bloqueado, maxTokens invalido), tambien espera 30 min', async ($, on) => {
+  const reloj = mock.clock(on)
+  mock.store(on)
+  const visto = motor(on, JSON.stringify(AHORA), 0, new Error('modelo bloqueado'))
   await $.command.run({ command: 'pendientes-ahora' })
   await reloj.advance(1)
   expect(visto.prompts).toHaveLength(1)

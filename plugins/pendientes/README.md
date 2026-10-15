@@ -117,7 +117,7 @@ The pane fills the height it has; `+N más` expands the rest.
 - **Model calls:** short titles are written by Haiku (`$.model.complete`), in batches of 12, and
   cached in the mod's store. Each pendiente is asked once per text: a title that comes back
   unusable is replaced by the automatic cut and not asked again, and a changed text is asked
-  again. If a call fails (no answer, unreadable reply), no titles are asked for 30 minutes. Until
+  again. If a call fails (no answer, unreadable reply, or rejected: model blocked, invalid request), no titles are asked for 30 minutes. Until
   a title arrives, an automatic cut of the text is shown. This uses your Claude
   account like any other request and sends those pendiente texts to the model.
 - **Local reads only:** to detect "en curso" the mod reads `git log` and the transcripts of this

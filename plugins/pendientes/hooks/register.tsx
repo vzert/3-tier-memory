@@ -148,18 +148,22 @@ export async function titular($: EngineInterface): Promise<void> {
     for (let i = 0; i < faltan.length && !enEspera; i += TANDA) {
       const tanda = faltan.slice(i, i + TANDA)
       const lista = tanda.map(p => `${p.id}\t${p.texto}`).join('\n')
-      const r = await $.model.complete({
-        model: 'haiku',
-        system:
-          'Resumes tareas pendientes en titulos para una lista. Responde SOLO un objeto JSON {"id": "titulo"}. ' +
-          'Cada titulo: espanol, de 3 a 6 palabras, empieza por verbo en infinitivo, sin ids, sin fechas, ' +
-          'sin el tema inicial tipo "Snippet de cierre:", sin punto final. Conserva nombres de comandos o versiones si son la clave.',
-        prompt: `Una tarea por linea (id TAB texto):\n${lista}`,
-        maxTokens: 900,
-        timeoutMs: 30000,
-      })
+      // Un rechazo (modelo bloqueado, maxTokens invalido) es un fallo como una respuesta ilegible:
+      // abre la espera. Sin este catch lo tragaba el de fuera y cada turno volvia a llamar.
+      const r = await $.model
+        .complete({
+          model: 'haiku',
+          system:
+            'Resumes tareas pendientes en titulos para una lista. Responde SOLO un objeto JSON {"id": "titulo"}. ' +
+            'Cada titulo: espanol, de 3 a 6 palabras, empieza por verbo en infinitivo, sin ids, sin fechas, ' +
+            'sin el tema inicial tipo "Snippet de cierre:", sin punto final. Conserva nombres de comandos o versiones si son la clave.',
+          prompt: `Una tarea por linea (id TAB texto):\n${lista}`,
+          maxTokens: 900,
+          timeoutMs: 30000,
+        })
+        .catch(() => null)
       let nuevos: Record<string, unknown> | null = null
-      if (r.isAnswered) {
+      if (r?.isAnswered) {
         try {
           nuevos = JSON.parse(r.text.slice(r.text.indexOf('{'), r.text.lastIndexOf('}') + 1)) as Record<string, unknown>
         } catch {
