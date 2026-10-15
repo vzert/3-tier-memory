@@ -46,6 +46,26 @@ Tipos de evento:
   pendiente.relate  --id ID (--relacionado X [--relacionado Y ...] | --sin-relacion)
                     Pone (reemplaza) o quita `_relacionado: X, Y_` en un pendiente VIVO
                     (2.55.0). Mismo patron que pendiente.block; no cambia el id.
+  pendiente.adopt   (--text-prefix P | --line "<linea entera>" | --id sin-id-<10 hex>[-N]
+                     | --todas) [--colapsar]                                          (2.58.0)
+                    Le pone su `_id:` a un pendiente que no lo tiene (escrito a mano o anterior
+                    al journal): sin id ningun otro evento lo encuentra. Despues, update/resolve
+                    normales. El id es el CANONICO de la linea, sha1(texto+creado+origen), el
+                    mismo que pone `enrich-memory.py --only creado,id` (la linea queda byte a byte
+                    igual), asi que repair-dualwrite no lo ve como inventado. Si falta `_creado`
+                    se escribe tambien, con la derivacion de enrich (la llama, no la copia): slug
+                    de _origen, `date:` del fichero al que enlaza, mtime de _pendientes.md.
+                    Diferencias con enrich: los items con sangria (enrich los salta, adopt y
+                    repair-dualwrite no) y un `_id:p-…_` mal espaciado (enrich lo da por id y no
+                    lo toca; adopt lo reespacia). --id acepta el id sintetico de /triage-3t. El
+                    evento lleva la linea VERBATIM, espacios incluidos: si cambio antes del
+                    compactado, se salta con aviso. Mismo id
+                    dos veces (lineas identicas, o copia de un pendiente que ya tiene id) = el
+                    mismo pendiente: se niega; --colapsar deja una y guarda las copias enteras en
+                    .journal/adopt-colapsados.log. --todas adopta todas en un evento y aparta
+                    los duplicados. Imprime el id (uno por linea con --todas). Un
+                    `_id: p-<10 hex>_` mal espaciado (`_id:p-…_`) se reespacia y CONSERVA su id;
+                    otro `_id:` no canonico (`p-1234abcd`, prosa) se deja y el canonico va al final.
   session.add       --slug DATE-SLUG --date D --status ST --summary R [--commit C]      (Fase 2)
                     Fila en _session-index.md (arriba de la tabla). Si la fila del slug ya
                     existe, rellena status/summary/commit con lo que se pase. Imprime s-<slug>.
@@ -510,6 +530,192 @@ def strip_meta(text):
     return text.strip()
 
 
+# ----------------------------------------------------------------------------- adopcion (2.58.0)
+# Un pendiente sin `_id:` (escrito a mano, o anterior al journal) no lo encuentra ningun evento:
+# update/resolve/expire/block/relate buscan `_id: p-…_` en la linea. `pendiente.adopt` le pone su
+# id. El id es el CANONICO de la propia linea, sha1(texto+creado+origen) — el mismo que pone
+# `enrich-memory.py --only id` y el mismo que `repair-dualwrite.ids_invented` re-deriva —, asi que
+# ninguna herramienta lo ve como inventado y `--fix-ids` no lo renombra. Estas funciones las
+# importa journal-compact.py: una sola definicion de como se lee la linea y como queda adoptada.
+ID_CANONICO_RE = re.compile(r"_id: (p-[0-9a-f]{10})_")        # = journal-compact.ID_RE
+# Un `_id: p-<10 hex>_` con otro espaciado (`_id:p-…_`, `_id:  p-…_`): es un id de verdad que
+# repair-dualwrite y enrich ya reconocen (ID_RE con `\s*`) y find_id_line no. Se reespacia y se
+# CONSERVA el id: puede estar citado. Cualquier otro `_id:` (8 hex, prosa) no se toca.
+ID_MAL_ESPACIADO_RE = re.compile(r"_id:\s*(p-[0-9a-f]{10})_")
+ORIGEN_LINK_RE = re.compile(r"_origen:\s*\[\[[^\]]+\]\]_")    # = enrich-memory.ORIGEN_RE
+CREADO_LINEA_RE = re.compile(r"_creado:\s*(\d{4}-\d{2}-\d{2})")
+
+
+def abierta_sin_id(line):
+    """¿Es un `- [ ]` sin `_id: p-<10 hex>_`? Lo que find_id_line del compactador no encuentra."""
+    return line.lstrip().startswith("- [ ]") and not ID_CANONICO_RE.search(line)
+
+
+def datos_linea(line):
+    """(texto, creado|None, origen) de una linea de Tier 2, leidos como los lee enrich-memory.
+
+    El origen es solo el wikilink `[[...]]` (un `_origen:` que no es wikilink cuenta como vacio),
+    igual que en `enrich_ids` y en `repair-dualwrite.ORIGEN_RE`: si este calculo divergiera de
+    aquellos, el id adoptado saldria como inventado en `ids_invented`.
+    """
+    s = line.strip()
+    text = strip_meta(s[5:])
+    mc = CREADO_LINEA_RE.search(s)
+    mo = ORIGEN_LINK_RE.search(s)
+    origen = re.search(r"\[\[[^\]]+\]\]", mo.group(0)).group(0) if mo else ""
+    return text, (mc.group(1) if mc else None), origen
+
+
+def _enriquecedor():
+    """El modulo enrich-memory.py vecino (para `linked_file_date`), o None."""
+    import importlib.util
+    sys.dont_write_bytecode = True
+    ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "enrich-memory.py")
+    if not os.path.isfile(ruta):
+        return None
+    try:
+        spec = importlib.util.spec_from_file_location("enrich_memory", ruta)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:
+        return None
+
+
+def creado_para(memory_dir, line, hoy):
+    """La fecha `_creado` de una linea que no la tiene: `enrich-memory.derivar_creado` (slug de
+    `_origen`, o `date:` del fichero al que enlaza) y si no, el mtime de `_pendientes.md` con la
+    misma funcion de enrich. Es LA MISMA derivacion que `enrich-memory.py --only creado`, llamada,
+    no copiada. `hoy` solo si enrich-memory.py no esta al lado.
+
+    Hace falta ESCRIBIRLA al adoptar, no solo usarla para el hash: si la linea quedara sin
+    `_creado`, un enrich posterior le pondria uno, el texto+creado+origen de la linea ya no daria
+    el id adoptado, `ids_invented` lo contaria y `--fix-ids --apply` lo renombraria — rompiendo
+    las citas del id, que es justo lo que adoptarlo viene a permitir.
+    """
+    enr = _enriquecedor()
+    if enr is None:
+        return hoy
+    mo = enr.ORIGEN_RE.search(line)
+    d = enr.derivar_creado(memory_dir, mo.group(1)) if mo else None
+    return d or enr.mtime_date(os.path.join(memory_dir, "_pendientes.md"))
+
+
+def linea_adoptada(line, pid, creado_nuevo=""):
+    """La linea con su `_id:` (y su `_creado:` si le faltaba), byte a byte como la dejaria
+    `enrich-memory.py --only creado,id`: el creado va justo detras del `_origen:` (o al final si no
+    hay), y el id al final. No se borra nada de la linea: un `_id:` que no es canonico (`p-1234abcd`,
+    prosa) se queda donde esta, como lo deja enrich, y sigue a la vista quien lo cite."""
+    out = line.rstrip("\r\n")
+    if creado_nuevo:
+        campo = f" — _creado: {creado_nuevo}_"
+        mo = ORIGEN_LINK_RE.search(out)
+        out = out[:mo.end()] + campo + out[mo.end():] if mo else out + campo
+    return out.rstrip() + f" — _id: {pid}_"
+
+
+def reespaciar_id(line):
+    """(linea, id) si la linea lleva un `_id: p-<10 hex>_` mal espaciado; si no, None."""
+    m = ID_MAL_ESPACIADO_RE.search(line)
+    if not m or ID_CANONICO_RE.search(line):
+        return None
+    return line[:m.start()] + f"_id: {m.group(1)}_" + line[m.end():], m.group(1)
+
+
+def id_de_adopcion(line, creado_nuevo=""):
+    """El id canonico que recibe la linea al adoptarla (None si no hay creado de donde sacarlo).
+
+    Se lee de la linea YA con su `_creado:` insertado, como lo lee enrich (su pasada de id corre
+    sobre lo que dejo la de creado): si el `_origen:` no va detras de una raya (`- [ ] _origen:
+    [[…]]_ texto`), el `— _creado: …_` insertado se lleva como metadato el texto que le sigue, y
+    hashear la linea original daria otro id que el de enrich."""
+    if creado_nuevo:
+        line = linea_adoptada(line, "x", creado_nuevo).rsplit(" — _id: x_", 1)[0]
+    text, creado, origen = datos_linea(line)
+    if not creado:
+        return None
+    return pendiente_id(text, creado, origen)
+
+
+def _triage():
+    """bin/triage-scan.py, para reconocer su id sintetico `sin-id-<hash>[-N]`, o None."""
+    import importlib.util
+    sys.dont_write_bytecode = True
+    ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "triage-scan.py")
+    try:
+        spec = importlib.util.spec_from_file_location("triage_scan", ruta)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception:
+        return None
+
+
+SIN_ID_RE = re.compile(r"^(sin-id-[0-9a-f]{10})(?:-(\d+))?$")   # = el cursor de triage-scan
+
+
+def candidatas_adopt(memory_dir, a, hoy):
+    """[(linea, id, creado_nuevo)] que el selector elige, y los ids canonicos que ya viven.
+
+    El selector se resuelve AQUI, contra el fichero de ahora, y el evento lleva la linea VERBATIM:
+    el compactador solo casa por esa linea, nunca por posicion. Importa por el sufijo `-N` del id
+    de triage, que es posicional: adoptar `sin-id-X` convierte `sin-id-X-2` en `sin-id-X`.
+    """
+    path = os.path.join(memory_dir, "_pendientes.md")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            lineas = fh.read().split("\n")
+    except OSError:
+        sys.exit(f"journal-emit: no existe {path}")
+    vivos = {m.group(1) for ln in lineas for m in [ID_CANONICO_RE.search(ln)]
+             if m and ln.lstrip().startswith("- [ ]")}
+    sin_id = [ln for ln in lineas if abierta_sin_id(ln)]
+
+    if a.todas:
+        elegidas = sin_id
+    elif a.line is not None:
+        elegidas = [ln for ln in sin_id if ln.strip() == a.line.strip()]
+        if not elegidas and any(ln.strip() == a.line.strip() for ln in lineas):
+            m = ID_CANONICO_RE.search(a.line)
+            if m:
+                print(m.group(1))      # ya adoptada: nada que hacer
+                sys.exit(0)
+    elif a.id:
+        m = SIN_ID_RE.match(a.id.strip())
+        if not m:
+            sys.exit("journal-emit: pendiente.adopt --id acepta el id sintetico de /triage-3t "
+                     "(sin-id-<10 hex>[-N]); un p-… ya esta adoptado")
+        tri = _triage()
+        if tri is None:
+            sys.exit("journal-emit: no encuentro triage-scan.py junto a este script")
+        n_pedido = int(m.group(2) or 1)
+        vistos, elegidas = 0, []
+        for ln in sin_id:
+            texto = re.sub(r"\s+", " ", tri.META.sub("", ln.strip()[5:].strip()))
+            if tri.sintetico(texto) == m.group(1):
+                vistos += 1
+                if vistos == n_pedido:
+                    elegidas = [ln]
+                    break
+    elif a.text_prefix:
+        pref = normalize_text(a.text_prefix)
+        elegidas = [ln for ln in sin_id if normalize_text(datos_linea(ln)[0]).startswith(pref)]
+    else:
+        sys.exit("journal-emit: pendiente.adopt necesita --line \"<linea>\", --text-prefix P, "
+                 "--id sin-id-… o --todas")
+
+    out = []
+    for ln in elegidas:
+        r = reespaciar_id(ln)
+        if r:                    # ya tiene id, mal espaciado: se conserva, sin _creado nuevo
+            out.append((ln.rstrip("\r"), r[1], ""))
+            continue
+        _t, creado, _o = datos_linea(ln)
+        nuevo = "" if creado else creado_para(memory_dir, ln, hoy)
+        out.append((ln.rstrip("\r"), id_de_adopcion(ln, nuevo), nuevo))
+    return out, vivos
+
+
 # ----------------------------------------------------------------------------- main
 def memory_dir_de(a):
     """El memory/ que este proceso va a usar, para poder mirar si el origen existe."""
@@ -688,7 +894,7 @@ def main():
     ap.add_argument("--type", required=True,
                     choices=["pendiente.add", "pendiente.resolve", "pendiente.update",
                              "pendiente.expire", "pendiente.reopen", "pendiente.window",
-                             "pendiente.block", "pendiente.relate",
+                             "pendiente.block", "pendiente.relate", "pendiente.adopt",
                              "session.add", "session.amend",
                              "learning.add", "learning.update", "learning.retire",
                              "plan.upsert", "plan.reopen", "research.upsert",
@@ -706,6 +912,8 @@ def main():
     ap.add_argument("--relacionado", action="append", default=[])   # pendiente.add / .relate
     ap.add_argument("--sin-relacion", dest="sin_relacion", action="store_true")
     ap.add_argument("--transcript")   # pendiente.add: de donde leer el paso recibido (2.57.0)
+    ap.add_argument("--todas", action="store_true")        # pendiente.adopt (2.58.0)
+    ap.add_argument("--colapsar", action="store_true")     # pendiente.adopt
     # pendiente.resolve
     ap.add_argument("--id")
     ap.add_argument("--estado")
@@ -1134,6 +1342,54 @@ def main():
         base["payload"] = {"id": pid, "bloqueado": bloqueado}
         write_event(memory_dir, base)
         print(pid)
+        return
+
+    if a.type == "pendiente.adopt":
+        hoy = date.today().isoformat()
+        elegidas, vivos = candidatas_adopt(memory_dir, a, hoy)
+        if not elegidas:
+            sys.exit("journal-emit: pendiente.adopt no encuentra ninguna linea `- [ ]` sin `_id:` "
+                     "que case con el selector" + ("" if a.todas else
+                     " (si ya tiene `_id: p-…_`, usa ese id directamente)"))
+        # Mas de una linea DISTINTA para un selector de una sola: no se elige por el usuario.
+        if not a.todas and len({ln.strip() for ln, _p, _c in elegidas}) > 1:
+            sys.exit("journal-emit: el selector casa con varias lineas distintas sin id; afina "
+                     "--text-prefix o pasa --line con la linea entera:\n  " +
+                     "\n  ".join(ln.strip()[:120] for ln, _p, _c in elegidas[:8]))
+        sin_creado = [ln for ln, pid, _c in elegidas if pid is None]
+        if sin_creado:   # no pasa: creado_para siempre da una fecha. Guarda, no camino.
+            sys.exit("journal-emit: no hay fecha de creado para: " + sin_creado[0].strip()[:120])
+        # Duplicados = el MISMO id canonico dos veces: dos lineas con el mismo texto, creado y
+        # origen, o una linea sin id que repite un pendiente que ya tiene id. Son el mismo
+        # pendiente; adoptar las dos dejaria dos lineas vivas con un id, y resolve solo cerraria
+        # una. Sin --colapsar se niega; con el, el compactador deja UNA y guarda el resto entero
+        # en .journal/adopt-colapsados.log (lo mismo texto distinto con otro creado u origen: da
+        # otro id y no es duplicado).
+        cuenta = {}
+        for _ln, pid, _c in elegidas:
+            cuenta[pid] = cuenta.get(pid, 0) + 1
+        dup = {pid for pid, n in cuenta.items() if n > 1 or pid in vivos}
+        if dup and not a.colapsar:
+            for pid in sorted(dup):
+                donde = (f"ya vive como {pid}" if pid in vivos
+                         else f"{cuenta[pid]} copias identicas")
+                ejemplo = next(ln for ln, p_, _c in elegidas if p_ == pid).strip()[:100]
+                print(f"journal-emit: DUPLICADO ({donde}): {ejemplo}", file=sys.stderr)
+            if not a.todas or len(dup) == len(cuenta):
+                sys.exit("journal-emit: pendiente.adopt no adopta duplicados. Es el mismo "
+                         "pendiente: repite con --colapsar para dejar una sola linea (las copias "
+                         "quedan enteras en .journal/adopt-colapsados.log)")
+            elegidas = [e for e in elegidas if e[1] not in dup]
+            print(f"journal-emit: --todas sigue sin esos {len(dup)} id(s) duplicados",
+                  file=sys.stderr)
+        base["payload"] = {
+            "lineas": [{"line": ln, "id": pid, "creado_nuevo": c} for ln, pid, c in elegidas],
+            "colapsar": bool(a.colapsar),
+            "fecha": hoy,
+        }
+        write_event(memory_dir, base)
+        for pid in dict.fromkeys(pid for _ln, pid, _c in elegidas):
+            print(pid)
         return
 
     if a.type == "pendiente.relate":

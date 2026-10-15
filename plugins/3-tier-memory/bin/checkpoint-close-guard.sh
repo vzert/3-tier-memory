@@ -835,6 +835,48 @@ if pedir_revision and reentrante and not revision_contestada():
                      + str(len(REVISION_ITEMS)) + " lineas). Preguntale al agente \"¿falto algo de "
                      "tu checkpoint?\" antes de dar el cierre por bueno.")
 
+def ruta_aviso():
+    """(absoluta, relativa al directorio de la sesion) del archivo con el aviso completo (2.59.0).
+    Siempre DENTRO del directorio de la sesion (`cwd`): un Read fuera de los directorios de trabajo
+    pide permiso, o se niega con `blockReadsOutsideWorkingDirectories` (medido con `claude -p`;
+    adversarios de 2.59.0: la primera version lo dejaba junto al transcript, la segunda en el `.git`
+    del repo, que queda FUERA cuando la sesion se abrio en una subcarpeta). Si la sesion esta en la
+    raiz de un checkout normal va en `.git/`, que git no versiona. Si no (una subcarpeta, o un
+    worktree, cuyo git-dir vive fuera), va en el propio `cwd` como `.3t-revision-cierre-<id>.md` y
+    el patron se excluye en `info/exclude` (comun a todos los worktrees). Sin git, lanza: el aviso
+    vuelve entero."""
+    def git(*a):
+        return subprocess.run(["git", "-C", cwd, *a], capture_output=True, text=True,
+                              timeout=10, check=True).stdout.strip()
+    base = os.path.realpath(cwd)
+    raiz = os.path.realpath(git("rev-parse", "--show-toplevel"))
+    gdir = os.path.realpath(git("rev-parse", "--absolute-git-dir"))
+    nombre = "3t-revision-cierre-" + (re.sub(r"[^A-Za-z0-9_-]", "-", SID)[:12] or "sin-sesion") + ".md"
+    if base == raiz and gdir.startswith(raiz + os.sep):
+        return os.path.join(gdir, nombre), os.path.relpath(os.path.join(gdir, nombre), base)
+    excl = git("rev-parse", "--git-path", "info/exclude")
+    excl = excl if os.path.isabs(excl) else os.path.join(base, excl)
+    patron = ".3t-revision-cierre-*.md"   # sin `/`: casa en cualquier carpeta del repo
+    try:
+        actual = open(excl, encoding="utf-8").read()
+    except FileNotFoundError:
+        actual = ""
+    if patron not in actual.splitlines():
+        os.makedirs(os.path.dirname(excl), exist_ok=True)
+        with open(excl, "a", encoding="utf-8") as f:
+            f.write(("" if not actual or actual.endswith("\n") else "\n") + patron + "\n")
+    return os.path.join(base, "." + nombre), "." + nombre
+
+
+if reentrante and not (pedir_revision and not revision_contestada()):
+    # El aviso de 2.59.0 ya se uso (la revision esta contestada, o no se pidio): se borra, para no
+    # dejar uno por sesion. Si la revision sigue sin contestar se queda, por si el agente aun lo
+    # lee (adversario externo de 2.59.0); el siguiente bloqueo lo reescribe.
+    try:
+        os.remove(ruta_aviso()[0])
+    except Exception:
+        pass
+
 if not problemas and not (pedir_revision and not reentrante):
     sys.exit(0)
 
@@ -870,7 +912,32 @@ else:
                 "tal cual lo imprimen, sin resumirlo y sin nada despues. No lo pegues antes de la "
                 "revision ni dos veces:\n"
                 + "\n".join(f"- {e}" for _, e in sorted(dict.fromkeys(cierre_final), key=lambda x: x[0])))
-    print(json.dumps({"decision": "block", "reason": "\n\n".join(partes)}, ensure_ascii=False))
+    completo = "\n\n".join(partes)
+    # El aviso completo va a un archivo y el `reason` solo lo senala (2.59.0). Un Stop no tiene
+    # campo que separe lo que ve el humano de lo que ve el modelo: `reason` y `additionalContext`
+    # salen enteros en la terminal como "Stop hook feedback", y eran ~2.000-2.800 caracteres en
+    # cada /checkpoint-3t. El bloqueo se queda en el Stop a proposito: la revision funciona porque
+    # llega como turno nuevo (ver arriba, 62 de 66), y entregarla antes, a mitad del turno, es el
+    # antiguo Step 7b que se contestaba como tramite. Si no se puede escribir, el aviso entero
+    # vuelve a `reason`, como antes: nunca se pierde.
+    reason = completo
+    try:
+        aviso, corto = ruta_aviso()
+        with open(aviso, "w", encoding="utf-8") as f:
+            f.write(completo)
+        n = len(problemas)
+        que = [f"{n} problema(s) del cierre"] if n else []
+        que += ["la revision del cierre"] if pedir_revision else []
+        reason = (f"/checkpoint-3t: falta {' y '.join(que)}. Lee con Read `{aviso}` y haz lo que "
+                  "dice antes de terminar.")
+        if len(reason) > 300:
+            # Una ruta de proyecto muy larga: la forma relativa a la raiz del repo mantiene el aviso
+            # corto (adversario externo de 2.59.0: 469 caracteres con una ruta larga).
+            reason = (f"/checkpoint-3t: falta {' y '.join(que)}. Lee con Read `{corto}` (relativa "
+                      "a tu directorio de trabajo) y haz lo que dice antes de terminar.")
+    except Exception:
+        reason = completo
+    print(json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False))
 sys.exit(0)
 PY
 exit 0

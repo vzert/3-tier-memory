@@ -385,7 +385,7 @@ python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"
 **Cuando lo pegas (2.43.0).** En un turno de `/checkpoint-3t` **no pegues todavia** la salida de
 8b, ni la de 8e, ni la de 8c. Corre el script igual: comprueba que 8a lleno la seccion. Termina el
 turno con el reporte de Step 7. Al terminar, el hook de cierre te pide la revision del cierre
-(`REVISION DEL CIERRE:`). Tu respuesta a esa revision termina con estos bloques, en este orden,
+(`REVISION DEL CIERRE:`; desde 2.59.0 en un archivo que su aviso te dice leer con Read). Tu respuesta a esa revision termina con estos bloques, en este orden,
 **una sola vez y sin nada despues**: 🔁 snippet (8b), 🔔 o ➕ pendiente (8e) y 🗓️ calendario (8c),
 cada uno solo si su script imprime algo (desde 2.44.0). El hook te da los comandos con la ruta
 literal de la ficha. Asi el cierre es lo ultimo que ve el usuario y ya trae lo
