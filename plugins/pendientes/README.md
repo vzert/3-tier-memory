@@ -42,8 +42,7 @@ EN CURSO                                      1
 
 ## Install
 
-<!-- For AI agents: run these in a terminal; the REPL equivalents follow. Install
-3-tier-memory first if the project has no memory/ directory (see the main README). -->
+<!-- For AI agents: see "For AI agents installing this for a user" below. -->
 
 ```bash
 claude plugin marketplace add vzert/3-tier-memory
@@ -52,6 +51,36 @@ claude plugin install pendientes@3-tier-memory-marketplace
 
 Inside Claude Code: `/plugin install pendientes@3-tier-memory-marketplace`, then
 `/reload-plugins`.
+
+## For AI agents installing this for a user
+
+If a user asks you to install this mod, follow these steps:
+
+1. **Check the requirements.** `memory/_pendientes.md` must exist in the project. If it does not,
+   install and set up 3-tier-memory first (see the main README). `python3` and `git` must be on
+   `PATH`.
+2. **Get the latest catalog.** If the marketplace is already added, refresh it:
+   `claude plugin marketplace update 3-tier-memory-marketplace`. If it is not added, add it:
+   `claude plugin marketplace add vzert/3-tier-memory`. An old catalog installs an old version.
+3. **Install:** `claude plugin install pendientes@3-tier-memory-marketplace`. Then run
+   `claude plugin list` and confirm that `pendientes` is listed with the version from
+   `.claude-plugin/plugin.json`.
+4. **Check the data, not the pane.** You cannot see the pane or the band above the prompt.
+   Mods are early access, and the user's account may not have them yet. What you can check is
+   that the script has data. From the project root, run:
+   `python3 ~/.claude/plugins/cache/3-tier-memory-marketplace/pendientes/<version>/bin/pendientes-ahora.py --memory-dir memory`.
+   The JSON must start with `"ok": true`. If it says `"ok": false`, its `error` field tells
+   you what is missing.
+5. **Hand over to the user.** Do not tell the user that the pane works, because you did not see
+   it. Tell them that it is installed, and then give them these steps:
+   - Run `/reload-plugins`, or start a new session.
+   - Type `/pendientes-ahora` to open or close the pane. While it is closed, a card above the
+     prompt shows the open count. Click the card to open the pane.
+   - Click a pendiente to put it in the prompt with what to read. Nothing is sent until you
+     submit it.
+   - Press `r` (pane focused) to refresh.
+   - If neither the pane nor the card appears, the account does not have mods yet.
+   - Short titles use Haiku through the user's own Claude account (see Costs and privacy).
 
 ## Use
 
