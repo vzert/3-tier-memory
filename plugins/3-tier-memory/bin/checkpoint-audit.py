@@ -1107,8 +1107,10 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                                   "de checkpoint de la sesion: Step 3b pone un candidato por pregunta", ligar,
                                   corrige="hazle las preguntas de Step 3b con AskUserQuestion, una por "
                                           "candidato, y cita su encabezado en la linea "
-                                          "(`pregunta: <encabezado>`); si no hay pantalla, la "
-                                          "decision es `sin confirmar`"))
+                                          "(`pregunta: <encabezado>`); en una sesion supervisada, "
+                                          "un SendMessage al supervisor con los candidatos "
+                                          "numerados, su respuesta, y `pregunta: <summary>`; si no "
+                                          "hay pantalla, la decision es `sin confirmar`"))
             else:
                 h.append(Hallazgo(HECHO, "pendientes.candidatos_pregunta",
                                   f"{preguntas_usuario} pregunta(s) al usuario en los turnos de checkpoint de la sesion, "

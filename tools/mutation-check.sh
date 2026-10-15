@@ -403,6 +403,11 @@ caso "guard turno sin ckpt"    checkpoint-close-guard.sh $L test-checkpoint-clos
 caso "guard sin encabezados"   checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "una pregunta ajena a los candidatos" guard-sin-encabezados
 caso "hecho sin pregunta"      checkpoint-audit.py $L $S "CH5: hecho sin ninguna pregunta" hecho-no-pregunta
 caso "hecho no es decision"    checkpoint-audit.py $L $S "CH1: hecho con evidencia" hecho-no-es-decision
+caso "peer no cuenta"          checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "SendMessage al supervisor y su respuesta" peer-no-cuenta
+caso "peer sin respuesta"      checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "SendMessage sin respuesta" peer-sin-respuesta-cuenta
+caso "peer respuesta anterior" checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "ANTERIOR al envio" peer-respuesta-anterior
+caso "peer sin cola"           checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "la respuesta llega en cola" peer-sin-cola
+caso "peer un numero"          checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "un SendMessage con dos candidatos numerados" peer-un-numero
 
 # Filtro de ignoradas de checkpoint-commit.py (issue #11): cada pieza del arreglo con su aserto.
 I=m_commit_ignoradas.py; C=test-checkpoint-commit.sh

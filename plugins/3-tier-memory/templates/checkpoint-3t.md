@@ -603,6 +603,14 @@ modal vuelve con una respuesta, hay alguien contestando. Sin pantalla, no pregun
 nada. Cada candidato queda con decision
 `sin confirmar`. No cuenta como pendiente, no sale al inicio de sesion, y queda escrito en la ficha.
 
+**Sesion supervisada** (lookout u otro supervisor que te manda preguntar por `SendMessage` en vez de
+`AskUserQuestion`): la pregunta va al supervisor por `SendMessage`, que se la pasa al usuario. Un
+solo mensaje con los candidatos numerados (`1)`, `2)`…), uno por numero, con su recomendacion, y el
+`summary` del mensaje hace de encabezado: cada linea de la ficha cita `pregunta: <summary>`. Espera
+su respuesta antes de escribir las decisiones. El hook de cierre cuenta ese mensaje como tantas
+preguntas como numeros lleva, y solo si despues llego un mensaje de esa misma sesion (sin respuesta
+no llego a nadie, igual que un modal sin resultado) (p-1d0f012aa9).
+
 **3. Escribe la decision en la ficha**, en `## Candidatos a pendiente` (reemplaza el placeholder de
 Step 2), una linea por candidato:
 
@@ -620,8 +628,8 @@ El id de `guardado` sale del stdout de `journal-emit.py` (abajo). `checkpoint-au
 un id que exista, si un `hecho` no trae `_verificado: <evidencia>_`, si un pendiente abierto que nacio en esta sesion (`_origen` = esta ficha) no sale
 como `guardado`, si hay mas `_descartado:` en `## Bugs fixed` que lineas `descartado`/`sin
 confirmar` aqui, o si falta la seccion cuando habia algo de eso que decidir. El hook de cierre
-anade `pendientes.candidatos_pregunta`: toma las preguntas de los `AskUserQuestion` de cada turno
-de esta sesion que corrio `/checkpoint-3t` y que llegaron al usuario (respondidos, o rechazados por
+anade `pendientes.candidatos_pregunta`: toma las preguntas de los `AskUserQuestion` (y de los
+`SendMessage` respondidos de una sesion supervisada, arriba) de cada turno de esta sesion que corrio `/checkpoint-3t` y que llegaron al usuario (respondidos, o rechazados por
 el con el texto de arriba) y, desde 2.54.0, exige que cada decision `guardado`, `hecho` o
 `descartado` cite con `pregunta:` el encabezado de una de ellas; cada pregunta cubre una sola
 decision. Una decision sin `pregunta:`, con un encabezado que no llego al usuario, o con uno que ya

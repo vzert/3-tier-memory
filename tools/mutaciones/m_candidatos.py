@@ -6,6 +6,7 @@ import io, sys
 # AskUserQuestion (sin pasarlo, contando uno sin resultado, o midiendo un turno sin /checkpoint-3t).
 # 2.54.0 (Hacerlo ahora): `hecho` exige `_verificado:`, pide pregunta como toda decision, y es decision.
 # 2.54.1 (re-checkpoint): las preguntas de un checkpoint anterior cuentan; las de otro turno, no.
+# 2.60.3 (p-1d0f012aa9): un SendMessage cuenta solo con respuesta posterior de su destinatario.
 #
 # Uso: m_candidatos.py <fichero> <mutacion>
 # Patrones de una sola linea, sin "\n": el checkout de Windows trae CRLF (regla 322).
@@ -26,8 +27,8 @@ M = {
     "guard-no-pasa": [
         ('        extra += ["--preguntas-usuario", str(respondidas)]', "        pass")],
     "guard-sin-resultado-cuenta": [
-        ("        llegaron = [i for i in preguntas if i in resultados and",
-         "        llegaron = [i for i in preguntas if True and")],
+        ("        llegaron = [i for i in preguntas if i in envios_respondidos or i in resultados and",
+         "        llegaron = [i for i in preguntas if i in envios_respondidos or True and")],
     "guard-error-cuenta": [
         ("                    (i not in con_error or RECHAZO_USUARIO.search(resultados[i]))]",
          "                    True]")],
@@ -70,6 +71,20 @@ M = {
          '                if m.group(1).lower() in ("guardado", "descartado"):')],
     "hecho-no-es-decision": [
         ("(guardado|descartado|sin confirmar|hecho)\\b", "(guardado|descartado|sin confirmar)\\b")],
+    # p-1d0f012aa9 (2.60.3): sesion supervisada, la pregunta va por SendMessage al supervisor.
+    "peer-no-cuenta": [
+        ('        elif nombre == "SendMessage" and b.get("id") not in n_preg:', "        elif False:")],
+    "peer-sin-respuesta-cuenta": [
+        ("    if not any(p > pos and a_quien in (de, nom) for p, de, nom in respuestas_peer):",
+         "    if False:")],
+    "peer-respuesta-anterior": [
+        ("    if not any(p > pos and a_quien in (de, nom) for p, de, nom in respuestas_peer):",
+         "    if not any(a_quien in (de, nom) for p, de, nom in respuestas_peer):")],
+    "peer-sin-cola": [
+        ('    for o in (r.get("origin"), (r.get("attachment") or {}).get("origin")):',
+         '    for o in (r.get("origin"),):')],
+    "peer-un-numero": [
+        ('    n = max(1, len(ENUM_CANDIDATO.findall(inp["message"])))', "    n = 1")],
     "ninguno-ignora-descartado": [
         ("        if veredicto_adv == \"break\" and not vivos and not descartados_bugs:",
          "        if veredicto_adv == \"break\" and not vivos:")],

@@ -1149,7 +1149,31 @@ u("guarda el checkpoint")
 if preg != "reimprime":
     a([{"type": "tool_use", "id": "t1", "name": "Skill", "input": {"skill": "checkpoint-3t"}}])
     u([{"type": "tool_result", "tool_use_id": "t1", "content": "Launching skill: checkpoint-3t"}])
-if preg not in ("sin", "reimprime"):
+SOCK = "uds:/tmp/cc-socks/9.sock"
+def peer(de, cola=False):
+    # Las dos formas reales (transcript d69ad375, 2026-10-15): `user` isMeta con la sesion ocupada,
+    # `attachment` queued_command con la sesion ociosa. El `origin` lo escribe el harness.
+    o = {"kind": "peer", "from": de, "name": "supervisor-x"}
+    txt = f'<cross-session-message from="{de}">decision: 1 descartado</cross-session-message>'
+    if cola:
+        R.append({"type": "attachment", "attachment": {"type": "queued_command", "prompt": txt, "origin": o}})
+    else:
+        R.append({"type": "user", "isMeta": True, "origin": o,
+                  "message": {"role": "user", "content": "Another Claude session sent a message:\n" + txt}})
+if preg.startswith("peer"):
+    if preg == "peer-antes":
+        peer(SOCK)
+    msg = "1) revisar algo\n2) otra cosa" if preg == "peer-dos" else "Candidato: revisar algo. Recomiendo descartar."
+    a([{"type": "tool_use", "id": "m1", "name": "SendMessage",
+        "input": {"to": "worker" if preg == "peer-sub" else SOCK, "summary": "Uno", "message": msg}}])
+    u([{"type": "tool_result", "tool_use_id": "m1", "content": '{"success":true}'}])
+    if preg in ("peer", "peer-dos", "peer-uno"):
+        peer(SOCK)
+    elif preg == "peer-cola":
+        peer(SOCK, cola=True)
+    elif preg == "peer-otro":
+        peer("uds:/tmp/cc-socks/77.sock")
+elif preg not in ("sin", "reimprime"):
     qs = {"dos": [{"question": "a", "header": "Uno"}, {"question": "b", "header": "Dos"}],
           "ajena": [{"question": "otra cosa", "header": "Otra"}]}.get(preg, [{"question": "a", "header": "Uno"}])
     a([{"type": "tool_use", "id": "q1", "name": "AskUserQuestion", "input": {"questions": qs}}])
@@ -1199,6 +1223,32 @@ txc "$T/tc.jsonl" ajena
 chk "una pregunta ajena a los candidatos no cubre la decision: lo reclama" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
 txc "$T/tc.jsonl" reimprime
 chk "un turno que solo reimprime el snippet no mide candidatos" "0" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+
+echo "== p-1d0f012aa9: sesion supervisada por lookout, la pregunta va por SendMessage al supervisor =="
+txc "$T/tc.jsonl" peer
+chk "SendMessage al supervisor y su respuesta: no lo reclama" "0" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-cola
+chk "la respuesta llega en cola (queued_command, sesion ociosa): no lo reclama" "0" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-sinresp
+chk "SendMessage sin respuesta: no llego a nadie, lo reclama" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-otro
+chk "la respuesta viene de otra sesion, no del destinatario: lo reclama" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-antes
+chk "un mensaje del supervisor ANTERIOR al envio no es su respuesta: lo reclama" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-sub
+chk "sin supervisor (SendMessage a un subagente, sin mensaje peer): sigue exigiendo la pregunta" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+cp "$FC" "$FC.bak"
+python3 - "$FC" <<'PY'
+import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+t=t.replace("- revisar algo — pregunta: Uno — recomendacion: descartar — decision: descartado\n",
+            "- revisar algo — pregunta: Uno — recomendacion: descartar — decision: descartado\n- otra cosa — pregunta: Uno — decision: descartado\n",1)
+open(p,"w",encoding="utf-8").write(t)
+PY
+txc "$T/tc.jsonl" peer-dos
+chk "dos decisiones y un SendMessage con dos candidatos numerados: no lo reclama" "0" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-uno
+chk "dos decisiones y un SendMessage sin numerar (una pregunta): lo reclama" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+mv "$FC.bak" "$FC"
 
 echo "== p-ea8992fa7e: un segundo /checkpoint-3t que EDITA la ficha conserva las decisiones del primero =="
 # Turnos de la sesion: $2 = lista "ck:Encabezado" o "otro:Encabezado" (vacio tras ':' = sin
