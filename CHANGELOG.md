@@ -24,7 +24,7 @@ reemplaza por otras.
 - Un compactador anterior a esta version que vea un `learning.update` que solo trae `sin_disparadores` lo
   manda a cuarentena ("sin nada que corregir"): no lo aplica a medias. Se reintenta con esta version.
   Si el mismo evento trae ademas `--text` o `--last-verified`, ese compactador aplica lo demas y
-  conserva las frases sin avisar: quitar frases junto a otro cambio pide 2.59.0 en quien compacta.
+  conserva las frases sin avisar: quitar frases junto a otro cambio pide esta version en quien compacta.
 - Una decision de dejar una regla sin frases que no este en `.migracion-learnings.json` no la ve la
   migracion: en el repo del plugin, la de la F7 manual (2026-10-06) solo estaba en
   `tools/recall-bench/resultado-F7.json`, y la corrida del 2026-10-15 enriquecio esas reglas.
