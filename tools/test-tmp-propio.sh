@@ -107,12 +107,17 @@ mata_a_mitad() {  # <repo> <base>: arranca run-tests --una, lo mata con pkill a 
   n=0; while pgrep -f "$T/suite-lenta.sh" >/dev/null && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n+1)); done
 }
 cuenta() { ls -d "$1"/tmp.* "$1"/3tm-tests.* 2>/dev/null | wc -l | tr -d ' '; }
-# Git Bash (windows-latest) no trae pkill ni pgrep: sin ellos el caso no puede matar a nadie y el
-# control saldria rojo por eso, no por el ayudante. Se salta y se cuenta (run-tests: "skip").
+# Sin pkill/pgrep que funcionen el caso no puede matar a nadie y el control saldria rojo por eso, no
+# por el ayudante. No se supone por sistema: se mira si pgrep -f ve un sleep lanzado aqui (puede
+# faltar, como quiza en Git Bash, o no poder leer la lista de procesos, como en un sandbox: medido
+# "pgrep: Cannot get process list"). No sirve buscar a esta prueba: el pgrep de macOS no devuelve a
+# sus propios ancestros (medido). Si no lo ve, se salta y se cuenta (run-tests: "skip").
 skip=0
-if ! command -v pkill >/dev/null 2>&1 || ! command -v pgrep >/dev/null 2>&1; then
-  skip=1; echo "  SALTA caso 5: sin pkill/pgrep en este sistema"
+sleep 30 & sonda=$!
+if ! command -v pkill >/dev/null 2>&1 || ! pgrep -f "sleep 30" 2>/dev/null | grep -qx "$sonda"; then
+  skip=1; echo "  SALTA caso 5: pkill/pgrep no estan o no ven los procesos en este sistema"
 fi
+kill "$sonda" 2>/dev/null; wait "$sonda" 2>/dev/null
 [ "$skip" -eq 1 ] || for caso in con sin; do
   R="$T/repo-$caso"; B="$T/base-$caso"; mkdir -p "$R/tools" "$B"
   cp "$RT_REAL" "$R/tools/run-tests.sh"
