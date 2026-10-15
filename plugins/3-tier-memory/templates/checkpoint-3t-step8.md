@@ -193,7 +193,8 @@ Reglas para llenar los slots:
   6. **Palabras simples:** el usuario tambien lo lee.
   7. **Unos 300 caracteres**, como guia y no como tope. Los umbrales acordados (el parrafo "Incluye
      aqui los umbrales…", mas abajo) si caben.
-  Medido sobre 211 snippets (research `hilo-pendientes-relacionados-medicion`, Anexo 2): con un paso
+  Medido sobre los 163 snippets con una segunda respuesta util del usuario (de 211; research
+  `hilo-pendientes-relacionados-medicion`, Anexo 2): con un paso
   limpio el usuario tuvo que aclarar o corregir en el 8 % de los casos; con una espera suya, 27 %;
   con varias tareas, 22 %; con ramas, 67 % (3 casos). El largo va junto con la complejidad, asi que
   es guia y no regla. `checkpoint-audit.py` (`snippet.marco`) avisa como `POR-DISEÑO`, nunca como

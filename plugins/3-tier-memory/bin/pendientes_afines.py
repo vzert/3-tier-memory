@@ -92,7 +92,8 @@ def fecha_futura(texto, hoy):
 # POR-DISENO que el hook de cierre pone en la revision, nunca un SALTADO (decision de Victor del
 # 2026-10-14). La via principal de una espera sigue siendo `_bloqueado:` (regla 216).
 # Una espera escrita solo en el texto: el paso depende de que otro decida, responda o actue.
-# Medido en 211 snippets: 27 % de problema contra 8 % de un paso limpio. Se busca sin tildes.
+# Medido en 163 snippets con respuesta util (de 211): 27 % de problema contra 8 % de un paso
+# limpio. Se busca sin tildes.
 ESPERA_AJENA = re.compile(
     r"\bsi\s+(?:\S+\s+){1,2}(?:lo\s+|la\s+)?(?:decide|aprueba|autoriza|confirma|acepta|quiere|da el ok)\b"
     r"|\bdecidir\s+con\s+\S+"

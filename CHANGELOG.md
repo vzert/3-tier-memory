@@ -3,7 +3,7 @@
 
 ## [2.60.0] - 2026-10-15
 Origen: p-88a7cc28c2 y p-3d1c7ab131. Victor acepto el 2026-10-13 el marco del `Proximo paso`
-(research `hilo-pendientes-relacionados-medicion`, Anexo 2). Sobre 211 snippets, lo que se asocia a
+(research `hilo-pendientes-relacionados-medicion`, Anexo 2). Sobre 211 snippets (163 con una segunda respuesta util), lo que se asocia a
 que el usuario tenga que aclarar o corregir es el contenido del paso, no el largo: paso limpio 8 %,
 espera de Victor 27 %, varias tareas 22 %, ramas 67 % (3 casos). El 2026-10-14 decidio que las
 senales de formato avisan y no bloquean.
