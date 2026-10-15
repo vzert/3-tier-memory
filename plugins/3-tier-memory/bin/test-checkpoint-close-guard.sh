@@ -121,8 +121,21 @@ PY
 corre() {   # $1 transcript, $2 reentrante (true|false), $3 last_assistant_message (fichero o "-")
   local LAM=""; [ "$3" != "-" ] && [ -n "$3" ] && LAM="$(cat "$3")"
   python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":sys.argv[2]=="true","last_assistant_message":sys.argv[3],"cwd":"/tmp"}))' "$1" "$2" "$LAM" \
-    | bash "$HOOK" 2>/dev/null
+    | bash "$HOOK" 2>/dev/null | expande
 }
+# Desde 2.59.0 el `reason` del bloqueo solo senala el archivo con el aviso completo. `expande` pone
+# el contenido de ese archivo en `reason` y guarda el puntero en `puntero`: cada aserto de este test
+# sigue midiendo el texto que recibe el agente, y `razon_corta` mide lo que ve el humano. Si el
+# puntero no casa, el reason se queda corto y los asertos de contenido fallan (no pasa en silencio).
+expande() { python3 -c '
+import json,re,sys
+d=sys.stdin.read()
+if not d.strip(): sys.exit(0)
+j=json.loads(d)
+m=re.search(r"Lee con Read `([^`]+)`", j.get("reason") or "") if j.get("decision")=="block" else None
+if m:
+    j["puntero"]=j["reason"]; j["reason"]=open(m.group(1),encoding="utf-8").read()
+print(json.dumps(j,ensure_ascii=False))'; }
 bloquea() { printf '%s' "$1" | grep -c '"decision": "block"' || true; }
 
 M="$T/memory"; F="$M/sessions/2026-09-22-demo.md"
@@ -389,7 +402,7 @@ python3 - "$F" <<'PYX'
 import sys; p=sys.argv[1]; t=open(p, encoding="utf-8").read()
 open(p, "w", encoding="utf-8").write(t.replace("date: 2026-09-22\n", "date: 2026-09-22\nsession_id: sesion-actual\n", 1))
 PYX
-O=$(python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":False,"session_id":"sesion-actual","cwd":"/tmp"}))' "$T/t.jsonl" | bash "$HOOK" 2>/dev/null)
+O=$(python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":False,"session_id":"sesion-actual","cwd":"/tmp"}))' "$T/t.jsonl" | bash "$HOOK" 2>/dev/null | expande)
 chk "bloquea" "1" "$(bloquea "$O")"
 
 # ================================================================================================
@@ -600,8 +613,8 @@ tx "$T/t.jsonl" skill "$F" "$T/o-sin.txt" -
 chk "silencio" "" "$(corre "$T/t.jsonl" false -)"
 
 echo "== transcript ilegible o ausente: silencio (falla abierto) =="
-chk "sin transcript" "" "$(printf '{"stop_hook_active":false}' | bash "$HOOK" 2>/dev/null)"
-chk "stdin basura" "" "$(printf 'no-json' | bash "$HOOK" 2>/dev/null)"
+chk "sin transcript" "" "$(printf '{"stop_hook_active":false}' | bash "$HOOK" 2>/dev/null | expande)"
+chk "stdin basura" "" "$(printf 'no-json' | bash "$HOOK" 2>/dev/null | expande)"
 
 echo "== Step 7a (2.40.0): la salida del audit tiene que estar en la respuesta del turno del checkpoint =="
 # Antes lo vigilaba checkpoint-audit-nudge.sh en el commit, que va ANTES del audit: avisaba en
@@ -661,9 +674,11 @@ fecha30() { python3 -c 'import sys;p=sys.argv[1];t=open(p,encoding="utf-8").read
 corre_en() {   # $1 transcript, $2 reentrante, $3 fichero de last_assistant_message ("-"), $4 cwd
   local LAM=""; [ "$3" != "-" ] && LAM="$(cat "$3")"
   python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":sys.argv[2]=="true","last_assistant_message":sys.argv[3],"cwd":sys.argv[4]}))' "$1" "$2" "$LAM" "$4" \
-    | bash "$HOOK" 2>/dev/null
+    | bash "$HOOK" 2>/dev/null | expande
 }
 razon() { printf '%s' "$1" | python3 -c 'import json,sys;d=sys.stdin.read();j=json.loads(d) if d.strip() else {};print(j.get("reason") or j.get("systemMessage") or "")'; }
+# Lo que ve el humano en la terminal (2.59.0): el `reason` tal como lo imprimio el hook.
+razon_corta() { printf '%s' "$1" | python3 -c 'import json,sys;d=sys.stdin.read();j=json.loads(d) if d.strip() else {};print(j.get("puntero") or j.get("reason") or "")'; }
 REV_OK='REVISION DEL CIERRE:
 1. ninguno
 2. ninguno
@@ -686,6 +701,17 @@ chk "con la cabecera de la revision" "1" "$(razon "$O" | grep -c '^REVISION DEL 
 chk "con sus 9 lineas numeradas" "9" "$(razon "$O" | grep -cE '^[1-9]\. ')"
 chk "dice que ninguno vale" "1" "$(razon "$O" | grep -c 'no inventes para llenar')"
 chk "trae la lista de lo que no cuenta" "1" "$(razon "$O" | grep -c 'No cuenta como falta')"
+echo "== 2.59.0: lo que ve el humano es una linea; el aviso completo esta en el archivo =="
+chk "el reason visible mide 300 caracteres o menos" "1" "$(razon_corta "$O" | python3 -c 'import sys;print(int(len(sys.stdin.read().strip())<=300))')"
+chk "el reason visible no trae la lista" "0" "$(razon_corta "$O" | grep -c 'No cuenta como falta')"
+chk "el reason visible senala el archivo junto al transcript" "1" "$(razon_corta "$O" | grep -cF "Lee con Read \`$T/.revision-cierre-")"
+chk "el archivo trae el cierre al final" "1" "$(razon "$O" | grep -c 'termina tu respuesta con el cierre')"
+echo "== 2.59.0: si el archivo no se puede escribir, el aviso entero vuelve al reason =="
+rm -f "$T/.revision-cierre-sin-sesion.md"; mkdir "$T/.revision-cierre-sin-sesion.md"
+O2=$(corre "$T/t.jsonl" false -)
+chk "bloquea igual" "1" "$(bloquea "$O2")"
+chk "el reason trae la revision entera" "9" "$(razon_corta "$O2" | grep -cE '^[1-9]\. ')"
+rmdir "$T/.revision-cierre-sin-sesion.md"
 echo "== 2.42.0: la vuelta siguiente (stop_hook_active) sin el bloque contestado: avisa al usuario, no bloquea =="
 O=$(corre "$T/t.jsonl" true -)
 chk "no bloquea" "0" "$(bloquea "$O")"

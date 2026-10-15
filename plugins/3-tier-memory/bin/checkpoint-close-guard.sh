@@ -870,7 +870,29 @@ else:
                 "tal cual lo imprimen, sin resumirlo y sin nada despues. No lo pegues antes de la "
                 "revision ni dos veces:\n"
                 + "\n".join(f"- {e}" for _, e in sorted(dict.fromkeys(cierre_final), key=lambda x: x[0])))
-    print(json.dumps({"decision": "block", "reason": "\n\n".join(partes)}, ensure_ascii=False))
+    completo = "\n\n".join(partes)
+    # El aviso completo va a un archivo y el `reason` solo lo senala (2.59.0). Un Stop no tiene
+    # campo que separe lo que ve el humano de lo que ve el modelo: `reason` y `additionalContext`
+    # salen enteros en la terminal como "Stop hook feedback", y eran ~2.000 caracteres en cada
+    # /checkpoint-3t. El bloqueo se queda en el Stop a proposito: la revision funciona porque
+    # llega como turno nuevo (ver arriba, 62 de 66), y entregarla antes, a mitad del turno, es el
+    # antiguo Step 7b que se contestaba como tramite. El archivo vive junto al transcript (el
+    # STATE_DIR de rule-reinject-count.sh): por maquina, nunca se commitea, uno por sesion. Si no
+    # se puede escribir, el aviso entero vuelve a `reason`, como antes: nunca se pierde.
+    reason = completo
+    try:
+        sid = re.sub(r"[^A-Za-z0-9_-]", "-", SID) or "sin-sesion"
+        aviso = os.path.join(os.path.dirname(os.path.abspath(tpath)), f".revision-cierre-{sid}.md")
+        with open(aviso, "w", encoding="utf-8") as f:
+            f.write(completo + "\n")
+        n = len(problemas)
+        que = [f"{n} problema(s) del cierre"] if n else []
+        que += ["la revision del cierre"] if pedir_revision else []
+        reason = (f"/checkpoint-3t: falta {' y '.join(que)}. Lee con Read `{aviso}` y haz lo que "
+                  "dice antes de terminar.")
+    except Exception:
+        pass
+    print(json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False))
 sys.exit(0)
 PY
 exit 0

@@ -1,6 +1,38 @@
 # Changelog
 
 
+## [2.59.0] - 2026-10-14
+Origen: pedido de Victor (2026-10-14). La revision del cierre de 2.42.0 funciona, pero su aviso
+(~2.000 caracteres: las 9 preguntas, lo que no cuenta como falta y el cierre que va al final)
+salia entero en la terminal del humano como "Stop hook feedback" en cada `/checkpoint-3t`.
+
+### Changed
+- **`checkpoint-close-guard.sh` escribe el aviso completo en un archivo y el `reason` solo lo
+  senala.** El archivo es `.revision-cierre-<session_id>.md`, junto al transcript (el mismo
+  directorio por maquina que ya usa `rule-reinject-count.sh`; nunca se commitea), y se reescribe
+  en cada bloqueo. El `reason` visible es una linea: que falta (N problemas, la revision) y
+  "Lee con Read `<archivo>` y haz lo que dice antes de terminar". El contenido que recibe el
+  agente no cambia.
+- El bloqueo se queda en el Stop a proposito. Un Stop no tiene campo que separe lo que ve el
+  humano de lo que ve el modelo (`reason` y `additionalContext` salen enteros como hook
+  feedback). Se descarto entregar la lista antes, por `additionalContext` de un PostToolUse: la
+  revision funciona porque llega como turno nuevo (62 de 66 cierres medidos en 2.42.0), y a mitad
+  del turno es el antiguo Step 7b, que se contestaba como tramite.
+- Falla abierto: si el archivo no se puede escribir, el aviso entero vuelve al `reason`, como
+  antes. El aviso reentrante (`systemMessage`, para el humano) no cambia.
+- Step 7b de `checkpoint-3t.md`, Step 8 de `checkpoint-3t-step8.md` y el README lo dicen.
+
+### Tests
+- `test-checkpoint-close-guard.sh`: el runner sustituye el puntero por el contenido del archivo,
+  asi que los asertos de contenido siguen midiendo lo que recibe el agente. Casos nuevos: el
+  `reason` visible mide 300 caracteres o menos, no trae la lista, senala el archivo junto al
+  transcript; el archivo trae el cierre final; con el archivo imposible de escribir, el `reason`
+  trae la revision entera.
+
+### Sin verificar
+- Que la terminal muestre de verdad solo la linea y un "Read N lines" plegado: solo lo ve el
+  humano, en el proximo `/checkpoint-3t` real.
+
 ## [2.58.0] - 2026-10-14
 Origen: encargo de Victor desde otro proyecto (2026-10-14). Un pendiente sin `_id:` no lo
 alcanza ningun evento: `find_id_line` exige `_id: p-…_` en la linea, asi que update, resolve,
