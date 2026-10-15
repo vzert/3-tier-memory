@@ -226,7 +226,7 @@ def _origen_peer(r):
     for o in (r.get("origin"), (r.get("attachment") or {}).get("origin")):
         # El informe final de un subagente tambien llega con `kind == "peer"` y su `from` es el id
         # de la tarea, pero trae `handback`/`senderTaskId`: no es el usuario contestando (adversario
-        # de 2.60.3: 27 casos reales de SendMessage a un subagente seguido de su informe).
+        # de 2.61.1: 27 casos reales de SendMessage a un subagente seguido de su informe).
         if isinstance(o, dict) and o.get("kind") == "peer" and not o.get("handback") \
                 and "senderTaskId" not in o:
             return o
