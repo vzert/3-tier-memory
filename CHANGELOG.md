@@ -14,8 +14,11 @@ aunque el usuario habia decidido los candidatos (sesion d69ad375, 2026-10-15).
   `attachment` queued_command con la sesion ociosa). El encabezado es el `summary` del mensaje, y un
   mensaje con candidatos numerados (`1)`, `2.`) cuenta una pregunta por numero. Sin respuesta, con
   respuesta de otra sesion, con un mensaje anterior al envio o a un subagente, no cuenta: sin
-  supervisor el cierre sigue exigiendo la pregunta. Medido sobre el transcript real d69ad375 con
-  las lineas citando `pregunta: <summary>`: el hook de 2.60.2 bloquea por `candidatos_pregunta`, este no.
+  supervisor el cierre sigue exigiendo la pregunta. Medido sobre el transcript real d69ad375, con
+  una COPIA de la memoria cuya ficha cita `pregunta: <summary>` en cada candidato: el hook de 2.60.2
+  bloquea por `candidatos_pregunta` y este pasa 7 preguntas y el audit da HECHO. La ficha real de esa
+  sesion no lleva `pregunta:` (se escribio antes de esta version) y con ella el cierre sigue
+  bloqueando: el arreglo vale para los cierres que siguen Step 3b tal como queda aqui.
 - Step 3b de `/checkpoint-3t` explica la forma supervisada; el `corrige` de
   `pendientes.candidatos_pregunta` la nombra.
 

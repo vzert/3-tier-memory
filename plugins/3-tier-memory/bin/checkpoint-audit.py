@@ -156,7 +156,8 @@ DESDE_CANDIDATOS = "2026-10-09"
 # `hecho` (2.54.0): el usuario eligio `Hacerlo ahora` y el agente lo hizo dentro de Step 3b; la
 # linea trae `_verificado: <evidencia>_`, como un defecto cerrado de `## Bugs fixed`.
 DECISION_CANDIDATO = re.compile(r"decision:\s*\**\s*(guardado|descartado|sin confirmar|hecho)\b", re.I)
-# `pregunta: <encabezado>` (2.54.0): el encabezado del AskUserQuestion donde el usuario decidio ese
+# `pregunta: <encabezado>` (2.54.0): el encabezado del AskUserQuestion (o el `summary` del SendMessage
+# al supervisor en una sesion supervisada, 2.60.3) donde el usuario decidio ese
 # candidato. El hook de cierre pasa los encabezados que llegaron al usuario y aqui se cruzan.
 PREGUNTA_CANDIDATO = re.compile(r"pregunta:\s*([^—]+?)\s*(?:—|$)", re.I)
 
@@ -1057,7 +1058,8 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         if malos:
             h.append(Hallazgo(SALTADO, "pendientes.candidatos",
                               f"{len(malos)} problema(s) en los pendientes nuevos de la sesion", malos,
-                              corrige="Step 3b: pregunta cada candidato con AskUserQuestion y escribe "
+                              corrige="Step 3b: pregunta cada candidato con AskUserQuestion (en una "
+                                      "sesion supervisada, SendMessage al supervisor) y escribe "
                                       "su decision en `## Candidatos a pendiente` (`hecho` lleva "
                                       "`_verificado: <evidencia>_`). Si es un re-checkpoint y "
                                       "reescribiste la ficha, primero recupera las lineas "
@@ -1069,7 +1071,8 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             h.append(Hallazgo(HECHO, "pendientes.candidatos",
                               "cada pendiente nuevo de la sesion tiene la decision del usuario"))
         # La pregunta de verdad. Solo con el dato del hook de cierre, que cuenta en el transcript
-        # los AskUserQuestion de los turnos de /checkpoint-3t de la sesion (desde 2.54.1 tambien los de un
+        # los AskUserQuestion de los turnos de /checkpoint-3t de la sesion (desde 2.60.3 tambien los SendMessage
+        # al supervisor con su respuesta, p-1d0f012aa9; desde 2.54.1 tambien los de un
         # checkpoint anterior: p-ea8992fa7e) que llegaron al usuario. Una decision `guardado`,
         # `hecho` o `descartado` sin ninguna pregunta la tomo el agente, que es justo lo que 2.53.0 quita.
         # `sin confirmar` (sin pantalla) no necesita pregunta. Desde 2.54.0 compara cuantas: el hook
@@ -1824,7 +1827,8 @@ def main():
     ap.add_argument("--veredicto-adversario", choices=("break", "hold"), default=None,
                     help="ultimo veredicto del adversario en el transcript; lo pasa el hook Stop")
     ap.add_argument("--preguntas-usuario", type=int, default=None,
-                    help="preguntas de los AskUserQuestion de los turnos de checkpoint de la sesion que llegaron "
+                    help="preguntas de los AskUserQuestion (y SendMessage respondidos al supervisor, 2.60.3) "
+                         "de los turnos de checkpoint de la sesion que llegaron "
                          "al usuario (respondidos o rechazados por el); lo pasa el hook Stop")
     ap.add_argument("--encabezados-usuario", default=None,
                     help="JSON: encabezados de esas preguntas; lo pasa el hook Stop (2.54.0)")
