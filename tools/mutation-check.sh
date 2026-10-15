@@ -13,9 +13,8 @@
 # Cada mutador imprime cuantas sustituciones hizo; CERO significa SIN PROBAR, no aprobado.
 #
 # Uso:  tools/mutation-check.sh        (exit 0 = todas discriminan)
-# Entra en el runner, y un arnes que nadie corre se pudre. Tarda ~2,5 min (medido 2026-09-29: 94 s
-# con los 15 primeros casos, 125 s con los 24 del contrato de 2.41.4; 2026-09-30: 147 s con los 4
-# de escalada a persona; el "13 s" de antes ya no valia). Si una mutacion deja de aplicarse porque el fuente cambio, esto se pone ROJO con
+# Entra en el runner, y un arnes que nadie corre se pudre. En serie tardaba 41 min en ubuntu con 236
+# casos (2026-10-14; ~2,5 min con 24 el 2026-09-29): el CI lo corre con MUT_JOBS=4. Si una mutacion deja de aplicarse porque el fuente cambio, esto se pone ROJO con
 # "SIN PROBAR" y hay que actualizar el mutador — no es ruido, es que el arnes dejo de verificar lo
 # que dice verificar, que es el fallo que este fichero existe para evitar.
 #
@@ -51,7 +50,7 @@ if [ "$JOBS" -gt 1 ] && [ -z "${MUT_SHARD:-}" ]; then
       P=$(( P + $(printf '%s' "$ult" | sed -E 's/^SIN ACLARAR: ([0-9]+) de.*/\1/') ))
       T=$(( T + $(printf '%s' "$ult" | sed -E 's/.* de ([0-9]+)$/\1/') ))
     else
-      echo "  !! la tanda $(( k + 1 )) no termino con su resumen: «$ult»"; MALAS=$(( MALAS + 1 ))
+      echo "  !! la tanda $(( k + 1 )) no termino con su resumen: «${ult}»"; MALAS=$(( MALAS + 1 ))
     fi
     k=$(( k + 1 ))
   done

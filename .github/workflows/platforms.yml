@@ -20,9 +20,8 @@ on:
     paths: ['.github/workflows/platforms.yml']
   workflow_dispatch:
 
-concurrency:
-  group: platforms-${{ github.ref }}
-  cancel-in-progress: false
+# Sin `concurrency`: GitHub deja una sola corrida en espera por grupo y reemplaza a la anterior, y
+# aqui cada corrida es una version que tiene que quedar probada.
 
 jobs:
   suites:

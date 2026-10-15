@@ -16,16 +16,15 @@ name: tests
 on:
   push:
     branches: [main]
-    # Un checkpoint de memoria no toca codigo: no hay nada que probar.
-    paths-ignore: ['memory/**']
   pull_request:
-    paths-ignore: ['memory/**']
   workflow_dispatch:
 
 # Un push nuevo a la misma rama de un PR cancela la corrida vieja: ya no prueba el ultimo commit.
-# En main no se cancela: cada merge queda probado.
+# Fuera de un PR cada corrida tiene su propio grupo (run_id): GitHub deja UNA corrida en espera por
+# grupo y reemplaza a la anterior, asi que un grupo comun por rama perdia el merge de en medio de
+# tres seguidos sin correrlo nunca (adversario, 2026-10-14).
 concurrency:
-  group: tests-${{ github.ref }}
+  group: tests-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
