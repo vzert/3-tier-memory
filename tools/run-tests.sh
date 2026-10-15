@@ -24,6 +24,9 @@ BIN="plugins/3-tier-memory/bin"
 # Claude Code donde corre. Las suites no son esa sesion: sin esto, correr el runner desde Claude Code
 # dependeria de como arranco la sesion de quien lo corre.
 unset CLAUDE_CODE_SESSION_ID
+# Un temporal propio para toda la corrida, borrado tambien si la matan (p-292d06c4c0). Con `-f`:
+# test-run-tests corre una COPIA de este script desde otra carpeta, donde no esta (y ya va anidada).
+[ -f tools/tmp-propio.sh ] && . tools/tmp-propio.sh
 FALLOS=0
 TOTAL=0
 LENTAS=""
@@ -124,6 +127,7 @@ fi
 
 echo "Higiene del repo"
 correr "test-run-tests" bash tools/test-run-tests.sh
+correr "test-tmp-propio" bash tools/test-tmp-propio.sh
 correr "check-ignored-tracked" bash tools/check-ignored-tracked.sh
 # Que las comprobaciones editadas sigan sabiendo fallar. Un aserto que nunca se ha visto fallar no
 # se ha visto funcionar, y en esta sesion tres afirmaron cubrir mas de lo que cubrian.
@@ -160,6 +164,7 @@ else
 fi
 
 echo
+type tmp_propio_avisos >/dev/null 2>&1 && tmp_propio_avisos
 echo "------------------------------------------------------------"
 if [ "$FALLOS" -eq 0 ] && { [ -n "$SALTADAS" ] || [ -n "$PARCIALES" ]; }; then
   echo "VERDE CON SALTOS — $TOTAL sin fallos${SALTADAS:+, sin correr:$SALTADAS}${PARCIALES:+, con casos saltados:$PARCIALES}"
