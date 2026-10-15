@@ -679,7 +679,10 @@ ese id. El pendiente sigue en `## Pendientes` de la ficha. No cambia el id. Para
 existe: `journal-emit.py --type pendiente.block --id p-… --bloqueado-por "…"` (o
 `--desbloquear` cuando ya no espera). Caso real (2026-09-22, sesion 5790b9f2): `p-a4439fa8fd`
 ("verificar... una vez esa instalacion actualice a 2.32.0") llego a `Proximo paso` porque nada
-lo marcaba. La regla en prosa de Step 8 ya lo prohibia y no bastaba.
+lo marcaba. La regla en prosa de Step 8 ya lo prohibia y no bastaba. Desde 2.60.0 un `Proximo
+paso:` que escribe la espera en el texto sin el campo ("si Victor lo decide", "pedir permiso")
+sale como aviso `POR-DISEÑO` en `snippet.marco`. Es una red de formato que no bloquea. El campo
+sigue siendo la via que el audit hace cumplir.
 
 **`--revisar` cuando el pendiente nombra una fecha futura** (`revisar el 2026-09-22`, `target
 2026-10-01`, `T+7` resuelto a fecha). Escribe la fecha **como campo**, no solo en prosa: el

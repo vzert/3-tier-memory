@@ -232,6 +232,38 @@ ficha 2026-10-14-hoy "Proximo paso: la media (p-2222222222), no la alta (p-11111
 chk "nombrar al Alta de pasada no lo vuelve el paso: SALTADO" "1" "$(audit | grep -c 'el primero es p-1111111111 (Alta')"
 chk "el orden lo imprime --hilo para el Step 8" "p-1111111111" "$(python3 "$BIN/pendientes_afines.py" "$M/sessions/2026-10-14-hoy.md" --hilo --hoy 2026-10-14 | head -1 | cut -d' ' -f1)"
 
+echo "== 6. marco del Proximo paso (2.60.0): avisos POR-DISENO, nunca SALTADO =="
+marco() {   # $1 = paso; imprime el audit
+  memoria
+  ficha 2026-10-14-hoy "$1"
+  pend Alta p-1111111111 "el nuevo" 2026-10-14-hoy
+  pend Media p-2222222222 "otro" 2026-10-14-hoy
+  audit
+}
+OUT=$(marco "Proximo paso: arreglar el parser (p-1111111111).")
+chk "paso limpio: HECHO" "1" "$(printf '%s\n' "$OUT" | grep -c 'HECHO .*snippet.marco')"
+OUT=$(marco "Proximo paso: publicar el parser si Victor lo decide (p-1111111111).")
+chk "espera de Victor sin _bloqueado: POR-DISENO" "1" "$(printf '%s\n' "$OUT" | grep -c 'POR-DISEÑO .*snippet.marco')"
+chk "y no lo vuelve SALTADO" "0" "$(printf '%s\n' "$OUT" | grep -c 'SALTADO .*snippet.marco')"
+chk "nombra la espera" "1" "$(printf '%s\n' "$OUT" | grep -c 'si Victor lo decide')"
+OUT=$(marco "Proximo paso: pedir permiso al usuario para el merge (p-1111111111).")
+chk "pedir permiso: POR-DISENO" "1" "$(printf '%s\n' "$OUT" | grep -c 'POR-DISEÑO .*snippet.marco')"
+OUT=$(marco "Proximo paso: revisar si goal-spec-skill respondió al mensaje (p-1111111111).")
+chk "revisar si X respondio (con tilde): POR-DISENO" "1" "$(printf '%s\n' "$OUT" | grep -c 'POR-DISEÑO .*snippet.marco')"
+OUT=$(marco "Proximo paso: arreglar el parser (p-1111111111) y de paso"$'\n'"el lector (p-2222222222).")
+chk "dos pendientes, el segundo en otra linea del campo: POR-DISENO" "1" "$(printf '%s\n' "$OUT" | grep -c 'junta 2 pendientes')"
+OUT=$(marco "Proximo paso: arreglar el parser (p-1111111111); ver tambien p-2222222222.")
+chk "ver tambien no cuenta como segundo objetivo: HECHO" "1" "$(printf '%s\n' "$OUT" | grep -c 'HECHO .*snippet.marco')"
+OUT=$(marco "Proximo paso: arreglar el parser (p-1111111111). Antes: (1) leer el log, (2) correr la suite.")
+chk "lista (1)… (2)…: POR-DISENO" "1" "$(printf '%s\n' "$OUT" | grep -c 'trae una lista')"
+LARGO=$(python3 -c "print('x ' * 320)")
+OUT=$(marco "Proximo paso: arreglar el parser (p-1111111111) $LARGO.")
+chk "mas de 600 caracteres: POR-DISENO" "1" "$(printf '%s\n' "$OUT" | grep -c 'caracteres (guia: unos 300)')"
+OUT=$(marco "Proximo paso: ninguno — lo unico propio espera a que Victor decida, p-1111111111.")
+chk "caso 5 (ninguno): el marco no aplica" "0" "$(printf '%s\n' "$OUT" | grep -c 'snippet.marco')"
+marco "Proximo paso: x si Victor lo decide (p-1111111111)." >/dev/null
+chk "en --json el estado es POR-DISEÑO (el que lee el hook de cierre)" "POR-DISEÑO" "$(python3 "$BIN/checkpoint-audit.py" "$M" --session-file "$M/sessions/2026-10-14-hoy.md" --no-git --hoy 2026-10-14 --solo-snippet --json | python3 -c "import json,sys; print([x['estado'] for x in json.load(sys.stdin) if x['clave']=='snippet.marco'][0])")"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

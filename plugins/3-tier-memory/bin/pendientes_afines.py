@@ -87,6 +87,59 @@ def fecha_futura(texto, hoy):
     return None
 
 
+# El marco del `Proximo paso` (2.60.0, p-88a7cc28c2 + p-3d1c7ab131, research
+# hilo-pendientes-relacionados-medicion, Anexo 2). Redes de FORMATO, no juicio: lo que avisan es un
+# POR-DISENO que el hook de cierre pone en la revision, nunca un SALTADO (decision de Victor del
+# 2026-10-14). La via principal de una espera sigue siendo `_bloqueado:` (regla 216).
+# Una espera escrita solo en el texto: el paso depende de que otro decida, responda o actue.
+# Medido en 211 snippets: 27 % de problema contra 8 % de un paso limpio. Se busca sin tildes.
+ESPERA_AJENA = re.compile(
+    r"\bsi\s+(?:\S+\s+){1,2}(?:lo\s+|la\s+)?(?:decide|aprueba|autoriza|confirma|acepta|quiere|da el ok)\b"
+    r"|\bdecidir\s+con\s+\S+"
+    r"|\b(?:pedir(?:le)?|solicitar)\s+(?:el\s+|su\s+)?(?:permiso|autorizacion|aprobacion|ok|visto bueno)\b"
+    r"|\b(?:cuando|en cuanto|una vez que|hasta que|despues de que)\s+(?:\S+\s+){1,3}?"
+    r"(?:responda|conteste|apruebe|decida|autorice|confirme|actualice|publique)\b"
+    r"|\besperar\s+(?:a\s+|la\s+|el\s+|que\s+|su\s+)?(?:respuesta|decision|aprobacion|confirmacion|"
+    r"autorizacion|visto bueno|ok)\b"
+    r"|\brevisar\s+si\s+(?:\S+\s+){1,3}?(?:respondio|contesto|actuo|actualizo|aprobo|decidio)\b",
+    re.I)
+# Una lista "(1)… (2)…" o "(a)… (b)…" dentro del paso: varias tareas o comprobaciones previas.
+ITEM_LISTA = re.compile(r"\((?:[1-9]|[a-e])\)")
+# "ver tambien p-…" es una referencia, no un segundo objetivo (asi se conto en el Anexo 2).
+VER_TAMBIEN = re.compile(r"\bver\s+tambi[eé]n\b.*", re.I | re.S)
+ID_P = re.compile(r"\bp-[0-9a-f]{10}\b")
+LARGO_AVISO = 600
+
+
+def _sin_tildes(s):
+    import unicodedata
+    return "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
+
+
+def senales_marco(paso):
+    """Las senales del marco que trae el texto de un `Proximo paso` (sin su etiqueta), en orden.
+
+    Cada una es una cadena para el aviso. Vacia = el paso no trae ninguna. Es formato: un paso que
+    espera a alguien con otras palabras no sale, y uno que nombra una espera ya resuelta si."""
+    paso = (paso or "").strip()
+    out = []
+    m = ESPERA_AJENA.search(_sin_tildes(paso))
+    if m:
+        out.append(f"espera una decision o accion de fuera de la sesion (\"{m.group(0).strip()}\"): "
+                   "si es asi, el pendiente lleva `_bloqueado:` y no va en el paso")
+    ids = sorted(set(ID_P.findall(VER_TAMBIEN.sub("", paso))))
+    if len(ids) >= 2:
+        out.append(f"junta {len(ids)} pendientes ({', '.join(ids)}): un paso es un objetivo; el "
+                   "resto del hilo va en la linea de extras")
+    if len(set(ITEM_LISTA.findall(paso))) >= 2:
+        out.append("trae una lista (1)… (2)…: varias tareas o comprobaciones previas; las "
+                   "comprobaciones van a `## Estado` de la ficha")
+    if len(paso) > LARGO_AVISO:
+        out.append(f"mide {len(paso)} caracteres (guia: unos 300): el porque y el estado van a la "
+                   "ficha, no al paso")
+    return out
+
+
 def proximo_paso(ficha_texto):
     """La linea `Proximo paso:` de `## Como retomar`, o None."""
     m = re.search(r"^## Como retomar[^\n]*\n(.*?)(?=^## |\Z)", ficha_texto, re.M | re.S)

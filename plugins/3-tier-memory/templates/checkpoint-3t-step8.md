@@ -176,6 +176,34 @@ Reglas para llenar los slots:
   3a con `pendiente.relate`; no lo agregues a mano al snippet. Quien retoma decide si el paso es
   corto: ningun campo lo dice, y el script no lo adivina por el texto (regla 216).
 
+  **Como se escribe el `<next-step>` (2.60.0, marco que Victor acepto el 2026-10-13).** Elegido el
+  candidato con la escalera, redactalo asi:
+  1. **Una accion que se pueda empezar hoy**, con su id. La accion empieza con un verbo
+     ("arreglar…", "medir…", "decidir…"). Sin `Fase actual`.
+  2. **Un solo objetivo.** Lo demas del hilo va en la linea de extras que imprime el script, no
+     dentro del paso ("y de paso…", "en paralelo…" son un segundo paso).
+  3. **Sin ramas.** Nada de "si pasa X, haz Y; si no, Z". Si hay que decidir antes, el paso es
+     "decidir X" y las opciones van en la ficha.
+  4. **Sin historia.** El porque, el estado y las comprobaciones previas ("Antes: (1) leer…, (2)…")
+     van a `## Estado` o `## Contexto` de la ficha; el snippet ya manda leerla. `No repitas` queda
+     para callejones sin salida.
+  5. **Sin esperas de Victor ni de terceros** (p-3d1c7ab131): si el paso solo espera una decision o
+     una accion de fuera de la sesion, no es paso. Ponle `_bloqueado:` al pendiente y baja por la
+     escalera (ver la pregunta de mas abajo).
+  6. **Palabras simples:** el usuario tambien lo lee.
+  7. **Unos 300 caracteres**, como guia y no como tope. Los umbrales acordados (el parrafo "Incluye
+     aqui los umbrales…", mas abajo) si caben.
+  Medido sobre 211 snippets (research `hilo-pendientes-relacionados-medicion`, Anexo 2): con un paso
+  limpio el usuario tuvo que aclarar o corregir en el 8 % de los casos; con una espera suya, 27 %;
+  con varias tareas, 22 %; con ramas, 67 % (3 casos). El largo va junto con la complejidad, asi que
+  es guia y no regla. `checkpoint-audit.py` (`snippet.marco`) avisa como `POR-DISEÑO`, nunca como
+  `SALTADO`, cuatro senales de formato: una espera escrita solo en el texto ("si Victor lo decide",
+  "pedir permiso", "cuando X responda", "revisar si X respondio"), 2 o mas ids (sin contar "ver
+  tambien"), una lista "(1)… (2)…" y mas de 600 caracteres. `checkpoint-close-guard.sh` mete esos
+  avisos en la revision del cierre: rehaz el paso o di en su ultima linea por que se queda asi. Son
+  redes de formato (regla 216): un aviso puede ser falso, y su silencio no prueba que el paso
+  cumpla el marco.
+
   **Ningun candidato de los casos 2 o 3 es valido si su unico dato accionable es una fecha futura**
   — trae `_revisar: YYYY-MM-DD` posterior a hoy en `_pendientes.md`, el mismo campo que Step 8c ya
   lee para generar su propio recordatorio de calendario. Un pendiente asi no es accionable hoy sea
@@ -271,7 +299,9 @@ Reglas para llenar los slots:
   lleva el campo**: nace con `--bloqueado-por "<que espera>"` (Step 3b) o se lo pone
   `pendiente.block` (Step 3a), y entonces el audit rechaza citarlo en `Proximo paso`. El juicio de
   "esto espera a un tercero" se hace al CREAR el pendiente, no al leer su texto aqui (regla 216:
-  nunca clasificar por prosa).
+  nunca clasificar por prosa). Desde 2.60.0 una espera escrita solo en el texto del paso, sin el
+  campo, sale como aviso `POR-DISEÑO` en `snippet.marco` (punto 5 del marco, arriba). Es una red de
+  formato que no bloquea; el campo sigue siendo la via que el audit hace cumplir.
   Esta pregunta no es un ejercicio retorico: se salto DOS veces, en dos formas de superficie
   distintas, y la segunda ocurrio en la propia sesion que escribio esta regla mas amplia — la
   variante estrecha de abajo no bastaba porque el patron con otras palabras no la disparaba.

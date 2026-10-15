@@ -146,6 +146,8 @@ DESDE_PASO_ACCION = "2026-10-13"
 # Desde 2.57.0 (p-b282a8cfc4) el `Proximo paso` de los casos 2-3 es el primero del hilo
 # (pendientes_afines.hilo). Las fichas anteriores se escribieron con otra regla.
 DESDE_HILO = "2026-10-13"
+# Desde 2.60.0 (p-88a7cc28c2) el `Proximo paso` sigue el marco de Step 8 (snippet.marco, aviso).
+DESDE_MARCO = "2026-10-14"
 # Tercer cierre de un defecto (2.53.0): el usuario decidio en Step 3b no abrirle pendiente.
 DESCARTADO_BUG = re.compile(r"_descartado:\s*(.*?)_(?=\s|$|[.,;:)\]—])", re.S)
 # `pendientes.candidatos` (2.53.0): desde aqui cada pendiente nuevo sale en `## Candidatos a
@@ -1431,6 +1433,28 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                                       else "; el paso no cita ningun pendiente del hilo")],
                                   corrige=f"cita {primero['id']} en `Proximo paso:` (Step 8, caso 2: "
                                           "el primero que imprime pendientes_afines.py --hilo)"))
+
+    # 8-ter-ter. El marco del `Proximo paso` (2.60.0, p-88a7cc28c2 + p-3d1c7ab131): una espera de
+    # fuera de la sesion escrita solo en el texto, varios pendientes, una lista "(1)… (2)…" o mas
+    # de 600 caracteres. Redes de formato (pendientes_afines.senales_marco), asi que el estado es
+    # POR-DISENO y nunca SALTADO (decision de Victor, 2026-10-14): checkpoint-close-guard.sh lo
+    # pone en la revision del cierre para que el agente rehaga el paso o diga por que se queda.
+    # Se lee el campo entero, no solo su primera linea. El caso 5 (`ninguno — …`) no es un paso.
+    if pp is not None and "```" in sec_retomar and fecha_ficha and fecha_ficha >= DESDE_MARCO \
+            and not pp.lower().startswith(("ninguno", "nada accionable")):
+        af = _afines_mod()
+        entero = af.campo(sec_retomar, "proximo paso:") or af.campo(sec_retomar, "próximo paso:") or pp
+        entero = re.sub(r"^\W*pr[oó]ximo paso:\**\s*", "", entero, flags=re.I)
+        senales = af.senales_marco(entero)
+        if senales:
+            h.append(Hallazgo(DISENO, "snippet.marco",
+                              f"`Proximo paso:` trae {len(senales)} senal(es) fuera del marco de "
+                              "Step 8 (aviso, no bloquea)",
+                              senales,
+                              corrige="rehaz el paso como una accion de hoy con su id, o di en la "
+                                      "revision del cierre por que se queda asi"))
+        else:
+            h.append(Hallazgo(HECHO, "snippet.marco", "`Proximo paso:` sin senales fuera del marco"))
 
     # 8-quinquies. Cada defecto de `## Bugs fixed` declara su cierre (2.34.0, p-272254efc5). La
     # salida que 2.33.0 dejo abierta: un defecto hallado en vivo y "arreglado" solo con prosa
