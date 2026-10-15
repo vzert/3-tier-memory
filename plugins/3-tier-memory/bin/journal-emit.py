@@ -122,7 +122,12 @@ Tipos de evento:
                     que /audit-3t mira para la frescura). Solo avanza: una fecha anterior a la
                     que ya tiene no la cambia, asi que un replay viejo no la hace retroceder.
                     --disparadores sin --text enriquece la regla sin cambiar su texto; con
-                    --text sin --disparadores, la regla conserva los que tenia.
+                    --text sin --disparadores, la regla conserva los que tenia; --disparadores
+                    REEMPLAZA el juego entero (no anade frases a las que habia).
+                    [--match-prefix P --sin-disparadores]                                  (2.60.2)
+                    quita el comentario de disparadores entero (texto y marcador intactos): la
+                    vuelta atras de un juego de frases que hace perder recall. No va con
+                    --disparadores.
                     Corrige una regla YA escrita, CONSERVANDO su numero. Un learning no tiene id
                     en la linea: el ancla es topic + prefijo del texto de hoy. El numero se
                     conserva porque las reglas se citan por numero ("learning 106"); renumerar
@@ -960,6 +965,8 @@ def main():
     ap.add_argument("--solo-vecinos", dest="solo_vecinos", action="store_true")
     # learning.add / learning.update: disparadores (F4, 2.48.0)
     ap.add_argument("--disparadores", default=None)
+    # learning.update: quitar el comentario de disparadores entero (2.60.2)
+    ap.add_argument("--sin-disparadores", dest="sin_disparadores", action="store_true")
     # learning.update: fecha de la ultima revision del topic (F6, 2.50.0)
     ap.add_argument("--last-verified", dest="last_verified", default="")
     # learning.update: enlace Quick Reference -> regla (F7, 2.51.0)
@@ -1091,6 +1098,9 @@ def main():
         disp = disparadores_arg(a.disparadores, text)
         if disp and not text:
             sys.exit("journal-emit: --disparadores necesita --text (la regla que los lleva)")
+        if a.sin_disparadores:
+            sys.exit("journal-emit: --sin-disparadores es de learning.update (quita los de una regla "
+                     "ya escrita); un learning.add sin --disparadores ya no los lleva")
         if disp:
             # Opcionales (cierre de F4, 2026-10-02): en el banco no llevaron el recall de prompt al
             # criterio, asi que no se exigen ni se avisa si faltan. cmd/path/tool son para la F5.
@@ -1169,11 +1179,16 @@ def main():
             sys.exit("journal-emit: --quickref necesita --quickref-prefix (el prefijo de la regla "
                      "ACTUAL del Quick Reference)")
         disp = disparadores_arg(a.disparadores, text)
-        if (text or disp) and not mprefix:
-            sys.exit("journal-emit: --disparadores necesita --match-prefix (el prefijo del texto "
-                     "ACTUAL de la regla que los lleva)")
-        if mprefix and not (text or disp):
-            sys.exit("journal-emit: --match-prefix sin --text ni --disparadores no corrige nada")
+        sin_disp = bool(a.sin_disparadores)
+        if disp and sin_disp:
+            sys.exit("journal-emit: --disparadores y --sin-disparadores a la vez: o se cambian o se "
+                     "quitan")
+        if (text or disp or sin_disp) and not mprefix:
+            sys.exit("journal-emit: --disparadores/--sin-disparadores necesitan --match-prefix (el "
+                     "prefijo del texto ACTUAL de la regla que los lleva)")
+        if mprefix and not (text or disp or sin_disp):
+            sys.exit("journal-emit: --match-prefix sin --text, --disparadores ni --sin-disparadores "
+                     "no corrige nada")
         qregla = (a.quickref_regla or "").strip()
         if qregla:
             import learning_marks
@@ -1191,9 +1206,10 @@ def main():
         if last_verified and not (re.fullmatch(r"\d{4}-\d{2}-\d{2}", last_verified)
                                   and fecha_real(last_verified)):
             sys.exit(f"journal-emit: --last-verified {last_verified!r} no es una fecha YYYY-MM-DD")
-        if not (text or quickref or qregla or title or when or disp or last_verified):
+        if not (text or quickref or qregla or title or when or disp or sin_disp or last_verified):
             sys.exit("journal-emit: learning.update necesita al menos uno de --text, --quickref, "
-                     "--quickref-regla, --title, --when, --disparadores o --last-verified")
+                     "--quickref-regla, --title, --when, --disparadores, --sin-disparadores o "
+                     "--last-verified")
         base["payload"] = {
             "topic": topic,
             "match_prefix": mprefix,
@@ -1206,6 +1222,10 @@ def main():
             "when": when,
             "last_verified": last_verified,
         }
+        if sin_disp:
+            # Solo cuando se pide: un payload sin la clave es el de antes de 2.60.2, y el replay de
+            # un update viejo no tiene que cambiar.
+            base["payload"]["sin_disparadores"] = True
         write_event(memory_dir, base)
         print(f"l-topic-{topic}")
         return

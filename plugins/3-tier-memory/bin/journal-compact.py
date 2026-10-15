@@ -2899,7 +2899,8 @@ def apply_learning_update(mem, p):
 
     text = normalize_text(p.get("text") or "")
     disp_nuevo = p.get("disparadores") or ""
-    if text or disp_nuevo:
+    sin_disp = p.get("sin_disparadores") is True
+    if text or disp_nuevo or sin_disp:
         tpath = os.path.join(mem, "learnings", topic + ".md")
         if not os.path.isfile(tpath):
             raise Quarantine(f"no-anchor: learnings/{topic}.md no existe — learning.update corrige "
@@ -2916,12 +2917,17 @@ def apply_learning_update(mem, p):
         #  - corregir el texto de una regla retirada no la resucita: si el texto nuevo no trae el
         #    marcador, se le vuelve a pegar el que tenia (2.45.0). Resucitarla seria otra decision,
         #    y no se toma en silencio dentro de una correccion de redaccion;
-        #  - corregir el texto no tira los disparadores (F4, paso 2): se conservan si no llegan otros.
+        #  - corregir el texto no tira los disparadores (F4, paso 2): se conservan si no llegan otros;
+        #    `sin_disparadores` (2.60.2) es la unica forma de quitarlos.
         # Se compara la linea entera: un replay (o un update que no cambia nada) no escribe.
         cuerpo = text or learning_marks.sin_marca(viejo)
         marca = "" if (text and learning_marks.regla_retirada(text)) else learning_marks.sufijo_marca(viejo)
-        coment = (learning_marks.comentario_disparadores(disp_nuevo) if disp_nuevo
-                  else learning_marks.sufijo_disparadores(viejo))
+        if sin_disp:
+            coment = ""
+        elif disp_nuevo:
+            coment = learning_marks.comentario_disparadores(disp_nuevo)
+        else:
+            coment = learning_marks.sufijo_disparadores(viejo)
         final = cuerpo + marca + coment
         if normalize_text(final) != normalize_text(viejo):
             rewrite_rule(lines, i, related, final, f"learnings/{topic}.md")
@@ -4253,8 +4259,15 @@ def validate(ev):
         if not p.get("topic"):
             raise Quarantine("malformed: learning.update sin 'topic'")
         if not (p.get("text") or p.get("quickref") or p.get("title") or p.get("when")
-                or p.get("disparadores") or p.get("last_verified") or p.get("quickref_regla")):
+                or p.get("disparadores") or p.get("sin_disparadores") or p.get("last_verified")
+                or p.get("quickref_regla")):
             raise Quarantine("malformed: learning.update sin nada que corregir")
+        sd = p.get("sin_disparadores")
+        if sd is not None and sd is not True:
+            raise Quarantine(f"malformed: learning.update sin_disparadores {sd!r} no es true")
+        if sd and p.get("disparadores"):
+            raise Quarantine("malformed: learning.update con 'disparadores' y 'sin_disparadores' "
+                             "a la vez")
         qr = p.get("quickref_regla")
         if qr:
             if not learning_marks.valor_regla_qr_valido(qr):
@@ -4275,9 +4288,10 @@ def validate(ev):
             except ValueError:
                 raise Quarantine(f"malformed: learning.update last_verified {lv!r} no es una fecha "
                                  f"del calendario")
-        if (p.get("text") or p.get("disparadores")) and not p.get("match_prefix"):
-            raise Quarantine("malformed: learning.update con 'text' o 'disparadores' sin "
-                             "'match_prefix' — sin ancla no se sabe que regla reescribir")
+        if (p.get("text") or p.get("disparadores") or sd) and not p.get("match_prefix"):
+            raise Quarantine("malformed: learning.update con 'text', 'disparadores' o "
+                             "'sin_disparadores' sin 'match_prefix' — sin ancla no se sabe que "
+                             "regla reescribir")
         validar_disparadores(p, "learning.update")
         if p.get("quickref") and not p.get("quickref_prefix"):
             raise Quarantine("malformed: learning.update con 'quickref' sin 'quickref_prefix'")

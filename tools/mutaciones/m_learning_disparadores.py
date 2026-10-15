@@ -26,7 +26,10 @@ M = {
          "    texto = truncate(texto)")],
     # journal-compact.py
     "update-pierde-disparadores": [
-        ("                  else learning_marks.sufijo_disparadores(viejo))", '                  else "")')],
+        ("            coment = learning_marks.sufijo_disparadores(viejo)", '            coment = ""')],
+    "sin-disparadores-ignorado": [
+        ("        if sin_disp:\n            coment = \"\"\n        elif disp_nuevo:",
+         "        if disp_nuevo:")],
     "compactador-sin-validar": [
         ("    d = p.get(\"disparadores\")", "    return")],
     # learning_marks.py

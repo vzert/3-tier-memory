@@ -161,7 +161,43 @@ compact
 chk "la 3 queda marcada, comentario al final" "3. **No borres un worktree con commits sin publicar** — remove --force tira commits que no estan en ningun remoto — ⊘ RETIRADA ($(date +%F), superada por #5)$C2" "$(regla 3)"
 chk "la 5 nueva con su comentario" "5. **Un worktree solo se borra tras publicar su rama** — git worktree remove sin --force$C1" "$(regla 5)"
 
+paso 2>/dev/null || true
+echo "== 7b. update --sin-disparadores (2.60.2): quita el comentario, conserva texto y marcador; replay = nada =="
+emit --type learning.update --topic gate --match-prefix "Un worktree solo se borra" --sin-disparadores >/dev/null
+emit --type learning.update --topic gate --match-prefix "No borres un worktree" --sin-disparadores >/dev/null
+compact
+chk "regla viva: solo el texto" "5. **Un worktree solo se borra tras publicar su rama** — git worktree remove sin --force" "$(regla 5)"
+chk "regla retirada: texto + marcador, sin comentario" "3. **No borres un worktree con commits sin publicar** — remove --force tira commits que no estan en ningun remoto — ⊘ RETIRADA ($(date +%F), superada por #5)" "$(regla 3)"
+chk "sin cuarentena" "0" "$(cuar)"
+h=$(huella); replay; compact
+chk "replay: no escribe" "$h" "$(huella)"; chk "replay: sin cuarentena" "0" "$(cuar)"
+emit --type learning.update --topic gate --match-prefix "Nunca empujar" --sin-disparadores >/dev/null
+h=$(huella); compact
+chk "regla que nunca los tuvo: no escribe" "$h" "$(huella)"; chk "ni cuarentena" "0" "$(cuar)"
+emit --type learning.update --topic gate --match-prefix "Un worktree solo se borra" --disparadores "$D2" >/dev/null
+compact
+chk "se pueden volver a poner" "5. **Un worktree solo se borra tras publicar su rama** — git worktree remove sin --force$C2" "$(regla 5)"
+indice
+chk "sin comentario no hay kw_disparadores en el indice" "0" "$(python3 -c "import json,sys;print(sum(1 for l in open(sys.argv[1],encoding='utf-8') if 'commits sin publicar' in l and json.loads(l).get('kw_disparadores')))" "$T/idx.jsonl")"
+set +e; emit --type learning.update --topic gate --match-prefix "Un worktree" --sin-disparadores --disparadores "$D1" >/dev/null 2>&1; rc=$?; set -e
+chk "emisor: --sin-disparadores con --disparadores rechazado" "1" "$rc"
+set +e; emit --type learning.update --topic gate --sin-disparadores >/dev/null 2>&1; rc=$?; set -e
+chk "emisor: --sin-disparadores sin --match-prefix rechazado" "1" "$rc"
+set +e; emit --type learning.add --topic gate --text "**Z** — z" --decision nueva --sin-disparadores >/dev/null 2>&1; rc=$?; set -e
+chk "emisor: learning.add --sin-disparadores rechazado" "1" "$rc"
+chk "nada quedo pendiente" "0" "$(ls "$M/.journal/pending" | wc -l | tr -d ' ')"
+
 echo "== 8. el compactador es su propia frontera: payload a mano invalido -> cuarentena =="
+for payload in '{"topic":"gate","match_prefix":"Nunca empujar","sin_disparadores":"si"}' \
+               '{"topic":"gate","match_prefix":"Nunca empujar","sin_disparadores":true,"disparadores":"frases=uno | dos | tres"}' \
+               '{"topic":"gate","sin_disparadores":true}'; do
+  fixture
+  mkdir -p "$M/.journal/pending"
+  printf '{"v":1,"type":"learning.update","ts":1,"session":"t","payload":%s}\n' "$payload" > "$M/.journal/pending/1-a-1-0.json"
+  h=$(huella); compact
+  chk "sin_disparadores invalido: cuarentena ($payload)" "1" "$(cuar)"; has "sin_disparadores invalido: motivo malformed" "$(motivo)" "malformed"
+  chk "sin_disparadores invalido: nada escrito" "$h" "$(huella)"
+done
 for payload in '{"topic":"gate","text":"**X** — y","disparadores":"frases=a | b"}' \
                '{"topic":"gate","match_prefix":"Nunca empujar","disparadores":"frases=uno | dos | tres; cmd=a --b"}' \
                '{"topic":"gate","disparadores":"frases=uno | dos | tres"}'; do

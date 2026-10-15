@@ -108,6 +108,9 @@ Conserva el numero de la regla (se cita por numero en todo el repo). El prefijo 
 enfasis ni mayusculas; si casan cero o dos reglas, el evento cae en cuarentena y nombra las
 candidatas en vez de reescribir a ciegas.
 
+`--text` conserva los disparadores de la regla. `--disparadores "..."` los reemplaza enteros, y
+`--sin-disparadores` (2.60.2, con `--match-prefix`, sin `--disparadores`) los quita.
+
 Then compact:
 
 ```bash
