@@ -25,6 +25,7 @@ BIN="plugins/3-tier-memory/bin"
 # dependeria de como arranco la sesion de quien lo corre.
 unset CLAUDE_CODE_SESSION_ID
 FALLOS=0
+FALLIDAS=""
 TOTAL=0
 LENTAS=""
 SALTADAS=""
@@ -82,7 +83,7 @@ correr() {   # $1 = etiqueta, $2... = comando
   # sintaxis DESPUES del resumen, con set -e y trap EXIT, sale rc=0 en bash 3.2 con el resumen ya
   # impreso, y ni el rc ni sin_resumen lo ven. Un `rc=$?` en el trap no sirve: ahi $? llega en 0.
   if [ "$(basename "$1")" = bash ] && [ -f "${2:-}" ] && ! out=$("$1" -n "$2" 2>&1); then
-    TOTAL=$(( TOTAL + 1 )); FALLOS=$(( FALLOS + 1 ))
+    TOTAL=$(( TOTAL + 1 )); FALLOS=$(( FALLOS + 1 )); FALLIDAS="$FALLIDAS $nom"
     printf '  FALLA %-32s %3ss  bash -n: error de sintaxis\n' "$nom" 0
     printf '%s\n' "$out" | sed 's/^/       /'
     return 0
@@ -103,14 +104,14 @@ correr() {   # $1 = etiqueta, $2... = comando
     PARCIALES="$PARCIALES $nom"
     printf '  skip %-32s %3ss  %s\n' "$nom" "$dur" "$(printf '%s' "$out" | tail -1 | cut -c1-46)"
   elif [ "$rc" -eq 0 ] && sin_resumen "$out"; then
-    FALLOS=$(( FALLOS + 1 ))
+    FALLOS=$(( FALLOS + 1 )); FALLIDAS="$FALLIDAS $nom"
     printf '  FALLA %-32s %3ss  rc=0 sin linea de resumen (murio a mitad?)\n' "$nom" "$dur"
     printf '%s\n' "$out" | tail -5 | sed 's/^/       /'
   elif [ "$rc" -eq 0 ]; then
     printf '  ok   %-32s %3ss  %s\n' "$nom" "$dur" "$(printf '%s' "$out" | tail -1 | cut -c1-46)"
     [ "$VERBOSE" -eq 1 ] && printf '%s\n' "$out" | sed 's/^/       /'
   else
-    FALLOS=$(( FALLOS + 1 ))
+    FALLOS=$(( FALLOS + 1 )); FALLIDAS="$FALLIDAS $nom"
     printf '  FALLA %-32s %3ss  rc=%s\n' "$nom" "$dur" "$rc"
     printf '%s\n' "$out" | sed 's/^/       /'
   fi
@@ -160,7 +161,9 @@ if [ "$FALLOS" -eq 0 ] && { [ -n "$SALTADAS" ] || [ -n "$PARCIALES" ]; }; then
 elif [ "$FALLOS" -eq 0 ]; then
   echo "TODO VERDE — $TOTAL/$TOTAL"
 else
-  echo "HAY FALLOS — $FALLOS de $TOTAL"
+  # Con los nombres: quien corre el runner con `| tail` (o lo pierde al pasar a segundo plano) no
+  # ve la linea FALLA de arriba, y sin ellos acaba culpando a la suite mas lenta (p-578883244d).
+  echo "HAY FALLOS — $FALLOS de $TOTAL:$FALLIDAS"
 fi
 [ -n "$LENTAS" ] && echo "lentas (>=5s):$LENTAS"
 echo "bash $BASH_VERSION en $(uname -s)"
