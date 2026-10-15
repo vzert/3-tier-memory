@@ -17,10 +17,15 @@ de la fila mensual.
   (`_ev: 0`) no tiene orden y el reopen sigue, como antes.
 - **El reopen escribe el indice con `escribir_anotado`.** Si `_pendientes.md` no se puede escribir,
   las dos anotaciones se anulan y el reintento aplica, en vez de archivarse como su propio replay.
+- **Una pasada que murio a medias se termina.** Si el compactador muere despues de escribir el
+  indice y antes de sacar la linea del archivo, el reintento ve su `reopen-<id>` anotado y la linea
+  viva: completa la limpieza del archivo y de la fila mensual sin volver a anotar. Solo es replay
+  (noop) si la linea NO esta viva. (Adversario: la primera version lo trataba como replay y la
+  linea quedaba viva y archivada a la vez.)
 - `fue_revertido` descuenta las anulaciones (`-ts`) igual que `ts_registrados`; con `startswith`
   un cierre cuya reversa se anulo seguia contado como revertido.
-- `test-resolve-reopen.sh` casos 16-21: replay tras un cierre nuevo (resolve y expire), orden contra
-  `_ev:`, reopen sin ts, fallo de escritura del indice y cierre sin ts. 15 asertos fallan contra
+- `test-resolve-reopen.sh` casos 16-22: replay tras un cierre nuevo (resolve y expire), orden contra
+  `_ev:`, reopen sin ts, fallo de escritura del indice, cierre sin ts y pasada muerta a medias. 15 asertos fallan contra
   2.41.0 y 2.58.0.
 
 ### Changed

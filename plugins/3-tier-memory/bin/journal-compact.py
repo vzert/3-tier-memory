@@ -1649,12 +1649,9 @@ def buscar_archivado(mem, pid):
 def apply_reopen(mem, p):
     """Reversa de expire Y de resolve: devuelve la linea VERBATIM y limpia la fila mensual."""
     ts = p["_ts"]   # validate garantiza > 0
-    # Replay de ESTE mismo reopen: ya consta con su ts (clave `reopen-<id>`). Sin esto, el replay
-    # de un reopen viejo, despues de un cierre NUEVO del mismo pendiente, encontraba la linea
-    # archivada de ese cierre y la reabria en silencio (p-c577d64793). Mismo guardia que
-    # apply_plan_reopen.
-    if ts in ts_registrados(mem, "reopen-" + p["id"]):
-        return False
+    # ESTE mismo reopen ya consta con su ts (clave `reopen-<id>`): o es su replay, o una pasada
+    # anterior murio a medias. Se decide abajo, con el indice a la vista.
+    ya_anotado = ts in ts_registrados(mem, "reopen-" + p["id"])
     hallado = buscar_archivado(mem, p["id"])
     if hallado is None:
         # Hasta 2.31.0 `resolve` no archivaba nada, asi que un pendiente cerrado ANTES de esta
@@ -1670,6 +1667,14 @@ def apply_reopen(mem, p):
                 f"Reabrelo con un pendiente.add y su --creado original para reproducir el id.")
         return False  # idempotente: ya reabierto, o un id que nunca existio
     cpath, clines, idx, verbatim, prio_archivada, origen, ev_archivado = hallado
+    path = os.path.join(mem, "_pendientes.md")
+    lines = read_lines(path)
+    viva = find_id_line(lines, p["id"]) is not None
+    if ya_anotado and not viva:
+        # Replay de este reopen despues de un cierre NUEVO del mismo pendiente: la linea archivada
+        # es la de ese cierre. Sin esto se reabria en silencio (p-c577d64793). Mismo guardia que
+        # apply_plan_reopen.
+        return False
     # Comparar por ORDEN con el cierre archivado (su ts va en `_ev:`): un cierre POSTERIOR a este
     # reopen es una decision mas nueva que la de reabrir, y el reopen no la deshace. Cubre tambien
     # el reopen que aplico un compactador anterior a este arreglo (sin clave `reopen-<id>`) y
@@ -1691,14 +1696,16 @@ def apply_reopen(mem, p):
                    ("reopen-" + p["id"], ts, "la reapertura")]
     # ORDEN, igual que expire pero al reves: primero devolver la linea viva y solo despues
     # quitarla del archivo. El peor caso vuelve a ser "esta en los dos", nunca "en ninguno".
-    path = os.path.join(mem, "_pendientes.md")
-    lines = read_lines(path)
-    if find_id_line(lines, p["id"]) is not None:
-        # Ya vive en el indice (una pasada anterior murio antes de sacarlo del archivo): no hay
-        # escritura que proteger. Se anota y se sigue sin reescribir `_pendientes.md`, cuyo mtime
-        # lee derivar_creado.
-        for clave, ets, que in anotaciones:
-            anotar_reabierto(mem, clave, ets, que=que)
+    if viva:
+        # Ya vive en el indice: una pasada anterior murio despues de escribirlo y antes de sacar
+        # la linea del archivo. No hay escritura que proteger: se completa la limpieza de abajo
+        # sin reescribir `_pendientes.md` (su mtime lo lee derivar_creado). Si este reopen ya
+        # consta (`ya_anotado`), sus anotaciones las hizo esa pasada y no se repiten; si no, se
+        # anotan aqui. (Adversario de 2.58.1: con el noop por `reopen-<id>` antes de mirar el
+        # indice, esa pasada muerta nunca se terminaba.)
+        if not ya_anotado:
+            for clave, ets, que in anotaciones:
+                anotar_reabierto(mem, clave, ets, que=que)
     else:
         prio = p.get("prioridad") or prio_archivada
         if prio in ("", "?"):

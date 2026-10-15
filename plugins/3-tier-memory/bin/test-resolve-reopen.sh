@@ -335,6 +335,26 @@ replay "$REOPEN"
 chk "sigue cerrado tras el replay" "0" "$(printf '%s' "$(linea "$ID")" | grep -c .)"
 chk "sin cuarentena" "0" "$(cuar)"
 
+echo "== 22. una pasada que murio tras escribir el indice: el reintento termina la limpieza =="
+# El reopen anota `reopen-<id>` ANTES de escribir el indice. Si el proceso muere despues de
+# escribirlo y antes de sacar la linea del archivo y limpiar la fila mensual, el evento sigue en
+# pending/. Una primera version de 2.58.1 veia su ts anotado y lo archivaba como replay: la linea
+# quedaba viva Y archivada para siempre (adversario de 2.58.1). Se simula devolviendo el archivo y
+# la mensual a su estado previo y el evento a pending/.
+fixture; cerrar
+cp "$M/pendientes/_resueltos.md" "$T/res.bak"; cp "$M/pendientes/2026-09.md" "$T/mes.bak"
+emit_cap --type pendiente.reopen --id "$ID"; REOPEN=$EV
+compact --quiet >/dev/null
+cp "$T/res.bak" "$M/pendientes/_resueltos.md"; cp "$T/mes.bak" "$M/pendientes/2026-09.md"
+chk "estado a medias: viva y archivada" "1|1" "$(grep -c "_id: ${ID}_" "$M/_pendientes.md")|$(arch "$ID")"
+replay "$REOPEN"
+chk "sigue viva una vez, byte a byte" "$L0" "$(linea "$ID")"
+chk "sale del archivo" "0" "$(arch "$ID")"
+chk "la fila mensual vuelve identica" "$F0" "$(fila "$ID")"
+chk "no repite la anotacion del reopen" "1" "$(vivas "reopen-$ID")"
+chk "ni la del cierre" "1" "$(vivas "$ID")"
+chk "sin cuarentena" "0" "$(cuar)"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
