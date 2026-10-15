@@ -7,32 +7,46 @@ planes cerrados mas recientes. Si ya quito la fila de un plan cerrado, el replay
 miraba filas que existen.
 
 ### Fixed
-- **`plan.upsert` sin fila lee el frontmatter del plan.** Si el evento trae un status que no es de
-  cierre, el plan no tiene fila y `plans/plan-<slug>.md` dice `status: completed|abandoned|superseded`,
-  el evento es noop con `WARN`. No va a cuarentena: un replay no es un error. El aviso da la salida:
-  para reabrir a proposito, poner `status: active` en el frontmatter y reemitir el `plan.upsert`.
-  Cerrado -> cerrado sin fila se inserta como antes. Sin archivo regular, sin frontmatter, sin
-  `status:` o con un status que no es de cierre, se inserta como antes: sin saber, no se pierde la
-  escritura. Lee CRLF, comillas y mayusculas (`status: "Completed"`).
+- **La poda de planes deja registro.** Cada fila de plan que la poda quita anota
+  `poda-plan-<slug>` en `.journal/reabiertos.log`, con el ts del evento que la podo, ANTES de
+  escribir el indice (la misma escritura anotada de `promote-<slug>`).
+- **`plan.upsert` sin fila de un plan podado no lo reabre.** Si el evento trae un status que no es
+  de cierre, el plan no tiene fila, tiene registro `poda-plan-<slug>` y `plans/plan-<slug>.md` dice
+  `status: completed|abandoned|superseded`, el evento es noop con `WARN`. No va a cuarentena: un
+  replay no es un error. El frontmatter es la salida manual: para reabrir a proposito, poner
+  `status: active` en el frontmatter y reemitir el `plan.upsert`. Lee CRLF, comillas y mayusculas
+  (`status: "Completed"`). Cerrado -> cerrado sin fila se inserta como antes. Sin registro, sin
+  archivo regular, sin frontmatter, sin `status:` o con un status que no es de cierre, se inserta
+  como antes.
+- Por que hacen falta las dos condiciones: el frontmatter dice el estado de HOY, no el del momento
+  del evento. Un plan creado y cerrado en el mismo lote de pending/ ya tiene el archivo en
+  `completed` cuando el compactador llega a su primer upsert. Con solo el frontmatter, ese primer
+  registro se tomaba por replay y se perdian su fecha de creacion y su `(fase de plan-X)` (lo
+  encontro el adversario de la primera ronda). Sin registro de poda, "no hay fila" es el primer
+  registro.
 - La cuarentena `no-fila` de `plan.reopen` ya no manda solo a `plan.upsert --status active`: pide
-  antes poner `status: active` en el frontmatter, porque con el frontmatter cerrado ese upsert
-  ahora es noop.
-- `test-plan-reopen.sh` caso 17 (13 asertos; la suite pasa de 45 a 58). Contra 2.60.1 (`0be3486`) y
-  contra 2.60.2 fallan 7: seis del guardian y uno (`cerrado -> cerrado`) en cascada, porque la fila
-  reinsertada como active se cierra con la fecha vieja y la poda la vuelve a quitar.
-- `mutation-check.sh`: 3 casos nuevos (`m_plan_poda.py`). Quitar el guardian tumba 7 asertos; leer
-  el status sin quitar comillas tumba el de CRLF; frenar solo `completed` tumba el de `abandoned`.
+  antes poner `status: active` en el frontmatter. `/checkpoint-3t` Step 5 dice lo mismo.
+- `test-plan-reopen.sh` casos 17 y 18 (17 asertos; la suite pasa de 45 a 62). Contra 2.60.1
+  (`0be3486`) fallan 8: siete del guardian y el del registro (uno de los siete, `cerrado -> cerrado`,
+  cae en cascada: la fila reinsertada como active se cierra con la fecha vieja y la poda la vuelve
+  a quitar). Contra la primera version de este arreglo, que solo miraba el frontmatter, fallan 4:
+  el registro y los tres del caso 18.
+- `mutation-check.sh`: 5 casos nuevos (`m_plan_poda.py`). Quitar el guardian tumba 7 asertos; no
+  anotar la poda, 8; no exigir el registro, los 3 del caso 18; leer el status sin quitar comillas,
+  el de CRLF; frenar solo `completed`, el de `abandoned` y el de `cerrado -> cerrado`.
 
 ### Known
-- Un plan `--inline` (sin archivo) cuya fila se podo sigue sin proteccion: no hay frontmatter que
-  leer. Igual que antes.
-- Un frontmatter con un status fuera de `completed|abandoned|superseded` (en el repo del plugin hay
-  `cerrado-por-medicion` e `implementado — ...`) no protege: cuenta solo la primera palabra, igual
-  que la poda y el guardian de la fila.
+- Un plan podado antes de esta version no tiene registro: su fila sigue sin proteccion, como antes.
+- Un plan `--inline` (sin archivo ni slug en la fila) no se anota al podarse y sigue sin
+  proteccion, como antes.
+- Si la anotacion de la poda no se puede escribir, el evento que podaba (el upsert de OTRO plan) va
+  a cuarentena `no-registro` y el indice no cambia. Es lo que ya hacia `promote-<slug>`: sin
+  registro no se poda.
+- Un frontmatter con un status fuera de `completed|abandoned|superseded` (`cerrado-por-medicion`,
+  `implementado — ...`) no protege: cuenta solo la primera palabra, igual que la poda y el guardian
+  de la fila. Tampoco un plan cerrado en el indice cuyo archivo nadie paso a cerrado.
 - La cuarentena `titulo-ambiguo` se evalua antes que este guardian: un replay viejo sobre un indice
   con una fila del mismo titulo sin wikilink va a cuarentena en vez de a noop. Igual que antes.
-- El guardian confia en que el frontmatter se actualice al cerrar y al reabrir. Un plan cerrado en
-  el indice cuyo archivo sigue en `status: active` no esta protegido tras la poda.
 
 ## [2.60.2] - 2026-10-15
 Origen: p-19f90435f1 y p-240bbd4b2f. `/migrate-learnings-3t` corrido en el repo del plugin bajo el

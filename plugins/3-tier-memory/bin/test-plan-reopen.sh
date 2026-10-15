@@ -242,19 +242,38 @@ replay "$ACT"
 chk "abandoned en el frontmatter tambien frena" "0" "$(filas aband)"
 emit --type plan.upsert --slug aband --title "P aband" --date 2026-07-01 --status superseded; compact --quiet >/dev/null
 chk "cerrado -> cerrado sin fila se inserta" "superseded" "$(status 'plan-aband\|')"
-fixture
-mkdir -p "$M/plans"; printf -- '---\r\ntype: plan\r\nstatus: "Completed"\r\n---\r\n# x\r\n' > "$M/plans/plan-crlf.md"
-emit --type plan.upsert --slug crlf --title "P crlf" --date 2026-01-01 --status active; compact --quiet >/dev/null
+podado crlf completed
+chk "la poda deja registro poda-plan-<slug>" "1" "$(grep -c "^poda-plan-crlf	" "$M/.journal/reabiertos.log")"
+printf -- '---\r\ntype: plan\r\nstatus: "Completed"\r\n---\r\n# x\r\n' > "$M/plans/plan-crlf.md"
+replay "$ACT"
 chk "frontmatter CRLF, con comillas y mayusculas: frena" "0" "$(filas crlf)"
-fixture
-emit --type plan.upsert --slug nuevo --title "P nuevo" --date 2026-01-01 --status active; compact --quiet >/dev/null
-chk "sin archivo de plan: se inserta (sin saber, no se pierde la escritura)" "active" "$(status 'plan-nuevo\|')"
-mkdir -p "$M/plans"; printf '# sin frontmatter\nstatus: completed\n' > "$M/plans/plan-sinfm.md"
-emit --type plan.upsert --slug sinfm --title "P sinfm" --date 2026-01-01 --status active; compact --quiet >/dev/null
-chk "archivo sin frontmatter: se inserta" "active" "$(status 'plan-sinfm\|')"
+podado nuevo completed
+rm "$M/plans/plan-nuevo.md"; replay "$ACT"
+chk "podado sin archivo de plan: se inserta (sin saber, no se pierde la escritura)" "active" "$(status 'plan-nuevo\|')"
+podado sinfm completed
+printf '# sin frontmatter\nstatus: completed\n' > "$M/plans/plan-sinfm.md"; replay "$ACT"
+chk "podado con archivo sin frontmatter: se inserta" "active" "$(status 'plan-sinfm\|')"
 plan_md vivo active
 emit --type plan.upsert --slug vivo --title "P vivo" --date 2026-01-01 --status active; compact --quiet >/dev/null
 chk "plan nuevo con frontmatter active: se inserta" "active" "$(status 'plan-vivo\|')"
+
+echo "== 18. sin registro de poda, \"no hay fila\" es el primer registro: se inserta (adversario 2.60.3) =="
+# Un plan creado y cerrado en el mismo lote: cuando el compactador llega a su primer upsert, el
+# archivo ya dice completed. Sin el registro de la poda, ese upsert se tomaba por replay viejo y se
+# perdian la fecha de creacion y la anotacion de fase.
+fixture
+emit --type plan.upsert --slug q --title Q --date 2026-08-01 --status active; compact --quiet >/dev/null
+plan_md p completed
+emit --type plan.upsert --slug p --title P --date 2026-09-01 --status active --parent q
+emit --type plan.upsert --slug p --title P --date 2026-09-02 --status completed
+OUT=$(compact)
+has "los dos eventos se aplican" "$OUT" "applied=2"
+chk "conserva fase y fecha de creacion" "completed (fase de plan-q)|2026-09-01" \
+  "$(grep -F 'plan-p\|' "$M/_plans-index.md" | awk -F' \\| ' '{print $2"|"$3}')"
+fixture
+plan_md antiguo completed
+emit --type plan.upsert --slug antiguo --title Antiguo --date 2026-01-01 --status active; compact --quiet >/dev/null
+chk "plan sin registro (podado antes de 2.60.3) con frontmatter cerrado: se inserta" "active" "$(status 'plan-antiguo\|')"
 
 echo
 echo "RESULTADO: $pass ok, $fail fallas"

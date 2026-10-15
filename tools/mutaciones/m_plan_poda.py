@@ -10,6 +10,8 @@ M = {
     "sin-comillas": [("""v = m.group(1).strip().strip("'\\"").lower().split()""",
                       "v = m.group(1).strip().lower().split()")],
     "solo-completed": [("        if fm in PLAN_CERRADO:", '        if fm == "completed":')],
+    "sin-registro-poda": [('anotaciones += [(f"poda-plan-{s}", ts, "la poda") for s in podados]', "pass")],
+    "sin-condicion-registro": [('            and ts_registrados(mem, f"poda-plan-{slug}"):', "            :")],
 }
 
 p, nombre = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""

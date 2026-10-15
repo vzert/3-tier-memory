@@ -185,6 +185,8 @@ caso "hermano de la tabla primero" plan-siguiente-hermano.py m_relacionado.py $T
 caso "poda sin guardian"   journal-compact.py m_plan_poda.py test-plan-reopen.sh "el replay active NO reinserta la fila" sin-guardian
 caso "poda sin comillas"   journal-compact.py m_plan_poda.py test-plan-reopen.sh "frontmatter CRLF, con comillas" sin-comillas
 caso "poda solo completed" journal-compact.py m_plan_poda.py test-plan-reopen.sh "abandoned en el frontmatter tambien frena" solo-completed
+caso "poda sin registro"   journal-compact.py m_plan_poda.py test-plan-reopen.sh "el replay active NO reinserta la fila" sin-registro-poda
+caso "poda sin pedir registro" journal-compact.py m_plan_poda.py test-plan-reopen.sh "conserva fase y fecha de creacion" sin-condicion-registro
 T=test-hilo-pendientes.sh
 caso "hilo: liga al nacer" journal-emit.py m_hilo.py $T "el evento trae _relacionado al paso recibido, campo en 2 lineas" liga-sin-auto
 caso "hilo: liga no hereda en backfill" journal-emit.py m_hilo.py $T "ficha de otra fecha, backfill: no hereda el snippet de la sesion en curso" liga-sin-guardia
