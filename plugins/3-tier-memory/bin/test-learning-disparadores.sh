@@ -162,7 +162,7 @@ chk "la 3 queda marcada, comentario al final" "3. **No borres un worktree con co
 chk "la 5 nueva con su comentario" "5. **Un worktree solo se borra tras publicar su rama** — git worktree remove sin --force$C1" "$(regla 5)"
 
 paso 2>/dev/null || true
-echo "== 7b. update --sin-disparadores (2.59.0): quita el comentario, conserva texto y marcador; replay = nada =="
+echo "== 7b. update --sin-disparadores (2.60.2): quita el comentario, conserva texto y marcador; replay = nada =="
 emit --type learning.update --topic gate --match-prefix "Un worktree solo se borra" --sin-disparadores >/dev/null
 emit --type learning.update --topic gate --match-prefix "No borres un worktree" --sin-disparadores >/dev/null
 compact

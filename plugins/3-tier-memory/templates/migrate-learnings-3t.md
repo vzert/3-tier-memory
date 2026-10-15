@@ -41,7 +41,7 @@ CORE RULES:
   of the recall for a prompt where it used to appear (measured in the plugin's repo: enriching
   every rule lost 2 of 14 recall cases and gained 2 others). The plugin's recall bench lives in the plugin repo, not in your
   install, so this command cannot detect that here. Say so in the report. The way back, for a
-  rule whose new phrases cost a case (since 2.59.0): `journal-emit.py --type learning.update
+  rule whose new phrases cost a case (since 2.60.2): `journal-emit.py --type learning.update
   --topic T --match-prefix P --sin-disparadores` removes its phrases (text and marker kept), and
   `learnings-migracion.py --memory-dir <memory> --decidir T#N` records that the user wants it
   without phrases, so the next run does not add them again.

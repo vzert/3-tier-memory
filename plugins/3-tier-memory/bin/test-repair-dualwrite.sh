@@ -381,6 +381,33 @@ check "el id viejo ya no esta" "$(grep -c 'p-bbbbbbbbbb' "$M19/_pendientes.md")"
 check "sin GRAVE de fila mensual no actualizada (aqui no habia fila mensual aun)" \
   "$(echo "$OUT" | grep -c 'la fila de Tier 2 SI se renombro, pero su')" "0"
 
+echo "22. las lineas '- [ ]' sin _id se cuentan (sin_id=N) y se sugiere adopt --todas (p-f127ef9d9c)"
+# parse_tier2 se las salta: sin id no hay nada que reconciliar. Saltarlas sin contarlas hizo que
+# una sesion de otra instalacion creyera que este informe ya las cubria. La cuenta es la de
+# `pendiente.adopt --todas` (abierta_sin_id del emisor): sangradas si, cerradas `[x]` no.
+M22="$TMP/m22"; mkdir -p "$M22/pendientes"
+cat > "$M22/_pendientes.md" <<'EOF'
+# Pendientes
+
+## Media prioridad
+
+- [ ] Sin id escrito a mano — _creado: 2026-10-01_
+- [ ] Pendiente normal — _origen: [[sessions/y]]_ — _creado: 2026-08-02_ — _id: p-0ae06deea6_
+  - [ ] Sangrado sin id
+- [x] Cerrado sin id
+
+## Related
+EOF
+OUT=$(python3 "$BIN/repair-dualwrite.py" "$M22")
+check "cuenta sin_id=2 (la sangrada si, la cerrada no)" "$(echo "$OUT" | grep -o 'sin_id=[0-9]*')" "sin_id=2"
+check "dice en que lineas" "$(echo "$OUT" | grep -c 'lineas 5, 7')" "1"
+check "y sugiere adopt --todas" "$(echo "$OUT" | grep -c 'pendiente.adopt --todas')" "1"
+python3 "$BIN/journal-emit.py" --memory-dir "$M22" --type pendiente.adopt --todas >/dev/null
+python3 "$BIN/journal-compact.py" --memory-dir "$M22" --quiet >/dev/null
+OUT=$(python3 "$BIN/repair-dualwrite.py" "$M22")
+check "tras adopt --todas, sin_id=0" "$(echo "$OUT" | grep -o 'sin_id=[0-9]*')" "sin_id=0"
+check "y ya no avisa" "$(echo "$OUT" | grep -c 'no llevan `_id:`')" "0"
+
 echo
 [ $FAIL -eq 0 ] && echo "TODO VERDE" || echo "HAY FALLOS"
 exit $FAIL

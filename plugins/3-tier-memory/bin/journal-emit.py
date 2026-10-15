@@ -37,7 +37,7 @@ Tipos de evento:
                     sesiones: si no se pasa, se toma de la linea viva. Exige --text y/o
                     --prioridad. Sobre un pendiente ya cerrado o caducado no hace nada.
   pendiente.expire  --id ID --dias N [--line "<linea verbatim>"]   (caducidad por edad)
-  pendiente.reopen  --id ID [--prioridad P]                        (reversa de expire)
+  pendiente.reopen  --id ID [--prioridad P]             (reversa de expire y de resolve)
   pendiente.window  --id ID --revisar YYYY-MM-DD                  (pone/actualiza la ventana)
   pendiente.block   --id ID (--bloqueado-por "QUE" | --desbloquear)
                     Pone, cambia o quita `_bloqueado: QUE_` en un pendiente VIVO. Existe para
@@ -124,7 +124,7 @@ Tipos de evento:
                     --disparadores sin --text enriquece la regla sin cambiar su texto; con
                     --text sin --disparadores, la regla conserva los que tenia; --disparadores
                     REEMPLAZA el juego entero (no anade frases a las que habia).
-                    [--match-prefix P --sin-disparadores]                                  (2.59.0)
+                    [--match-prefix P --sin-disparadores]                                  (2.60.2)
                     quita el comentario de disparadores entero (texto y marcador intactos): la
                     vuelta atras de un juego de frases que hace perder recall. No va con
                     --disparadores.
@@ -965,7 +965,7 @@ def main():
     ap.add_argument("--solo-vecinos", dest="solo_vecinos", action="store_true")
     # learning.add / learning.update: disparadores (F4, 2.48.0)
     ap.add_argument("--disparadores", default=None)
-    # learning.update: quitar el comentario de disparadores entero (2.59.0)
+    # learning.update: quitar el comentario de disparadores entero (2.60.2)
     ap.add_argument("--sin-disparadores", dest="sin_disparadores", action="store_true")
     # learning.update: fecha de la ultima revision del topic (F6, 2.50.0)
     ap.add_argument("--last-verified", dest="last_verified", default="")
@@ -1223,7 +1223,7 @@ def main():
             "last_verified": last_verified,
         }
         if sin_disp:
-            # Solo cuando se pide: un payload sin la clave es el de antes de 2.59.0, y el replay de
+            # Solo cuando se pide: un payload sin la clave es el de antes de 2.60.2, y el replay de
             # un update viejo no tiene que cambiar.
             base["payload"]["sin_disparadores"] = True
         write_event(memory_dir, base)

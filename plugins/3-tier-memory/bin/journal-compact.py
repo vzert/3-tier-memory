@@ -1002,6 +1002,10 @@ def anotar_reabierto(mem, pid, ev, que="la reapertura"):
       `research-<slug>`. Por celda y no por sesion: con una sola clave, un amend de la Fecha con ts
       anterior a un amend del alias ya aplicado se descartaba como replay sin serlo. Las clases de
       clave no pueden chocar entre si (prefijos distintos; `p-` exige 10 hex).
+    - `reopen-p-<10 hex>` (pendientes, 2.60.1): el ts del propio evento `pendiente.reopen`.
+      `apply_reopen` lo busca por pertenencia: el replay de ese reopen, despues de un cierre NUEVO
+      del mismo pendiente, es noop (p-c577d64793). La clave `p-<id>` sigue guardando el ts del
+      cierre revertido; son dos significados y por eso dos claves.
     - `promote-<slug>` (planes, `plan.upsert --promote`): el ts del evento que promovio la fila
       (inline) del plan. `promote_inline_row` lo busca por igualdad: el replay de esa promocion,
       cuando la fila ya no esta, sigue como upsert normal en vez de ir a cuarentena.
@@ -1102,7 +1106,13 @@ def fue_revertido(mem, pid, ev):
 
     Se compara el ts del evento, no solo el id: un cierre NUEVO despues del reopen es legitimo y
     tiene otro ts, asi que pasa. Solo se frena la reaplicacion del cierre ya revertido.
+
+    Un ts numerico se cuenta con `ts_registrados`, que descuenta las anulaciones (`-ts`): desde que
+    apply_reopen escribe con `escribir_anotado`, una escritura fallida del indice anula la
+    anotacion, y con `startswith` el cierre seguiria contado como revertido sin haberse reabierto.
     """
+    if str(ev).isdigit():
+        return int(ev) in ts_registrados(mem, pid)
     path = os.path.join(mem, ".journal", REABIERTOS_LOG)
     if not os.path.isfile(path):
         return False
@@ -1124,8 +1134,9 @@ def ts_registrados(mem, clave_id):
     `research-<slug>`, `session-fecha-<slug>`, `session-alias-<slug>`), descontando las
     anulaciones (`-ts`, ver `desanotar`). Es un multiconjunto: anotar 100, anular -100 y volver a
     anotar 100 en el reintento deja 100 vivo — con una diferencia de conjuntos desapareceria y el
-    replay de ese evento ya no seria noop. Solo campos numericos: una linea de pendiente (`p-...`)
-    nunca casa."""
+    replay de ese evento ya no seria noop. Solo cuentan los campos numericos. Tambien sirve para
+    `p-<id>` (fue_revertido) y `reopen-p-<id>` (apply_reopen): la clave se compara entera hasta
+    el tabulador, asi que `p-X` no casa con `reopen-p-X`."""
     path = os.path.join(mem, ".journal", REABIERTOS_LOG)
     if not os.path.isfile(path):
         return []
@@ -1637,6 +1648,10 @@ def buscar_archivado(mem, pid):
 
 def apply_reopen(mem, p):
     """Reversa de expire Y de resolve: devuelve la linea VERBATIM y limpia la fila mensual."""
+    ts = p["_ts"]   # validate garantiza > 0
+    # ESTE mismo reopen ya consta con su ts (clave `reopen-<id>`): o es su replay, o una pasada
+    # anterior murio a medias. Se decide abajo, con el indice a la vista.
+    ya_anotado = ts in ts_registrados(mem, "reopen-" + p["id"])
     hallado = buscar_archivado(mem, p["id"])
     if hallado is None:
         # Hasta 2.31.0 `resolve` no archivaba nada, asi que un pendiente cerrado ANTES de esta
@@ -1644,6 +1659,18 @@ def apply_reopen(mem, p):
         # indistinguible de "ya estaba reabierto": la persona no sabia si habia funcionado ni por
         # que no. Se separan los dos silencios (pendiente p-d949b88e8a).
         donde = pendiente_cerrado(mem, p["id"])
+        if donde and find_id_line(read_lines(os.path.join(mem, "_pendientes.md")), p["id"]) \
+                is not None:
+            # Vive en el indice y no en el archivo, pero la fila mensual sigue cerrada: una pasada
+            # anterior murio entre sacar la linea del archivo y limpiar la mensual. El motivo de
+            # abajo ("cerrado antes de 2.31.0, usa pendiente.add") seria falso aqui y su consejo
+            # duplicaria una linea viva (adversario de 2.60.1, ronda 3). Sigue siendo cuarentena:
+            # terminar esa pasada es p-c103c7df05.
+            raise Quarantine(
+                f"mensual-cerrada: {p['id']} ya vive en _pendientes.md, pero su fila mensual sigue "
+                f"{donde}. Una pasada anterior murio antes de limpiarla: vacia a mano las celdas "
+                f"Resuelto y Sesion resolucion de esa fila. NO emitas pendiente.add: duplicaria "
+                f"la linea viva.")
         if donde:
             raise Quarantine(
                 f"no-archivado: {p['id']} figura {donde} pero no hay linea suya en "
@@ -1652,16 +1679,51 @@ def apply_reopen(mem, p):
                 f"Reabrelo con un pendiente.add y su --creado original para reproducir el id.")
         return False  # idempotente: ya reabierto, o un id que nunca existio
     cpath, clines, idx, verbatim, prio_archivada, origen, ev_archivado = hallado
+    path = os.path.join(mem, "_pendientes.md")
+    lines = read_lines(path)
+    viva = find_id_line(lines, p["id"]) is not None
+    # `reanuda`: este reopen ya anoto como revertido EL MISMO cierre que sigue archivado, o sea una
+    # pasada anterior murio entre anotar y escribir el indice (kill, corte, OOM: escribir_anotado
+    # solo anula ante una excepcion). Hay que terminarla, no archivarla como replay: eso perdia el
+    # reopen dado por aplicado (adversario de 2.60.1, ronda 2; 2.58.0 si lo reabria).
+    reanuda = ya_anotado and fue_revertido(mem, p["id"], ev_archivado)
+    if ya_anotado and not viva and not reanuda:
+        # Replay de este reopen despues de un cierre NUEVO del mismo pendiente: la linea archivada
+        # es la de ese cierre, que este reopen no revirtio. Sin esto se reabria en silencio
+        # (p-c577d64793). Mismo guardia que apply_plan_reopen.
+        return False
+    # Comparar por ORDEN con el cierre archivado (su ts va en `_ev:`): un cierre POSTERIOR a este
+    # reopen es una decision mas nueva que la de reabrir, y el reopen no la deshace. Cubre tambien
+    # el reopen que aplico un compactador anterior a este arreglo (sin clave `reopen-<id>`) y
+    # vuelve a entrar despues. `_ev: 0` (o ausente) es un cierre sin ts: no se sabe el orden y
+    # el reopen sigue, como antes.
+    if ev_archivado.isdigit() and int(ev_archivado) > ts:
+        log(f"WARN pendiente.reopen: {p['id']} se cerro DESPUES de este reopen (cierre "
+            f"{ev_archivado} > reopen {ts}); no se reabre. Si hay que reabrirlo, emite otro "
+            f"pendiente.reopen.")
+        return False
     # PRIMERO el registro de la reversa, ANTES de tocar nada. Si no se puede escribir, esto
     # cuarentena y el reopen no ocurre: una reapertura sin registro queda sin proteccion frente al
     # replay del cierre original, o sea deshecha mas tarde y en silencio. Mejor no reabrir que
-    # reabrir a medias. (Adversario externo, 2a ronda.)
-    anotar_reabierto(mem, p["id"], ev_archivado)
+    # reabrir a medias. (Adversario externo, 2a ronda.) Dos anotaciones: el cierre revertido
+    # (`<id>`, lo lee fue_revertido) y el propio reopen (`reopen-<id>`, frena su replay).
+    # `escribir_anotado` las anula si la escritura del indice falla, para que el reintento aplique
+    # en vez de archivarse como replay.
+    anotaciones = [(p["id"], ev_archivado, "la reapertura"),
+                   ("reopen-" + p["id"], ts, "la reapertura")]
     # ORDEN, igual que expire pero al reves: primero devolver la linea viva y solo despues
     # quitarla del archivo. El peor caso vuelve a ser "esta en los dos", nunca "en ninguno".
-    path = os.path.join(mem, "_pendientes.md")
-    lines = read_lines(path)
-    if find_id_line(lines, p["id"]) is None:
+    if viva:
+        # Ya vive en el indice: una pasada anterior murio despues de escribirlo y antes de sacar
+        # la linea del archivo. No hay escritura que proteger: se completa la limpieza de abajo
+        # sin reescribir `_pendientes.md` (su mtime lo lee derivar_creado). Si este reopen ya
+        # consta (`ya_anotado`), sus anotaciones las hizo esa pasada y no se repiten; si no, se
+        # anotan aqui. (Adversario de 2.60.1: con el noop por `reopen-<id>` antes de mirar el
+        # indice, esa pasada muerta nunca se terminaba.)
+        if not ya_anotado:
+            for clave, ets, que in anotaciones:
+                anotar_reabierto(mem, clave, ets, que=que)
+    else:
         prio = p.get("prioridad") or prio_archivada
         if prio in ("", "?"):
             prio = ""
@@ -1680,7 +1742,12 @@ def apply_reopen(mem, p):
         lines.insert(at, verbatim)
         if at + 1 < len(lines) and lines[at + 1].startswith("## "):
             lines.insert(at + 1, "")
-        atomic_write(path, lines)
+        # Al reanudar, las anotaciones ya estan vivas: no se repiten (y si la escritura vuelve a
+        # fallar no se anulan, porque no son de esta pasada).
+        if reanuda:
+            atomic_write(path, lines)
+        else:
+            escribir_anotado(mem, anotaciones, path, lines)
 
     # Releer antes de borrar: entre medias pudo escribir otro. La entrada SALE del archivo —el
     # invariante que la bateria de expire/reopen defiende es que tras un reopen el item vive en
@@ -2851,7 +2918,7 @@ def apply_learning_update(mem, p):
         #    marcador, se le vuelve a pegar el que tenia (2.45.0). Resucitarla seria otra decision,
         #    y no se toma en silencio dentro de una correccion de redaccion;
         #  - corregir el texto no tira los disparadores (F4, paso 2): se conservan si no llegan otros;
-        #    `sin_disparadores` (2.59.0) es la unica forma de quitarlos.
+        #    `sin_disparadores` (2.60.2) es la unica forma de quitarlos.
         # Se compara la linea entera: un replay (o un update que no cambia nada) no escribe.
         cuerpo = text or learning_marks.sin_marca(viejo)
         marca = "" if (text and learning_marks.regla_retirada(text)) else learning_marks.sufijo_marca(viejo)
@@ -4048,6 +4115,16 @@ def validate(ev):
     elif t == "pendiente.reopen":
         if not p.get("id"):
             raise Quarantine("malformed: pendiente.reopen sin 'id'")
+        # Sin ts, cuarentena, como plan.reopen: el ts es lo unico que distingue el replay de este
+        # reopen de uno nuevo. Sin el, el replay de un reopen viejo reabria un pendiente que se
+        # habia vuelto a cerrar despues (p-c577d64793). journal-emit siempre lo pone.
+        try:
+            p["_ts"] = int(ev.get("ts") or 0)
+        except (TypeError, ValueError):
+            p["_ts"] = 0
+        if p["_ts"] <= 0:
+            raise Quarantine("malformed: pendiente.reopen sin 'ts' — sin el no se distingue su "
+                             "replay de un reopen nuevo; emitelo con journal-emit.py")
     elif t == "pendiente.window":
         if not p.get("id"):
             raise Quarantine("malformed: pendiente.window sin 'id'")

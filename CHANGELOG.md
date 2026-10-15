@@ -1,6 +1,6 @@
 # Changelog
 
-## [VERSION-POR-FIJAR] - 2026-10-15
+## [2.60.2] - 2026-10-15
 Origen: p-19f90435f1 y p-240bbd4b2f. `/migrate-learnings-3t` corrido en el repo del plugin bajo el
 banco de recall local de 7/15 a 6/15 en prompt@4: el caso que pidio en prosa "¿hago las dos cosas?"
 al cerrar dejo de recibir su regla. Medido termino a termino, una frase nueva de otra regla ("estoy
@@ -31,6 +31,102 @@ p-a02371c827.
 - Una decision de dejar una regla sin frases que no este en `.migracion-learnings.json` no la ve la
   migracion: en el repo del plugin, la de la F7 manual (2026-10-06) solo estaba en
   `tools/recall-bench/resultado-F7.json`, y la corrida del 2026-10-15 enriquecio esas reglas.
+
+## [2.60.1] - 2026-10-15
+Origen: Fase 3 de la familia de correccion y reversa del journal (p-c577d64793). `pendiente.reopen`
+tenia el hueco que 2.37.0 cerro para planes: el reopen solo anotaba el cierre que revertia, no su
+propio ts. El replay de un reopen viejo, despues de un cierre NUEVO del mismo pendiente, encontraba
+la linea archivada de ese cierre nuevo y la reabria en silencio, y ademas vaciaba la fecha de cierre
+de la fila mensual. Con un arreglo mas de la misma sesion: p-f127ef9d9c (repair-dualwrite).
+
+### Added
+- **`repair-dualwrite.py` cuenta las lineas sin `_id:`** (`sin_id=N`, siempre en la linea de
+  resumen) y, si hay, imprime un AVISO con sus numeros de linea y el comando
+  `journal-emit.py --type pendiente.adopt --todas` ya con las rutas. Antes `parse_tier2` se las
+  saltaba en silencio y una sesion de otra instalacion creyo que el informe ya las cubria. La cuenta
+  usa `abierta_sin_id` del emisor, la misma prueba que adopt (sangradas si, `[x]` no).
+  test-repair-dualwrite.sh caso 22. checkpoint-3t y audit-3t documentan el campo.
+
+### Fixed
+- **El replay de un `pendiente.reopen` ya no reabre un cierre posterior.** El reopen anota su propio
+  ts con la clave `reopen-<id>` en `.journal/reabiertos.log`; su replay, con la linea no viva, es
+  noop, como `plan.reopen`. La clave `<id>` sigue guardando el ts del cierre revertido: dos
+  significados, dos claves.
+- **Orden contra el cierre archivado.** Si el `_ev:` de la linea archivada es mayor que el ts del
+  reopen, el cierre es mas nuevo que la decision de reabrir: noop con WARN. Cubre el reopen que
+  aplico un compactador anterior (sin clave `reopen-<id>`) y vuelve a entrar. Un cierre sin ts
+  (`_ev: 0`) no tiene orden y el reopen sigue, como antes.
+- **El reopen escribe el indice con `escribir_anotado`.** Si `_pendientes.md` no se puede escribir,
+  las dos anotaciones se anulan y el reintento aplica, en vez de archivarse como su propio replay.
+- **Dos muertes a medias se terminan en el reintento** (las demas, ver Known):
+  - despues de escribir el indice y antes de sacar la linea del archivo: con la linea viva y
+    archivada, el reintento saca la linea del archivo y limpia la fila mensual sin reescribir el
+    indice. Anota las dos claves si faltan (pasada de un compactador anterior) y no las repite si
+    ya estan. (Adversario, ronda 1: la primera version lo archivaba como replay.)
+  - entre anotar y escribir el indice: un kill no lanza excepcion, asi que `escribir_anotado` no
+    anula. Si el cierre archivado es el MISMO que este reopen anoto como revertido
+    (`fue_revertido`), el reintento reabre sin repetir las anotaciones; si es otro cierre, es
+    replay. (Adversario, ronda 2: era una regresion frente a 2.58.0, que aqui si reabria.)
+- **Un reopen cuya linea ya vive pero cuya fila mensual sigue cerrada** va a cuarentena
+  `mensual-cerrada` con el motivo cierto. Antes decia "se cerro antes de 2.31.0" y aconsejaba un
+  `pendiente.add`, que duplicaria la linea viva. (Adversario, ronda 3.)
+- `fue_revertido` descuenta las anulaciones (`-ts`) igual que `ts_registrados`; con `startswith`
+  un cierre cuya reversa se anulo seguia contado como revertido.
+- `test-resolve-reopen.sh` casos 16-25: replay tras un cierre nuevo (resolve y expire), orden
+  contra `_ev:`, reopen sin ts, fallo de escritura del indice, cierre sin ts, las muertes a medias y
+  el motivo de `mensual-cerrada`; el caso 15 cuenta ya por clave entera. Contra 2.41.0 y 2.58.0
+  fallan 24 asertos, de los casos 15 a 25. Cada guarda tiene una mutacion que algun caso tumba.
+
+### Changed
+- **Un `pendiente.reopen` sin `ts` va a cuarentena** (`malformed ... sin 'ts'`), como `plan.reopen`.
+  `journal-emit.py` siempre lo pone: solo alcanza a un evento escrito a mano. Antes se aplicaba.
+
+### Known
+- `checkpoint-audit.py` no lee todavia `sin_id`: el aviso sale en la salida de repair-dualwrite,
+  no en el bloque de hallazgos del cierre.
+- Residuos de muerte del proceso que ya estaban en 2.58.0 y siguen abiertos (se deciden en
+  p-c103c7df05, paso 3 de la Fase 3):
+  - muerte entre sacar la linea del archivo y limpiar la fila mensual: el reintento va a la
+    cuarentena `mensual-cerrada` y la fila se limpia a mano;
+  - muerte despues de escribir el indice seguida de un cierre NUEVO: quedan dos entradas archivadas
+    y el reintento lee la primera (la vieja), asi que reabre y deshace ese cierre.
+- Dos cierres SIN ts (`_ev: 0`) del mismo pendiente no se distinguen: el replay de un reopen que
+  revirtio el primero, despues del segundo, reabre. Ya pasaba con `fue_revertido` antes de esta
+  version; journal-emit siempre pone el ts, asi que solo alcanza a eventos escritos a mano.
+- Si el reloj de la maquina que emite un reopen va por detras del de la que cerro, la guarda de
+  orden lo descarta con WARN y hay que volver a emitirlo.
+
+
+## [2.60.0] - 2026-10-15
+Origen: p-88a7cc28c2 y p-3d1c7ab131. Victor acepto el 2026-10-13 el marco del `Proximo paso`
+(research `hilo-pendientes-relacionados-medicion`, Anexo 2). Sobre 211 snippets (163 con una segunda respuesta util), lo que se asocia a
+que el usuario tenga que aclarar o corregir es el contenido del paso, no el largo: paso limpio 8 %,
+espera de Victor 27 %, varias tareas 22 %, ramas 67 % (3 casos). El 2026-10-14 decidio que las
+senales de formato avisan y no bloquean.
+
+### Added
+- **Step 8: como se escribe el `<next-step>`.** Siete puntos: una accion de hoy con su id que empieza
+  con un verbo, un solo objetivo, sin ramas, sin historia (va a `## Estado` de la ficha), sin esperas
+  de Victor ni de terceros, palabras simples, unos 300 caracteres como guia.
+- **`checkpoint-audit.py` `snippet.marco`** (desde fichas del 2026-10-14). Avisa como `POR-DISEÑO`,
+  nunca `SALTADO`, cuatro senales del campo entero (no solo de su primera linea): una espera escrita
+  solo en el texto ("si Victor lo decide", "decidir con…", "pedir permiso", "cuando X responda",
+  "revisar si X respondio"), 2 o mas ids sin contar "ver tambien", una lista "(1)… (2)…" y mas de
+  600 caracteres. El detector es `pendientes_afines.senales_marco`. El caso 5 no se mide.
+- **`checkpoint-close-guard.sh` pone esos avisos en la revision del cierre** (desde 2.59.0 en su archivo), que ya bloquea una vez:
+  el agente rehace el paso o dice en la linea 9 por que se queda. Sin esto el aviso no tenia lector:
+  Step 8 escribe el snippet despues de que Step 7a corre el audit, y el hook solo leia `SALTADO`.
+
+### Changed
+- Step 8 (pregunta "¿se puede hacer de inmediato?") y Step 3b (`--bloqueado-por`) nombran la red
+  nueva. El campo `_bloqueado:` sigue siendo la via que el audit hace cumplir (regla 216).
+
+### Tests
+- `test-hilo-pendientes.sh` seccion 6: 12 asertos (10 rojos contra 2.59.0).
+  `test-checkpoint-close-guard.sh`: 7 asertos (4 rojos contra 2.59.0), en un repo git (los avisos
+  dentro del archivo de la revision) y fuera de git (respaldo en el `reason`).
+- `tools/mutation-check.sh`: 10 mutaciones del marco en `m_hilo.py` (cada senal, sin tildes, campo
+  entero, aviso y no falta, caso 5 fuera, el hook).
 
 ## [2.59.0] - 2026-10-14
 Origen: pedido de Victor (2026-10-14). La revision del cierre de 2.42.0 funciona, pero su aviso
