@@ -264,6 +264,55 @@ chk "caso 5 (ninguno): el marco no aplica" "0" "$(printf '%s\n' "$OUT" | grep -c
 marco "Proximo paso: x si Victor lo decide (p-1111111111)." >/dev/null
 chk "en --json el estado es POR-DISEÑO (el que lee el hook de cierre)" "POR-DISEÑO" "$(python3 "$BIN/checkpoint-audit.py" "$M" --session-file "$M/sessions/2026-10-14-hoy.md" --no-git --hoy 2026-10-14 --solo-snippet --json | python3 -c "import json,sys; print([x['estado'] for x in json.load(sys.stdin) if x['clave']=='snippet.marco'][0])")"
 
+echo "== 7. que puede ser extra (2.61.0): fuera lo citado en Terminas/No repitas, lo en vivo y lo que espera un OK =="
+EXTRAS() { printf '%s\n' "$OUT" | grep '^Si ese paso es corto' || true; }
+QUEDAN() { printf '%s\n' "$OUT" | grep '^quedan' || true; }
+# Forma del caso real que lo disparo (2026-10-15): el Terminas cuando mandaba un pendiente a la
+# siguiente sesion y la linea de extras lo sugeria para la misma sesion.
+memoria
+ficha 2026-10-14-hoy "Proximo paso: arreglar el presupuesto (p-1111111111)."$'\n\n'"Terminas cuando: 1.5.0 publicada; la prueba en vivo va en la siguiente supervision (p-2222222222)."
+pend Alta p-1111111111 "el paso" 2026-10-14-hoy
+pend Media p-2222222222 "repasar el lector de eventos" 2026-10-14-hoy
+pend Media p-3333333333 "arreglar el parser" 2026-10-14-hoy
+OUT=$(retomar)
+chk "el citado en Terminas cuando no va de extra" "0" "$(EXTRAS | grep -c 'p-2222222222')"
+chk "su lugar lo toma el siguiente del hilo" "1" "$(EXTRAS | grep -c 'p-3333333333 (Media) — arreglar el parser')"
+chk "y el citado queda en quedan N" "1" "$(QUEDAN | grep -c '^quedan 1 en el hilo: p-2222222222\.$')"
+memoria
+ficha 2026-10-14-hoy "Proximo paso: arreglar el presupuesto (p-1111111111)."$'\n\n'"No repitas: tocar p-2222222222 mientras corre la suite."
+pend Alta p-1111111111 "el paso" 2026-10-14-hoy
+pend Media p-2222222222 "repasar el lector" 2026-10-14-hoy
+OUT=$(retomar)
+chk "el citado en No repitas no va de extra" "0" "$(EXTRAS | grep -c 'p-2222222222')"
+chk "sin otro elegible no hay linea de extras, solo quedan" "1" "$(QUEDAN | grep -c 'p-2222222222')"
+memoria
+ficha 2026-10-14-hoy "Proximo paso: arreglar el presupuesto (p-1111111111)."
+pend Alta p-1111111111 "el paso" 2026-10-14-hoy
+pend Alta p-2222222222 "Confirmar en vivo la version 1.4 en una supervisión real tras /reload-plugins" 2026-10-14-hoy
+pend Media p-3333333333 "Verificar en una instalacion real que el instalador deja el icono" 2026-10-14-hoy
+pend Media p-4444444444 "Probar en una sesion nueva que el aviso sale una vez" 2026-10-14-hoy
+pend Media p-5555555555 "Comprimir la tabla de pedidos — probado en la copia, falta OK de Víctor" 2026-10-14-hoy
+pend Media p-6666666666 "Re-disparar el issue cuando Victor decida" 2026-10-14-hoy
+pend Media p-7777777777 "arreglar el parser" 2026-10-14-hoy
+pend Media p-8888888888 "Publicar la nota, a la espera de la aprobación del cliente" 2026-10-14-hoy
+pend Media p-9999999999 "Subir el indice: depende de que Victor apruebe la ventana" 2026-10-14-hoy
+OUT=$(retomar)
+chk "pruebas en vivo y esperas de OK fuera: el unico extra es la tarea de codigo" "p-7777777777" "$(EXTRAS | grep -o 'p-[0-9a-f]\{10\}' | tr '\n' ' ' | sed 's/ $//')"
+chk "las siete van a quedan" "1" "$(QUEDAN | grep -c '^quedan 7 en el hilo: ')"
+HILO=$(python3 "$BIN/pendientes_afines.py" "$M/sessions/2026-10-14-hoy.md" --hilo)
+chk "--hilo dice por que no va de extra (lo lee el Step 8)" "1" "$(printf '%s\n' "$HILO" | grep -c '^p-2222222222 (Alta, nuevo) \[no va de extra: prueba en uso real\]')"
+chk "--hilo no marca la tarea de codigo" "0" "$(printf '%s\n' "$HILO" | grep '^p-7777777777' | grep -c 'no va de extra')"
+# Lo que NO debe salir: texto que cuenta algo ya hecho en vivo, una decision que toma el agente, la
+# cita de una decision ya tomada.
+memoria
+ficha 2026-10-14-hoy "Proximo paso: arreglar el presupuesto (p-1111111111)."
+pend Alta p-1111111111 "el paso" 2026-10-14-hoy
+pend Media p-2222222222 "sin verificar el contador (40 avisos en 30 dias) — verificado en vivo: arreglar el conteo" 2026-10-14-hoy
+pend Media p-3333333333 "decidir con datos si las 3 colas siguen; va despues por decision de Victor del 2026-10-06" 2026-10-14-hoy
+OUT=$(retomar)
+chk "lo ya verificado y las decisiones del agente siguen siendo extra" "p-2222222222 p-3333333333" "$(EXTRAS | grep -o 'p-[0-9a-f]\{10\}' | tr '\n' ' ' | sed 's/ $//')"
+chk "el audit snippet.hilo no cambia: sigue viendo el hilo entero" "1" "$(audit | grep -c 'HECHO .*snippet.hilo.*(3 hacibles)')"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

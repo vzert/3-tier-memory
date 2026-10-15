@@ -538,12 +538,88 @@ def paso_recibido_de(ficha_path=None, transcripcion=None):
     return recibido(snip)["paso"] if snip else []
 
 
+# --- Que puede ser extra (2.61.0) ---------------------------------------------------------------
+# Medido sobre 22 sesiones que recibieron la linea de extras (35 extras, 2026-10-13..15, medicion
+# local del autor, no publicada): los 7 que se cerraron eran tareas de codigo o de doc; los 11 que
+# esperaban un OK, una decision, una prueba en vivo o una sesion real no cerraron ninguno y dieron 5
+# de las 7 fricciones (el usuario pregunta que es, o el agente los reporta como "no avanzaron"). Y en
+# 3 snippets la linea sugeria un id que el `Terminas cuando` del MISMO snippet mandaba a otra sesion.
+# Decidido por Victor el 2026-10-15: esos salen de la linea de extras y van a `quedan N`. No salen
+# del hilo: `checkpoint-audit.py` (`snippet.hilo`) sigue viendo el mismo orden. Sobre esa muestra el
+# filtro, con el texto que cada pendiente tenia en la fecha de su sesion, saca 9 de 35: 3 de las 7
+# fricciones y 1 de los 7 cerrados (uno que el `No repitas` de su snippet mandaba a otro PR); las
+# otras 4 fricciones este filtro no las ve.
+#
+# Una prueba que solo puede pasar en uso real: en vivo, en una supervision o un cierre real, en una
+# sesion nueva, tras reiniciar o recargar plugins. Se busca sin tildes.
+# El verbo va pegado (hasta 3 palabras) a "en vivo"/"en … real": con mas holgura casaba texto que
+# cuenta algo ya hecho ("sin verificar saldo (…) — verificado en vivo"). Calibrado contra los 1423
+# pendientes abiertos de 7 proyectos el 2026-10-15 (deja fuera 52).
+EN_VIVO = re.compile(
+    r"\b(?:confirmar|verificar|probar|comprobar|medir|validar)\s+(?:\S+\s+){0,3}?"
+    r"(?:en\s+vivo|en\s+uso\s+real|en\s+(?:una?|el|la)\s+(?:\S+\s+){0,2}?real\b|"
+    r"en\s+una\s+sesion\s+(?:\S+\s+)?nueva)"
+    r"|\btras\s+(?:reiniciar|recargar|/reload-plugins)\b"
+    r"|\ben\s+(?:el|la)\s+(?:proxim[oa]|siguiente)\s+(?:\S+\s+){1,2}?real\b",
+    re.I)
+# Espera un OK o una decision de otro. Tiene que nombrar el OK o a quien decide: `ESPERA_AJENA` (del
+# marco del paso) sobre el texto de un pendiente casaba "si se quiere", "decidir con datos" o "si
+# GitHub lo acepta", trabajo que el agente si puede hacer. "OK de Victor para el <fecha>" ya dado
+# no cuenta: la fecha la cubre `fecha_futura`.
+ESPERA_OK = re.compile(
+    r"\b(?:falta|faltan|espera|esperan|esperar|requiere|necesita|pendiente\s+de)\s+"
+    r"(?:el\s+|su\s+|un\s+|una\s+|la\s+)?(?:ok|visto\s+bueno|aprobacion|autorizacion|decision)\b"
+    r"|\b(?:si|cuando|hasta\s+que|una\s+vez\s+que)\s+(?:victor|el\s+usuario|user)\s+(?:lo\s+|la\s+)?"
+    r"(?:decide|decida|aprueba|apruebe|autoriza|autorice|quiere|confirma|confirme)\b"
+    r"|\b(?:cuando|hasta\s+que)\s+se\s+(?:decida|apruebe|autorice|publique)\b"
+    r"|\bdecidir\s+con\s+(?:victor|el\s+usuario)\b"
+    r"|\ba\s+la\s+espera\s+de\s+(?:la\s+|el\s+|su\s+)?(?:ok|aprobacion|autorizacion|decision|respuesta|visto\s+bueno)\b"
+    r"|\bdepende\s+de\s+que\s+(?:victor|el\s+usuario|user)\s+(?:lo\s+|la\s+)?"
+    r"(?:decida|apruebe|autorice|responda|confirme)\b"
+    r"|\b(?:pedir(?:le)?|solicitar)\s+(?:el\s+|su\s+)?(?:ok|permiso|autorizacion|aprobacion|visto\s+bueno)\b"
+    # "decision de Victor" a secas casi siempre cita una ya tomada ("por decision de Victor del …").
+    r"|\bdecision\s+(?:de\s+)?victor\s+pendiente\b|\bpide\s+(?:la\s+|una\s+)?decision\b",
+    re.I)
+
+
+def bloque_retomar(ficha_texto):
+    """El texto de `## Como retomar` (fence incluido), o ''."""
+    m = re.search(r"^## Como retomar[^\n]*\n(.*?)(?=^## |\Z)", ficha_texto or "", re.M | re.S)
+    return m.group(1) if m else ""
+
+
+def citados_fuera_del_paso(ficha_texto):
+    """Los ids `p-…` que el snippet de la ficha cita en `Terminas cuando` o `No repitas`. El agente
+    que cierra ya les dio un papel ("va aparte", "va en la siguiente supervision"): sugerirlos como
+    extra contradice al mismo snippet."""
+    bloque = bloque_retomar(ficha_texto)
+    ids = set()
+    for inicio in ("terminas cuando:", "no repitas:"):
+        ids |= anclas(campo(bloque, inicio))[0]
+    return ids
+
+
+def motivo_no_extra(p, citados=frozenset()):
+    """Por que un pendiente del hilo no va en la linea de extras, o None si puede ir."""
+    if p["id"] in citados:
+        return "citado en Terminas cuando o No repitas"
+    t = _sin_tildes(p["texto"])
+    if EN_VIVO.search(t):
+        return "prueba en uso real"
+    if ESPERA_OK.search(t):
+        return "espera un OK o una decision"
+    return None
+
+
 def extras_y_quedan(ficha_texto, pend_path, slug=None, hoy=None):
-    """(extras, quedan): hasta MAX_AFINES del hilo fuera del paso, y el resto."""
+    """(extras, quedan): hasta MAX_AFINES del hilo fuera del paso que se pueden sumar en la misma
+    sesion (`motivo_no_extra`), y el resto, en el orden del hilo."""
     ids_pp = anclas(proximo_paso(ficha_texto))[0]
     resto = [p for p in hilo(ficha_texto, pend_path, slug, hoy) if p["id"] not in ids_pp]
-    altas_medias = [p for p in resto if p["prio"] in PRIORIDAD]
-    extras = (altas_medias or resto)[:MAX_AFINES]
+    citados = citados_fuera_del_paso(ficha_texto)
+    elegibles = [p for p in resto if not motivo_no_extra(p, citados)]
+    altas_medias = [p for p in elegibles if p["prio"] in PRIORIDAD]
+    extras = (altas_medias or elegibles)[:MAX_AFINES]
     vistos = {p["id"] for p in extras}
     return extras, [p for p in resto if p["id"] not in vistos]
 
@@ -591,9 +667,14 @@ def main():
     pend = os.path.join(memory_dir, "_pendientes.md")
     if ver_hilo:
         # Step 8, casos 2-3: el primero es el `Proximo paso`.
+        # Desde 2.61.0 dice tambien cual no ira en la linea de extras y por que: el agente que
+        # escribe el snippet ve antes de cerrar que un id de su `Terminas cuando` sale a `quedan N`.
         etiqueta = {0: "heredado, saltado 2+ sesiones", 1: "nuevo", 2: "heredado"}
+        citados = citados_fuera_del_paso(texto)
         for p in hilo(texto, pend, slug, hoy):
-            print(f"{p['id']} ({p['prio']}, {etiqueta[p['grupo']]}) — {corto(p['texto'])}")
+            motivo = motivo_no_extra(p, citados)
+            fuera = f" [no va de extra: {motivo}]" if motivo else ""
+            print(f"{p['id']} ({p['prio']}, {etiqueta[p['grupo']]}){fuera} — {corto(p['texto'])}")
         return 0
     l = linea_snippet(texto, pend, hoy, slug)
     if l:
