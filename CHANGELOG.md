@@ -7,7 +7,10 @@ al cerrar dejo de recibir su regla. Medido termino a termino, una frase nueva de
 cerrando el checkpoint...") sumaba `cerrar` y `checkpoint` con el peso de disparador y la empujaba
 fuera del top 4. Quitar las frases de esa regla lo recupera (7/15, ningun otro caso cambia), pero el
 journal no tenia forma de quitarlas: `learning.update --text` las conserva y `--disparadores` las
-reemplaza por otras.
+reemplaza por otras. Con esta version se quitaron las de esa regla y las de otra con `hago` (7/15,
+ningun otro caso cambia, medido el 2026-10-15); horas despues una regla nueva con `hago` en sus
+frases lo volvio a tumbar. Podar frases no lo sostiene: el arreglo duradero, en el motor, es
+p-a02371c827.
 
 ### Added
 - **`learning.update --sin-disparadores`** (con `--match-prefix`): quita el comentario
