@@ -22,10 +22,15 @@ de la fila mensual.
   viva: completa la limpieza del archivo y de la fila mensual sin volver a anotar. Solo es replay
   (noop) si la linea NO esta viva. (Adversario: la primera version lo trataba como replay y la
   linea quedaba viva y archivada a la vez.)
+- **Tambien la que murio entre anotar y escribir el indice.** Un kill no lanza excepcion, asi que
+  `escribir_anotado` no anula y las dos anotaciones quedan vivas sin la linea en el indice. Si el
+  cierre archivado es el MISMO que este reopen anoto como revertido (`fue_revertido`), el reintento
+  reabre sin repetir las anotaciones; si es otro cierre, es replay. (Adversario, ronda 2: era una
+  regresion frente a 2.58.0, que en ese caso si reabria.)
 - `fue_revertido` descuenta las anulaciones (`-ts`) igual que `ts_registrados`; con `startswith`
   un cierre cuya reversa se anulo seguia contado como revertido.
 - `test-resolve-reopen.sh` casos 16-22: replay tras un cierre nuevo (resolve y expire), orden contra
-  `_ev:`, reopen sin ts, fallo de escritura del indice, cierre sin ts y pasada muerta a medias. 15 asertos fallan contra
+  `_ev:`, reopen sin ts, fallo de escritura del indice, cierre sin ts y las dos muertes a medias (casos 22 y 23). 15 asertos fallan contra
   2.41.0 y 2.58.0.
 
 ### Changed
@@ -33,6 +38,11 @@ de la fila mensual.
   `journal-emit.py` siempre lo pone: solo alcanza a un evento escrito a mano. Antes se aplicaba.
 
 ### Known
+- Dos cierres SIN ts (`_ev: 0`) del mismo pendiente no se distinguen: el replay de un reopen que
+  revirtio el primero, despues del segundo, reabre. Ya pasaba con `fue_revertido` antes de esta
+  version; journal-emit siempre pone el ts, asi que solo alcanza a eventos escritos a mano.
+- Si el reloj de la maquina que emite un reopen va por detras del de la que cerro, la guarda de
+  orden lo descarta con WARN y hay que volver a emitirlo.
 - El numero 2.59.0 ya lo usa la rama `revision-cierre-a-archivo`, sin mergear. La rama que entre
   segunda reordena su entrada del CHANGELOG.
 
