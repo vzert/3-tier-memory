@@ -107,7 +107,13 @@ mata_a_mitad() {  # <repo> <base>: arranca run-tests --una, lo mata con pkill a 
   n=0; while pgrep -f "$T/suite-lenta.sh" >/dev/null && [ "$n" -lt 50 ]; do sleep 0.1; n=$((n+1)); done
 }
 cuenta() { ls -d "$1"/tmp.* "$1"/3tm-tests.* 2>/dev/null | wc -l | tr -d ' '; }
-for caso in con sin; do
+# Git Bash (windows-latest) no trae pkill ni pgrep: sin ellos el caso no puede matar a nadie y el
+# control saldria rojo por eso, no por el ayudante. Se salta y se cuenta (run-tests: "skip").
+skip=0
+if ! command -v pkill >/dev/null 2>&1 || ! command -v pgrep >/dev/null 2>&1; then
+  skip=1; echo "  SALTA caso 5: sin pkill/pgrep en este sistema"
+fi
+[ "$skip" -eq 1 ] || for caso in con sin; do
   R="$T/repo-$caso"; B="$T/base-$caso"; mkdir -p "$R/tools" "$B"
   cp "$RT_REAL" "$R/tools/run-tests.sh"
   [ "$caso" = con ] && cp "$HELPER" "$R/tools/tmp-propio.sh"
@@ -122,5 +128,5 @@ for caso in con sin; do
 done
 
 echo
-echo "pass=$pass fail=$fail"
+if [ "$skip" -gt 0 ]; then echo "pass=$pass fail=$fail skip=$skip"; else echo "pass=$pass fail=$fail"; fi
 [ "$fail" -eq 0 ]
