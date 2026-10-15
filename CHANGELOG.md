@@ -1,5 +1,36 @@
 # Changelog
 
+## [2.58.1] - 2026-10-14
+Origen: Fase 3 de la familia de correccion y reversa del journal (p-c577d64793). `pendiente.reopen`
+tenia el hueco que 2.37.0 cerro para planes: el reopen solo anotaba el cierre que revertia, no su
+propio ts. El replay de un reopen viejo, despues de un cierre NUEVO del mismo pendiente, encontraba
+la linea archivada de ese cierre nuevo y la reabria en silencio, y ademas vaciaba la fecha de cierre
+de la fila mensual.
+
+### Fixed
+- **El replay de un `pendiente.reopen` ya no reabre un cierre posterior.** El reopen anota su propio
+  ts con la clave `reopen-<id>` en `.journal/reabiertos.log` y su replay es noop, como `plan.reopen`.
+  La clave `<id>` sigue guardando el ts del cierre revertido: dos significados, dos claves.
+- **Orden contra el cierre archivado.** Si el `_ev:` de la linea archivada es mayor que el ts del
+  reopen, el cierre es mas nuevo que la decision de reabrir: noop con WARN. Cubre el reopen que
+  aplico un compactador anterior (sin clave `reopen-<id>`) y vuelve a entrar. Un cierre sin ts
+  (`_ev: 0`) no tiene orden y el reopen sigue, como antes.
+- **El reopen escribe el indice con `escribir_anotado`.** Si `_pendientes.md` no se puede escribir,
+  las dos anotaciones se anulan y el reintento aplica, en vez de archivarse como su propio replay.
+- `fue_revertido` descuenta las anulaciones (`-ts`) igual que `ts_registrados`; con `startswith`
+  un cierre cuya reversa se anulo seguia contado como revertido.
+- `test-resolve-reopen.sh` casos 16-21: replay tras un cierre nuevo (resolve y expire), orden contra
+  `_ev:`, reopen sin ts, fallo de escritura del indice y cierre sin ts. 15 asertos fallan contra
+  2.41.0 y 2.58.0.
+
+### Changed
+- **Un `pendiente.reopen` sin `ts` va a cuarentena** (`malformed ... sin 'ts'`), como `plan.reopen`.
+  `journal-emit.py` siempre lo pone: solo alcanza a un evento escrito a mano. Antes se aplicaba.
+
+### Known
+- El numero 2.59.0 ya lo usa la rama `revision-cierre-a-archivo`, sin mergear. La rama que entre
+  segunda reordena su entrada del CHANGELOG.
+
 
 ## [2.59.0] - 2026-10-14
 Origen: pedido de Victor (2026-10-14). La revision del cierre de 2.42.0 funciona, pero su aviso

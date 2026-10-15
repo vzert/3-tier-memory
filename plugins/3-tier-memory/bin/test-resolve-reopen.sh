@@ -217,7 +217,123 @@ emit --type pendiente.reopen --id "$ID" >/dev/null
 compact --quiet >/dev/null
 chk "ahora si vuelve, byte a byte" "$L0" "$(linea "$ID")"
 chk "sin cuarentena" "0" "$(cuar)"
-chk "y la reversa quedo anotada" "1" "$(grep -c "$ID" "$M/.journal/reabiertos.log")"
+# Por clave entera: desde 2.58.1 cada reopen anota dos claves, `<id>` (el cierre revertido) y
+# `reopen-<id>` (el propio reopen).
+chk "y la reversa quedo anotada" "1" "$(grep -c "^$ID	" "$M/.journal/reabiertos.log")"
+chk "y el propio reopen tambien" "1" "$(grep -c "^reopen-$ID	" "$M/.journal/reabiertos.log")"
+
+# ---------------------------------------------------------------------------------------------
+# 2.58.1 (p-c577d64793): el replay del PROPIO reopen. Hasta 2.58.0 el reopen solo anotaba el
+# cierre que revertia; su propio ts no quedaba en ningun sitio. El replay de un reopen viejo,
+# despues de un cierre NUEVO del mismo pendiente, encontraba la linea archivada de ese cierre
+# nuevo, la anotaba y la reabria en silencio. Mismo hueco que 2.37.0 cerro para planes
+# (test-plan-reopen.sh caso 5).
+# emit_cap ... -> como emit, y deja en $EV una copia del evento recien emitido para reinyectarlo.
+emit_cap() {
+  local antes; antes=$(ls "$M/.journal/pending" 2>/dev/null)
+  emit "$@" >/dev/null
+  EV=$(comm -13 <(printf '%s\n' "$antes" | sort) <(ls "$M/.journal/pending" | sort) | head -1)
+  cp "$M/.journal/pending/$EV" "$T/$EV.bak"
+  EV="$T/$EV.bak"
+}
+replay() { cp "$1" "$M/.journal/pending/$(basename "$1" .bak)"; compact --quiet >/dev/null 2>&1 || true; }
+vivas() {  # anotaciones VIVAS (anotadas menos anuladas) de la clave exacta $1, como ts_registrados
+  if [ ! -f "$M/.journal/reabiertos.log" ]; then echo 0; return; fi
+  awk -F'\t' -v k="$1" '$1 == k { if ($2 ~ /^-/) { t=substr($2,2); if (c[t]>0) c[t]-- } else c[$2]++ }
+    END { n=0; for (t in c) if (c[t]>0) n+=c[t]; print n }' "$M/.journal/reabiertos.log"; }
+resuelto_cel() { fila "$ID" | awk -F' \\| ' '{print $6}'; }
+
+echo "== 16. replay del reopen viejo tras un cierre NUEVO: el pendiente sigue cerrado =="
+fixture; cerrar
+emit_cap --type pendiente.reopen --id "$ID"; REOPEN=$EV
+compact --quiet >/dev/null
+chk "el reopen aplico" "$L0" "$(linea "$ID")"
+cerrar
+chk "el cierre nuevo cerro" "0" "$(printf '%s' "$(linea "$ID")" | grep -c .)"
+replay "$REOPEN"
+chk "sigue cerrado tras el replay" "0" "$(printf '%s' "$(linea "$ID")" | grep -c .)"
+chk "y sigue archivado una vez" "1" "$(arch "$ID")"
+has "la fila mensual conserva la fecha de cierre" "$(resuelto_cel)" "^[0-9]\{4\}-[0-9][0-9]-[0-9][0-9]$"
+chk "no anota una segunda reapertura" "1" "$(vivas "reopen-$ID")"
+chk "sin cuarentena (un replay no es un error)" "0" "$(cuar)"
+
+echo "== 17. lo mismo por la via de expire =="
+fixture
+emit --type pendiente.expire --id "$ID" --dias 40 >/dev/null; compact --quiet >/dev/null
+emit_cap --type pendiente.reopen --id "$ID"; REOPEN=$EV
+compact --quiet >/dev/null
+chk "el reopen devolvio la linea" "$L0" "$(linea "$ID")"
+emit --type pendiente.expire --id "$ID" --dias 41 >/dev/null; compact --quiet >/dev/null
+chk "caducado otra vez" "1" "$(cad "$ID")"
+replay "$REOPEN"
+chk "sigue caducado tras el replay" "0" "$(printf '%s' "$(linea "$ID")" | grep -c .)"
+chk "y en _caducados.md una vez" "1" "$(cad "$ID")"
+chk "sin cuarentena" "0" "$(cuar)"
+
+echo "== 18. un reopen con ts ANTERIOR al cierre archivado no lo deshace (orden) =="
+# El reopen que aplico un compactador anterior a 2.58.1 no tiene clave `reopen-<id>`: si vuelve a
+# entrar, solo el orden contra el `_ev:` del cierre archivado lo frena.
+fixture
+emit_cap --type pendiente.reopen --id "$ID"; VIEJO=$EV
+rm -f "$M/.journal/pending/$(basename "$VIEJO" .bak)"
+cerrar
+cp "$VIEJO" "$M/.journal/pending/$(basename "$VIEJO" .bak)"
+OUT=$(compact 2>&1 || true)
+has "avisa por que no reabre" "$OUT" "se cerro DESPUES de este reopen"
+chk "sigue cerrado" "0" "$(printf '%s' "$(linea "$ID")" | grep -c .)"
+chk "y archivado" "1" "$(arch "$ID")"
+chk "sin anotar nada" "0" "$(vivas "reopen-$ID")"
+chk "sin cuarentena" "0" "$(cuar)"
+
+echo "== 19. un reopen sin ts: cuarentena, no reabre (su replay no se podria frenar) =="
+fixture; cerrar
+mkdir -p "$M/.journal/pending"
+printf '{"v":1,"type":"pendiente.reopen","session_id":"x","agent_id":"x","payload":{"id":"%s"}}\n' "$ID" > "$M/.journal/pending/0000-a-mano.json"
+compact --quiet >/dev/null 2>&1 || true
+chk "cuarentena 1" "1" "$(cuar)"
+has "motivo malformed sin ts" "$(motivo)" "sin 'ts'"
+chk "no reabrio" "0" "$(printf '%s' "$(linea "$ID")" | grep -c .)"
+
+echo "== 20. la escritura del indice falla: las anotaciones se anulan y el reintento reabre =="
+# Antes de 2.58.1 el reopen no usaba escribir_anotado: anotaba y, si el indice no se podia
+# escribir, la anotacion quedaba viva. Con la clave `reopen-<id>` viva, el reintento se veria como
+# su propio replay y el reopen se perderia contado como aplicado.
+# `chmod 555` sobre memory/ basta en POSIX; Git Bash lo ignora en un directorio, por eso tambien
+# el indice en solo lectura (os.replace sobre el niega el acceso en Windows).
+fixture; cerrar
+emit --type pendiente.reopen --id "$ID" >/dev/null
+chmod 444 "$M/_pendientes.md"; chmod 555 "$M"
+compact --quiet >/dev/null 2>&1 || true
+chmod 755 "$M"; chmod 644 "$M/_pendientes.md"
+chk "el fallo ocurrio: no reabrio" "0" "$(printf '%s' "$(linea "$ID")" | grep -c .)"
+chk "sin anotacion viva del reopen" "0" "$(vivas "reopen-$ID")"
+chk "ni del cierre" "0" "$(vivas "$ID")"
+# fue_revertido tiene que leer esa anulacion: con `startswith` veia la anotacion original y daba el
+# cierre por revertido sin que el reopen hubiera ocurrido. No hay efecto visible hoy (el cierre
+# sigue archivado y su replay es noop), por eso se pregunta a la funcion directamente.
+C1=$(sed -n "s/.*_id: ${ID}_.*_ev: \([0-9]*\)_.*/\1/p" "$M/pendientes/_resueltos.md")
+chk "fue_revertido respeta la anulacion" "False" "$(python3 -c '
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("jc", sys.argv[1]); m = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m); print(m.fue_revertido(sys.argv[2], sys.argv[3], sys.argv[4]))' "$BIN/journal-compact.py" "$M" "$ID" "$C1")"
+compact --quiet >/dev/null 2>&1 || true
+chk "el reintento reabre, byte a byte" "$L0" "$(linea "$ID")"
+chk "sale del archivo" "0" "$(arch "$ID")"
+chk "ahora si anotado" "1" "$(vivas "reopen-$ID")"
+
+echo "== 21. replay del reopen tras un cierre SIN ts: solo lo frena su propia anotacion =="
+# Un cierre escrito a mano sin ts archiva `_ev: 0`: no hay orden que comparar (caso 18 no aplica),
+# asi que lo unico que distingue el replay del reopen es la clave `reopen-<id>`.
+fixture; cerrar
+emit_cap --type pendiente.reopen --id "$ID"; REOPEN=$EV
+compact --quiet >/dev/null
+chk "reabierto" "$L0" "$(linea "$ID")"
+printf '{"v":1,"type":"pendiente.resolve","session_id":"x","agent_id":"x","payload":{"id":"%s","estado":"resolved"}}\n' "$ID" > "$M/.journal/pending/0000-sin-ts.json"
+compact --quiet >/dev/null 2>&1 || true
+chk "cerrado sin ts, archivado con _ev: 0" "1" "$(grep -c "_id: ${ID}_.*_ev: 0_" "$M/pendientes/_resueltos.md")"
+replay "$REOPEN"
+chk "sigue cerrado tras el replay" "0" "$(printf '%s' "$(linea "$ID")" | grep -c .)"
+chk "sin cuarentena" "0" "$(cuar)"
 
 echo
 echo "pass=$pass fail=$fail"
