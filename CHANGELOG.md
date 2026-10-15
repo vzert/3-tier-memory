@@ -1,5 +1,39 @@
 # Changelog
 
+## [2.60.3] - 2026-10-15
+Origen: p-fb70d4600d, el limite declarado en 2.37.0. La poda de `_plans-index.md` guarda solo los 5
+planes cerrados mas recientes. Si ya quito la fila de un plan cerrado, el replay de un
+`plan.upsert --status active` viejo la volvia a insertar como `active`: el guardian de reversa solo
+miraba filas que existen.
+
+### Fixed
+- **`plan.upsert` sin fila lee el frontmatter del plan.** Si el evento trae un status que no es de
+  cierre, el plan no tiene fila y `plans/plan-<slug>.md` dice `status: completed|abandoned|superseded`,
+  el evento es noop con `WARN`. No va a cuarentena: un replay no es un error. El aviso da la salida:
+  para reabrir a proposito, poner `status: active` en el frontmatter y reemitir el `plan.upsert`.
+  Cerrado -> cerrado sin fila se inserta como antes. Sin archivo regular, sin frontmatter, sin
+  `status:` o con un status que no es de cierre, se inserta como antes: sin saber, no se pierde la
+  escritura. Lee CRLF, comillas y mayusculas (`status: "Completed"`).
+- La cuarentena `no-fila` de `plan.reopen` ya no manda solo a `plan.upsert --status active`: pide
+  antes poner `status: active` en el frontmatter, porque con el frontmatter cerrado ese upsert
+  ahora es noop.
+- `test-plan-reopen.sh` caso 17 (13 asertos; la suite pasa de 45 a 58). Contra 2.60.1 (`0be3486`) y
+  contra 2.60.2 fallan 7: seis del guardian y uno (`cerrado -> cerrado`) en cascada, porque la fila
+  reinsertada como active se cierra con la fecha vieja y la poda la vuelve a quitar.
+- `mutation-check.sh`: 3 casos nuevos (`m_plan_poda.py`). Quitar el guardian tumba 7 asertos; leer
+  el status sin quitar comillas tumba el de CRLF; frenar solo `completed` tumba el de `abandoned`.
+
+### Known
+- Un plan `--inline` (sin archivo) cuya fila se podo sigue sin proteccion: no hay frontmatter que
+  leer. Igual que antes.
+- Un frontmatter con un status fuera de `completed|abandoned|superseded` (en el repo del plugin hay
+  `cerrado-por-medicion` e `implementado — ...`) no protege: cuenta solo la primera palabra, igual
+  que la poda y el guardian de la fila.
+- La cuarentena `titulo-ambiguo` se evalua antes que este guardian: un replay viejo sobre un indice
+  con una fila del mismo titulo sin wikilink va a cuarentena en vez de a noop. Igual que antes.
+- El guardian confia en que el frontmatter se actualice al cerrar y al reabrir. Un plan cerrado en
+  el indice cuyo archivo sigue en `status: active` no esta protegido tras la poda.
+
 ## [2.60.2] - 2026-10-15
 Origen: p-19f90435f1 y p-240bbd4b2f. `/migrate-learnings-3t` corrido en el repo del plugin bajo el
 banco de recall local de 7/15 a 6/15 en prompt@4: el caso que pidio en prosa "¿hago las dos cosas?"

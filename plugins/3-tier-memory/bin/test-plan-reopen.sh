@@ -207,6 +207,55 @@ chmod 644 "$M/.journal/reabiertos.log"
 has "motivo no-registro" "$(cat "$M"/.journal/quarantine/*.reason 2>/dev/null)" "^no-registro:"
 chk "indice intacto" "$ANTES" "$(hash_ < "$M/_plans-index.md")"
 
+echo "== 17. fila podada: el frontmatter del plan decide (p-fb70d4600d, 2.60.3) =="
+# La poda guarda los 5 cerrados mas recientes por Fecha: con 6 cerrados de fechas distintas, el de
+# fecha mas vieja pierde su fila. Antes el replay de su `--status active` viejo la reinsertaba.
+plan_md() { mkdir -p "$M/plans"; printf -- '---\ntype: plan\ndate: 2026-09-01\nstatus: %s\n---\n# %s\n' "$2" "$1" > "$M/plans/plan-$1.md"; }
+filas() { grep -cF "plan-$1\\|" "$M/_plans-index.md"; }  # -F: en GNU grep, \| es alternancia
+podado() {  # $1 slug con fecha vieja y status de cierre $2; deja en $ACT su upsert --status active
+  fixture
+  plan_md "$1" "$2"
+  emit --type plan.upsert --slug "$1" --title "P $1" --date 2026-01-01 --status active; ACT=$EV
+  compact --quiet >/dev/null
+  emit --type plan.upsert --slug "$1" --title "P $1" --date 2026-01-01 --status "$2"
+  for d in 02 03 04 05 06; do
+    plan_md "c$d" completed
+    emit --type plan.upsert --slug "c$d" --title "C $d" --date "2026-$d-01" --status completed
+  done
+  compact --quiet >/dev/null
+}
+podado viejo completed
+chk "la poda quito la fila" "0" "$(filas viejo)"
+: > "$LOG"
+cp "$ACT" "$M/.journal/pending/$(basename "$ACT" .bak)"; OUT=$(compact)
+chk "el replay active NO reinserta la fila" "0" "$(filas viejo)"
+has "cuenta como noop" "$OUT" "noop=1"
+chk "sin cuarentena" "0" "$(cuar)"
+has "aviso con la salida (frontmatter a active)" "$(cat "$LOG")" "pon 'status: active' en plans/plan-viejo.md"
+emit --type plan.upsert --slug viejo --title "P viejo" --date 2026-01-01 --status paused; compact --quiet >/dev/null
+chk "un status no cerrado distinto (paused) tampoco" "0" "$(filas viejo)"
+plan_md viejo active
+emit --type plan.upsert --slug viejo --title "P viejo" --date 2026-01-01 --status active; compact --quiet >/dev/null
+chk "frontmatter active: reabrir a proposito inserta" "active" "$(status 'plan-viejo\|')"
+podado aband abandoned
+replay "$ACT"
+chk "abandoned en el frontmatter tambien frena" "0" "$(filas aband)"
+emit --type plan.upsert --slug aband --title "P aband" --date 2026-07-01 --status superseded; compact --quiet >/dev/null
+chk "cerrado -> cerrado sin fila se inserta" "superseded" "$(status 'plan-aband\|')"
+fixture
+mkdir -p "$M/plans"; printf -- '---\r\ntype: plan\r\nstatus: "Completed"\r\n---\r\n# x\r\n' > "$M/plans/plan-crlf.md"
+emit --type plan.upsert --slug crlf --title "P crlf" --date 2026-01-01 --status active; compact --quiet >/dev/null
+chk "frontmatter CRLF, con comillas y mayusculas: frena" "0" "$(filas crlf)"
+fixture
+emit --type plan.upsert --slug nuevo --title "P nuevo" --date 2026-01-01 --status active; compact --quiet >/dev/null
+chk "sin archivo de plan: se inserta (sin saber, no se pierde la escritura)" "active" "$(status 'plan-nuevo\|')"
+mkdir -p "$M/plans"; printf '# sin frontmatter\nstatus: completed\n' > "$M/plans/plan-sinfm.md"
+emit --type plan.upsert --slug sinfm --title "P sinfm" --date 2026-01-01 --status active; compact --quiet >/dev/null
+chk "archivo sin frontmatter: se inserta" "active" "$(status 'plan-sinfm\|')"
+plan_md vivo active
+emit --type plan.upsert --slug vivo --title "P vivo" --date 2026-01-01 --status active; compact --quiet >/dev/null
+chk "plan nuevo con frontmatter active: se inserta" "active" "$(status 'plan-vivo\|')"
+
 echo
 echo "RESULTADO: $pass ok, $fail fallas"
 [ "$fail" -eq 0 ]

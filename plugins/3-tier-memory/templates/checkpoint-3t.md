@@ -979,7 +979,10 @@ Do NOT skip this step. Actively scan the conversation for these signals:
   2.37.0 an upsert that moves the status backwards is dropped with a WARN (that is what stops a
   replayed old event from un-closing a plan). Emit
   `python3 "$JBIN/journal-emit.py" --type plan.reopen --slug <slug>` (add `--title "<Plan title>"`
-  for an `--inline` plan), then update the plan file's frontmatter yourself.
+  for an `--inline` plan), then update the plan file's frontmatter yourself. If the pruning already
+  removed its row (`plan.reopen` quarantines `no-fila`), set `status: active` in the frontmatter
+  FIRST and then emit `plan.upsert --status active`: since 2.60.3 an upsert with no row whose plan
+  file still says closed is dropped with a WARN, as an old replay.
 - Add wikilink in session log ## Plans section and ## Related
 
 **Fallback (no JBIN)**: add/update the row in memory/_plans-index.md by hand.
