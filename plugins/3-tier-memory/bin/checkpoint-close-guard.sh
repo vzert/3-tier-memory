@@ -849,15 +849,24 @@ def ruta_aviso():
     del repo, que queda FUERA cuando la sesion se abrio en una subcarpeta). Si la sesion esta en la
     raiz de un checkout normal va en `.git/`, que git no versiona. Si no (una subcarpeta, o un
     worktree, cuyo git-dir vive fuera), va en el propio `cwd` como `.3t-revision-cierre-<id>.md` y
-    el patron se excluye en `info/exclude` (comun a todos los worktrees). Sin git, lanza: el aviso
-    vuelve entero."""
+    el patron se excluye en `info/exclude` (comun a todos los worktrees). Fuera de un repo (o sin
+    git instalado) va en el `cwd` con el mismo nombre: no hay commit en que colarse (p-92aa5de144).
+    Si git falla por otra cosa (p. ej. `safe.directory`: SI es un repo, pero no se puede excluir el
+    archivo), lanza y el aviso vuelve entero."""
     def git(*a):
         return subprocess.run(["git", "-C", cwd, *a], capture_output=True, text=True,
-                              timeout=10, check=True).stdout.strip()
+                              timeout=10, check=True, env={**os.environ, "LC_ALL": "C"}).stdout.strip()
     base = os.path.realpath(cwd)
-    raiz = os.path.realpath(git("rev-parse", "--show-toplevel"))
-    gdir = os.path.realpath(git("rev-parse", "--absolute-git-dir"))
     nombre = "3t-revision-cierre-" + (re.sub(r"[^A-Za-z0-9_-]", "-", SID)[:12] or "sin-sesion") + ".md"
+    try:
+        raiz = os.path.realpath(git("rev-parse", "--show-toplevel"))
+    except FileNotFoundError:
+        return os.path.join(base, "." + nombre), "." + nombre
+    except subprocess.CalledProcessError as e:
+        if "not a git repository" not in (e.stderr or ""):
+            raise
+        return os.path.join(base, "." + nombre), "." + nombre
+    gdir = os.path.realpath(git("rev-parse", "--absolute-git-dir"))
     if base == raiz and gdir.startswith(raiz + os.sep):
         return os.path.join(gdir, nombre), os.path.relpath(os.path.join(gdir, nombre), base)
     excl = git("rev-parse", "--git-path", "info/exclude")

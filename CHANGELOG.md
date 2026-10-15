@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.60.3] - 2026-10-15
+Origen: p-92aa5de144. Desde 2.59.0 la revision del cierre de `/checkpoint-3t` va a un archivo y lo
+que ve el humano es una linea, pero fuera de un repo git el aviso entero (~2.000-2.800 caracteres)
+seguia saliendo en la terminal: `ruta_aviso()` no tenia donde dejar el archivo y usaba el respaldo.
+
+### Fixed
+- **`checkpoint-close-guard.sh` fuera de git escribe el aviso en el directorio de la sesion**, como
+  `.3t-revision-cierre-<id>.md` (el mismo nombre que en una subcarpeta o un worktree), y el `reason`
+  visible es la linea que lo senala. Sin repo no hay commit en que colarse, y el Stop reentrante lo
+  borra al contestar la revision, como en un repo. Solo cuando git dice `not a git repository` o no
+  esta instalado: si falla por otra cosa (p. ej. `safe.directory`, que SI es un repo y donde no se
+  podria excluir el archivo), el aviso entero sigue en el `reason`, como antes. Medido con `claude -p
+  --permission-mode default` en una carpeta sin git: Read lee el archivo, con la ruta absoluta y la
+  relativa, sin pedir permiso (`permission_denials` vacio).
+- `test-checkpoint-close-guard.sh`: `corre` abre la sesion en una carpeta fuera de git del temporal
+  del test, no en `/tmp` (ahi dejaria el archivo). 9 asertos nuevos y 3 cambiados (7 rojos contra
+  2.60.2): fuera de git una linea y el archivo igual al aviso del repo, limpieza reentrante, sin git
+  instalado, y el respaldo medido con un `git` falso que falla con `dubious ownership`. 203 → 212.
+
+### Known
+- Si el usuario hace `git init` y `git add -A` en esa carpeta con una revision aun sin contestar, el
+  archivo entra en el commit: fuera de un repo no hay `info/exclude` donde ponerlo. Se borra al
+  contestar la revision.
+
 ## [2.60.2] - 2026-10-15
 Origen: p-19f90435f1 y p-240bbd4b2f. `/migrate-learnings-3t` corrido en el repo del plugin bajo el
 banco de recall local de 7/15 a 6/15 en prompt@4: el caso que pidio en prosa "¿hago las dos cosas?"
