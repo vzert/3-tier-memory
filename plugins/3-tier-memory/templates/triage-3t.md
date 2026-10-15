@@ -204,6 +204,16 @@ Los items sin `_creado` se saltan: el id se deriva de (texto, creado, origen) y 
 identidad. El propio enriquecedor rellena `_creado` en la misma pasada, asi que con `--apply`
 suele bastar una.
 
+Con otras sesiones escribiendo la memoria a la vez, o para UN item concreto, usa el evento del
+journal en vez del enriquecedor (2.58.0): da el mismo id que el enriquecedor en los items que este
+toca, crea la fila de Tier 3 y no pisa a nadie. Ademas adopta los items con sangria, que el
+enriquecedor salta.
+
+```bash
+python3 "$JBIN/journal-emit.py" --type pendiente.adopt --id sin-id-xxxxxxxxxx   # el de este barrido
+python3 "$JBIN/journal-emit.py" --type pendiente.adopt --todas                  # todos los sin id
+```
+
 Nunca un `--offset` numerico: al cerrar items del lote la lista se acorta y el offset se saltaria
 los que ocupan los huecos. El corte del cursor es **estricto**, asi que ni repite ni salta, tambien
 cuando varios items comparten dia; los que no tienen `_creado` van al final y se alcanzan con la

@@ -8,25 +8,29 @@ name: tests
 # mano no disparaba nunca en Linux, el detector de hooks heredados no disparaba nunca en Windows.
 # Ninguno lo habia visto ninguna suite en meses, y la del resolutor llevaba encima dos rondas de
 # adversario. No era un hueco de rigor sino de plataforma, y eso solo lo cierra ejecutar en la otra.
+#
+# 2026-10-14: este workflow corre SOLO ubuntu; macOS y Windows estan en platforms.yml y corren al
+# publicar version (cambio de plugin.json o marketplace.json en main) o a mano. Medido ese dia: cada
+# corrida de 3 sistemas tardaba 2-3,5 h de reloj (Windows 137 min, macOS 85, ubuntu 45) y el 90 % era
+# tools/mutation-check.sh en serie. Aqui corre en 4 tandas paralelas (MUT_JOBS).
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
 
+# Un push nuevo a la misma rama de un PR cancela la corrida vieja: ya no prueba el ultimo commit.
+# Fuera de un PR cada corrida tiene su propio grupo (run_id): GitHub deja UNA corrida en espera por
+# grupo y reemplaza a la anterior, asi que un grupo comun por rama perdia el merge de en medio de
+# tres seguidos sin correrlo nunca (adversario, 2026-10-14).
+concurrency:
+  group: tests-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   suites:
-    name: ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false   # que una plataforma no oculte el resultado de las otras
-      matrix:
-        # Windows entro aqui el 2026-09-12, tras 2.18.9. Antes era un job aparte con
-        # `continue-on-error` mientras se medía: informativo primero, bloqueante cuando dejo de
-        # tener rojos propios. Corre con Git Bash, y sus 3 casos no construibles alli (las ACL de
-        # NTFS frente a `chmod`, un `bash.exe` sin sus DLL, el pty) se SALTAN Y SE CUENTAN, no se
-        # dan por buenos.
-        os: [ubuntu-latest, macos-latest, windows-latest]
+    name: ubuntu-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -36,13 +40,14 @@ jobs:
         shell: bash
         run: |
           uname -s
+          nproc
           bash --version | head -1
           python3 --version
           git --version
       # Solo para las pruebas: el oraculo de rewrite_rule (tools/oraculo-rewrite-rule.py) necesita un
       # parser CommonMark de referencia. El plugin NO lo usa ni lo distribuye. Sin este paso el
-      # oraculo sale como skip en las tres plataformas. El import final hace que falle aqui, a la
-      # vista, si la instalacion no llego (macOS/Linux pueden rechazar --user sin el flag de PEP 668).
+      # oraculo sale como skip. El import final hace que falle aqui, a la vista, si la instalacion no
+      # llego (PEP 668 puede rechazar --user sin el flag).
       - name: oraculo (markdown-it-py)
         shell: bash
         run: |
@@ -51,4 +56,6 @@ jobs:
           python3 -c "import markdown_it; print('markdown-it-py', markdown_it.__version__)"
       - name: suites
         shell: bash
+        env:
+          MUT_JOBS: '4'
         run: bash tools/run-tests.sh

@@ -1,6 +1,114 @@
 # Changelog
 
 
+## [2.59.0] - 2026-10-14
+Origen: pedido de Victor (2026-10-14). La revision del cierre de 2.42.0 funciona, pero su aviso
+(~2.000-2.800 caracteres: las 9 preguntas, lo que no cuenta como falta y el cierre que va al
+final) salia entero en la terminal del humano como "Stop hook feedback" en cada `/checkpoint-3t`.
+
+### Changed
+- **`checkpoint-close-guard.sh` escribe el aviso completo en un archivo y el `reason` solo lo
+  senala.** El `reason` visible es una linea: que falta (N problemas, la revision) y "Lee con
+  Read `<archivo>` y haz lo que dice antes de terminar". El archivo trae byte a byte el texto que
+  antes iba en `reason`.
+- **Donde va el archivo: siempre dentro del directorio de la sesion.** Un Read fuera de los
+  directorios de trabajo pide permiso, y en `claude -p` se niega (medido con `claude -p
+  --permission-mode default`: denegado con el archivo fuera del proyecto, y con el `.git` de la
+  raiz cuando la sesion se abrio en una subcarpeta; lectura limpia en `.git/` desde la raiz y en
+  la propia subcarpeta). Si la sesion esta en la raiz de un checkout normal va en
+  `<repo>/.git/3t-revision-cierre-<12 primeros de session_id>.md`, que git no versiona. Si no (una
+  subcarpeta, o un worktree, cuyo git-dir vive fuera) va en el propio directorio de la sesion como
+  `.3t-revision-cierre-<id>.md`, y el patron `.3t-revision-cierre-*.md` se anade una vez a
+  `info/exclude` (comun a todos los worktrees). Si la ruta absoluta deja el `reason` en mas de
+  300 caracteres, el `reason` usa la ruta relativa al directorio de la sesion (medido: el agente
+  la resuelve y la lee).
+- El Stop reentrante borra el archivo cuando la revision quedo contestada (o no se pidio): no
+  queda uno por sesion. Si sigue sin contestar se queda; el siguiente bloqueo lo reescribe.
+- El bloqueo se queda en el Stop a proposito. Un Stop no tiene campo que separe lo que ve el
+  humano de lo que ve el modelo (`reason` y `additionalContext` salen enteros como hook
+  feedback). Se descarto entregar la lista antes, por `additionalContext` de un PostToolUse: la
+  revision funciona porque llega como turno nuevo (62 de 66 cierres medidos en 2.42.0), y a mitad
+  del turno es el antiguo Step 7b, que se contestaba como tramite.
+- Falla abierto: fuera de un repo git, o si el archivo no se puede escribir, el aviso entero
+  vuelve al `reason`, como antes. El aviso reentrante (`systemMessage`, para el humano) no cambia.
+- Step 7b de `checkpoint-3t.md`, Step 8 de `checkpoint-3t-step8.md` y el README lo dicen.
+
+### Tests
+- `test-checkpoint-close-guard.sh`: el runner sustituye el puntero por el contenido del archivo,
+  asi que los asertos de contenido siguen midiendo lo que recibe el agente. Casos nuevos: en un
+  repo, el `reason` visible mide 300 caracteres o menos, no trae la lista y senala el archivo en
+  `.git/`; el archivo es igual al aviso que el mismo turno deja en el `reason` fuera de git; el
+  Stop reentrante lo borra solo con la revision contestada; desde una subcarpeta va en esa
+  carpeta y no en el `.git` de la raiz; en un worktree va en su raiz y `git status` no lo ve, sin
+  repetir el patron en `info/exclude`; con una ruta de proyecto larga el `reason` usa la ruta
+  relativa y
+  sigue en 300 o menos; con el archivo imposible de escribir, el `reason` trae la revision
+  entera. Las rutas se comparan por nombre de archivo (en Windows el hook las escribe como C:\).
+
+### Sin verificar
+- Que la terminal muestre de verdad solo la linea y un "Read N lines" plegado: solo lo ve el
+  humano, en el proximo `/checkpoint-3t` real.
+
+## [2.58.0] - 2026-10-14
+Origen: encargo de Victor desde otro proyecto (2026-10-14). Un pendiente sin `_id:` no lo
+alcanza ningun evento: `find_id_line` exige `_id: p-…_` en la linea, asi que update, resolve,
+expire, block y relate no lo encuentran. La unica salida era editar `_pendientes.md` a mano y
+re-sellar las huellas (`--reseal`), y en esa instalacion ya habia pasado dos veces.
+
+### Added
+- **Evento `pendiente.adopt`**: le pone su `_id:` a una linea que no lo tiene. Despues, update y
+  resolve normales sobre ese id. Selectores: `--text-prefix P`, `--line "<linea entera>"`,
+  `--id sin-id-<10 hex>[-N]` (el id sintetico que muestra `/triage-3t`) o `--todas` (todas las
+  lineas sin id en un solo evento y un solo escrito de `_pendientes.md`).
+- El id es el **canonico** de la linea, `sha1(texto+creado+origen)`. La linea queda byte a byte
+  como la dejaria `enrich-memory.py --only creado,id`, asi que `repair-dualwrite` no lo cuenta como
+  inventado y `--fix-ids` no lo renombra. Si falta `_creado`, se escribe tambien, con el orden de
+  enrich, que adopt LLAMA (`enrich-memory.derivar_creado` + `mtime_date`), no copia: fecha del
+  slug de `_origen`, `date:` del fichero al que enlaza, mtime de `_pendientes.md`. Sin escribirlo,
+  un enrich posterior pondria un `_creado` y el id dejaria de ser canonico. Dos diferencias con
+  enrich: los items con sangria (enrich los salta; adopt y repair-dualwrite no) y un `_id:p-…_` mal
+  espaciado (enrich lo da por id y no lo toca; adopt lo reespacia). El id se calcula sobre la
+  linea YA con su `_creado` insertado, como en enrich: con un `_origen:` que no va detras de una
+  raya, el `— _creado:` insertado se lleva como metadato el texto que le sigue.
+- Crea la fila de Tier 3 que falte, con la prioridad de la seccion. Tambien en el replay, por si
+  la pasada murio entre los dos escritos.
+- Guarda contra la actualizacion perdida: el evento lleva la linea VERBATIM y el compactador solo
+  casa por ella, espacios incluidos. Si otra sesion la cambio o la cerro, se salta con aviso; no
+  hay cuarentena ni perdida, y un `--todas` grande no se cae por una linea.
+- Duplicados: dos lineas con el mismo id canonico (mismo texto, creado y origen), o una linea sin
+  id que repite un pendiente que ya lo tiene, son el mismo pendiente. Se niegan; `--colapsar` deja
+  una y guarda cada copia entera en `.journal/adopt-colapsados.log`. Mismo texto con otro creado u
+  origen da otro id y se adopta normal.
+- Un `_id: p-<10 hex>_` mal espaciado (`_id:p-…_`) es un id que repair-dualwrite y enrich ya
+  reconocen y `find_id_line` no: adopt lo reespacia y CONSERVA ese id, que puede estar citado.
+  Cualquier otro `_id:` (8 hex, o prosa) no se toca, como hace enrich: el canonico va al final.
+- Si una fila mensual escrita a mano ya lleva el id pero no al final de la celda, adopt no anade
+  otra: avisa (resolve no la encontrara, ver Known).
+- La cuarentena `unknown-id` de `pendiente.update` sugiere adoptar la linea. `checkpoint-3t` (Step
+  3a) y `triage-3t` lo explican.
+
+### Fixed
+- `enrich-memory.py --only creado` escribia tal cual una fecha imposible del slug de `_origen`
+  (`sessions/2026-02-30-x` daba `_creado: 2026-02-30_`), o de la `date:` del fichero enlazado, y
+  eso revienta a quien la parsea (triage-scan, expire-pendientes). Ahora pasa al siguiente recurso.
+  La derivacion vive en `derivar_creado`, que tambien usa adopt.
+
+### Tests
+- `test-pendiente-adopt.sh` (50 asertos): igualdad con enrich (con un mtime viejo, para que el
+  respaldo de la fecha no se confunda con hoy), update y resolve tras adoptar, `ids_invented=0`,
+  `--fix-ids` no toca nada, adopt y update en el mismo compactado, replay idempotente, linea
+  cambiada (tambien por un espacio), duplicados con y sin `--colapsar`, selectores, `_id:` raros,
+  fila mensual a mano que cita el id, payload incoherente. Nueve mutaciones ad hoc la tumban
+  (creado, guarda, mtime, `_id:` raro, duplicados, Tier 3, coherencia, fecha imposible, fila que
+  cita el id).
+
+### Known
+- Un `_id:` no canonico que ya tuviera fila en Tier 3 deja esa fila huerfana: adopt crea la del id
+  canonico. `--colapsar` guarda la copia entera pero no la seccion de la que salia.
+- `find_monthly_row` toma el ULTIMO `_id:` de la celda de texto (la forma que escriben add y adopt).
+  Una fila escrita a mano con el id propio y despues la cita de otro no la reconocen add, update ni
+  resolve; adopt la detecta y no duplica, pero no la arregla. El criterio no cambia aqui.
+
 ## [2.57.2] - 2026-10-14
 Origen: goalspec 0.55.0+ deja de negar el borrado de una carpeta mktemp propia, pero solo si el
 comando es exactamente `rm -rf <ruta absoluta literal>`. De 7 negaciones medidas en el Step 0b, 4
