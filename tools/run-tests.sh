@@ -127,7 +127,13 @@ correr "test-run-tests" bash tools/test-run-tests.sh
 correr "check-ignored-tracked" bash tools/check-ignored-tracked.sh
 # Que las comprobaciones editadas sigan sabiendo fallar. Un aserto que nunca se ha visto fallar no
 # se ha visto funcionar, y en esta sesion tres afirmaron cubrir mas de lo que cubrian.
-correr "mutation-check" bash tools/mutation-check.sh
+# RUN_MUTATION=0 la salta y la cuenta como saltada: el CI de macOS y Windows lo usa porque el arnes
+# mide si los asertos discriminan, y eso ya lo mide ubuntu (2 h en Windows por nada nuevo).
+if [ "${RUN_MUTATION:-1}" = 0 ]; then
+  correr "mutation-check" echo "SKIP: RUN_MUTATION=0 (corre en el job de ubuntu)"
+else
+  correr "mutation-check" bash tools/mutation-check.sh
+fi
 # learning.update contra un parser CommonMark. Sin markdown-it-py la linea dice SKIP, no verde.
 correr "oraculo-rewrite-rule" python3 tools/oraculo-rewrite-rule.py
 # Banco de recall (F0 del plan de ciclo de vida de learnings): sabotajes y equivalencia de motores

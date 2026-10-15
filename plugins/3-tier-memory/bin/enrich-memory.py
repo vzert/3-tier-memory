@@ -151,6 +151,30 @@ def linked_file_date(memory_dir, origen_text):
     return dm.group(1) if dm else None
 
 
+def fecha_real(v):
+    try:
+        date.fromisoformat(str(v))
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def derivar_creado(memory_dir, origen_token):
+    """Fecha de creado que sale del `_origen:` de una linea, o None (y entonces: el mtime).
+
+    Orden: la fecha del slug del wikilink, y si no la hay, la `date:` del fichero al que enlaza.
+    Una fecha IMPOSIBLE (`sessions/2026-02-30-x`) no se escribe: hasta 2.58.0 se escribia tal cual
+    y reventaba a quien la parsea (triage-scan, expire-pendientes); ahora se pasa al siguiente
+    recurso. `journal-emit.py` (pendiente.adopt) llama a ESTA funcion: el id que adopt pone tiene
+    que ser el mismo que pondria esta pasada, y dos copias de la derivacion se separarian.
+    """
+    md = DATE_RE.search(origen_token)
+    if md and fecha_real(md.group(1)):
+        return md.group(1)
+    d = linked_file_date(memory_dir, origen_token)
+    return d if d and fecha_real(d) else None
+
+
 # ----------------------------------------------------------------------------- pendientes
 def enrich_pendientes(memory_dir, apply):
     path = os.path.join(memory_dir, "_pendientes.md")
@@ -170,10 +194,7 @@ def enrich_pendientes(memory_dir, apply):
         #   2) frontmatter `date:` of the file _origen links to (e.g. learnings/…)
         #   3) file mtime of _pendientes.md (coarse last resort; never a future date)
         origen = ORIGEN_RE.search(line)
-        derived = None
-        if origen:
-            md = DATE_RE.search(origen.group(1))
-            derived = md.group(1) if md else linked_file_date(memory_dir, origen.group(1))
+        derived = derivar_creado(memory_dir, origen.group(1)) if origen else None
         created = derived or fallback
         if not derived:
             mtime_used += 1
