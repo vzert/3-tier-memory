@@ -888,7 +888,9 @@ masa una memoria existente: eso lo decide la F7. Si las
 escribes: con acentos, variando la forma del verbo clave, y sin repetir el titulo (MALA: "no
 borrar un worktree con cambios sin publicar"; BUENA: "ya termine la rama, limpio la carpeta del
 worktree"). Para enriquecer una regla YA escrita: `learning.update --match-prefix P
---disparadores "..."` (sin `--text`); corregir el texto con `learning.update --text` los conserva.
+--disparadores "..."` (sin `--text`; reemplaza el juego entero); corregir el texto con
+`learning.update --text` los conserva; y `learning.update --match-prefix P --sin-disparadores`
+(2.60.2) los quita, si un juego de frases hace perder recall.
 
 `--decision reemplaza:N` es lo mismo que `--supersedes N`. Sin `--decision`, el emisor se niega
 (sale 1 y no escribe) cuando una regla del topic se parece mucho (0,5 o mas): lee su lista y
