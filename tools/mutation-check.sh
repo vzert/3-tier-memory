@@ -21,6 +21,9 @@
 # sella-huellas: no (trabaja sobre copias en temporales)
 set -u
 cd "$(cd "$(dirname "$0")/.." && pwd)" || exit 2
+# Cada caso copia bin/ en un mktemp: matar el arnes a mitad dejaba esas copias en el temporal del
+# sistema (p-292d06c4c0). Dentro de run-tests ya va anidado y no hace nada.
+[ -f tools/tmp-propio.sh ] && . tools/tmp-propio.sh && tmp_propio_avisos
 SRC="plugins/3-tier-memory/bin"
 MUT="tools/mutaciones"
 PEND=0; TOTAL=0
