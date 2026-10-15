@@ -9,35 +9,45 @@ de la fila mensual.
 
 ### Fixed
 - **El replay de un `pendiente.reopen` ya no reabre un cierre posterior.** El reopen anota su propio
-  ts con la clave `reopen-<id>` en `.journal/reabiertos.log` y su replay es noop, como `plan.reopen`.
-  La clave `<id>` sigue guardando el ts del cierre revertido: dos significados, dos claves.
+  ts con la clave `reopen-<id>` en `.journal/reabiertos.log`; su replay, con la linea no viva, es
+  noop, como `plan.reopen`. La clave `<id>` sigue guardando el ts del cierre revertido: dos
+  significados, dos claves.
 - **Orden contra el cierre archivado.** Si el `_ev:` de la linea archivada es mayor que el ts del
   reopen, el cierre es mas nuevo que la decision de reabrir: noop con WARN. Cubre el reopen que
   aplico un compactador anterior (sin clave `reopen-<id>`) y vuelve a entrar. Un cierre sin ts
   (`_ev: 0`) no tiene orden y el reopen sigue, como antes.
 - **El reopen escribe el indice con `escribir_anotado`.** Si `_pendientes.md` no se puede escribir,
   las dos anotaciones se anulan y el reintento aplica, en vez de archivarse como su propio replay.
-- **Una pasada que murio a medias se termina.** Si el compactador muere despues de escribir el
-  indice y antes de sacar la linea del archivo, el reintento ve su `reopen-<id>` anotado y la linea
-  viva: completa la limpieza del archivo y de la fila mensual sin volver a anotar. Solo es replay
-  (noop) si la linea NO esta viva. (Adversario: la primera version lo trataba como replay y la
-  linea quedaba viva y archivada a la vez.)
-- **Tambien la que murio entre anotar y escribir el indice.** Un kill no lanza excepcion, asi que
-  `escribir_anotado` no anula y las dos anotaciones quedan vivas sin la linea en el indice. Si el
-  cierre archivado es el MISMO que este reopen anoto como revertido (`fue_revertido`), el reintento
-  reabre sin repetir las anotaciones; si es otro cierre, es replay. (Adversario, ronda 2: era una
-  regresion frente a 2.58.0, que en ese caso si reabria.)
+- **Dos muertes a medias se terminan en el reintento** (las demas, ver Known):
+  - despues de escribir el indice y antes de sacar la linea del archivo: con la linea viva y
+    archivada, el reintento saca la linea del archivo y limpia la fila mensual sin reescribir el
+    indice. Anota las dos claves si faltan (pasada de un compactador anterior) y no las repite si
+    ya estan. (Adversario, ronda 1: la primera version lo archivaba como replay.)
+  - entre anotar y escribir el indice: un kill no lanza excepcion, asi que `escribir_anotado` no
+    anula. Si el cierre archivado es el MISMO que este reopen anoto como revertido
+    (`fue_revertido`), el reintento reabre sin repetir las anotaciones; si es otro cierre, es
+    replay. (Adversario, ronda 2: era una regresion frente a 2.58.0, que aqui si reabria.)
+- **Un reopen cuya linea ya vive pero cuya fila mensual sigue cerrada** va a cuarentena
+  `mensual-cerrada` con el motivo cierto. Antes decia "se cerro antes de 2.31.0" y aconsejaba un
+  `pendiente.add`, que duplicaria la linea viva. (Adversario, ronda 3.)
 - `fue_revertido` descuenta las anulaciones (`-ts`) igual que `ts_registrados`; con `startswith`
   un cierre cuya reversa se anulo seguia contado como revertido.
-- `test-resolve-reopen.sh` casos 16-22: replay tras un cierre nuevo (resolve y expire), orden contra
-  `_ev:`, reopen sin ts, fallo de escritura del indice, cierre sin ts y las dos muertes a medias (casos 22 y 23). 15 asertos fallan contra
-  2.41.0 y 2.58.0.
+- `test-resolve-reopen.sh` casos 16-25: replay tras un cierre nuevo (resolve y expire), orden
+  contra `_ev:`, reopen sin ts, fallo de escritura del indice, cierre sin ts, las muertes a medias y
+  el motivo de `mensual-cerrada`; el caso 15 cuenta ya por clave entera. Contra 2.41.0 y 2.58.0
+  fallan 24 asertos, de los casos 15 a 25. Cada guarda tiene una mutacion que algun caso tumba.
 
 ### Changed
 - **Un `pendiente.reopen` sin `ts` va a cuarentena** (`malformed ... sin 'ts'`), como `plan.reopen`.
   `journal-emit.py` siempre lo pone: solo alcanza a un evento escrito a mano. Antes se aplicaba.
 
 ### Known
+- Residuos de muerte del proceso que ya estaban en 2.58.0 y siguen abiertos (se deciden en
+  p-c103c7df05, paso 3 de la Fase 3):
+  - muerte entre sacar la linea del archivo y limpiar la fila mensual: el reintento va a la
+    cuarentena `mensual-cerrada` y la fila se limpia a mano;
+  - muerte despues de escribir el indice seguida de un cierre NUEVO: quedan dos entradas archivadas
+    y el reintento lee la primera (la vieja), asi que reabre y deshace ese cierre.
 - Dos cierres SIN ts (`_ev: 0`) del mismo pendiente no se distinguen: el replay de un reopen que
   revirtio el primero, despues del segundo, reabre. Ya pasaba con `fue_revertido` antes de esta
   version; journal-emit siempre pone el ts, asi que solo alcanza a eventos escritos a mano.

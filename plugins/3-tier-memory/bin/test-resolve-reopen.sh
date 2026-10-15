@@ -377,6 +377,35 @@ cerrar
 replay "$REOPEN"
 chk "y su replay tras un cierre nuevo sigue siendo noop" "0" "$(printf '%s' "$(linea "$ID")" | grep -c .)"
 
+echo "== 24. pasada muerta de un compactador SIN la clave reopen-<id>: el reintento la anota =="
+# Viva y archivada, sin anotaciones (lo que deja un compactador anterior a 2.58.1 que murio tras
+# escribir el indice). El reintento completa la limpieza y anota las dos claves: sin ellas, su
+# replay tras un cierre nuevo no se podria frenar.
+fixture; cerrar
+cp "$M/pendientes/_resueltos.md" "$T/res.bak"; cp "$M/pendientes/2026-09.md" "$T/mes.bak"
+emit_cap --type pendiente.reopen --id "$ID"; REOPEN=$EV
+compact --quiet >/dev/null
+cp "$T/res.bak" "$M/pendientes/_resueltos.md"; cp "$T/mes.bak" "$M/pendientes/2026-09.md"
+: > "$M/.journal/reabiertos.log"
+replay "$REOPEN"
+chk "sale del archivo" "0" "$(arch "$ID")"
+chk "anota el reopen" "1" "$(vivas "reopen-$ID")"
+chk "y el cierre revertido" "1" "$(vivas "$ID")"
+
+echo "== 25. pasada muerta entre archivo y mensual: cuarentena con el motivo cierto =="
+# Residuo declarado (p-c103c7df05): no se termina solo. Lo que no puede hacer es decir que se cerro
+# antes de 2.31.0 y aconsejar un pendiente.add, que duplicaria la linea viva.
+fixture; cerrar
+cp "$M/pendientes/2026-09.md" "$T/mes.bak"
+emit_cap --type pendiente.reopen --id "$ID"; REOPEN=$EV
+compact --quiet >/dev/null
+cp "$T/mes.bak" "$M/pendientes/2026-09.md"
+replay "$REOPEN"
+chk "cuarentena 1" "1" "$(cuar)"
+has "motivo mensual-cerrada" "$(motivo)" "mensual-cerrada"
+chk "no aconseja pendiente.add" "0" "$(motivo | grep -c 'Reabrelo con un pendiente.add')"
+chk "la linea sigue viva una vez" "1" "$(grep -c "_id: ${ID}_" "$M/_pendientes.md")"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

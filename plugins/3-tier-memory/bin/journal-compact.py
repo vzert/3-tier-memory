@@ -1659,6 +1659,18 @@ def apply_reopen(mem, p):
         # indistinguible de "ya estaba reabierto": la persona no sabia si habia funcionado ni por
         # que no. Se separan los dos silencios (pendiente p-d949b88e8a).
         donde = pendiente_cerrado(mem, p["id"])
+        if donde and find_id_line(read_lines(os.path.join(mem, "_pendientes.md")), p["id"]) \
+                is not None:
+            # Vive en el indice y no en el archivo, pero la fila mensual sigue cerrada: una pasada
+            # anterior murio entre sacar la linea del archivo y limpiar la mensual. El motivo de
+            # abajo ("cerrado antes de 2.31.0, usa pendiente.add") seria falso aqui y su consejo
+            # duplicaria una linea viva (adversario de 2.58.1, ronda 3). Sigue siendo cuarentena:
+            # terminar esa pasada es p-c103c7df05.
+            raise Quarantine(
+                f"mensual-cerrada: {p['id']} ya vive en _pendientes.md, pero su fila mensual sigue "
+                f"{donde}. Una pasada anterior murio antes de limpiarla: vacia a mano las celdas "
+                f"Resuelto y Sesion resolucion de esa fila. NO emitas pendiente.add: duplicaria "
+                f"la linea viva.")
         if donde:
             raise Quarantine(
                 f"no-archivado: {p['id']} figura {donde} pero no hay linea suya en "
