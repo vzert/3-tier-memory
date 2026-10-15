@@ -742,7 +742,14 @@ chk "el reason senala el archivo del worktree" "1" "$(razon_corta "$O" | grep -c
 corre_en "$T/t.jsonl" false - "$WT" >/dev/null
 chk "info/exclude no repite el patron" "1" "$(grep -c '^\.3t-revision-cierre-\*\.md$' "$R/.git/info/exclude")"
 echo "== 2.59.0: con una ruta de proyecto muy larga, la forma relativa mantiene el aviso corto =="
-L="$T/$(python3 -c 'print("/".join(["directorio-con-nombre-largo-%02d" % i for i in range(8)]))')"
+# La ruta crece hasta que la forma absoluta pase de 300 caracteres, y no mas: Windows no entra en
+# directorios de mas de ~260 (CI de 2.59.0: `fatal: cannot change to` con 8 niveles).
+L=$(python3 -c '
+import sys
+b = sys.argv[1]; i = 0
+while len(b) < 175:
+    b += "/directorio-con-nombre-largo-%02d" % i; i += 1
+print(b)' "$T")
 mkdir -p "$L"; git -C "$L" init -q
 O=$(corre_en "$T/t.jsonl" false - "$L")
 chk "ruta larga: reason de 300 o menos" "1" "$(razon_corta "$O" | python3 -c 'import sys;print(int(len(sys.stdin.read().strip())<=300))')"
