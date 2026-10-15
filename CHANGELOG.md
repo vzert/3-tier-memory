@@ -11,16 +11,19 @@ final) salia entero en la terminal del humano como "Stop hook feedback" en cada 
   senala.** El `reason` visible es una linea: que falta (N problemas, la revision) y "Lee con
   Read `<archivo>` y haz lo que dice antes de terminar". El archivo trae byte a byte el texto que
   antes iba en `reason`.
-- **Donde va el archivo: siempre dentro del proyecto.** Un Read fuera de los directorios de
-  trabajo pide permiso, y en `claude -p` se niega (medido: `permission_denials` con el archivo
-  fuera, lectura limpia con el archivo en `.git/` del proyecto). En un checkout normal va en
-  `<repo>/.git/3t-revision-cierre-<12 primeros de session_id>.md`, que git no versiona. En un
-  worktree su git-dir vive fuera, asi que va en la raiz del worktree como
-  `.3t-revision-cierre-<id>.md` y el patron `/.3t-revision-cierre-*.md` se anade una vez a
+- **Donde va el archivo: siempre dentro del directorio de la sesion.** Un Read fuera de los
+  directorios de trabajo pide permiso, y en `claude -p` se niega (medido con `claude -p
+  --permission-mode default`: denegado con el archivo fuera del proyecto, y con el `.git` de la
+  raiz cuando la sesion se abrio en una subcarpeta; lectura limpia en `.git/` desde la raiz y en
+  la propia subcarpeta). Si la sesion esta en la raiz de un checkout normal va en
+  `<repo>/.git/3t-revision-cierre-<12 primeros de session_id>.md`, que git no versiona. Si no (una
+  subcarpeta, o un worktree, cuyo git-dir vive fuera) va en el propio directorio de la sesion como
+  `.3t-revision-cierre-<id>.md`, y el patron `.3t-revision-cierre-*.md` se anade una vez a
   `info/exclude` (comun a todos los worktrees). Si la ruta absoluta deja el `reason` en mas de
-  300 caracteres, el `reason` usa la ruta relativa a la raiz del repo.
-- El Stop reentrante borra el archivo: el agente ya tuvo su turno para leerlo. No queda uno por
-  sesion.
+  300 caracteres, el `reason` usa la ruta relativa al directorio de la sesion (medido: el agente
+  la resuelve y la lee).
+- El Stop reentrante borra el archivo cuando la revision quedo contestada (o no se pidio): no
+  queda uno por sesion. Si sigue sin contestar se queda; el siguiente bloqueo lo reescribe.
 - El bloqueo se queda en el Stop a proposito. Un Stop no tiene campo que separe lo que ve el
   humano de lo que ve el modelo (`reason` y `additionalContext` salen enteros como hook
   feedback). Se descarto entregar la lista antes, por `additionalContext` de un PostToolUse: la
@@ -35,8 +38,10 @@ final) salia entero en la terminal del humano como "Stop hook feedback" en cada 
   asi que los asertos de contenido siguen midiendo lo que recibe el agente. Casos nuevos: en un
   repo, el `reason` visible mide 300 caracteres o menos, no trae la lista y senala el archivo en
   `.git/`; el archivo es igual al aviso que el mismo turno deja en el `reason` fuera de git; el
-  Stop reentrante lo borra; en un worktree va en su raiz y `git status` no lo ve, sin repetir el
-  patron en `info/exclude`; con una ruta de proyecto larga el `reason` usa la ruta relativa y
+  Stop reentrante lo borra solo con la revision contestada; desde una subcarpeta va en esa
+  carpeta y no en el `.git` de la raiz; en un worktree va en su raiz y `git status` no lo ve, sin
+  repetir el patron en `info/exclude`; con una ruta de proyecto larga el `reason` usa la ruta
+  relativa y
   sigue en 300 o menos; con el archivo imposible de escribir, el `reason` trae la revision
   entera. Las rutas se comparan por nombre de archivo (en Windows el hook las escribe como C:\).
 

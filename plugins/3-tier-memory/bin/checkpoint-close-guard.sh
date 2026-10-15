@@ -836,23 +836,27 @@ if pedir_revision and reentrante and not revision_contestada():
                      "tu checkpoint?\" antes de dar el cierre por bueno.")
 
 def ruta_aviso():
-    """(absoluta, relativa a la raiz) del archivo con el aviso completo (2.59.0). Siempre DENTRO del
-    proyecto: un Read fuera de los directorios de trabajo pide permiso, o se niega con
-    `blockReadsOutsideWorkingDirectories` (adversarios de 2.59.0; la primera version lo dejaba junto
-    al transcript). En un checkout normal va en `.git/`, que git no versiona. En un worktree su
-    `.git` es un archivo y su git-dir vive fuera, asi que va en la raiz del worktree y se excluye
-    en `info/exclude` (comun a todos los worktrees). Sin git, lanza: el aviso vuelve entero."""
+    """(absoluta, relativa al directorio de la sesion) del archivo con el aviso completo (2.59.0).
+    Siempre DENTRO del directorio de la sesion (`cwd`): un Read fuera de los directorios de trabajo
+    pide permiso, o se niega con `blockReadsOutsideWorkingDirectories` (medido con `claude -p`;
+    adversarios de 2.59.0: la primera version lo dejaba junto al transcript, la segunda en el `.git`
+    del repo, que queda FUERA cuando la sesion se abrio en una subcarpeta). Si la sesion esta en la
+    raiz de un checkout normal va en `.git/`, que git no versiona. Si no (una subcarpeta, o un
+    worktree, cuyo git-dir vive fuera), va en el propio `cwd` como `.3t-revision-cierre-<id>.md` y
+    el patron se excluye en `info/exclude` (comun a todos los worktrees). Sin git, lanza: el aviso
+    vuelve entero."""
     def git(*a):
         return subprocess.run(["git", "-C", cwd, *a], capture_output=True, text=True,
                               timeout=10, check=True).stdout.strip()
+    base = os.path.realpath(cwd)
     raiz = os.path.realpath(git("rev-parse", "--show-toplevel"))
     gdir = os.path.realpath(git("rev-parse", "--absolute-git-dir"))
     nombre = "3t-revision-cierre-" + (re.sub(r"[^A-Za-z0-9_-]", "-", SID)[:12] or "sin-sesion") + ".md"
-    if gdir.startswith(raiz + os.sep):
-        return os.path.join(gdir, nombre), os.path.relpath(os.path.join(gdir, nombre), raiz)
+    if base == raiz and gdir.startswith(raiz + os.sep):
+        return os.path.join(gdir, nombre), os.path.relpath(os.path.join(gdir, nombre), base)
     excl = git("rev-parse", "--git-path", "info/exclude")
-    excl = excl if os.path.isabs(excl) else os.path.join(raiz, excl)
-    patron = "/.3t-revision-cierre-*.md"
+    excl = excl if os.path.isabs(excl) else os.path.join(base, excl)
+    patron = ".3t-revision-cierre-*.md"   # sin `/`: casa en cualquier carpeta del repo
     try:
         actual = open(excl, encoding="utf-8").read()
     except FileNotFoundError:
@@ -861,11 +865,13 @@ def ruta_aviso():
         os.makedirs(os.path.dirname(excl), exist_ok=True)
         with open(excl, "a", encoding="utf-8") as f:
             f.write(("" if not actual or actual.endswith("\n") else "\n") + patron + "\n")
-    return os.path.join(raiz, "." + nombre), "." + nombre
+    return os.path.join(base, "." + nombre), "." + nombre
 
 
-if reentrante:
-    # El aviso de 2.59.0 ya tuvo su turno para leerse: se borra, para no dejar uno por sesion.
+if reentrante and not (pedir_revision and not revision_contestada()):
+    # El aviso de 2.59.0 ya se uso (la revision esta contestada, o no se pidio): se borra, para no
+    # dejar uno por sesion. Si la revision sigue sin contestar se queda, por si el agente aun lo
+    # lee (adversario externo de 2.59.0); el siguiente bloqueo lo reescribe.
     try:
         os.remove(ruta_aviso()[0])
     except Exception:
@@ -927,8 +933,8 @@ else:
         if len(reason) > 300:
             # Una ruta de proyecto muy larga: la forma relativa a la raiz del repo mantiene el aviso
             # corto (adversario externo de 2.59.0: 469 caracteres con una ruta larga).
-            reason = (f"/checkpoint-3t: falta {' y '.join(que)}. Lee con Read `{corto}` (desde la "
-                      "raiz del repo) y haz lo que dice antes de terminar.")
+            reason = (f"/checkpoint-3t: falta {' y '.join(que)}. Lee con Read `{corto}` (relativa "
+                      "a tu directorio de trabajo) y haz lo que dice antes de terminar.")
     except Exception:
         reason = completo
     print(json.dumps({"decision": "block", "reason": reason}, ensure_ascii=False))

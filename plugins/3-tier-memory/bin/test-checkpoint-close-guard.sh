@@ -720,9 +720,18 @@ import json,sys
 a=json.loads(sys.argv[1])["reason"]; b=json.loads(sys.argv[2])["reason"]
 print(int(a.rstrip("\n")==b))' "$O" "$SIN")"
 chk "fuera de git el aviso entero sigue en el reason" "9" "$(razon_corta "$SIN" | grep -cE '^[1-9]\. ')"
-echo "== 2.59.0: el Stop reentrante borra el archivo =="
+echo "== 2.59.0: el Stop reentrante borra el archivo solo con la revision contestada =="
 corre_en "$T/t.jsonl" true - "$R" >/dev/null
-chk "borrado" "0" "$([ -f "$R/.git/3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
+chk "sin contestar: se queda" "1" "$([ -f "$R/.git/3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
+printf '%s\n' "$REV_OK" > "$T/rev259.txt"; corre_en "$T/t.jsonl" true "$T/rev259.txt" "$R" >/dev/null
+chk "contestada: borrado" "0" "$([ -f "$R/.git/3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
+echo "== 2.59.0: sesion abierta en una subcarpeta: el archivo va en esa carpeta, no en .git de la raiz =="
+mkdir -p "$R/sub/hondo"
+O=$(corre_en "$T/t.jsonl" false - "$R/sub/hondo")
+chk "el archivo esta en la subcarpeta" "1" "$([ -f "$R/sub/hondo/.3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
+chk "no en .git de la raiz" "0" "$([ -f "$R/.git/3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
+chk "git no lo ve (info/exclude)" "0" "$(git -C "$R" status --porcelain --untracked-files=all | grep -c 3t-revision)"
+chk "el reason senala el archivo de la subcarpeta" "1" "$(razon_corta "$O" | grep -cE 'Lee con Read `[^`]*hondo[\\/]\.3t-revision-cierre-sin-sesion\.md`')"
 echo "== 2.59.0: en un worktree va en su raiz y queda excluido de git =="
 git -C "$R" -c user.email=t@t -c user.name=t commit -q --allow-empty -m base
 WT="$T/wt"; git -C "$R" worktree add -q "$WT" -b wt-prueba
@@ -731,13 +740,13 @@ chk "el archivo esta en la raiz del worktree" "1" "$([ -f "$WT/.3t-revision-cier
 chk "git no lo ve (info/exclude)" "0" "$(git -C "$WT" status --porcelain | grep -c 3t-revision)"
 chk "el reason senala el archivo del worktree" "1" "$(razon_corta "$O" | grep -c '\.3t-revision-cierre-sin-sesion\.md`')"
 corre_en "$T/t.jsonl" false - "$WT" >/dev/null
-chk "info/exclude no repite el patron" "1" "$(grep -c '^/\.3t-revision-cierre-\*\.md$' "$R/.git/info/exclude")"
+chk "info/exclude no repite el patron" "1" "$(grep -c '^\.3t-revision-cierre-\*\.md$' "$R/.git/info/exclude")"
 echo "== 2.59.0: con una ruta de proyecto muy larga, la forma relativa mantiene el aviso corto =="
 L="$T/$(python3 -c 'print("/".join(["directorio-con-nombre-largo-%02d" % i for i in range(8)]))')"
 mkdir -p "$L"; git -C "$L" init -q
 O=$(corre_en "$T/t.jsonl" false - "$L")
 chk "ruta larga: reason de 300 o menos" "1" "$(razon_corta "$O" | python3 -c 'import sys;print(int(len(sys.stdin.read().strip())<=300))')"
-chk "ruta larga: usa la ruta relativa a la raiz" "1" "$(razon_corta "$O" | grep -c 'desde la raiz del repo')"
+chk "ruta larga: usa la ruta relativa al directorio de la sesion" "1" "$(razon_corta "$O" | grep -c 'relativa a tu directorio de trabajo')"
 echo "== 2.59.0: si el archivo no se puede escribir, el aviso entero vuelve al reason =="
 mkdir "$R/.git/3t-revision-cierre-sin-sesion.md"
 O2=$(corre_en "$T/t.jsonl" false - "$R")

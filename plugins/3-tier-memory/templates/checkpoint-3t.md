@@ -1444,7 +1444,7 @@ pregunto, y el bloque escrito aqui se contestaba como tramite. Desde 2.42.0 lo p
 cierre (`checkpoint-close-guard.sh`): al terminar el turno del checkpoint bloquea UNA vez con una
 lista cerrada (`REVISION DEL CIERRE:`, 9 lineas, las tres de antes incluidas) y la lista de lo que
 NO cuenta como falta. Desde 2.59.0 el aviso visible del hook es una linea que senala un archivo
-(`3t-revision-cierre-<sesion>.md`, dentro del proyecto): leelo con Read; ahi estan la lista, lo que
+(`3t-revision-cierre-<sesion>.md`, dentro de tu directorio de trabajo): leelo con Read; ahi estan la lista, lo que
 no cuenta y el cierre que va al final. No la anticipes aqui: contestala cuando llegue, releyendo la sesion. Cada
 linea lleva `ninguno` o lo que falto con su cita o su correccion; `ninguno` es la respuesta
 correcta cuando no falta nada.
