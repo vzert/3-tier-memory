@@ -418,6 +418,22 @@ caso "guard turno sin ckpt"    checkpoint-close-guard.sh $L test-checkpoint-clos
 caso "guard sin encabezados"   checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "una pregunta ajena a los candidatos" guard-sin-encabezados
 caso "hecho sin pregunta"      checkpoint-audit.py $L $S "CH5: hecho sin ninguna pregunta" hecho-no-pregunta
 caso "hecho no es decision"    checkpoint-audit.py $L $S "CH1: hecho con evidencia" hecho-no-es-decision
+caso "peer no cuenta"          checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "SendMessage al supervisor y su respuesta" peer-no-cuenta
+caso "peer sin respuesta"      checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "SendMessage sin respuesta" peer-sin-respuesta-cuenta
+caso "peer respuesta anterior" checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "ANTERIOR al envio" peer-respuesta-anterior
+caso "peer sin cola"           checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "la respuesta llega en cola" peer-sin-cola
+caso "peer un numero"          checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "un SendMessage con dos candidatos numerados" peer-un-numero
+caso "peer handback cuenta"    checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "un subagente con el nombre del supervisor" peer-handback-cuenta
+caso "peer envio fallido"      checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "negado por permisos" peer-error-cuenta
+caso "peer fallo sin is_error" checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "un SendMessage que fallo" peer-fallo-sin-is-error
+caso "peer teammate cuenta"    checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "un teammate con el nombre del supervisor" peer-team-cuenta
+caso "peer cualquier destino"  checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "el envio va a otra sesion" peer-cualquier-destino
+caso "peer responde por nombre" checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "la respuesta viene de otra sesion" peer-responde-por-nombre
+caso "peer sin ref"            checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "nombre .ref." peer-sin-ref
+caso "peer sin marca"          checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "corre. .sin session_id." peer-sin-marca
+caso "peer nombre sin dir"     checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "marca sin direccion" peer-nombre-sin-dir
+caso "peer marca rota vale"    checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "address que no es texto" peer-marca-rota-vale
+caso "peer marca null vale"    checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "address null" peer-marca-null-vale
 
 # Filtro de ignoradas de checkpoint-commit.py (issue #11): cada pieza del arreglo con su aserto.
 I=m_commit_ignoradas.py; C=test-checkpoint-commit.sh
