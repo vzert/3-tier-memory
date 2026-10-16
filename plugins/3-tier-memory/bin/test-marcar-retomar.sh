@@ -171,6 +171,27 @@ chk "sessions/x.md se acepta sin el .md" "0" "$R4"
 compact --quiet >/dev/null
 chk "y se escribe como sessions/x" "1" "$(linea "$A" | grep -c "_retomar: $HOY sessions/x_")"
 
+echo "== 10. el compactador cuarentena un evento escrito a mano con ficha o fecha malas =="
+# El emisor ya las rechaza; esto cubre un evento que no paso por el (adversario, 2026-10-16).
+fixture
+mkdir -p "$M/.journal/pending"
+for caso in 'ficha:sessions/x\n' 'retomar:20261016' 'retomar:2026-W42-5'; do
+  python3 -I - "$M/.journal/pending" "$A" "$caso" <<'PY'
+import json, os, sys, time
+d, pid, caso = sys.argv[1], sys.argv[2], sys.argv[3]
+campo, valor = caso.split(":", 1)
+p = {"id": pid, "retomar": "2026-10-16", "ficha": "sessions/x", "fecha": "2026-10-16"}
+p[campo] = valor.replace("\\n", "\n")
+ev = {"v": 1, "type": "pendiente.retomar", "ts": time.time_ns(), "payload": p}
+n = f"{time.time_ns()}-{campo}-{len(os.listdir(d))}.json"
+open(os.path.join(d, n), "w", encoding="utf-8").write(json.dumps(ev))
+PY
+done
+compact --quiet >/dev/null
+chk "los tres a cuarentena" "3" "$(cuarentena)"
+chk "la linea no cambio" "0" "$(linea "$A" | grep -c '_retomar:')"
+chk "y no se partio (sin una linea suelta '_')" "0" "$(grep -c '^_$' "$M/_pendientes.md" || true)"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

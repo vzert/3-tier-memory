@@ -4162,11 +4162,16 @@ def validate(ev):
     elif t == "pendiente.retomar":
         if not p.get("id"):
             raise Quarantine("malformed: pendiente.retomar sin 'id'")
+        # fromisoformat solo no basta: acepta `20261016` y `2026-W42-5`, que el mod no lee.
+        # fullmatch y no match: con `$`, `sessions/x\n` pasaba y partia la linea de Tier 2.
+        ret = str(p.get("retomar", ""))
         try:
-            date.fromisoformat(str(p.get("retomar", "")))
+            date.fromisoformat(ret)
         except (ValueError, TypeError):
             raise Quarantine("malformed: pendiente.retomar sin 'retomar' con fecha real")
-        if not FICHA_RETOMAR_RE.match(str(p.get("ficha", ""))):
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", ret):
+            raise Quarantine("malformed: pendiente.retomar sin 'retomar' AAAA-MM-DD")
+        if not FICHA_RETOMAR_RE.fullmatch(str(p.get("ficha", ""))):
             raise Quarantine("malformed: pendiente.retomar sin 'ficha' sessions/<slug>")
     elif t == "pendiente.block":
         if not p.get("id"):

@@ -21,9 +21,13 @@ cierre de otra sesion lo desplazaba.
   motivo `retomar hoy` / `retomar desde FECHA`) hasta que el pendiente se cierre, salvo con
   `_revisar` futuro. El clic pega el snippet entero de la ficha de la marca (`retomar_snippet`, el
   bloque `## Como retomar` sin fence); sin marca, lo de antes.
-- Pruebas: `test-marcar-retomar.sh` (40; incluye que 8e y `hacible()` dan lo mismo con la marca, y
-  el control de que con `_revisar` = hoy no), 13 casos nuevos en `test_pendientes_ahora.py` (fallan
-  con el script de 2.62.1) y uno en `pane.test.tsx` (falla con el `register.tsx` de 0.2.2).
+- El compactador cuarentena un `pendiente.retomar` escrito a mano con la ficha o la fecha mal
+  formadas (`sessions/x` con salto de linea, `20261016`, `2026-W42-5`): `fullmatch` y forma
+  AAAA-MM-DD, no solo `fromisoformat`. El emisor ya las rechazaba.
+- Pruebas: `test-marcar-retomar.sh` (43; incluye que 8e y `hacible()` dan lo mismo con la marca, el
+  control de que con `_revisar` = hoy no, y la cuarentena de eventos malos), 13 comprobaciones nuevas
+  en `test_pendientes_ahora.py` (9 fallan con el script de 2.62.1; las otras 4 confirman lo que no
+  debe salir y ya no salia) y un caso en `pane.test.tsx` (falla con el `register.tsx` de 0.2.2).
 
 ### Known
 - La marca se pone en el checkpoint. Un snippet rehecho despues sin volver a correr 8a2 deja la

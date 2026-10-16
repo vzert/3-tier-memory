@@ -1371,7 +1371,7 @@ def main():
         ficha = (a.ficha or "").strip()
         if ficha.endswith(".md"):
             ficha = ficha[:-3]
-        if not FICHA_RETOMAR_RE.match(ficha):
+        if not FICHA_RETOMAR_RE.fullmatch(ficha):
             sys.exit("journal-emit: pendiente.retomar necesita --ficha sessions/<slug>")
         base["payload"] = {"id": pid, "retomar": ret, "ficha": ficha,
                            "fecha": date.today().isoformat()}
