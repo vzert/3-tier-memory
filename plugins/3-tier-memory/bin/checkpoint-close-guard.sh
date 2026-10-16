@@ -841,6 +841,8 @@ if pedir_revision and reentrante and not revision_contestada():
                      + str(len(REVISION_ITEMS)) + " lineas). Preguntale al agente \"¿falto algo de "
                      "tu checkpoint?\" antes de dar el cierre por bueno.")
 
+NOMBRE_AVISO = "3t-revision-cierre-" + (re.sub(r"[^A-Za-z0-9_-]", "-", SID)[:12] or "sin-sesion") + ".md"
+
 def ruta_aviso():
     """(absoluta, relativa al directorio de la sesion) del archivo con el aviso completo (2.59.0).
     Siempre DENTRO del directorio de la sesion (`cwd`): un Read fuera de los directorios de trabajo
@@ -849,15 +851,26 @@ def ruta_aviso():
     del repo, que queda FUERA cuando la sesion se abrio en una subcarpeta). Si la sesion esta en la
     raiz de un checkout normal va en `.git/`, que git no versiona. Si no (una subcarpeta, o un
     worktree, cuyo git-dir vive fuera), va en el propio `cwd` como `.3t-revision-cierre-<id>.md` y
-    el patron se excluye en `info/exclude` (comun a todos los worktrees). Sin git, lanza: el aviso
-    vuelve entero."""
+    el patron se excluye en `info/exclude` (comun a todos los worktrees). Fuera de un repo (o sin
+    git instalado) va en el `cwd` con el mismo nombre: no hay commit en que colarse (p-92aa5de144).
+    Si git falla por otra cosa (p. ej. `safe.directory`: SI es un repo, pero no se puede excluir el
+    archivo), lanza y el aviso vuelve entero."""
     def git(*a):
         return subprocess.run(["git", "-C", cwd, *a], capture_output=True, text=True,
-                              timeout=10, check=True).stdout.strip()
+                              timeout=10, check=True, env={**os.environ, "LC_ALL": "C"}).stdout.strip()
     base = os.path.realpath(cwd)
-    raiz = os.path.realpath(git("rev-parse", "--show-toplevel"))
+    nombre = NOMBRE_AVISO
+    try:
+        raiz = os.path.realpath(git("rev-parse", "--show-toplevel"))
+    except FileNotFoundError:
+        return os.path.join(base, "." + nombre), "." + nombre
+    except subprocess.CalledProcessError as e:
+        # Solo "no hay repo en ninguna carpeta de arriba". `not a git repository: <ruta>` (un
+        # worktree cuyo gitdir ya no existe, o GIT_DIR roto) SI es un repo: respaldo.
+        if "not a git repository (or any" not in (e.stderr or ""):
+            raise
+        return os.path.join(base, "." + nombre), "." + nombre
     gdir = os.path.realpath(git("rev-parse", "--absolute-git-dir"))
-    nombre = "3t-revision-cierre-" + (re.sub(r"[^A-Za-z0-9_-]", "-", SID)[:12] or "sin-sesion") + ".md"
     if base == raiz and gdir.startswith(raiz + os.sep):
         return os.path.join(gdir, nombre), os.path.relpath(os.path.join(gdir, nombre), base)
     excl = git("rev-parse", "--git-path", "info/exclude")
@@ -877,11 +890,14 @@ def ruta_aviso():
 if reentrante and not (pedir_revision and not revision_contestada()):
     # El aviso de 2.59.0 ya se uso (la revision esta contestada, o no se pidio): se borra, para no
     # dejar uno por sesion. Si la revision sigue sin contestar se queda, por si el agente aun lo
-    # lee (adversario externo de 2.59.0); el siguiente bloqueo lo reescribe.
-    try:
-        os.remove(ruta_aviso()[0])
-    except Exception:
-        pass
+    # lee (adversario externo de 2.59.0); el siguiente bloqueo lo reescribe. Tambien el del `cwd`:
+    # si se escribio fuera de git y luego hubo `git init`, `ruta_aviso()` ya apunta a `.git/` y el
+    # del `cwd` quedaria para siempre, listo para un `git add -A` (adversario externo de 2.60.3).
+    for _ruta in (lambda: ruta_aviso()[0], lambda: os.path.join(os.path.realpath(cwd), "." + NOMBRE_AVISO)):
+        try:
+            os.remove(_ruta())
+        except Exception:
+            pass
 
 if not problemas and not (pedir_revision and not reentrante):
     sys.exit(0)
