@@ -113,8 +113,10 @@ M = {
     "peer-nombre-sin-dir": [
         ("RESPONDE = {SUP_DIR} if SUP_DIR else SUPERVISOR", "RESPONDE = {SUP_DIR}")],
     "peer-marca-rota-vale": [
-        ("        if v is not None and not isinstance(v, str):",
+        ("        if not isinstance(v, str) or (v and not v.strip()):",
          "        if False:")],
+    "peer-marca-null-vale": [
+        ('        v = marca.get(k, "")', '        v = marca.get(k) or ""')],
     "ninguno-ignora-descartado": [
         ("        if veredicto_adv == \"break\" and not vivos and not descartados_bugs:",
          "        if veredicto_adv == \"break\" and not vivos:")],

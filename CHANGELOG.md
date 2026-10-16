@@ -14,8 +14,9 @@ aunque el usuario habia decidido los candidatos (sesion d69ad375, 2026-10-15).
   (`$LOOKOUT_STATE_DIR` o `~/.local/state/lookout`, `sessions/<session_id>.json`, claves `address` y
   `supervisor`), leida solo para leer. El envio tiene que ir a esa direccion o a ese nombre (un
   ` [ref]` al final se ignora) y despues tiene que llegar un mensaje desde esa direccion (el nombre
-  solo si la marca no trae direccion, o la trae vacia: dos sesiones pueden compartir nombre). Una
-  clave de la marca que no es texto la hace ilegible entera. Ese mensaje es el
+  solo si la marca no trae direccion, o la trae vacia: dos sesiones pueden compartir nombre). Si
+  `address` o `supervisor` no es texto (tambien `null`) o solo trae espacios, la marca es ilegible
+  entera. Ese mensaje es el
   registro que escribe el harness con `origin.kind == "peer"`: un `user` isMeta con la sesion
   ocupada, o un `attachment` queued_command con la sesion ociosa. El encabezado es el `summary` del
   mensaje, y un mensaje con candidatos numerados (`1)`, `2.`) cuenta una pregunta por numero.
@@ -43,6 +44,7 @@ aunque el usuario habia decidido los candidatos (sesion d69ad375, 2026-10-15).
   cada linea el `summary` de la pregunta sigue frenando el olvido. Vigila el olvido, no a un agente
   que finge (igual que con `AskUserQuestion`, donde no mide que la pregunta describiera bien al
   candidato).
+
 ## [2.62.0] - 2026-10-15
 Origen: Victor (via `/goalspec:interview`) reporto snippets de cierre que mandaban al agente a trabajo
 de otro agente. Caso real en un proyecto que usa el plugin (2026-10-15): una sesion de indices

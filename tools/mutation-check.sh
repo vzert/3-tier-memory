@@ -427,6 +427,7 @@ caso "peer sin ref"            checkpoint-close-guard.sh $L test-checkpoint-clos
 caso "peer sin marca"          checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "corre. .sin session_id." peer-sin-marca
 caso "peer nombre sin dir"     checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "marca sin direccion" peer-nombre-sin-dir
 caso "peer marca rota vale"    checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "address que no es texto" peer-marca-rota-vale
+caso "peer marca null vale"    checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "address null" peer-marca-null-vale
 
 # Filtro de ignoradas de checkpoint-commit.py (issue #11): cada pieza del arreglo con su aserto.
 I=m_commit_ignoradas.py; C=test-checkpoint-commit.sh
