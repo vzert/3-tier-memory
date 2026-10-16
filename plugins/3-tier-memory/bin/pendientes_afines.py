@@ -430,9 +430,13 @@ def snippet_de_transcripcion(ruta):
                 d = json.loads(linea)
             except ValueError:
                 continue
+            # Una linea que no es un objeto, o con `message` que no lo es, se salta como una que no
+            # parsea (p-3f22a1cba1: tumbaba stamp-hilo.py con AttributeError).
+            if not isinstance(d, dict) or not isinstance(d.get("message"), dict):
+                continue
             if d.get("type") != "user" or d.get("isMeta"):
                 continue
-            texto = RUIDO.sub("", _texto_usuario((d.get("message") or {}).get("content")))
+            texto = RUIDO.sub("", _texto_usuario(d["message"].get("content")))
             texto = PASTED.sub("", texto).strip()
             if not texto:
                 continue
@@ -481,17 +485,24 @@ def escribio_la_ficha(transcripcion, nombre):
                 d = json.loads(linea)
             except ValueError:
                 continue
+            if not (isinstance(d, dict) and isinstance(d.get("message"), dict)):
+                continue
             if d.get("type") != "assistant":
                 continue
-            for b in (d.get("message") or {}).get("content") or []:
+            for b in d["message"].get("content") or []:
                 if not isinstance(b, dict) or b.get("type") != "tool_use":
                     continue
                 inp = b.get("input") or {}
+                if not isinstance(inp, dict):
+                    continue
                 ruta = str(inp.get("file_path") or "").replace("\\", "/")
                 if b.get("name") in ESCRIBE and (ruta == "sessions/" + nombre
                                                  or ruta.endswith("/sessions/" + nombre)):
                     return True
-                if b.get("name") == "Bash" and redir.search(str(inp.get("command") or "")):
+                # Las barras invertidas de una ruta de Windows valen como `/`, igual que en `file_path`
+                # (p-3f22a1cba1).
+                if b.get("name") == "Bash" and redir.search(
+                        str(inp.get("command") or "").replace("\\", "/")):
                     return True
     return False
 

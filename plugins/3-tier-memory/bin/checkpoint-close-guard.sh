@@ -211,6 +211,121 @@ def resolver(ruta, base):
     return ruta if os.path.isabs(ruta) else os.path.normpath(os.path.join(base, ruta))
 
 
+# Sesion supervisada por lookout (p-1d0f012aa9): el supervisor bloquea AskUserQuestion y manda
+# preguntar por SendMessage; la respuesta del usuario vuelve por el supervisor. Un SendMessage cuenta
+# como pregunta SOLO si va al supervisor que nombra la marca de lookout (abajo) y despues llega
+# un mensaje de el: el registro lleva
+# `origin.kind == "peer"` con su `from` (un `user` isMeta, o un `attachment` queued_command si llego
+# con la sesion ociosa), escrito por el harness, no por el agente. Sin respuesta, con el envio
+# fallido, o a un subagente (su informe final no cuenta), no llego a nadie y Step 3b sigue
+# exigiendo la pregunta. Encabezado: el `summary`; un mensaje con
+# varios candidatos numerados (`1)`, `2.`) cuenta una pregunta por numero.
+ENUM_CANDIDATO = re.compile(r"^\s*\(?\d+[.)]\s", re.M)
+
+
+def _origen_peer(r):
+    for o in (r.get("origin"), (r.get("attachment") or {}).get("origin")):
+        # El informe final de un subagente tambien llega con `kind == "peer"` y su `from` es el id
+        # de la tarea, pero trae `handback`/`senderTaskId`: no es el usuario contestando (adversario
+        # de 2.62.3: 27 casos reales de SendMessage a un subagente seguido de su informe).
+        if isinstance(o, dict) and o.get("kind") == "peer" and not o.get("handback") \
+                and "senderTaskId" not in o:
+            return o
+    return None
+
+
+pos_envio = {}         # tool_use_id de cada SendMessage -> su posicion en el transcript
+envio_ok = set()       # SendMessage cuyo tool_result dice `"success": true` (el envio salio)
+respuestas_peer = []   # (posicion, from, name) de cada mensaje que llego de otra sesion
+
+
+def _envio_salio(bloque):
+    # Un envio que no llega (socket ENOENT/ECONNREFUSED, "No agent named …") vuelve SIN `is_error`,
+    # con `{"success":false,…}` en el texto; `is_error` solo lo trae un rechazo de permisos o una
+    # llamada mal formada (adversario de 2.62.3: 31 y 6 casos reales). Se exige el `true`: un
+    # resultado que no se puede leer no prueba que el mensaje saliera.
+    if bloque.get("is_error"):
+        return False
+    try:
+        return json.loads(_texto_resultado(bloque).strip()).get("success") is True
+    except Exception:
+        return False
+
+
+for _i, r in enumerate(recs):
+    _o = _origen_peer(r)
+    if _o:
+        respuestas_peer.append((_i, str(_o.get("from") or ""), str(_o.get("name") or "")))
+    for b in (r.get("message") or {}).get("content") or []:
+        if not isinstance(b, dict):
+            continue
+        if r.get("type") == "assistant" and b.get("type") == "tool_use" and b.get("name") == "SendMessage":
+            pos_envio.setdefault(b.get("id"), _i)
+        elif r.get("type") == "user" and b.get("type") == "tool_result" \
+                and b.get("tool_use_id") in pos_envio and _envio_salio(b):
+            envio_ok.add(b.get("tool_use_id"))
+envios_respondidos = set()  # SendMessage con respuesta posterior de su destinatario
+
+
+def _supervisor_lookout(sid):
+    """Direccion y nombre del supervisor, de la marca que lookout escribe para cada sesion que
+    supervisa (`$LOOKOUT_STATE_DIR` o ~/.local/state/lookout, `sessions/<session_id>.json`, claves
+    `address` y `supervisor`). Solo lectura. Sin marca, o una que no se entiende, devuelve vacio y no
+    cuenta ningun SendMessage: cualquier otra sesion par no es quien pasa la decision del usuario
+    (adversario externo de 2.62.3). Depende del formato de lookout: si cambia, el fallo es exigir la
+    pregunta de mas, que se ve, no dejarla pasar."""
+    if not sid or "/" in sid or "\\" in sid or sid.startswith("."):
+        return "", ""
+    raiz = os.environ.get("LOOKOUT_STATE_DIR") or os.path.join(
+        os.path.expanduser("~"), ".local", "state", "lookout")
+    try:
+        with open(os.path.join(raiz, "sessions", sid + ".json"), encoding="utf-8") as fh:
+            marca = json.load(fh)
+    except Exception:
+        return "", ""
+    if not isinstance(marca, dict):
+        return "", ""
+    # Una clave presente que no es texto (tambien `null`) o que solo trae espacios hace ilegible la
+    # marca entera: tomarla por ausente dejaba valer el nombre con una `address` rota (adversario
+    # externo, rondas 4 y 5). El texto vacio SI es ausente: lookout escribe `address: ""` cuando no
+    # tiene direccion y entonces usa el nombre.
+    vals = []
+    for k in ("address", "supervisor"):
+        v = marca.get(k, "")
+        if not isinstance(v, str) or (v and not v.strip()):
+            return "", ""
+        vals.append(v.strip())
+    return tuple(vals)
+
+
+SUP_DIR, SUP_NOMBRE = _supervisor_lookout(SID)
+# A quien se puede escribir: la direccion o el nombre. De quien vale la respuesta: la direccion, que
+# es unica; dos sesiones pueden compartir nombre. El nombre solo si la marca no trae direccion.
+SUPERVISOR = {v for v in (SUP_DIR, SUP_NOMBRE) if v}
+RESPONDE = {SUP_DIR} if SUP_DIR else SUPERVISOR
+# `nombre [ref]` es una direccion valida de SendMessage (desambigua dos sesiones con el mismo nombre)
+# y la respuesta vuelve con el nombre solo: se compara sin el ` [ref]` (adversario de 2.62.3).
+REF_FINAL = re.compile(r"\s+\[[^\]\s]+\]\s*$")
+
+
+def registrar_envio(b):
+    inp = b.get("input") or {}
+    a_quien = REF_FINAL.sub("", str(inp.get("to") or "").strip())
+    pos = pos_envio.get(b.get("id"))
+    if a_quien not in SUPERVISOR or pos is None or b.get("id") not in envio_ok \
+            or not isinstance(inp.get("message"), str):
+        return
+    if not any(p > pos and (de in RESPONDE or (not SUP_DIR and nom in RESPONDE))
+               for p, de, nom in respuestas_peer):
+        return
+    envios_respondidos.add(b.get("id"))
+    preguntas.append(b.get("id"))
+    enc = str(inp.get("summary") or "").strip() or inp["message"].strip().split("\n")[0]
+    n = max(1, len(ENUM_CANDIDATO.findall(inp["message"])))
+    n_preg[b.get("id")] = n
+    encab[b.get("id")] = [enc] * n
+
+
 def registrar_pregunta(b):
     preguntas.append(b.get("id"))
     # Un modal lleva hasta 4 preguntas y Step 3b pone un candidato por pregunta: se cuentan
@@ -256,6 +371,8 @@ for r in turno:
             disparo = por_checkpoint = True
         elif nombre == "AskUserQuestion":
             registrar_pregunta(b)
+        elif nombre == "SendMessage" and b.get("id") not in n_preg:
+            registrar_envio(b)
         elif nombre == "Bash":
             cmd = inp.get("command") or ""
             # Disparo por CAMBIO DE ESTADO (2.33.1, p-c72a33ae7a): un turno que cierra, caduca o
@@ -644,12 +761,15 @@ def revisar(ficha):
                     if r.get("type") == "assistant" and b.get("type") == "tool_use" \
                             and b.get("name") == "AskUserQuestion" and b.get("id") not in n_preg:
                         registrar_pregunta(b)
+                    elif r.get("type") == "assistant" and b.get("type") == "tool_use" \
+                            and b.get("name") == "SendMessage" and b.get("id") not in n_preg:
+                        registrar_envio(b)
                     elif r.get("type") == "user" and b.get("type") == "tool_result" \
                             and b.get("tool_use_id") in n_preg:
                         resultados[b.get("tool_use_id")] = _texto_resultado(b)
                         if b.get("is_error"):
                             con_error.add(b.get("tool_use_id"))
-        llegaron = [i for i in preguntas if i in resultados and
+        llegaron = [i for i in preguntas if i in envios_respondidos or i in resultados and
                     (i not in con_error or RECHAZO_USUARIO.search(resultados[i]))]
         respondidas = sum(n_preg.get(i, 1) for i in llegaron)
         extra += ["--preguntas-usuario", str(respondidas)]

@@ -156,7 +156,8 @@ DESDE_CANDIDATOS = "2026-10-09"
 # `hecho` (2.54.0): el usuario eligio `Hacerlo ahora` y el agente lo hizo dentro de Step 3b; la
 # linea trae `_verificado: <evidencia>_`, como un defecto cerrado de `## Bugs fixed`.
 DECISION_CANDIDATO = re.compile(r"decision:\s*\**\s*(guardado|descartado|sin confirmar|hecho)\b", re.I)
-# `pregunta: <encabezado>` (2.54.0): el encabezado del AskUserQuestion donde el usuario decidio ese
+# `pregunta: <encabezado>` (2.54.0): el encabezado del AskUserQuestion (o el `summary` del SendMessage
+# al supervisor en una sesion supervisada, 2.62.3) donde el usuario decidio ese
 # candidato. El hook de cierre pasa los encabezados que llegaron al usuario y aqui se cruzan.
 PREGUNTA_CANDIDATO = re.compile(r"pregunta:\s*([^—]+?)\s*(?:—|$)", re.I)
 
@@ -1057,7 +1058,8 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         if malos:
             h.append(Hallazgo(SALTADO, "pendientes.candidatos",
                               f"{len(malos)} problema(s) en los pendientes nuevos de la sesion", malos,
-                              corrige="Step 3b: pregunta cada candidato con AskUserQuestion y escribe "
+                              corrige="Step 3b: pregunta cada candidato con AskUserQuestion (en una "
+                                      "sesion supervisada, SendMessage al supervisor) y escribe "
                                       "su decision en `## Candidatos a pendiente` (`hecho` lleva "
                                       "`_verificado: <evidencia>_`). Si es un re-checkpoint y "
                                       "reescribiste la ficha, primero recupera las lineas "
@@ -1069,7 +1071,8 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             h.append(Hallazgo(HECHO, "pendientes.candidatos",
                               "cada pendiente nuevo de la sesion tiene la decision del usuario"))
         # La pregunta de verdad. Solo con el dato del hook de cierre, que cuenta en el transcript
-        # los AskUserQuestion de los turnos de /checkpoint-3t de la sesion (desde 2.54.1 tambien los de un
+        # los AskUserQuestion de los turnos de /checkpoint-3t de la sesion (desde 2.62.3 tambien los SendMessage
+        # al supervisor con su respuesta, p-1d0f012aa9; desde 2.54.1 tambien los de un
         # checkpoint anterior: p-ea8992fa7e) que llegaron al usuario. Una decision `guardado`,
         # `hecho` o `descartado` sin ninguna pregunta la tomo el agente, que es justo lo que 2.53.0 quita.
         # `sin confirmar` (sin pantalla) no necesita pregunta. Desde 2.54.0 compara cuantas: el hook
@@ -1107,8 +1110,10 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                                   "de checkpoint de la sesion: Step 3b pone un candidato por pregunta", ligar,
                                   corrige="hazle las preguntas de Step 3b con AskUserQuestion, una por "
                                           "candidato, y cita su encabezado en la linea "
-                                          "(`pregunta: <encabezado>`); si no hay pantalla, la "
-                                          "decision es `sin confirmar`"))
+                                          "(`pregunta: <encabezado>`); en una sesion supervisada, "
+                                          "un SendMessage al supervisor con los candidatos "
+                                          "numerados, su respuesta, y `pregunta: <summary>`; si no "
+                                          "hay pantalla, la decision es `sin confirmar`"))
             else:
                 h.append(Hallazgo(HECHO, "pendientes.candidatos_pregunta",
                                   f"{preguntas_usuario} pregunta(s) al usuario en los turnos de checkpoint de la sesion, "
@@ -1404,15 +1409,22 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     # sesiones seguidas saltado (`hilo_saltos`). Solo cuenta (prioridad, grupo): entre dos del mismo
     # rango el agente elige. El caso 1 (plan activo citado) va antes que el hilo. Todo sale de
     # campos (el sello, `_origen`, `_relacionado`, `_bloqueado`, `_revisar`), no del texto.
-    if pp is not None and "```" in sec_retomar and fecha_ficha and fecha_ficha >= DESDE_HILO:
+    # El caso 5 colapsado (`Ninguno — …` sin bloque) es el mismo `ninguno` que dentro del bloque y
+    # tambien se mide: sin esto, quitar el bloque tapaba un heredado hacible, que la guardia del
+    # colapso (snippet.sigue_abierto) no ve porque solo cuenta los propios (p-3f22a1cba1).
+    colapsado = ("```" not in sec_retomar and "<filled in Step 8>" not in sec_retomar
+                 and sec_retomar.strip().strip("*").lower().startswith("ninguno"))
+    if ((pp is not None and "```" in sec_retomar or colapsado)
+            and fecha_ficha and fecha_ficha >= DESDE_HILO):
         af = _afines_mod()
         orden = af.hilo(texto, os.path.join(memory_dir, "_pendientes.md"), slug, ref)
         rango = {p["id"]: (af.PRIORIDAD_HILO[p["prio"]], p["grupo"]) for p in orden}
         # El id del paso es el PRIMERO que cita la linea: un paso es una accion (marco de Victor,
         # 2026-10-13), y nombrar al de mayor rango de pasada ("hacer p-baja, no p-alta") no lo
         # convierte en el paso (adversario externo, ronda 1 de 2.57.0).
-        citados = ID_PENDIENTE.findall(pp)[:1]
-        caso1 = {s for s in af.anclas(pp)[1] & planes_laxo if plan_activo(memory_dir, s)}
+        paso = "" if colapsado else pp
+        citados = ID_PENDIENTE.findall(paso)[:1]
+        caso1 = {s for s in af.anclas(paso)[1] & planes_laxo if plan_activo(memory_dir, s)}
         if caso1:
             h.append(Hallazgo(HECHO, "snippet.hilo", "caso 1 (plan activo): va antes que el hilo"))
         elif not orden:
@@ -1427,9 +1439,12 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                 motivo = {0: "heredado saltado 2 sesiones seguidas", 1: "nacido en esta sesion",
                           2: "heredado"}[primero["grupo"]]
                 h.append(Hallazgo(SALTADO, "snippet.hilo",
+                                  "el bloque colapsado (`Ninguno — …`) deja sin paso un pendiente "
+                                  "hacible del hilo" if colapsado else
                                   "`Proximo paso:` no es el primero del hilo",
                                   [f"el primero es {primero['id']} ({primero['prio']}, {motivo})"
-                                   + (f"; el paso cita primero {citados[0]}" if citados
+                                   + ("" if colapsado else
+                                      f"; el paso cita primero {citados[0]}" if citados
                                       else "; el paso no cita ningun pendiente del hilo")],
                                   corrige=f"cita {primero['id']} en `Proximo paso:` (Step 8, caso 2: "
                                           "el primero que imprime pendientes_afines.py --hilo)"))
@@ -1822,7 +1837,8 @@ def main():
     ap.add_argument("--veredicto-adversario", choices=("break", "hold"), default=None,
                     help="ultimo veredicto del adversario en el transcript; lo pasa el hook Stop")
     ap.add_argument("--preguntas-usuario", type=int, default=None,
-                    help="preguntas de los AskUserQuestion de los turnos de checkpoint de la sesion que llegaron "
+                    help="preguntas de los AskUserQuestion (y SendMessage respondidos al supervisor, 2.62.3) "
+                         "de los turnos de checkpoint de la sesion que llegaron "
                          "al usuario (respondidos o rechazados por el); lo pasa el hook Stop")
     ap.add_argument("--encabezados-usuario", default=None,
                     help="JSON: encabezados de esas preguntas; lo pasa el hook Stop (2.54.0)")
