@@ -118,10 +118,13 @@ with open(out, "w", encoding="utf-8") as fh:
 PY
 }
 
+# `corre` abre la sesion en una carpeta fuera de git ($SG); desde p-92aa5de144 el aviso va ahi como
+# `.3t-revision-cierre-<id>.md`, igual que en una subcarpeta de un repo.
+SG="$T/sin-git"; mkdir -p "$SG"
 corre() {   # $1 transcript, $2 reentrante (true|false), $3 last_assistant_message (fichero o "-")
   local LAM=""; [ "$3" != "-" ] && [ -n "$3" ] && LAM="$(cat "$3")"
-  python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":sys.argv[2]=="true","last_assistant_message":sys.argv[3],"cwd":"/tmp"}))' "$1" "$2" "$LAM" \
-    | bash "$HOOK" 2>/dev/null | expande
+  python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":sys.argv[2]=="true","last_assistant_message":sys.argv[3],"cwd":sys.argv[4]}))' "$1" "$2" "$LAM" "$SG" \
+    | bash "$HOOK" 2>/dev/null | RAIZ_EXP="$SG" expande
 }
 # Desde 2.59.0 el `reason` del bloqueo solo senala el archivo con el aviso completo. `expande` pone
 # el contenido de ese archivo en `reason` y guarda el puntero en `puntero`: cada aserto de este test
@@ -713,13 +716,70 @@ chk "el reason visible no trae la lista" "0" "$(razon_corta "$O" | grep -c 'No c
 chk "el reason visible senala el archivo en .git" "1" "$(razon_corta "$O" | grep -cE 'Lee con Read `[^`]*[\\/]\.git[\\/]3t-revision-cierre-sin-sesion\.md`')"
 chk "el archivo existe en .git del repo" "1" "$([ -f "$R/.git/3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
 chk "el archivo trae la revision y el cierre al final" "2" "$(razon "$O" | grep -cE '^REVISION DEL CIERRE:$|termina tu respuesta con el cierre')"
-# C1': el archivo trae, byte a byte, lo que el reason traia antes (el mismo turno fuera de git).
-SIN=$(corre "$T/t.jsonl" false -)
-chk "el archivo es igual al aviso de antes (fuera de git va entero en el reason)" "1" "$(python3 -c '
+# C1': el archivo trae, byte a byte, lo que el reason traia antes (el respaldo: git falla por algo
+# que no es "fuera de un repo" y el aviso va entero en el reason). Con git real y un GIT_DIR que no
+# existe (`not a git repository: '<ruta>'`), que se comporta igual en las tres plataformas.
+SIN=$(GIT_DIR="$T/no-existe" corre_en "$T/t.jsonl" false - "$R")
+chk "el archivo es igual al aviso de antes (respaldo: va entero en el reason)" "1" "$(python3 -c '
 import json,sys
 a=json.loads(sys.argv[1])["reason"]; b=json.loads(sys.argv[2])["reason"]
 print(int(a==b))' "$O" "$SIN")"
-chk "fuera de git el aviso entero sigue en el reason" "9" "$(razon_corta "$SIN" | grep -cE '^[1-9]\. ')"
+chk "GIT_DIR roto: el aviso entero sigue en el reason" "9" "$(razon_corta "$SIN" | grep -cE '^[1-9]\. ')"
+chk "GIT_DIR roto: no deja archivo en la carpeta" "0" "$(ls -A "$R" | grep -c 3t-revision)"
+# `safe.directory` con un `git` falso que lo imita. Solo donde Python puede lanzarlo: en Windows
+# CreateProcess no ejecuta un script sin .exe y el hook encontraria el git real (CI 38845045684).
+FG="$T/git-falso"; mkdir -p "$FG"
+printf '#!/bin/sh\necho "fatal: detected dubious ownership in repository" >&2\nexit 128\n' > "$FG/git"; chmod +x "$FG/git"
+if PATH="$FG:$PATH" python3 -c 'import subprocess,sys;r=subprocess.run(["git","rev-parse"],capture_output=True,text=True);sys.exit("dubious" not in r.stderr)' 2>/dev/null; then
+  O3=$(PATH="$FG:$PATH" corre_en "$T/t.jsonl" false - "$R")
+  chk "git falla por otra cosa (safe.directory): el aviso entero sigue en el reason" "9" "$(razon_corta "$O3" | grep -cE '^[1-9]\. ')"
+  chk "git falla por otra cosa: no deja archivo en la carpeta" "0" "$(ls -A "$R" | grep -c 3t-revision)"
+else
+  echo "  (sin git falso ejecutable en esta plataforma: el caso safe.directory no corre)"
+fi
+# Un worktree cuyo gitdir ya no existe SI es un repo (`not a git repository: <ruta>`): respaldo, sin
+# dejar un archivo que no se puede excluir (adversario Sonnet 5.5 de 2.60.3).
+WR="$T/wt-roto"; mkdir -p "$WR"; echo "gitdir: $T/no-existe" > "$WR/.git"
+O=$(corre_en "$T/t.jsonl" false - "$WR")
+chk "worktree con gitdir roto: el aviso entero sigue en el reason" "9" "$(razon_corta "$O" | grep -cE '^[1-9]\. ')"
+chk "worktree con gitdir roto: no deja archivo" "0" "$(ls -A "$WR" | grep -c 3t-revision)"
+echo "== p-92aa5de144: fuera de git, lo que ve el humano es una linea; el aviso va en el cwd =="
+rm -f "$SG/.3t-revision-cierre-sin-sesion.md"
+O=$(corre "$T/t.jsonl" false -)
+chk "bloquea" "1" "$(bloquea "$O")"
+chk "el reason visible mide 300 caracteres o menos" "1" "$(razon_corta "$O" | python3 -c 'import sys;print(int(len(sys.stdin.read().strip())<=300))')"
+chk "el reason visible no trae la lista" "0" "$(razon_corta "$O" | grep -c 'No cuenta como falta')"
+chk "el reason senala el archivo del cwd" "1" "$(razon_corta "$O" | grep -cE 'Lee con Read `[^`]*sin-git[\\/]\.3t-revision-cierre-sin-sesion\.md`')"
+chk "el archivo es igual al aviso del repo" "1" "$(python3 -c '
+import json,sys
+print(int(json.loads(sys.argv[1])["reason"]==open(sys.argv[2],encoding="utf-8").read()))' "$SIN" "$SG/.3t-revision-cierre-sin-sesion.md")"
+corre "$T/t.jsonl" true - >/dev/null
+chk "reentrante sin contestar: se queda" "1" "$([ -f "$SG/.3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
+printf '%s\n' "$REV_OK" > "$T/rev-sg.txt"; corre "$T/t.jsonl" true "$T/rev-sg.txt" >/dev/null
+chk "reentrante contestada: borrado" "0" "$([ -f "$SG/.3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
+# Aviso escrito fuera de git y `git init` antes de contestar: la limpieza borra tambien el del cwd
+# (adversario externo de 2.60.3: `ruta_aviso()` ya apuntaba a .git/ y el del cwd se quedaba).
+GI="$T/git-init-despues"; mkdir -p "$GI"
+O=$(corre_en "$T/t.jsonl" false - "$GI")
+chk "git init despues: el aviso esta en el cwd" "1" "$([ -f "$GI/.3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
+git -C "$GI" init -q
+corre_en "$T/t.jsonl" true "$T/rev-sg.txt" "$GI" >/dev/null
+chk "git init despues: contestada, el del cwd se borra" "0" "$([ -f "$GI/.3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
+chk "git init despues: git add -A no lo ve" "0" "$(git -C "$GI" add -A && git -C "$GI" status --porcelain | grep -c 3t-revision)"
+# Sin git instalado: un PATH con lo que el hook usa, menos git.
+SB="$T/sin-bin"; mkdir -p "$SB"
+for c in bash sh python3 cat dirname basename pwd cd env sed tr head tail grep; do
+  w=$(command -v "$c" 2>/dev/null) && [ "${w#/}" != "$w" ] && ln -sf "$w" "$SB/$c"
+done
+# Solo si ese python arranca Y no ve git: en Windows la copia de python3 en $SB no arranca (127) y,
+# con `set -e`, el caso mataba el test (CI 38847564992).
+if [ -x "$SB/python3" ] && env PATH="$SB" python3 -c 'import shutil,sys;sys.exit(0 if shutil.which("git") is None else 1)' 2>/dev/null; then
+  O=$(PATH="$SB" corre "$T/t.jsonl" false -)
+  chk "sin git instalado: reason de una linea que senala el archivo" "1" "$(razon_corta "$O" | grep -c 'Lee con Read `[^`]*\.3t-revision-cierre-sin-sesion\.md`')"
+  rm -f "$SG/.3t-revision-cierre-sin-sesion.md"
+else
+  echo "  (sin un python que arranque sin git en el PATH: el caso sin git instalado no corre)"
+fi
 echo "== 2.59.0: el Stop reentrante borra el archivo solo con la revision contestada =="
 corre_en "$T/t.jsonl" true - "$R" >/dev/null
 chk "sin contestar: se queda" "1" "$([ -f "$R/.git/3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
@@ -1254,8 +1314,8 @@ marco_ficha() {
   tx "$T/t.jsonl" skill "$F" - -
 }
 # En un repo git, como en una sesion real: la revision (con los avisos) va al archivo de 2.59.0 y
-# el reason visible solo lo senala. `corre` usa cwd=/tmp, fuera de git, donde el aviso entero se
-# queda en el reason: ese camino es el respaldo y se mide aparte al final.
+# el reason visible solo lo senala. `corre` abre la sesion fuera de git ($SG), donde el aviso va
+# en `.3t-revision-cierre-<id>.md` del cwd: se mide aparte al final.
 RM="$T/repo-marco"; rm -rf "$RM"; mkdir -p "$RM"; git -C "$RM" init -q
 AM="$RM/.git/3t-revision-cierre-sin-sesion.md"
 marco_ficha "resolver de raiz si Victor lo decide (p-daf3051915)."
@@ -1269,7 +1329,7 @@ marco_ficha "resolver de raiz (p-daf3051915)."
 corre_en "$T/t.jsonl" false - "$RM" >/dev/null
 chk "paso limpio: el archivo existe y no trae bloque de avisos" "1 0" "$([ -f "$AM" ] && echo 1 || echo 0) $(grep -c 'Avisos del marco' "$AM" 2>/dev/null)"
 marco_ficha "resolver de raiz si Victor lo decide (p-daf3051915)."
-chk "fuera de git (respaldo): los avisos van en el reason" "1" "$(razon "$(corre "$T/t.jsonl" false -)" | grep -c '^Avisos del marco del `Proximo paso`')"
+chk "fuera de git: los avisos van en el archivo del cwd" "1 1" "$(O=$(corre "$T/t.jsonl" false -); echo $(razon_corta "$O" | grep -c 'Lee con Read') $(razon "$O" | grep -c '^Avisos del marco del `Proximo paso`'))"
 
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

@@ -1,5 +1,34 @@
 # Changelog
 
+## [2.62.1] - 2026-10-15
+Origen: p-92aa5de144. Desde 2.59.0 la revision del cierre de `/checkpoint-3t` va a un archivo y lo
+que ve el humano es una linea, pero fuera de un repo git el aviso entero (~2.000-2.800 caracteres)
+seguia saliendo en la terminal: `ruta_aviso()` no tenia donde dejar el archivo y usaba el respaldo.
+
+### Fixed
+- **`checkpoint-close-guard.sh` fuera de git escribe el aviso en el directorio de la sesion**, como
+  `.3t-revision-cierre-<id>.md` (el mismo nombre que en una subcarpeta o un worktree), y el `reason`
+  visible es la linea que lo senala. Sin repo no hay commit en que colarse, y el Stop reentrante lo
+  borra al contestar la revision, como en un repo; tambien si entre medias hubo `git init`, cuando
+  la ruta del aviso ya apunta a `.git/`. Solo cuando git dice `not a git repository (or
+  any of the parent directories)` o no esta instalado: si falla por otra cosa (`safe.directory`, o
+  un worktree cuyo gitdir ya no existe, que dan error pero SI son un repo donde no se podria excluir
+  el archivo), el aviso entero sigue en el `reason`, como antes. Medido con `claude -p
+  --permission-mode default` en una carpeta sin git: Read lee el archivo, con la ruta absoluta y la
+  relativa, sin pedir permiso (`permission_denials` vacio).
+- `test-checkpoint-close-guard.sh`: `corre` abre la sesion en una carpeta fuera de git del temporal
+  del test, no en `/tmp` (ahi dejaria el archivo). 16 asertos nuevos y 3 cambiados (7 rojos contra
+  2.60.2): fuera de git una linea y el archivo igual al aviso del repo, limpieza reentrante, sin git
+  instalado, `git init` antes de contestar, y el respaldo medido con un `GIT_DIR` roto, un worktree
+  de gitdir roto y, donde Python puede lanzarlo (no en Windows), un `git` falso que falla con
+  `dubious ownership`. 203 → 219. Los casos del `git` falso y de "sin git instalado" solo corren
+  donde la plataforma los permite (en Windows no: lo dicen en una linea y no cuentan).
+
+### Known
+- Fuera de git, un `git init` + `git add -A` hecho mientras la revision sigue sin contestar mete el
+  archivo en el indice: no hay `info/exclude` donde excluirlo. Al contestar se borra del disco, pero
+  si ya estaba anadido hay que sacarlo del indice a mano. En `$HOME` sin git queda en `$HOME` hasta
+  entonces (nunca en `.claude/`).
 ## [2.62.0] - 2026-10-15
 Origen: Victor (via `/goalspec:interview`) reporto snippets de cierre que mandaban al agente a trabajo
 de otro agente. Caso real en un proyecto que usa el plugin (2026-10-15): una sesion de indices
