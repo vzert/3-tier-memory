@@ -36,11 +36,15 @@ M = {
     "sin-candado": [
         ("  candado_toma", "  :")],
     "muerto-bloquea": [
-        ('elif ! kill -0 "$quien" 2>/dev/null; then', 'elif false; then')],
+        ('elif ! candado_vivo "$quien"; then', 'elif false; then')],
     "una-con-candado": [
         ('if [ "${1:-}" != "--una" ]; then', 'if true; then')],
     "no-suelta": [
         ("_tp_limpia; candado_suelta' EXIT", "_tp_limpia' EXIT")],
+    "quita-sin-comprobar": [
+        ('  [ -e "$CANDADO" ] || return 0', '  return 0')],
+    "permiso-es-muerto": [
+        ('  case "$err" in *ermitted*) return 0 ;; esac', '  :')],
 }
 p, nombre = sys.argv[1], sys.argv[2]
 s = io.open(p, encoding="utf-8", newline="").read()

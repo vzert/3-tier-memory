@@ -160,6 +160,33 @@ chk "con el candado de un pid muerto, la corrida no se queda esperando" "0" "$(t
 chk "y corre su suite" "ini fin" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
 chk "y avisa que lo quito" "1" "$(grep -c 'ya no existe' "$T/c.err")"
 
+# Adversario, ronda 1: un candado abandonado que no se puede borrar (de otro usuario en un /tmp
+# compartido) hacia un bucle sin pausa y sin fin. Ahora sale con error. Se simula con chmod 555,
+# solo donde chmod de verdad impide borrar (no en Windows, ni como root).
+mkdir "$T/sonda"; : > "$T/sonda/f"; chmod 555 "$T/sonda"
+if rm -f "$T/sonda/f" 2>/dev/null; then
+  echo "  (sin probar aqui: chmod 555 no impide borrar; no cuenta) candado que no se puede quitar"
+else
+  bash -c 'exit 0' & muerto=$!; wait "$muerto"
+  mkdir "$CAND"; echo "$muerto" > "$CAND/pid"; chmod 555 "$CAND"
+  completa "$T/d"; d=$!
+  chk "un candado abandonado que no se puede quitar no deja un bucle sin fin" "0" "$(termina "$d" 15; echo $?)"
+  chk "y sale con error que lo dice" "1" "$(grep -c 'no puedo quitar el candado' "$T/d.err")"
+  chk "un solo aviso, no uno por vuelta" "1" "$(grep -c 'quito el candado' "$T/d.err")"
+  chmod 755 "$CAND"; rm -rf "$CAND"
+fi
+chmod 755 "$T/sonda"
+# Un pid vivo de otro usuario (kill -0 falla por permiso) no es un candado muerto: no se lo roba.
+if [ "$(kill -0 1 2>&1 | grep -c ermitted)" = 1 ]; then
+  mkdir "$CAND"; echo 1 > "$CAND/pid"
+  completa "$T/e"; e=$!
+  chk "el candado de un pid vivo de otro usuario se respeta: sigue esperando" "1" "$(termina "$e" 4; echo $?)"
+  chk "y avisa que espera" "1" "$(grep -c 'espero a que termine' "$T/e.err")"
+  rm -rf "$CAND"
+else
+  echo "  (sin probar aqui: kill -0 1 no falla por permiso; no cuenta) pid vivo de otro usuario"
+fi
+
 # --una lo llaman las suites DENTRO de una corrida completa: con el candado tomado no espera.
 mkdir "$CAND"; echo "$$" > "$CAND/pid"
 RUN_TESTS_CANDADO="$CAND" bash "$R/tools/run-tests.sh" --una prueba bash "$T/skip.sh" >/dev/null 2>&1 & u=$!

@@ -33,6 +33,22 @@ unset CLAUDE_CODE_SESSION_ID
 # RUN_TESTS_CANDADO cambia la ruta (lo usa test-run-tests.sh para no esperar a la corrida que lo lanzo).
 CANDADO="${RUN_TESTS_CANDADO:-${TMPDIR:-/tmp}}"
 [ -z "${RUN_TESTS_CANDADO:-}" ] && CANDADO="${CANDADO%/}/3tm-run-tests.candado"
+# Quita un candado abandonado. Si no puede (de otro usuario en un /tmp compartido), sale con error:
+# reintentar sin fin era un bucle sin pausa (adversario, ronda 1: 507 avisos en 3 s).
+candado_quita() {
+  rm -rf "$CANDADO" 2>/dev/null
+  [ -e "$CANDADO" ] || return 0
+  echo "ERROR run-tests: no puedo quitar el candado abandonado $CANDADO ($1). Borralo a mano o usa otro RUN_TESTS_CANDADO." >&2
+  exit 2
+}
+# Vivo: kill -0 sale 0, o falla por permiso (un proceso de otro usuario existe; adversario, ronda 1:
+# con pid=1 lo daba por muerto y robaba el candado). Muerto: "No such process".
+candado_vivo() {
+  local err
+  err=$(kill -0 "$1" 2>&1) && return 0
+  case "$err" in *ermitted*) return 0 ;; esac
+  return 1
+}
 candado_toma() {
   local quien vacio=0 avisado=0
   while ! mkdir "$CANDADO" 2>/dev/null; do
@@ -40,12 +56,12 @@ candado_toma() {
     if [ -z "$quien" ]; then
       # Recien creado: su dueno aun no escribe el pid. Vacio ~10 s = murio entre mkdir y escribirlo.
       vacio=$(( vacio + 1 ))
-      if [ "$vacio" -ge 10 ]; then rm -rf "$CANDADO"; vacio=0; continue; fi
-    elif ! kill -0 "$quien" 2>/dev/null; then
+      if [ "$vacio" -ge 10 ]; then candado_quita "sin pid tras 10 s"; vacio=0; continue; fi
+    elif ! candado_vivo "$quien"; then
       # Su dueno murio sin soltarlo (kill -9). Limite: dos corridas que lo vean a la vez pueden
       # quitarlo las dos, y la segunda borrar el que la primera acaba de tomar.
       echo "AVISO run-tests: quito el candado de una corrida que ya no existe (pid $quien): $CANDADO" >&2
-      rm -rf "$CANDADO"; continue
+      candado_quita "pid $quien muerto"; continue
     else
       vacio=0
       if [ "$avisado" = 0 ]; then
