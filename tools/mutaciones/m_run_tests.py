@@ -48,6 +48,8 @@ M = {
     # Cae por la carrera de las ocho corridas con pausa: medido 3 de 3, no es determinista.
     "sin-releer": [
         ('  if [ "$(cat "$CANDADO/pid" 2>/dev/null)" != "$1" ]; then', '  if false; then')],
+    "no-crea-espera": [
+        ('    if [ ! -d "$CANDADO" ]; then', '    if false; then')],
     "candado-en-tmpdir": [
         ('CANDADO="${RUN_TESTS_CANDADO:-/tmp/3tm-run-tests.candado}"',
          'CANDADO="${RUN_TESTS_CANDADO:-${TMPDIR:-/tmp}/3tm-run-tests.candado}"')],

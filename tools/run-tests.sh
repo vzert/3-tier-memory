@@ -73,12 +73,25 @@ candado_abandonado() {  # <pid visto, vacio si no habia> <motivo>
   candado_quita "$2"
 }
 candado_toma() {
-  local quien vacio=0 avisado=0 atascado=0
+  local quien vacio=0 avisado=0 atascado=0 nocrea=0
   while :; do
     if mkdir "$CANDADO" 2>/dev/null; then
       # Si se lo quitaron entre el mkdir y escribir el pid, no es suyo: vuelve a la cola.
       echo "$$" > "$CANDADO/pid" 2>/dev/null && [ "$(cat "$CANDADO/pid" 2>/dev/null)" = "$$" ] && break
     fi
+    # mkdir fallo y la carpeta no existe: no es que otra corrida la tenga, es que no se puede crear
+    # (/tmp de solo lectura en un sandbox, padre inexistente). Esperar ahi era colgarse sin decir nada
+    # (adversario, ronda 4). Una vez puede ser el hueco entre que una suelta y otra toma; tres
+    # seguidas, no: sigue SIN candado, como antes de p-524e2a5bf7, y lo dice.
+    if [ ! -d "$CANDADO" ]; then
+      nocrea=$(( nocrea + 1 ))
+      if [ "$nocrea" -ge 3 ]; then
+        echo "AVISO run-tests: no puedo crear el candado $CANDADO; corro SIN candado (otra corrida completa podria ir a la vez)." >&2
+        return 0
+      fi
+      sleep "${RUN_TESTS_CANDADO_ESPERA:-1}"; continue
+    fi
+    nocrea=0
     quien=$(cat "$CANDADO/pid" 2>/dev/null)
     # Solo pruebas: ensancha la ventana entre leer el pid y decidir (test-run-tests.sh, ronda 3).
     [ -n "${RUN_TESTS_CANDADO_PAUSA:-}" ] && sleep "$RUN_TESTS_CANDADO_PAUSA"

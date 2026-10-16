@@ -198,6 +198,14 @@ else
   echo "  (sin probar aqui: kill -0 1 no falla por permiso; no cuenta) pid vivo de otro usuario"
 fi
 
+# Un candado que no se puede crear (padre inexistente, /tmp de solo lectura) colgaba la corrida sin
+# decir nada (adversario, ronda 4): ahora corre sin candado y lo avisa.
+: > "$T/registro"; CAND_BUENO="$CAND"; CAND="$T/no-existe/candado"
+completa "$T/f"; f=$LANZADO; CAND="$CAND_BUENO"
+chk "un candado que no se puede crear no cuelga la corrida" "0" "$(termina "$f" 30; echo $?)"
+chk "y corre su suite" "ini fin" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
+chk "y avisa que va sin candado" "1" "$(grep -c 'corro SIN candado' "$T/f.err")"
+
 # Ruta fija, no del TMPDIR: procesos de la misma maquina con otro TMPDIR no compartian el candado.
 chk "el candado no depende de TMPDIR" "/tmp/3tm-run-tests.candado" \
   "$(env -u RUN_TESTS_CANDADO TMPDIR="$T/otro" bash "$R/tools/run-tests.sh" --ruta-candado)"

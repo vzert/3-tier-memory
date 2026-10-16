@@ -440,6 +440,7 @@ caso_tools "candado sin quitar"     run-tests.sh m_run_tests.py test-run-tests.s
 caso_tools "pid ajeno por muerto"  run-tests.sh m_run_tests.py test-run-tests.sh "de otro usuario se respeta" permiso-es-muerto
 caso_tools "quita sin releer el pid" run-tests.sh m_run_tests.py test-run-tests.sh "ninguna quito el candado de otra" sin-releer
 caso_tools "candado en TMPDIR"     run-tests.sh m_run_tests.py test-run-tests.sh "el candado no depende de TMPDIR" candado-en-tmpdir
+caso_tools "candado no creable cuelga" run-tests.sh m_run_tests.py test-run-tests.sh "un candado que no se puede crear no cuelga" no-crea-espera
 
 echo
 if [ "$PEND" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $TOTAL)"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi
