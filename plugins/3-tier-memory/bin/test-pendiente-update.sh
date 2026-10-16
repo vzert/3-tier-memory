@@ -178,7 +178,8 @@ echo "== 14b. --nota se rechaza: no hay donde guardarla (p-a37851219c) =="
 fixture
 RC=0; E=$(emit --type pendiente.update --id "$ID" --text "$NUEVO" --nota "verificado en el checkout" 2>&1 >/dev/null) || RC=$?
 chk "sale con error" "1" "$([ "$RC" -ne 0 ] && echo 1 || echo 0)"
-chk "dice que va en el --text" "1" "$(printf '%s' "$E" | grep -c 'no guarda --nota')"
+chk "dice que no la guarda" "1" "$(printf '%s' "$E" | grep -c 'no guarda --nota')"
+chk "dice que va en el --text" "1" "$(printf '%s' "$E" | grep -c 'metela en el --text')"
 chk "y la alternativa de cierre" "1" "$(printf '%s' "$E" | grep -c 'pendiente.resolve --nota')"
 chk "no dejo evento pendiente" "0" "$(ls "$M/.journal/pending" 2>/dev/null | grep -c '\.json$' | tr -d ' ')"
 

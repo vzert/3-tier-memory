@@ -11,7 +11,7 @@ sin avisar: el evento no tiene campo para ella. La nota tuvo que ir dentro del `
   va la nota: en el `--text` si describe el pendiente, o en `pendiente.resolve --nota` si lo cierra.
   Se eligio rechazar y no avisar porque con un aviso la nota igual se pierde. Ningun llamador del
   repo (plantillas, bin/, tools/) pasa `--nota` a `pendiente.update`. Caso 14b de
-  `test-pendiente-update.sh`: sus 3 asertos fallan contra 2.62.0.
+  `test-pendiente-update.sh`: sus 5 asertos fallan contra 2.62.0.
 
 ### Known
 - Los demas tipos que no usan `--nota` (p. ej. `pendiente.add`, `pendiente.expire`,
