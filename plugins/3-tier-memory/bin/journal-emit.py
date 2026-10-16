@@ -36,6 +36,7 @@ Tipos de evento:
                     `--text-prefix` es el guardian contra la actualizacion perdida entre dos
                     sesiones: si no se pasa, se toma de la linea viva. Exige --text y/o
                     --prioridad. Sobre un pendiente ya cerrado o caducado no hace nada.
+                    Rechaza --nota: no tiene donde guardarla; va en el --text.
   pendiente.expire  --id ID --dias N [--line "<linea verbatim>"]   (caducidad por edad)
   pendiente.reopen  --id ID [--prioridad P]             (reversa de expire y de resolve)
   pendiente.window  --id ID --revisar YYYY-MM-DD                  (pone/actualiza la ventana)
@@ -1312,6 +1313,11 @@ def main():
         pid = (a.id or "").strip()
         if not ID_RE.match(pid):
             sys.exit("journal-emit: --id debe tener la forma p-<10 hex>")
+        # El evento no tiene donde guardar una nota: ni la linea viva ni la fila mensual la llevan.
+        # Antes se descartaba sin avisar y quien la paso creia haberla dejado escrita (p-a37851219c).
+        if a.nota.strip():
+            sys.exit("journal-emit: pendiente.update no guarda --nota (no hay campo donde ponerla); "
+                     "si la nota importa, metela en el --text")
         # El texto que llega puede venir pegado de la linea entera (con sus `— _origen:` y su
         # `— _id:`). Esos sufijos los POSEE el compactador: si entraran aqui, la linea acabaria
         # con dos `_id:` y el pendiente dejaria de resolverse por id. Se quitan y se avisa.
