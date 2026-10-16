@@ -285,7 +285,15 @@ def _supervisor_lookout(sid):
         return "", ""
     if not isinstance(marca, dict):
         return "", ""
-    return tuple((v.strip() if isinstance(v, str) else "") for v in (marca.get("address"), marca.get("supervisor")))
+    # Una clave presente que no es texto no vacio hace ilegible la marca entera: tomarla por
+    # ausente dejaba valer el nombre con una `address` rota (adversario externo, ronda 4).
+    vals = []
+    for k in ("address", "supervisor"):
+        v = marca.get(k)
+        if v is not None and not (isinstance(v, str) and v.strip()):
+            return "", ""
+        vals.append(v.strip() if v else "")
+    return tuple(vals)
 
 
 SUP_DIR, SUP_NOMBRE = _supervisor_lookout(SID)

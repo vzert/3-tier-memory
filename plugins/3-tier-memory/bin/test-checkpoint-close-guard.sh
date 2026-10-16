@@ -1312,6 +1312,11 @@ mkdir -p "$T/lookout-vacio/sessions"
 chk "sin marca de lookout (sesion no supervisada): sigue exigiendo la pregunta" "1" "$(corre_sup "$T/tc.jsonl" "$T/lookout-vacio" | grep -c 'candidatos_pregunta')"
 mkdir -p "$T/lookout-roto/sessions"; printf 'no es json\n' > "$T/lookout-roto/sessions/sess-sup.json"
 chk "marca de lookout que no se entiende: sigue exigiendo la pregunta" "1" "$(corre_sup "$T/tc.jsonl" "$T/lookout-roto" | grep -c 'candidatos_pregunta')"
+mkdir -p "$T/lookout-dir-rota/sessions"
+printf '{"address": [], "supervisor": "supervisor-x"}\n' > "$T/lookout-dir-rota/sessions/sess-sup.json"
+txc "$T/tc.jsonl" peer-nombre
+chk "marca con address que no es texto: ilegible entera, no vale el nombre" "1" "$(corre_sup "$T/tc.jsonl" "$T/lookout-dir-rota" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer
 chk "la misma sesion por \`corre\` (sin session_id): sigue exigiendo la pregunta" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
 cp "$FC" "$FC.bak"
 python3 - "$FC" <<'PY'

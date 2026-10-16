@@ -112,6 +112,9 @@ M = {
          'SUP_DIR, SUP_NOMBRE = _supervisor_lookout(SID) if SID else ("uds:/tmp/cc-socks/9.sock", "")')],
     "peer-nombre-sin-dir": [
         ("RESPONDE = {SUP_DIR} if SUP_DIR else SUPERVISOR", "RESPONDE = {SUP_DIR}")],
+    "peer-marca-rota-vale": [
+        ("        if v is not None and not (isinstance(v, str) and v.strip()):",
+         "        if False:")],
     "ninguno-ignora-descartado": [
         ("        if veredicto_adv == \"break\" and not vivos and not descartados_bugs:",
          "        if veredicto_adv == \"break\" and not vivos:")],
