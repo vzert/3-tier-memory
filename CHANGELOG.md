@@ -8,29 +8,39 @@ cierre de `/checkpoint-3t` salia con `pendientes.candidatos_pregunta` en SALTADO
 aunque el usuario habia decidido los candidatos (sesion d69ad375, 2026-10-15).
 
 ### Fixed
-- **`checkpoint-close-guard.sh` cuenta como pregunta un `SendMessage` respondido.** Solo si despues
-  llega un mensaje de esa misma sesion: el registro que escribe el harness con `origin.kind ==
-  "peer"` y su `from` igual al `to` del envio (un `user` isMeta con la sesion ocupada, o un
-  `attachment` queued_command con la sesion ociosa). El encabezado es el `summary` del mensaje, y un
-  mensaje con candidatos numerados (`1)`, `2.`) cuenta una pregunta por numero. No cuenta sin
-  respuesta, con respuesta de otra sesion ni con un mensaje anterior al envio. Tampoco si el envio no
-  salio: el resultado del SendMessage tiene que decir `"success": true` (un envio que no llega vuelve
-  sin `is_error`, con `success:false` en el texto). Ni a un subagente o teammate: su informe final
-  tambien llega con `kind` peer y `from` = id de la tarea, pero trae `handback` o `senderTaskId` y se
-  descarta (adversario: 27 casos reales de ese par). Sin supervisor el cierre sigue exigiendo la pregunta. Medido sobre el transcript real d69ad375, con
-  una COPIA de la memoria cuya ficha cita `pregunta: <summary>` en cada candidato: el hook anterior
-  (2.60.2) bloquea por `candidatos_pregunta` y este pasa 7 preguntas y el audit da HECHO. La ficha real de esa
-  sesion no lleva `pregunta:` (se escribio antes de esta version) y con ella el cierre sigue
-  bloqueando: el arreglo vale para los cierres que siguen Step 3b tal como queda aqui.
+- **`checkpoint-close-guard.sh` cuenta como pregunta un `SendMessage` al supervisor de lookout
+  respondido.** El supervisor sale de la marca que lookout escribe para la sesion que supervisa
+  (`$LOOKOUT_STATE_DIR` o `~/.local/state/lookout`, `sessions/<session_id>.json`, claves `address` y
+  `supervisor`), leida solo para leer. El envio tiene que ir a esa direccion o a ese nombre (un
+  ` [ref]` al final se ignora) y despues tiene que llegar un mensaje desde esa direccion (el nombre
+  solo si la marca no trae direccion: dos sesiones pueden compartir nombre). Ese mensaje es el
+  registro que escribe el harness con `origin.kind == "peer"`: un `user` isMeta con la sesion
+  ocupada, o un `attachment` queued_command con la sesion ociosa. El encabezado es el `summary` del
+  mensaje, y un mensaje con candidatos numerados (`1)`, `2.`) cuenta una pregunta por numero.
+- No cuenta, y el cierre sigue exigiendo la pregunta: sin marca de lookout o con una que no se
+  entiende; a otra sesion par que no es ese supervisor; sin respuesta o con un mensaje anterior al
+  envio; con el envio fallido (el resultado tiene que decir `"success": true`: un envio que no llega
+  vuelve sin `is_error`, con `success:false` en el texto); y el informe final de un subagente o de un
+  teammate, que trae `handback` o `senderTaskId`.
+- Medido sobre el transcript real d69ad375, con una COPIA de la memoria cuya ficha cita
+  `pregunta: <summary>` en cada candidato y una marca de lookout con el supervisor de esa sesion
+  (la real ya no existe: la sesion termino): el hook anterior (2.60.2) bloquea por
+  `candidatos_pregunta` y este pasa 7 preguntas y el audit da HECHO; sin la marca, este tambien bloquea. La ficha
+  real de esa sesion no lleva `pregunta:` (se escribio antes de esta version) y con ella el cierre
+  sigue bloqueando: el arreglo vale para los cierres que siguen Step 3b tal como queda aqui.
 - Step 3b de `/checkpoint-3t` explica la forma supervisada; el `corrige` de
   `pendientes.candidatos_pregunta` la nombra.
 
 ### Known
+- **El plugin depende del formato de la marca de lookout** (lookout 0.13: ruta y claves de arriba).
+  Si lookout lo cambia, ningun SendMessage cuenta y el cierre supervisado vuelve a bloquear por
+  `candidatos_pregunta`: falla cerrado, se ve, no deja pasar nada. Un supervisor que no sea lookout
+  no escribe esa marca y sus sesiones tampoco cuentan.
 - El hook no mide que la respuesta del supervisor hable de esos candidatos: cualquier mensaje
-  posterior de esa sesion vale, de cualquier sesion par (no solo un supervisor lookout), y un mensaje
-  de estado numerado cuenta como preguntas. Citar en cada linea el `summary` de la pregunta sigue
-  frenando el olvido. Vigila el olvido, no a un agente que finge (igual que con
-  `AskUserQuestion`, donde no mide que la pregunta describiera bien al candidato).
+  posterior suyo vale, y un mensaje de estado numerado al supervisor cuenta como preguntas. Citar en
+  cada linea el `summary` de la pregunta sigue frenando el olvido. Vigila el olvido, no a un agente
+  que finge (igual que con `AskUserQuestion`, donde no mide que la pregunta describiera bien al
+  candidato).
 
 ## [2.61.0] - 2026-10-15
 Origen: Victor (via `/goalspec:interview`) pego un snippet de otro proyecto cuya linea `Si ese paso

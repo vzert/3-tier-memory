@@ -213,7 +213,8 @@ def resolver(ruta, base):
 
 # Sesion supervisada por lookout (p-1d0f012aa9): el supervisor bloquea AskUserQuestion y manda
 # preguntar por SendMessage; la respuesta del usuario vuelve por el supervisor. Un SendMessage cuenta
-# como pregunta SOLO si despues llega un mensaje de esa misma sesion: el registro lleva
+# como pregunta SOLO si va al supervisor que nombra la marca de lookout (abajo) y despues llega
+# un mensaje de el: el registro lleva
 # `origin.kind == "peer"` con su `from` (un `user` isMeta, o un `attachment` queued_command si llego
 # con la sesion ociosa), escrito por el harness, no por el agente. Sin respuesta, con el envio
 # fallido, o a un subagente (su informe final no cuenta), no llego a nadie y Step 3b sigue
@@ -266,13 +267,46 @@ for _i, r in enumerate(recs):
 envios_respondidos = set()  # SendMessage con respuesta posterior de su destinatario
 
 
+def _supervisor_lookout(sid):
+    """Direccion y nombre del supervisor, de la marca que lookout escribe para cada sesion que
+    supervisa (`$LOOKOUT_STATE_DIR` o ~/.local/state/lookout, `sessions/<session_id>.json`, claves
+    `address` y `supervisor`). Solo lectura. Sin marca, o una que no se entiende, devuelve vacio y no
+    cuenta ningun SendMessage: cualquier otra sesion par no es quien pasa la decision del usuario
+    (adversario externo de 2.61.1). Depende del formato de lookout: si cambia, el fallo es exigir la
+    pregunta de mas, que se ve, no dejarla pasar."""
+    if not sid or "/" in sid or "\\" in sid or sid.startswith("."):
+        return "", ""
+    raiz = os.environ.get("LOOKOUT_STATE_DIR") or os.path.join(
+        os.path.expanduser("~"), ".local", "state", "lookout")
+    try:
+        with open(os.path.join(raiz, "sessions", sid + ".json"), encoding="utf-8") as fh:
+            marca = json.load(fh)
+    except Exception:
+        return "", ""
+    if not isinstance(marca, dict):
+        return "", ""
+    return tuple((v.strip() if isinstance(v, str) else "") for v in (marca.get("address"), marca.get("supervisor")))
+
+
+SUP_DIR, SUP_NOMBRE = _supervisor_lookout(SID)
+# A quien se puede escribir: la direccion o el nombre. De quien vale la respuesta: la direccion, que
+# es unica; dos sesiones pueden compartir nombre. El nombre solo si la marca no trae direccion.
+SUPERVISOR = {v for v in (SUP_DIR, SUP_NOMBRE) if v}
+RESPONDE = {SUP_DIR} if SUP_DIR else SUPERVISOR
+# `nombre [ref]` es una direccion valida de SendMessage (desambigua dos sesiones con el mismo nombre)
+# y la respuesta vuelve con el nombre solo: se compara sin el ` [ref]` (adversario de 2.61.1).
+REF_FINAL = re.compile(r"\s+\[[^\]\s]+\]\s*$")
+
+
 def registrar_envio(b):
     inp = b.get("input") or {}
-    a_quien = str(inp.get("to") or "").strip()
+    a_quien = REF_FINAL.sub("", str(inp.get("to") or "").strip())
     pos = pos_envio.get(b.get("id"))
-    if not a_quien or pos is None or b.get("id") not in envio_ok or not isinstance(inp.get("message"), str):
+    if a_quien not in SUPERVISOR or pos is None or b.get("id") not in envio_ok \
+            or not isinstance(inp.get("message"), str):
         return
-    if not any(p > pos and a_quien in (de, nom) for p, de, nom in respuestas_peer):
+    if not any(p > pos and (de in RESPONDE or (not SUP_DIR and nom in RESPONDE))
+               for p, de, nom in respuestas_peer):
         return
     envios_respondidos.add(b.get("id"))
     preguntas.append(b.get("id"))

@@ -603,13 +603,15 @@ modal vuelve con una respuesta, hay alguien contestando. Sin pantalla, no pregun
 nada. Cada candidato queda con decision
 `sin confirmar`. No cuenta como pendiente, no sale al inicio de sesion, y queda escrito en la ficha.
 
-**Sesion supervisada** (lookout u otro supervisor que te manda preguntar por `SendMessage` en vez de
-`AskUserQuestion`): la pregunta va al supervisor por `SendMessage`, que se la pasa al usuario. Un
+**Sesion supervisada por lookout** (te bloquea `AskUserQuestion` y te manda preguntar por
+`SendMessage`): la pregunta va al supervisor por `SendMessage`, a la direccion que te dio, y el se la
+pasa al usuario. Un
 solo mensaje con los candidatos numerados (`1)`, `2)`…), uno por numero, con su recomendacion, y el
 `summary` del mensaje hace de encabezado: cada linea de la ficha cita `pregunta: <summary>`. Espera
 su respuesta antes de escribir las decisiones. El hook de cierre cuenta ese mensaje como tantas
-preguntas como numeros lleva, y solo si despues llego un mensaje de esa misma sesion (sin respuesta
-no llego a nadie, igual que un modal sin resultado) (p-1d0f012aa9).
+preguntas como numeros lleva, solo si va al supervisor que nombra la marca de lookout de esta
+sesion y solo si despues llego un mensaje desde su direccion (sin respuesta no llego a nadie, igual
+que un modal sin resultado). Otro supervisor, o cualquier otra sesion, no cuenta (p-1d0f012aa9).
 
 **3. Escribe la decision en la ficha**, en `## Candidatos a pendiente` (reemplaza el placeholder de
 Step 2), una linea por candidato:

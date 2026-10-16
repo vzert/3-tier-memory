@@ -75,11 +75,11 @@ M = {
     "peer-no-cuenta": [
         ('        elif nombre == "SendMessage" and b.get("id") not in n_preg:', "        elif False:")],
     "peer-sin-respuesta-cuenta": [
-        ("    if not any(p > pos and a_quien in (de, nom) for p, de, nom in respuestas_peer):",
-         "    if False:")],
+        ("    if not any(p > pos and (de in RESPONDE or (not SUP_DIR and nom in RESPONDE))",
+         "    if False and (p > pos and (de in RESPONDE or (not SUP_DIR and nom in RESPONDE))")],
     "peer-respuesta-anterior": [
-        ("    if not any(p > pos and a_quien in (de, nom) for p, de, nom in respuestas_peer):",
-         "    if not any(a_quien in (de, nom) for p, de, nom in respuestas_peer):")],
+        ("    if not any(p > pos and (de in RESPONDE or (not SUP_DIR and nom in RESPONDE))",
+         "    if not any(True and (de in RESPONDE or (not SUP_DIR and nom in RESPONDE))")],
     "peer-sin-cola": [
         ('    for o in (r.get("origin"), (r.get("attachment") or {}).get("origin")):',
          '    for o in (r.get("origin"),):')],
@@ -92,11 +92,26 @@ M = {
     "peer-team-cuenta": [
         ('                and "senderTaskId" not in o:', "                and True:")],
     "peer-error-cuenta": [
-        ('    if not a_quien or pos is None or b.get("id") not in envio_ok or not isinstance(inp.get("message"), str):',
-         '    if not a_quien or pos is None or not isinstance(inp.get("message"), str):')],
+        ('    if a_quien not in SUPERVISOR or pos is None or b.get("id") not in envio_ok \\',
+         '    if a_quien not in SUPERVISOR or pos is None \\')],
     "peer-fallo-sin-is-error": [
         ('        return json.loads(_texto_resultado(bloque).strip()).get("success") is True',
          "        return True")],
+    # Ronda 3 de 2.61.1: solo cuenta el supervisor que nombra la marca de lookout.
+    "peer-cualquier-destino": [
+        ("    if a_quien not in SUPERVISOR or pos is None or b.get(\"id\") not in envio_ok \\",
+         "    if pos is None or b.get(\"id\") not in envio_ok \\")],
+    "peer-responde-por-nombre": [
+        ("    if not any(p > pos and (de in RESPONDE or (not SUP_DIR and nom in RESPONDE))",
+         "    if not any(p > pos and (de in RESPONDE or nom in SUPERVISOR)")],
+    "peer-sin-ref": [
+        ('    a_quien = REF_FINAL.sub("", str(inp.get("to") or "").strip())',
+         '    a_quien = str(inp.get("to") or "").strip()')],
+    "peer-sin-marca": [
+        ("SUP_DIR, SUP_NOMBRE = _supervisor_lookout(SID)",
+         'SUP_DIR, SUP_NOMBRE = _supervisor_lookout(SID) if SID else ("uds:/tmp/cc-socks/9.sock", "")')],
+    "peer-nombre-sin-dir": [
+        ("RESPONDE = {SUP_DIR} if SUP_DIR else SUPERVISOR", "RESPONDE = {SUP_DIR}")],
     "ninguno-ignora-descartado": [
         ("        if veredicto_adv == \"break\" and not vivos and not descartados_bugs:",
          "        if veredicto_adv == \"break\" and not vivos:")],
