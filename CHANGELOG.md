@@ -1,6 +1,6 @@
 # Changelog
 
-## [VERSION-POR-FIJAR] - 2026-10-15
+## [2.62.4] - 2026-10-15
 Origen: medicion de p-dfc87d7b40 (2026-10-15). Al acotar ese pendiente con `pendiente.update`, la
 verificacion del checkout compartido se paso como `--nota`. El emisor salio con rc=0 y la descarto
 sin avisar: el evento no tiene campo para ella. La nota tuvo que ir dentro del `--text`
