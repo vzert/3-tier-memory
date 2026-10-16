@@ -610,7 +610,8 @@ solo mensaje con los candidatos numerados (`1)`, `2)`…), uno por numero, con s
 `summary` del mensaje hace de encabezado: cada linea de la ficha cita `pregunta: <summary>`. Espera
 su respuesta antes de escribir las decisiones. El hook de cierre cuenta ese mensaje como tantas
 preguntas como numeros lleva, solo si va al supervisor que nombra la marca de lookout de esta
-sesion y solo si despues llego un mensaje desde su direccion (sin respuesta no llego a nadie, igual
+sesion y solo si despues llego un mensaje desde su direccion, o desde su nombre si la marca no trae
+direccion (sin respuesta no llego a nadie, igual
 que un modal sin resultado). Otro supervisor, o cualquier otra sesion, no cuenta (p-1d0f012aa9).
 
 **3. Escribe la decision en la ficha**, en `## Candidatos a pendiente` (reemplaza el placeholder de

@@ -1,7 +1,8 @@
 # Changelog
 
 ## [2.61.1] - 2026-10-15
-Origen: p-1d0f012aa9. En una sesion supervisada por lookout, el supervisor bloquea
+Origen: p-1d0f012aa9. En una sesion supervisada por lookout (el plugin publico
+[vzert/lookout](https://github.com/vzert/lookout), que supervisa agentes en paneles), el supervisor bloquea
 `AskUserQuestion` y manda preguntar por `SendMessage`; la respuesta del usuario vuelve por el
 supervisor. El hook de cierre solo contaba `AskUserQuestion` como pregunta de Step 3b, asi que el
 cierre de `/checkpoint-3t` salia con `pendientes.candidatos_pregunta` en SALTADO en cada turno,
@@ -13,7 +14,8 @@ aunque el usuario habia decidido los candidatos (sesion d69ad375, 2026-10-15).
   (`$LOOKOUT_STATE_DIR` o `~/.local/state/lookout`, `sessions/<session_id>.json`, claves `address` y
   `supervisor`), leida solo para leer. El envio tiene que ir a esa direccion o a ese nombre (un
   ` [ref]` al final se ignora) y despues tiene que llegar un mensaje desde esa direccion (el nombre
-  solo si la marca no trae direccion: dos sesiones pueden compartir nombre). Ese mensaje es el
+  solo si la marca no trae direccion, o la trae vacia: dos sesiones pueden compartir nombre). Una
+  clave de la marca que no es texto la hace ilegible entera. Ese mensaje es el
   registro que escribe el harness con `origin.kind == "peer"`: un `user` isMeta con la sesion
   ocupada, o un `attachment` queued_command con la sesion ociosa. El encabezado es el `summary` del
   mensaje, y un mensaje con candidatos numerados (`1)`, `2.`) cuenta una pregunta por numero.

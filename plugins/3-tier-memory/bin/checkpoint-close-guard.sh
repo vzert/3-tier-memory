@@ -285,14 +285,15 @@ def _supervisor_lookout(sid):
         return "", ""
     if not isinstance(marca, dict):
         return "", ""
-    # Una clave presente que no es texto no vacio hace ilegible la marca entera: tomarla por
-    # ausente dejaba valer el nombre con una `address` rota (adversario externo, ronda 4).
+    # Una clave presente que no es texto hace ilegible la marca entera: tomarla por ausente dejaba
+    # valer el nombre con una `address` rota (adversario externo, ronda 4). Un texto vacio SI es
+    # ausente: lookout escribe `address: ""` cuando no tiene direccion y entonces usa el nombre.
     vals = []
     for k in ("address", "supervisor"):
         v = marca.get(k)
-        if v is not None and not (isinstance(v, str) and v.strip()):
+        if v is not None and not isinstance(v, str):
             return "", ""
-        vals.append(v.strip() if v else "")
+        vals.append((v or "").strip())
     return tuple(vals)
 
 

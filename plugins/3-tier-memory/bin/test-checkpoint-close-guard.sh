@@ -1316,6 +1316,9 @@ mkdir -p "$T/lookout-dir-rota/sessions"
 printf '{"address": [], "supervisor": "supervisor-x"}\n' > "$T/lookout-dir-rota/sessions/sess-sup.json"
 txc "$T/tc.jsonl" peer-nombre
 chk "marca con address que no es texto: ilegible entera, no vale el nombre" "1" "$(corre_sup "$T/tc.jsonl" "$T/lookout-dir-rota" | grep -c 'candidatos_pregunta')"
+mkdir -p "$T/lookout-dir-vacia/sessions"
+printf '{"address": "", "supervisor": "supervisor-x"}\n' > "$T/lookout-dir-vacia/sessions/sess-sup.json"
+chk "marca con address vacia (lookout sin direccion): vale el nombre" "0" "$(corre_sup "$T/tc.jsonl" "$T/lookout-dir-vacia" | grep -c 'candidatos_pregunta')"
 txc "$T/tc.jsonl" peer
 chk "la misma sesion por \`corre\` (sin session_id): sigue exigiendo la pregunta" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
 cp "$FC" "$FC.bak"
