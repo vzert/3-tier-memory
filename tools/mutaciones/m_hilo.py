@@ -52,7 +52,7 @@ M = {
     # print-como-retomar.py
     "print-sin-slug": [("                                        slug=slug)", "                                        slug=None)")],
     # checkpoint-audit.py
-    "audit-todos-los-ids": [("citados = ID_PENDIENTE.findall(pp)[:1]", "citados = ID_PENDIENTE.findall(pp)")],
+    "audit-todos-los-ids": [("citados = ID_PENDIENTE.findall(paso)[:1]", "citados = ID_PENDIENTE.findall(paso)")],
     "audit-sin-hilo": [('if mejor is not None and mejor <= rango[primero["id"]]:', "if True:")],
     # El marco del Proximo paso (2.60.0): pendientes_afines.senales_marco, el audit y el hook.
     "marco-sin-espera": [("m = ESPERA_AJENA.search(_sin_tildes(paso))", "m = None")],

@@ -1434,9 +1434,12 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                 motivo = {0: "heredado saltado 2 sesiones seguidas", 1: "nacido en esta sesion",
                           2: "heredado"}[primero["grupo"]]
                 h.append(Hallazgo(SALTADO, "snippet.hilo",
+                                  "el bloque colapsado (`Ninguno — …`) deja sin paso un pendiente "
+                                  "hacible del hilo" if colapsado else
                                   "`Proximo paso:` no es el primero del hilo",
                                   [f"el primero es {primero['id']} ({primero['prio']}, {motivo})"
-                                   + (f"; el paso cita primero {citados[0]}" if citados
+                                   + ("" if colapsado else
+                                      f"; el paso cita primero {citados[0]}" if citados
                                       else "; el paso no cita ningun pendiente del hilo")],
                                   corrige=f"cita {primero['id']} en `Proximo paso:` (Step 8, caso 2: "
                                           "el primero que imprime pendientes_afines.py --hilo)"))
