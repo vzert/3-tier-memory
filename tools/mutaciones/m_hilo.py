@@ -1,7 +1,7 @@
 import io, sys
 # El hilo de pendientes (2.57.0, p-b282a8cfc4). Cada mutacion apaga una pieza de la regla de Victor
 # y su aserto de test-hilo-pendientes.sh tiene que caer: (1) la liga al nacer y su guardia contra
-# fichas de otra sesion; el sello (campo partido, snippet pegado, saltos); (2) el cierre recursivo;
+# fichas de otra sesion; el sello (campo partido, snippet pegado, saltos); (2) el salto directo (2.62.0);
 # (3) el empate nuevo/heredado y el heredado saltado, y el chequeo del audit; (4) el paso recibido
 # en el hilo; (5) la Baja solo sin Alta ni Media, y `quedan N`.
 #
@@ -21,7 +21,13 @@ M = {
     "ruta-por-sufijo": [('if b.get("name") in ESCRIBE and (ruta == "sessions/" + nombre',
                          'if b.get("name") in ESCRIBE and (ruta.endswith("sessions/" + nombre)')],
     "leer-cuenta-como-escribir": [('ESCRIBE = ("Write", "Edit", "MultiEdit")', 'ESCRIBE = ("Write", "Edit", "MultiEdit", "Read")')],
-    "hilo-sin-cierre": [('if p["id"] not in miembros and ids_rel & miembros:', "if False:")],
+    # 2.62.0: el hilo es de un salto y solo por ids abiertos (antes, "hilo-sin-cierre" del cierre
+    # recursivo de 2.57.0). Las dos guardias de ids cerrados son redundantes: se apagan juntas.
+    "hilo-sin-vecino": [("elif ids_rel & semillas:", "elif False:")],
+    "hilo-cruza-cerrados": [("semillas = {i for i in nucleo if i in por_id}", "semillas = set(nucleo)"),
+                            ('ids_rel = {x for x in p["rel"] if x.startswith("p-") and x in por_id}',
+                             'ids_rel = {x for x in p["rel"] if x.startswith("p-")}')],
+    "sello-sin-retomamos": [("    if paso is None:", "    if False:")],
     "hilo-sin-recibido": [('miembros = set(heredados) | nuevos | ids_pp | {x for x in paso_rec if x.startswith("p-")}',
                            "miembros = nuevos | ids_pp")],
     "empate-sin-nuevo": [('return 1 if p["id"] in nuevos else 2', "return 2")],

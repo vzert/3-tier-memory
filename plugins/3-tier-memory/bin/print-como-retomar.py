@@ -33,8 +33,9 @@ Alta/Media ligados por `_relacionado:` (pendientes_afines.py). Se calcula EN VIV
 que vuelve a correr este script, compara contra el estado real. Si la ficha ya trae esa linea
 (escrita a mano), no se duplica.
 Hilo (2.57.0, p-b282a8cfc4): los extras ya no salen solo de `_relacionado` sino del hilo entero
-(lo que la sesion recibio, sellado por stamp-hilo.py; lo que nacio en ella; y su cierre por
-`_relacionado`), y debajo va `quedan N en el hilo: <ids>` con lo que no entro. Ver
+(lo que la sesion recibio, sellado por stamp-hilo.py; lo que nacio en ella; y, desde 2.62.0, sus
+vecinos DIRECTOS por `_relacionado`, solo por ids abiertos: el cierre transitivo de 2.57.0
+cruzaba al trabajo de otro agente), y debajo va `quedan N en el hilo: <ids>` con lo que no entro. Ver
 pendientes_afines.py, "El hilo".
 Si la seccion esta vacia o dice solo el placeholder (`<filled in Step 8>`), no imprime nada y
 sale con codigo 1 — Step 8a todavia no corrio.

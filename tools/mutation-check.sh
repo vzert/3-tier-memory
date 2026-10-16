@@ -181,7 +181,7 @@ caso "afines en direccion inversa" pendientes_afines.py m_relacionado.py $T "la 
 caso "afines Alta primero" pendientes_afines.py m_relacionado.py $T "el Alta ligado va primero aunque sea mas nuevo" afines-sin-prioridad
 caso "afines tope de 2" pendientes_afines.py m_relacionado.py $T "con 3 elegibles salen solo 2" afines-sin-tope
 caso "hermano de la tabla primero" plan-siguiente-hermano.py m_relacionado.py $T "y no desplaza a la fila de la tabla" hermano-fuera-primero
-# Fila de plan podada (2.61.1, p-fb70d4600d): el frontmatter del plan frena el replay viejo.
+# Fila de plan podada (2.62.1, p-fb70d4600d): el frontmatter del plan frena el replay viejo.
 caso "poda sin guardian"   journal-compact.py m_plan_poda.py test-plan-reopen.sh "el replay active NO reinserta la fila" sin-guardian
 caso "poda sin comillas"   journal-compact.py m_plan_poda.py test-plan-reopen.sh "frontmatter CRLF, con comillas" sin-comillas
 caso "poda solo completed" journal-compact.py m_plan_poda.py test-plan-reopen.sh "abandoned en el frontmatter tambien frena" solo-completed
@@ -192,7 +192,9 @@ caso "hilo: liga al nacer" journal-emit.py m_hilo.py $T "el evento trae _relacio
 caso "hilo: liga no hereda en backfill" journal-emit.py m_hilo.py $T "ficha de otra fecha, backfill: no hereda el snippet de la sesion en curso" liga-sin-guardia
 caso "hilo: campo en varias lineas" pendientes_afines.py m_hilo.py $T "hilo_paso" campo-una-linea
 caso "hilo: snippet pegado como bloque" pendientes_afines.py m_hilo.py $T "sella" pasted-sin-quitar
-caso "hilo: cierre recursivo" pendientes_afines.py m_hilo.py $T "p-3333333333, el nieto, esta en el snippet" hilo-sin-cierre
+caso "hilo: vecino directo" pendientes_afines.py m_hilo.py $T "p-2222222222, vecino directo del paso, esta en el snippet" hilo-sin-vecino
+caso "hilo: no cruza ids cerrados" pendientes_afines.py m_hilo.py $T "un pendiente que solo comparte un id cerrado no entra" hilo-cruza-cerrados
+caso "hilo: sello desde Retomamos" pendientes_afines.py m_hilo.py $T "hilo_paso toma el id de Retomamos:" sello-sin-retomamos
 caso "hilo: paso recibido sigue" pendientes_afines.py m_hilo.py $T "p-aaaaaaaaaa vuelve como extra" hilo-sin-recibido
 caso "hilo: empate, nuevo primero" pendientes_afines.py m_hilo.py $T "empate Alta/Alta, el paso cita al heredado: SALTADO" empate-sin-nuevo
 caso "hilo: heredado saltado 2" pendientes_afines.py m_hilo.py $T "heredado saltado 2 sesiones y el paso cita al nuevo: SALTADO" empate-sin-saltos

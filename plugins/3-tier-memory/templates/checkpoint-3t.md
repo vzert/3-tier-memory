@@ -665,8 +665,10 @@ linea `Si ese paso es corto, suma en la misma sesion: …` con hasta 2 del hilo 
 (Alta > Media > Baja; la Baja solo si no queda Alta ni Media), y debajo `quedan N en el hilo: <ids>`
 (2.57.0, `pendientes_afines.py`). Desde 2.61.0 un pendiente del hilo citado en `Terminas cuando:` o
 `No repitas:` del snippet, una prueba en uso real o uno que espera un OK no va de extra: va a
-`quedan N` (`motivo_no_extra`; detalle en Step 8). El hilo incluye lo ligado al `Proximo paso:`, de cualquier sesion
-y en cualquier direccion. Sin el
+`quedan N` (`motivo_no_extra`; detalle en Step 8). El hilo incluye lo ligado DIRECTAMENTE al
+`Proximo paso:`, a lo recibido y a lo nacido en la sesion, de cualquier sesion y en cualquier
+direccion; un solo salto y solo por ids abiertos (2.62.0: el cierre transitivo cruzaba al trabajo de
+otro agente). Sin el
 campo, un Media dejado junto a un Alta no vuelve a ningun snippet salvo que venza (medido en las 8
 ultimas fichas de dos proyectos, 2026-10-13). Para ligar uno que ya existe:
 `journal-emit.py --type pendiente.relate --id p-… --relacionado X [--relacionado Y]` (reemplaza la
@@ -983,7 +985,7 @@ Do NOT skip this step. Actively scan the conversation for these signals:
   `python3 "$JBIN/journal-emit.py" --type plan.reopen --slug <slug>` (add `--title "<Plan title>"`
   for an `--inline` plan), then update the plan file's frontmatter yourself. If the pruning already
   removed its row (`plan.reopen` quarantines `no-fila`), set `status: active` in the frontmatter
-  FIRST and then emit `plan.upsert --status active`: since 2.61.1 an upsert with no row whose plan
+  FIRST and then emit `plan.upsert --status active`: since 2.62.1 an upsert with no row whose plan
   file still says closed is dropped with a WARN, as an old replay.
 - Add wikilink in session log ## Plans section and ## Related
 
