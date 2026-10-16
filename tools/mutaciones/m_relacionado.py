@@ -19,7 +19,8 @@ M = {
     "afines-con-bloqueados": [('or p["bloqueado"]:', ":")],
     "afines-con-vence-hoy": [('if p["revisar"] and p["revisar"] >= hoy:', 'if p["revisar"] and p["revisar"] > hoy:')],
     # 2.57.0: el hilo sustituyo al filtro de afines; las mismas piezas, en su codigo nuevo.
-    "afines-sin-inversa": [('if p["id"] in miembros and not ids_rel <= miembros:', "if False:")],
+    # 2.62.0: el hilo es de un salto; la direccion "el ancla cita al candidato" es esta rama.
+    "afines-sin-inversa": [('if p["id"] in semillas:', "if False:")],
     "afines-sin-prioridad": [('out.sort(key=lambda p: (PRIORIDAD_HILO[p["prio"]], p["grupo"], p["creado"], p["fila"]))',
                               'out.sort(key=lambda p: (p["creado"], p["fila"]))')],
     "afines-sin-tope": [("extras = (altas_medias or elegibles)[:MAX_AFINES]", "extras = (altas_medias or elegibles)")],

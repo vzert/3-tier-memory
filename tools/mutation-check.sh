@@ -186,7 +186,9 @@ caso "hilo: liga al nacer" journal-emit.py m_hilo.py $T "el evento trae _relacio
 caso "hilo: liga no hereda en backfill" journal-emit.py m_hilo.py $T "ficha de otra fecha, backfill: no hereda el snippet de la sesion en curso" liga-sin-guardia
 caso "hilo: campo en varias lineas" pendientes_afines.py m_hilo.py $T "hilo_paso" campo-una-linea
 caso "hilo: snippet pegado como bloque" pendientes_afines.py m_hilo.py $T "sella" pasted-sin-quitar
-caso "hilo: cierre recursivo" pendientes_afines.py m_hilo.py $T "p-3333333333, el nieto, esta en el snippet" hilo-sin-cierre
+caso "hilo: vecino directo" pendientes_afines.py m_hilo.py $T "p-2222222222, vecino directo del paso, esta en el snippet" hilo-sin-vecino
+caso "hilo: no cruza ids cerrados" pendientes_afines.py m_hilo.py $T "un pendiente que solo comparte un id cerrado no entra" hilo-cruza-cerrados
+caso "hilo: sello desde Retomamos" pendientes_afines.py m_hilo.py $T "hilo_paso toma el id de Retomamos:" sello-sin-retomamos
 caso "hilo: paso recibido sigue" pendientes_afines.py m_hilo.py $T "p-aaaaaaaaaa vuelve como extra" hilo-sin-recibido
 caso "hilo: empate, nuevo primero" pendientes_afines.py m_hilo.py $T "empate Alta/Alta, el paso cita al heredado: SALTADO" empate-sin-nuevo
 caso "hilo: heredado saltado 2" pendientes_afines.py m_hilo.py $T "heredado saltado 2 sesiones y el paso cita al nuevo: SALTADO" empate-sin-saltos
