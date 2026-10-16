@@ -1315,7 +1315,7 @@ def main():
             sys.exit("journal-emit: --id debe tener la forma p-<10 hex>")
         # El evento no tiene donde guardar una nota: ni la linea viva ni la fila mensual la llevan.
         # Antes se descartaba sin avisar y quien la paso creia haberla dejado escrita (p-a37851219c).
-        if a.nota.strip():
+        if a.nota:   # cualquier --nota pasada, aun de solo espacios: quien la paso esperaba guardarla
             sys.exit("journal-emit: pendiente.update no guarda --nota (no hay campo donde ponerla). "
                      "Si la nota describe el pendiente, metela en el --text; si cierra el "
                      "pendiente, va en pendiente.resolve --nota")
