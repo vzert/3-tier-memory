@@ -1,5 +1,25 @@
 # Changelog
 
+## [Unreleased]
+Origen: las cuatro notas menores de los revisores de 2.57.0 (p-3f22a1cba1). Cada una tiene su
+prueba en la seccion 10 de `test-hilo-pendientes.sh`, roja contra 2.62.0, y su mutacion en
+`tools/mutaciones/m_hilo.py`.
+
+### Fixed
+- **Un Bash que escribe la ficha con barras invertidas** (`cat > memory\sessions\<ficha>`, Windows)
+  ahora cuenta como escribirla. `escribio_la_ficha` ya trataba asi el `file_path` de Write/Edit, pero
+  no el `command` de Bash. Sin esto, la guardia de la liga al nacer y `stamp-hilo.py` tomaban la
+  ficha como ajena.
+- **Una linea de la transcripcion con `message` que no es un objeto** (una cadena, una lista) se
+  salta igual que una linea que no parsea. Antes tumbaba `stamp-hilo.py` con `AttributeError`
+  (`snippet_de_transcripcion` y `escribio_la_ficha`).
+- **El audit `snippet.hilo` tambien mira el caso 5 colapsado** (`Ninguno — …` sin bloque). Con un
+  heredado hacible en el hilo, sale SALTADO, igual que `Proximo paso: ninguno` dentro del bloque.
+  Antes, quitar el bloque esquivaba el chequeo: la guardia del colapso (`snippet.sigue_abierto`)
+  solo cuenta los pendientes nacidos en la sesion, no los heredados.
+- El docstring de `print-como-retomar.py` ya no presenta la regla de 2.55.0 (extras solo por
+  `_relacionado`) como la vigente.
+
 ## [2.62.0] - 2026-10-15
 Origen: Victor (via `/goalspec:interview`) reporto snippets de cierre que mandaban al agente a trabajo
 de otro agente. Caso real en un proyecto que usa el plugin (2026-10-15): una sesion de indices

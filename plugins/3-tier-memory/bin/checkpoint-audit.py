@@ -1404,15 +1404,22 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     # sesiones seguidas saltado (`hilo_saltos`). Solo cuenta (prioridad, grupo): entre dos del mismo
     # rango el agente elige. El caso 1 (plan activo citado) va antes que el hilo. Todo sale de
     # campos (el sello, `_origen`, `_relacionado`, `_bloqueado`, `_revisar`), no del texto.
-    if pp is not None and "```" in sec_retomar and fecha_ficha and fecha_ficha >= DESDE_HILO:
+    # El caso 5 colapsado (`Ninguno — …` sin bloque) es el mismo `ninguno` que dentro del bloque y
+    # tambien se mide: sin esto, quitar el bloque tapaba un heredado hacible, que la guardia del
+    # colapso (snippet.sigue_abierto) no ve porque solo cuenta los propios (p-3f22a1cba1).
+    colapsado = ("```" not in sec_retomar and "<filled in Step 8>" not in sec_retomar
+                 and sec_retomar.strip().strip("*").lower().startswith("ninguno"))
+    if ((pp is not None and "```" in sec_retomar or colapsado)
+            and fecha_ficha and fecha_ficha >= DESDE_HILO):
         af = _afines_mod()
         orden = af.hilo(texto, os.path.join(memory_dir, "_pendientes.md"), slug, ref)
         rango = {p["id"]: (af.PRIORIDAD_HILO[p["prio"]], p["grupo"]) for p in orden}
         # El id del paso es el PRIMERO que cita la linea: un paso es una accion (marco de Victor,
         # 2026-10-13), y nombrar al de mayor rango de pasada ("hacer p-baja, no p-alta") no lo
         # convierte en el paso (adversario externo, ronda 1 de 2.57.0).
-        citados = ID_PENDIENTE.findall(pp)[:1]
-        caso1 = {s for s in af.anclas(pp)[1] & planes_laxo if plan_activo(memory_dir, s)}
+        paso = "" if colapsado else pp
+        citados = ID_PENDIENTE.findall(paso)[:1]
+        caso1 = {s for s in af.anclas(paso)[1] & planes_laxo if plan_activo(memory_dir, s)}
         if caso1:
             h.append(Hallazgo(HECHO, "snippet.hilo", "caso 1 (plan activo): va antes que el hilo"))
         elif not orden:
