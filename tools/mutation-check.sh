@@ -432,6 +432,10 @@ caso_tools "skip=N a cero" run-tests.sh m_run_tests.py test-run-tests.sh "un ski
 caso_tools "dos cuentas de saltos" run-tests.sh m_run_tests.py test-run-tests.sh "FALLA, no salto: «RESULT pass=1 fail=0 skip=2, 3 saltados»" dos-cuentas
 caso_tools "resumen por prefijo" run-tests.sh m_run_tests.py test-run-tests.sh "FALLA con «TODO VERDE de la seccion 3»" resumen-prefijo
 caso_tools "sin bash -n previo" run-tests.sh m_run_tests.py test-run-tests.sh "y lo dice: bash -n" sin-bash-n
+caso_tools "sin candado"           run-tests.sh m_run_tests.py test-run-tests.sh "una tras otra" sin-candado
+caso_tools "candado muerto bloquea" run-tests.sh m_run_tests.py test-run-tests.sh "con el candado de un pid muerto" muerto-bloquea
+caso_tools "--una toma el candado" run-tests.sh m_run_tests.py test-run-tests.sh "--una no toma el candado" una-con-candado
+caso_tools "no suelta el candado"  run-tests.sh m_run_tests.py test-run-tests.sh "y suelta el candado al terminar" no-suelta
 
 echo
 if [ "$PEND" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $TOTAL)"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi

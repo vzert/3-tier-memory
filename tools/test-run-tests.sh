@@ -119,5 +119,52 @@ for ult in "RESULT pass=1 fail=0 skip=3" "RESULT: pass=1 fail=0 skip=10" "PASS=5
 done
 chk "una suite roja sigue siendo FALLA" "FALLA" "$(veredicto "$T/roja.sh")"
 
+# p-524e2a5bf7: dos corridas completas a la vez dejaban al Mac sin memoria. Una COPIA de run-tests.sh
+# en un repo minimo: su unica suite que corre (test-lenta) anota ini/fin en un registro; las demas
+# no existen y fallan al instante. RUN_TESTS_CANDADO propio: el candado de la corrida que lanzo esta
+# prueba no debe verse. Toda espera tiene tope: un candado roto no cuelga la prueba, sale FALLA.
+echo "== candado: una corrida completa por maquina (p-524e2a5bf7) =="
+R="$T/repo"; mkdir -p "$R/tools" "$R/plugins/3-tier-memory/bin" "$T/bin"
+cp "$RT" "$R/tools/run-tests.sh"
+printf 'echo ini >> "%s"; sleep 2; echo fin >> "%s"; echo "pass=1 fail=0"\n' "$T/registro" "$T/registro" \
+  > "$R/plugins/3-tier-memory/bin/test-lenta.sh"
+printf '#!/bin/sh\nexit 1\n' > "$T/bin/claude"; chmod +x "$T/bin/claude"   # sin el CLI real: no tarda
+CAND="$T/candado"
+# termina <pid> <segundos>: 0 si el proceso acaba a tiempo; si no, lo mata y devuelve 1.
+termina() {
+  local i=0
+  while kill -0 "$1" 2>/dev/null; do
+    [ "$i" -ge $(( $2 * 5 )) ] && { kill "$1" 2>/dev/null; wait "$1" 2>/dev/null; return 1; }
+    sleep 0.2; i=$(( i + 1 ))
+  done
+  wait "$1" 2>/dev/null; return 0
+}
+completa() {  # <salida>: una corrida completa de la copia, en segundo plano; deja su pid en $!
+  RUN_TESTS_CANDADO="$CAND" RUN_MUTATION=0 PATH="$T/bin:$PATH" bash "$R/tools/run-tests.sh" >"$1.out" 2>"$1.err" &
+}
+: > "$T/registro"
+completa "$T/a"; a=$!
+completa "$T/b"; b=$!
+termina "$a" 60; ra=$?; termina "$b" 60; rb=$?
+chk "las dos corridas terminan" "0 0" "$ra $rb"
+chk "una tras otra: la suite de la segunda empieza al acabar la de la primera" "ini fin ini fin" \
+  "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
+chk "la que espero lo dice en stderr" "1" "$(cat "$T/a.err" "$T/b.err" | grep -c 'espero a que termine')"
+chk "y suelta el candado al terminar" "no" "$([ -e "$CAND" ] && echo si || echo no)"
+
+# Un candado de una corrida muerta (kill -9) no bloquea para siempre.
+bash -c 'exit 0' & muerto=$!; wait "$muerto"
+mkdir "$CAND"; echo "$muerto" > "$CAND/pid"; : > "$T/registro"
+completa "$T/c"; c=$!
+chk "con el candado de un pid muerto, la corrida no se queda esperando" "0" "$(termina "$c" 30; echo $?)"
+chk "y corre su suite" "ini fin" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
+chk "y avisa que lo quito" "1" "$(grep -c 'ya no existe' "$T/c.err")"
+
+# --una lo llaman las suites DENTRO de una corrida completa: con el candado tomado no espera.
+mkdir "$CAND"; echo "$$" > "$CAND/pid"
+RUN_TESTS_CANDADO="$CAND" bash "$R/tools/run-tests.sh" --una prueba bash "$T/skip.sh" >/dev/null 2>&1 & u=$!
+chk "--una no toma el candado: no espera a la corrida que lo tiene" "0" "$(termina "$u" 10; echo $?)"
+rm -rf "$CAND"
+
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

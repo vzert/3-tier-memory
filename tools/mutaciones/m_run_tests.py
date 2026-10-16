@@ -32,6 +32,15 @@ M = {
     "resumen-prefijo": [
         ('RESUMEN="^[[:space:]]*($(IFS=\'|\'; echo \"${RESUMEN_FORMAS[*]}\"))[[:space:]]*\\$"',
          'RESUMEN="^[[:space:]]*($(IFS=\'|\'; echo \"${RESUMEN_FORMAS[*]}\"))"')],
+    # p-524e2a5bf7: el candado de una corrida completa por maquina.
+    "sin-candado": [
+        ("  candado_toma", "  :")],
+    "muerto-bloquea": [
+        ('elif ! kill -0 "$quien" 2>/dev/null; then', 'elif false; then')],
+    "una-con-candado": [
+        ('if [ "${1:-}" != "--una" ]; then', 'if true; then')],
+    "no-suelta": [
+        ("_tp_limpia; candado_suelta' EXIT", "_tp_limpia' EXIT")],
 }
 p, nombre = sys.argv[1], sys.argv[2]
 s = io.open(p, encoding="utf-8", newline="").read()

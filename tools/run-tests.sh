@@ -24,9 +24,53 @@ BIN="plugins/3-tier-memory/bin"
 # Claude Code donde corre. Las suites no son esa sesion: sin esto, correr el runner desde Claude Code
 # dependeria de como arranco la sesion de quien lo corre.
 unset CLAUDE_CODE_SESSION_ID
+# Una corrida completa por maquina (p-524e2a5bf7). Varios agentes que esperaban a las suites ajenas
+# lanzaban la suite completa a la vez al terminar, y el Mac se quedaba sin memoria (2026-10-15/16).
+# El candado es una carpeta: `mkdir` es atomico en macOS, Linux y Git Bash, sin flock (macOS no lo
+# trae). La segunda corrida espera a la primera y lo dice en stderr. Va en el TMPDIR de ANTES de
+# tmp-propio (que lo cambia por corrida), asi que lo comparten todos los checkouts y worktrees del
+# mismo usuario. `--una` no lo toma: la llaman las suites desde dentro de una corrida completa.
+# RUN_TESTS_CANDADO cambia la ruta (lo usa test-run-tests.sh para no esperar a la corrida que lo lanzo).
+CANDADO="${RUN_TESTS_CANDADO:-${TMPDIR:-/tmp}}"
+[ -z "${RUN_TESTS_CANDADO:-}" ] && CANDADO="${CANDADO%/}/3tm-run-tests.candado"
+candado_toma() {
+  local quien vacio=0 avisado=0
+  while ! mkdir "$CANDADO" 2>/dev/null; do
+    quien=$(cat "$CANDADO/pid" 2>/dev/null)
+    if [ -z "$quien" ]; then
+      # Recien creado: su dueno aun no escribe el pid. Vacio ~10 s = murio entre mkdir y escribirlo.
+      vacio=$(( vacio + 1 ))
+      if [ "$vacio" -ge 10 ]; then rm -rf "$CANDADO"; vacio=0; continue; fi
+    elif ! kill -0 "$quien" 2>/dev/null; then
+      # Su dueno murio sin soltarlo (kill -9). Limite: dos corridas que lo vean a la vez pueden
+      # quitarlo las dos, y la segunda borrar el que la primera acaba de tomar.
+      echo "AVISO run-tests: quito el candado de una corrida que ya no existe (pid $quien): $CANDADO" >&2
+      rm -rf "$CANDADO"; continue
+    else
+      vacio=0
+      if [ "$avisado" = 0 ]; then
+        avisado=1
+        echo "run-tests: otra corrida (pid $quien) tiene el candado; espero a que termine." >&2
+        echo "  Si ese pid no es una corrida de run-tests.sh, borra el candado: rm -rf \"$CANDADO\"" >&2
+      fi
+    fi
+    sleep 1
+  done
+  echo "$$" > "$CANDADO/pid"
+  [ "$avisado" = 1 ] && echo "run-tests: candado tomado; empiezo." >&2
+  return 0
+}
+# Solo el suyo: si se lo quitaron por muerto y otra corrida lo tomo, no lo borra.
+candado_suelta() { [ "$(cat "$CANDADO/pid" 2>/dev/null)" = "$$" ] && rm -rf "$CANDADO"; return 0; }
 # Un temporal propio para toda la corrida, borrado tambien si la matan (p-292d06c4c0). Con `-f`:
 # test-run-tests corre una COPIA de este script desde otra carpeta, donde no esta (y ya va anidada).
 [ -f tools/tmp-propio.sh ] && . tools/tmp-propio.sh
+if [ "${1:-}" != "--una" ]; then
+  candado_toma
+  # Un solo trap EXIT: bash lo corre tambien al morir por INT/TERM/HUP (ver tmp-propio.sh), y este
+  # reemplaza el de tmp-propio, asi que lo repite.
+  trap 'type _tp_limpia >/dev/null 2>&1 && _tp_limpia; candado_suelta' EXIT
+fi
 FALLOS=0
 FALLIDAS=""
 TOTAL=0
