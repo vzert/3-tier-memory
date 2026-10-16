@@ -23,8 +23,10 @@ cierre de otra sesion lo desplazaba.
   bloque `## Como retomar` sin fence); sin marca, lo de antes.
 - El compactador cuarentena un `pendiente.retomar` escrito a mano con la ficha o la fecha mal
   formadas (`sessions/x` con salto de linea, `20261016`, `2026-W42-5`): `fullmatch` y forma
-  AAAA-MM-DD, no solo `fromisoformat`. El emisor ya las rechazaba.
-- Pruebas: `test-marcar-retomar.sh` (43; incluye que 8e y `hacible()` dan lo mismo con la marca, el
+  AAAA-MM-DD, no solo `fromisoformat`. El emisor tambien exige AAAA-MM-DD en `--retomar` (antes
+  `fromisoformat` dejaba pasar `20261016` y `2026-W42-5`, que el compactador cuarentenaba y la marca
+  se perdia), y `marcar-retomar.py --hoy` normaliza la fecha a esa forma.
+- Pruebas: `test-marcar-retomar.sh` (48; incluye que 8e y `hacible()` dan lo mismo con la marca, el
   control de que con `_revisar` = hoy no, y la cuarentena de eventos malos), 13 comprobaciones nuevas
   en `test_pendientes_ahora.py` (9 fallan con el script de 2.62.1; las otras 4 confirman lo que no
   debe salir y ya no salia) y un caso en `pane.test.tsx` (falla con el `register.tsx` de 0.2.2).

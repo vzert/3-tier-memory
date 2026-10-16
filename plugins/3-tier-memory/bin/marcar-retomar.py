@@ -100,6 +100,8 @@ def main(argv):
         return 2
     path = args[0]
     try:
+        # .isoformat() normaliza `20261016` o `2026-W42-5` a AAAA-MM-DD; lo que llega al emisor
+        # siempre tiene esa forma.
         hoy = datetime.date.fromisoformat(hoy).isoformat() if hoy else datetime.date.today().isoformat()
     except ValueError:
         print(f"uso: --hoy no es una fecha: {hoy}", file=sys.stderr)

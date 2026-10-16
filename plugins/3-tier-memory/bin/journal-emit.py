@@ -1366,8 +1366,10 @@ def main():
         if not ID_RE.match(pid):
             sys.exit("journal-emit: --id debe tener la forma p-<10 hex>")
         ret = (a.retomar or "").strip()
-        if not fecha_real(ret):
-            sys.exit("journal-emit: pendiente.retomar necesita --retomar con una fecha real")
+        # fecha_real (fromisoformat) acepta `20261016` y `2026-W42-5`: el compactador los cuarentena
+        # y el mod no los lee. Aqui solo AAAA-MM-DD.
+        if not (re.fullmatch(r"\d{4}-\d{2}-\d{2}", ret) and fecha_real(ret)):
+            sys.exit("journal-emit: pendiente.retomar necesita --retomar AAAA-MM-DD con una fecha real")
         ficha = (a.ficha or "").strip()
         if ficha.endswith(".md"):
             ficha = ficha[:-3]

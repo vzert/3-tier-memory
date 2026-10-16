@@ -171,8 +171,23 @@ chk "sessions/x.md se acepta sin el .md" "0" "$R4"
 compact --quiet >/dev/null
 chk "y se escribe como sessions/x" "1" "$(linea "$A" | grep -c "_retomar: $HOY sessions/x_")"
 
+echo "== 9b. el emisor exige AAAA-MM-DD; marcar-retomar normaliza --hoy =="
+fixture
+set +e
+emit --type pendiente.retomar --id "$A" --retomar 20261016 --ficha "sessions/x" >/dev/null 2>&1; R5=$?
+emit --type pendiente.retomar --id "$A" --retomar 2026-W42-5 --ficha "sessions/x" >/dev/null 2>&1; R6=$?
+set -e
+chk "fecha 20261016 (sin guiones): error" "1" "$([ "$R5" -ne 0 ] && echo 1 || echo 0)"
+chk "fecha 2026-W42-5 (semana ISO): error" "1" "$([ "$R6" -ne 0 ] && echo 1 || echo 0)"
+chk "y no dejan evento" "0" "$(eventos)"
+ficha 2026-10-16-uno "hacer $A."
+python3 "$BIN/marcar-retomar.py" "$M/sessions/2026-10-16-uno.md" --hoy 20261016 >/dev/null
+chk "marcar-retomar --hoy 20261016 escribe 2026-10-16" "1" "$(linea "$A" | grep -c '_retomar: 2026-10-16 sessions/2026-10-16-uno_')"
+chk "sin cuarentena" "0" "$(cuarentena)"
+
 echo "== 10. el compactador cuarentena un evento escrito a mano con ficha o fecha malas =="
-# El emisor ya las rechaza; esto cubre un evento que no paso por el (adversario, 2026-10-16).
+# El emisor tambien las rechaza (caso 9); esto cubre un evento que no paso por el (adversario,
+# 2026-10-16).
 fixture
 mkdir -p "$M/.journal/pending"
 for caso in 'ficha:sessions/x\n' 'retomar:20261016' 'retomar:2026-W42-5'; do
