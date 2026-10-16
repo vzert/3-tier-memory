@@ -1671,8 +1671,14 @@ def apply_reopen(mem, p):
             # Vive en el indice y no en el archivo, pero la fila mensual sigue cerrada: una pasada
             # anterior murio entre sacar la linea del archivo y limpiar la mensual. El motivo de
             # abajo ("cerrado antes de 2.31.0, usa pendiente.add") seria falso aqui y su consejo
-            # duplicaria una linea viva (adversario de 2.60.1, ronda 3). Sigue siendo cuarentena:
-            # terminar esa pasada es p-c103c7df05.
+            # duplicaria una linea viva (adversario de 2.60.1, ronda 3).
+            # Si ESTE reopen ya consta (`ya_anotado`), esa pasada fue la suya: la clave la escribio
+            # la propia operacion, no se deduce del estado. Lo unico que le faltaba es la fila
+            # mensual, y se termina aqui (p-c103c7df05). Sin la clave (un compactador anterior a
+            # 2.60.1) nada escrito por la operacion dice que la fila cerrada sea suya: cuarentena.
+            if ya_anotado:
+                limpiar_mensual_reabierto(mem, p["id"], donde)
+                return True
             raise Quarantine(
                 f"mensual-cerrada: {p['id']} ya vive en _pendientes.md, pero su fila mensual sigue "
                 f"{donde}. Una pasada anterior murio antes de limpiarla: vacia a mano las celdas "
@@ -1768,22 +1774,31 @@ def apply_reopen(mem, p):
             atomic_write(cpath, clines)
             break
 
-    found = find_monthly_row(mem, p["id"])
-    if found:
-        mpath, mlines, i, cells, cmap = found
-        # Una fila sin columna `Sesion resolucion` no pudo guardar el "expired —...", asi que la
-        # marca de caducado es la FECHA: se limpia igual, y no se exige la nota para reabrir.
-        # `origen == "resuelto"`: la celda Sesion lleva la nota de cierre (sesion — estado —
-        # nota), no "expired", asi que la condicion de expire no la cubria. Ningun evento
-        # deshacia estas dos celdas — es literalmente el paso que hubo que hacer a mano el
-        # 2026-09-19 al reabrir p-532174ff63 (pendiente p-d949b88e8a).
-        if origen == "resuelto" or cells[COL_SESION].startswith("expired") or \
-                (COL_SESION not in cmap and cells[COL_RESUELTO]):
-            cells[COL_RESUELTO] = ""
-            cells[COL_SESION] = ""
-            mlines[i] = render_row(cells, cmap)
-            atomic_write(mpath, mlines)
+    limpiar_mensual_reabierto(mem, p["id"], origen)
     return True
+
+
+def limpiar_mensual_reabierto(mem, pid, origen):
+    """Vacia las celdas Resuelto y Sesion resolucion de la fila mensual de un pendiente reabierto.
+    Devuelve True si la fila cambio."""
+    found = find_monthly_row(mem, pid)
+    if not found:
+        return False
+    mpath, mlines, i, cells, cmap = found
+    # Una fila sin columna `Sesion resolucion` no pudo guardar el "expired —...", asi que la
+    # marca de caducado es la FECHA: se limpia igual, y no se exige la nota para reabrir.
+    # `origen == "resuelto"`: la celda Sesion lleva la nota de cierre (sesion — estado —
+    # nota), no "expired", asi que la condicion de expire no la cubria. Ningun evento
+    # deshacia estas dos celdas — es literalmente el paso que hubo que hacer a mano el
+    # 2026-09-19 al reabrir p-532174ff63 (pendiente p-d949b88e8a).
+    if origen == "resuelto" or cells[COL_SESION].startswith("expired") or \
+            (COL_SESION not in cmap and cells[COL_RESUELTO]):
+        cells[COL_RESUELTO] = ""
+        cells[COL_SESION] = ""
+        mlines[i] = render_row(cells, cmap)
+        atomic_write(mpath, mlines)
+        return True
+    return False
 
 
 def find_monthly_row(mem, pid):

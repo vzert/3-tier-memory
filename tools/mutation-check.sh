@@ -187,6 +187,9 @@ caso "poda sin comillas"   journal-compact.py m_plan_poda.py test-plan-reopen.sh
 caso "poda solo completed" journal-compact.py m_plan_poda.py test-plan-reopen.sh "abandoned en el frontmatter tambien frena" solo-completed
 caso "poda sin registro"   journal-compact.py m_plan_poda.py test-plan-reopen.sh "el replay active NO reinserta la fila" sin-registro-poda
 caso "poda sin pedir registro" journal-compact.py m_plan_poda.py test-plan-reopen.sh "conserva fase y fecha de creacion" sin-condicion-registro
+# Reopen muerto entre el archivo y la fila mensual (p-c103c7df05): la clave reopen-<id> termina la pasada.
+caso "reopen termina la mensual" journal-compact.py m_reopen_mensual.py test-resolve-reopen.sh "la fila mensual vuelve identica" sin-terminar
+caso "reopen mensual sin registro" journal-compact.py m_reopen_mensual.py test-resolve-reopen.sh "motivo mensual-cerrada" sin-pedir-registro
 T=test-hilo-pendientes.sh
 caso "hilo: liga al nacer" journal-emit.py m_hilo.py $T "el evento trae _relacionado al paso recibido, campo en 2 lineas" liga-sin-auto
 caso "hilo: liga no hereda en backfill" journal-emit.py m_hilo.py $T "ficha de otra fecha, backfill: no hereda el snippet de la sesion en curso" liga-sin-guardia
