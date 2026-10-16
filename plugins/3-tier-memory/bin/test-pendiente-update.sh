@@ -187,6 +187,10 @@ RC=0; emit --type pendiente.update --id "$ID" --text "$NUEVO" --nota "   " >/dev
 chk "una --nota de solo espacios tambien se rechaza" "1" "$([ "$RC" -ne 0 ] && echo 1 || echo 0)"
 chk "y tampoco deja evento" "0" "$(ls "$M/.journal/pending" 2>/dev/null | grep -c '\.json$' | tr -d ' ')"
 
+RC=0; emit --type pendiente.update --id "$ID" --text "$NUEVO" --nota "" >/dev/null 2>&1 || RC=$?
+chk "una --nota vacia explicita tambien se rechaza" "1" "$([ "$RC" -ne 0 ] && echo 1 || echo 0)"
+chk "sin --nota el update sigue pasando" "0" "$(emit --type pendiente.update --id "$ID" --text "$NUEVO" >/dev/null 2>&1; echo $?)"
+
 echo "== 15. resolve DESPUES de un update: el prefijo se toma del texto nuevo =="
 fixture
 emit --type pendiente.update --id "$ID" --text "$NUEVO" >/dev/null
