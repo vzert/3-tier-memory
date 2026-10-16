@@ -20,6 +20,120 @@ prueba en la seccion 10 de `test-hilo-pendientes.sh`, roja contra 2.62.0, y su m
 - El docstring de `print-como-retomar.py` ya no presenta la regla de 2.55.0 (extras solo por
   `_relacionado`) como la vigente.
 
+## [2.62.4] - 2026-10-16
+Origen: medicion de p-dfc87d7b40 (2026-10-15). Al acotar ese pendiente con `pendiente.update`, la
+verificacion del checkout compartido se paso como `--nota`. El emisor salio con rc=0 y la descarto
+sin avisar: el evento no tiene campo para ella. La nota tuvo que ir dentro del `--text`
+(p-a37851219c).
+
+### Changed
+- **`pendiente.update` rechaza `--nota`** (cualquiera que se pase, aun vacia o de solo espacios): sale con error y no escribe evento. El mensaje dice donde
+  va la nota: en el `--text` si describe el pendiente, o en `pendiente.resolve --nota` si lo cierra.
+  Se eligio rechazar y no avisar porque con un aviso la nota igual se pierde. Ningun llamador del
+  repo (plantillas, bin/, tools/) pasa `--nota` a `pendiente.update`. Caso 14b de
+  `test-pendiente-update.sh`: sus 8 asertos de rechazo fallan contra 2.62.0.
+
+### Known
+- Los demas tipos que no usan `--nota` (p. ej. `pendiente.add`, `pendiente.expire`,
+  `pendiente.reopen`) la siguen descartando en silencio. Este cambio solo cubre `pendiente.update`.
+
+## [2.62.3] - 2026-10-16
+Origen: p-1d0f012aa9. En una sesion supervisada por lookout (el plugin publico
+[vzert/lookout](https://github.com/vzert/lookout), que supervisa agentes en paneles), el supervisor bloquea
+`AskUserQuestion` y manda preguntar por `SendMessage`; la respuesta del usuario vuelve por el
+supervisor. El hook de cierre solo contaba `AskUserQuestion` como pregunta de Step 3b, asi que el
+cierre de `/checkpoint-3t` salia con `pendientes.candidatos_pregunta` en SALTADO en cada turno,
+aunque el usuario habia decidido los candidatos (sesion d69ad375, 2026-10-15).
+
+### Fixed
+- **`checkpoint-close-guard.sh` cuenta como pregunta un `SendMessage` al supervisor de lookout
+  respondido.** El supervisor sale de la marca que lookout escribe para la sesion que supervisa
+  (`$LOOKOUT_STATE_DIR` o `~/.local/state/lookout`, `sessions/<session_id>.json`, claves `address` y
+  `supervisor`), leida solo para leer. El envio tiene que ir a esa direccion o a ese nombre (un
+  ` [ref]` al final se ignora) y despues tiene que llegar un mensaje desde esa direccion (el nombre
+  solo si la marca no trae direccion, o la trae vacia: dos sesiones pueden compartir nombre). Si
+  `address` o `supervisor` no es texto (tambien `null`) o solo trae espacios, la marca es ilegible
+  entera. Ese mensaje es el
+  registro que escribe el harness con `origin.kind == "peer"`: un `user` isMeta con la sesion
+  ocupada, o un `attachment` queued_command con la sesion ociosa. El encabezado es el `summary` del
+  mensaje, y un mensaje con candidatos numerados (`1)`, `2.`) cuenta una pregunta por numero.
+- No cuenta, y el cierre sigue exigiendo la pregunta: sin marca de lookout o con una que no se
+  entiende; a otra sesion par que no es ese supervisor; sin respuesta o con un mensaje anterior al
+  envio; con el envio fallido (el resultado tiene que decir `"success": true`: un envio que no llega
+  vuelve sin `is_error`, con `success:false` en el texto); y el informe final de un subagente o de un
+  teammate, que trae `handback` o `senderTaskId`.
+- Medido sobre el transcript real d69ad375, con una COPIA de la memoria cuya ficha cita
+  `pregunta: <summary>` en cada candidato y una marca de lookout con el supervisor de esa sesion
+  (la real ya no existe: la sesion termino): el hook anterior (2.60.2) bloquea por
+  `candidatos_pregunta` y este pasa 7 preguntas y el audit da HECHO; sin la marca, este tambien bloquea. La ficha
+  real de esa sesion no lleva `pregunta:` (se escribio antes de esta version) y con ella el cierre
+  sigue bloqueando: el arreglo vale para los cierres que siguen Step 3b tal como queda aqui.
+- Step 3b de `/checkpoint-3t` explica la forma supervisada; el `corrige` de
+  `pendientes.candidatos_pregunta` la nombra.
+
+### Known
+- **El plugin depende del formato de la marca de lookout** (lookout 0.13: ruta y claves de arriba).
+  Si lookout lo cambia, ningun SendMessage cuenta y el cierre supervisado vuelve a bloquear por
+  `candidatos_pregunta`: falla cerrado, se ve, no deja pasar nada. Un supervisor que no sea lookout
+  no escribe esa marca y sus sesiones tampoco cuentan.
+- El hook no mide que la respuesta del supervisor hable de esos candidatos: cualquier mensaje
+  posterior suyo vale, y un mensaje de estado numerado al supervisor cuenta como preguntas. Citar en
+  cada linea el `summary` de la pregunta sigue frenando el olvido. Vigila el olvido, no a un agente
+  que finge (igual que con `AskUserQuestion`, donde no mide que la pregunta describiera bien al
+  candidato).
+
+## [2.62.2] - 2026-10-16
+Origen: p-fb70d4600d, el limite declarado en 2.37.0. La poda de `_plans-index.md` guarda solo los 5
+planes cerrados mas recientes. Si ya quito la fila de un plan cerrado, el replay de un
+`plan.upsert --status active` viejo la volvia a insertar como `active`: el guardian de reversa solo
+miraba filas que existen.
+
+### Fixed
+- **La poda de planes deja registro.** Cada fila de plan que la poda quita anota
+  `poda-plan-<slug>` en `.journal/reabiertos.log`, con el ts del evento que la podo, ANTES de
+  escribir el indice (la misma escritura anotada de `promote-<slug>`).
+- **`plan.upsert` sin fila de un plan podado no lo reabre.** Si el evento trae un status que no es
+  de cierre, el plan no tiene fila, tiene registro `poda-plan-<slug>` y `plans/plan-<slug>.md` dice
+  `status: completed|abandoned|superseded`, el evento es noop con `WARN`. No va a cuarentena: un
+  replay no es un error. El frontmatter es la salida manual: para reabrir a proposito, poner
+  `status: active` en el frontmatter y reemitir el `plan.upsert`. Lee CRLF, comillas y mayusculas
+  (`status: "Completed"`). Cerrado -> cerrado sin fila se inserta como antes. Sin registro, sin
+  archivo regular, sin frontmatter, sin `status:` o con un status que no es de cierre, se inserta
+  como antes.
+- Por que hacen falta las dos condiciones: el frontmatter dice el estado de HOY, no el del momento
+  del evento. Un plan creado y cerrado en el mismo lote de pending/ ya tiene el archivo en
+  `completed` cuando el compactador llega a su primer upsert. Con solo el frontmatter, ese primer
+  registro se tomaba por replay y se perdian su fecha de creacion y su `(fase de plan-X)` (lo
+  encontro el adversario de la primera ronda). Sin registro de poda, "no hay fila" es el primer
+  registro.
+- La cuarentena `no-fila` de `plan.reopen` ya no manda solo a `plan.upsert --status active`: pide
+  antes poner `status: active` en el frontmatter. `/checkpoint-3t` Step 5 dice lo mismo.
+- `test-plan-reopen.sh` casos 17 y 18 (17 asertos; la suite pasa de 45 a 62). Contra 2.60.1
+  (`0be3486`) fallan 8: siete del guardian y el del registro (uno de los siete, `cerrado -> cerrado`,
+  cae en cascada: la fila reinsertada como active se cierra con la fecha vieja y la poda la vuelve
+  a quitar). Contra la primera version de este arreglo, que solo miraba el frontmatter, fallan 4:
+  el registro y los tres del caso 18.
+- `mutation-check.sh`: 5 casos nuevos (`m_plan_poda.py`). Quitar el guardian tumba 7 asertos; no
+  anotar la poda, 8; no exigir el registro, los 3 del caso 18; leer el status sin quitar comillas,
+  el de CRLF; frenar solo `completed`, el de `abandoned` y el de `cerrado -> cerrado`.
+
+### Known
+- Un plan podado antes de esta version no tiene registro: su fila sigue sin proteccion, como antes.
+- Un plan `--inline` (sin archivo ni slug en la fila) no se anota al podarse y sigue sin
+  proteccion, como antes.
+- Si la anotacion de la poda no se puede escribir, el evento que podaba (el upsert de OTRO plan) va
+  a cuarentena `no-registro` y el indice no cambia. Es lo que ya hacia `promote-<slug>`: sin
+  registro no se poda.
+- Un frontmatter con un status fuera de `completed|abandoned|superseded` (`cerrado-por-medicion`,
+  `implementado — ...`) no protege: cuenta solo la primera palabra, igual que la poda y el guardian
+  de la fila. Tampoco un plan cerrado en el indice cuyo archivo nadie paso a cerrado.
+- Un registro `poda-plan-<slug>` no caduca. Si un plan NUEVO reutiliza el slug de uno podado y se crea
+  y se cierra en el mismo lote de pending/ (el archivo ya dice cerrado), su primer upsert se toma
+  por replay y se pierden su fecha de creacion y su `(fase de plan-X)`: la misma perdida de la
+  ronda 1, que aqui pide las dos condiciones a la vez (lo encontro el adversario de la ronda 2).
+- La cuarentena `titulo-ambiguo` se evalua antes que este guardian: un replay viejo sobre un indice
+  con una fila del mismo titulo sin wikilink va a cuarentena en vez de a noop. Igual que antes.
+
 ## [2.62.1] - 2026-10-15
 Origen: p-92aa5de144. Desde 2.59.0 la revision del cierre de `/checkpoint-3t` va a un archivo y lo
 que ve el humano es una linea, pero fuera de un repo git el aviso entero (~2.000-2.800 caracteres)
