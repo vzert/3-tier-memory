@@ -42,10 +42,11 @@ candado_quita() {
   exit 2
 }
 # Vivo: kill -0 sale 0, o falla por permiso (un proceso de otro usuario existe; adversario, ronda 1:
-# con pid=1 lo daba por muerto y robaba el candado). Muerto: "No such process".
+# con pid=1 lo daba por muerto y robaba el candado). Muerto: "No such process". LC_ALL=C exportado
+# en la subshell: en glibc el mensaje se traduce ("Operacion no permitida"; adversario, ronda 2).
 candado_vivo() {
   local err
-  err=$(kill -0 "$1" 2>&1) && return 0
+  err=$(export LC_ALL=C; kill -0 "$1" 2>&1) && return 0
   case "$err" in *ermitted*) return 0 ;; esac
   return 1
 }

@@ -177,7 +177,7 @@ else
 fi
 chmod 755 "$T/sonda"
 # Un pid vivo de otro usuario (kill -0 falla por permiso) no es un candado muerto: no se lo roba.
-if [ "$(kill -0 1 2>&1 | grep -c ermitted)" = 1 ]; then
+if [ "$( (export LC_ALL=C; kill -0 1) 2>&1 | grep -c ermitted)" = 1 ]; then
   mkdir "$CAND"; echo 1 > "$CAND/pid"
   completa "$T/e"; e=$!
   chk "el candado de un pid vivo de otro usuario se respeta: sigue esperando" "1" "$(termina "$e" 4; echo $?)"
