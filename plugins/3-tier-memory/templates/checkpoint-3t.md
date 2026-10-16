@@ -985,7 +985,7 @@ Do NOT skip this step. Actively scan the conversation for these signals:
   `python3 "$JBIN/journal-emit.py" --type plan.reopen --slug <slug>` (add `--title "<Plan title>"`
   for an `--inline` plan), then update the plan file's frontmatter yourself. If the pruning already
   removed its row (`plan.reopen` quarantines `no-fila`), set `status: active` in the frontmatter
-  FIRST and then emit `plan.upsert --status active`: since 2.62.1 an upsert with no row whose plan
+  FIRST and then emit `plan.upsert --status active`: since 2.62.2 an upsert with no row whose plan
   file still says closed is dropped with a WARN, as an old replay.
 - Add wikilink in session log ## Plans section and ## Related
 

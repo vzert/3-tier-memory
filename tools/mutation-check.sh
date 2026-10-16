@@ -181,7 +181,7 @@ caso "afines en direccion inversa" pendientes_afines.py m_relacionado.py $T "la 
 caso "afines Alta primero" pendientes_afines.py m_relacionado.py $T "el Alta ligado va primero aunque sea mas nuevo" afines-sin-prioridad
 caso "afines tope de 2" pendientes_afines.py m_relacionado.py $T "con 3 elegibles salen solo 2" afines-sin-tope
 caso "hermano de la tabla primero" plan-siguiente-hermano.py m_relacionado.py $T "y no desplaza a la fila de la tabla" hermano-fuera-primero
-# Fila de plan podada (2.62.1, p-fb70d4600d): el frontmatter del plan frena el replay viejo.
+# Fila de plan podada (2.62.2, p-fb70d4600d): el frontmatter del plan frena el replay viejo.
 caso "poda sin guardian"   journal-compact.py m_plan_poda.py test-plan-reopen.sh "el replay active NO reinserta la fila" sin-guardian
 caso "poda sin comillas"   journal-compact.py m_plan_poda.py test-plan-reopen.sh "frontmatter CRLF, con comillas" sin-comillas
 caso "poda solo completed" journal-compact.py m_plan_poda.py test-plan-reopen.sh "abandoned en el frontmatter tambien frena" solo-completed

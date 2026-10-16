@@ -207,7 +207,7 @@ chmod 644 "$M/.journal/reabiertos.log"
 has "motivo no-registro" "$(cat "$M"/.journal/quarantine/*.reason 2>/dev/null)" "^no-registro:"
 chk "indice intacto" "$ANTES" "$(hash_ < "$M/_plans-index.md")"
 
-echo "== 17. fila podada: el frontmatter del plan decide (p-fb70d4600d, 2.62.1) =="
+echo "== 17. fila podada: el frontmatter del plan decide (p-fb70d4600d, 2.62.2) =="
 # La poda guarda los 5 cerrados mas recientes por Fecha: con 6 cerrados de fechas distintas, el de
 # fecha mas vieja pierde su fila. Antes el replay de su `--status active` viejo la reinsertaba.
 plan_md() { mkdir -p "$M/plans"; printf -- '---\ntype: plan\ndate: 2026-09-01\nstatus: %s\n---\n# %s\n' "$2" "$1" > "$M/plans/plan-$1.md"; }
@@ -257,7 +257,7 @@ plan_md vivo active
 emit --type plan.upsert --slug vivo --title "P vivo" --date 2026-01-01 --status active; compact --quiet >/dev/null
 chk "plan nuevo con frontmatter active: se inserta" "active" "$(status 'plan-vivo\|')"
 
-echo "== 18. sin registro de poda, \"no hay fila\" es el primer registro: se inserta (adversario 2.62.1) =="
+echo "== 18. sin registro de poda, \"no hay fila\" es el primer registro: se inserta (adversario 2.62.2) =="
 # Un plan creado y cerrado en el mismo lote: cuando el compactador llega a su primer upsert, el
 # archivo ya dice completed. Sin el registro de la poda, ese upsert se tomaba por replay viejo y se
 # perdian la fecha de creacion y la anotacion de fase.
@@ -273,7 +273,7 @@ chk "conserva fase y fecha de creacion" "completed (fase de plan-q)|2026-09-01" 
 fixture
 plan_md antiguo completed
 emit --type plan.upsert --slug antiguo --title Antiguo --date 2026-01-01 --status active; compact --quiet >/dev/null
-chk "plan sin registro (podado antes de 2.62.1) con frontmatter cerrado: se inserta" "active" "$(status 'plan-antiguo\|')"
+chk "plan sin registro (podado antes de 2.62.2) con frontmatter cerrado: se inserta" "active" "$(status 'plan-antiguo\|')"
 
 echo
 echo "RESULTADO: $pass ok, $fail fallas"

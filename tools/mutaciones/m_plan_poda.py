@@ -1,5 +1,5 @@
 import io, sys
-# Fila de plan podada (2.62.1, p-fb70d4600d). Cada mutacion apaga una pieza del guardian que lee el
+# Fila de plan podada (2.62.2, p-fb70d4600d). Cada mutacion apaga una pieza del guardian que lee el
 # frontmatter de plans/plan-<slug>.md, y su aserto del caso 17 de test-plan-reopen.sh tiene que caer.
 #
 # Uso: m_plan_poda.py <fichero> <mutacion>
