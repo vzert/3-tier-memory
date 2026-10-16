@@ -1,5 +1,47 @@
 # Changelog
 
+## [2.62.0] - 2026-10-15
+Origen: Victor (via `/goalspec:interview`) reporto snippets de cierre que mandaban al agente a trabajo
+de otro agente. Caso real en un proyecto que usa el plugin (2026-10-15): una sesion de indices
+cerro con un `Proximo paso:` que citaba la sombrilla de un trabajo de varias noches que llevaba
+otra sesion, mas tres Bajas de otro tema en «Si ese paso es corto» y «quedan N». Nada de eso se
+creo ni se toco en esa sesion. El hilo de 2.57.0 cerraba `_relacionado` sin limite: llego en 7
+saltos, uno por un pendiente ya cerrado (el fixture `bin/fixtures/hilo-ajeno` reproduce
+el grafo). El audit `snippet.hilo` lo empeoraba: exigia el primero del hilo, asi que con ese grafo
+marcaba SALTADO un `Proximo paso: ninguno — …` (seccion 8 de `test-hilo-pendientes.sh`, roja contra
+2.61.0).
+
+### Changed
+- **El hilo es de un salto** (reemplaza el «a cualquier distancia» de 2.57.0, decision de Victor del
+  2026-10-15): lo que la sesion recibio, lo que nacio en ella y el paso que escribe, mas sus vecinos
+  directos por `_relacionado` en las dos direcciones. Un id cerrado o que no esta en
+  `_pendientes.md` no liga nada. Los `plan-…` siguen como antes (un salto). Lo leen el `--hilo` del
+  Step 8, la linea de extras y `quedan N` de `print-como-retomar.py` y el audit `snippet.hilo`, asi
+  que el audit ya no exige un paso de otro hilo. Si el hilo sale vacio, el paso es
+  `ninguno — <motivo>, ver Recordatorios` (caso 5); la plantilla lo dice ahora en el caso 2.
+- **El sello lee el id de un recordatorio de calendario.** El prompt de Step 8c no trae
+  `Proximo paso:`; su id va en la linea `Retomamos: … id: p-…`. Sin `Proximo paso:`, `recibido()` lee
+  los ids de esa linea (solo esa: `Comprueba: … Despues: <otro id>` no cuenta). Antes la sesion
+  quedaba sin sello y su hilo solo tenia lo que nacia en ella.
+
+### Tests
+- `test-hilo-pendientes.sh`: la seccion 2 pasa a «el vecino directo sale, el de 2 saltos no»; nuevas
+  8 (un id cerrado no liga; el caso real como fixture en `bin/fixtures/hilo-ajeno`, con
+  la forma del grafo del caso real; ids, fichas y textos inventados) y 9 (sello desde un
+  recordatorio). Contra el `pendientes_afines.py` de 2.61.0 fallan 9 comprobaciones; con este, 70/70.
+- `tools/mutation-check.sh`: `hilo-sin-cierre` (apuntaba al bucle transitivo que ya no existe) pasa a
+  `hilo-sin-vecino`, `hilo-cruza-cerrados` y `sello-sin-retomamos`; `afines-sin-inversa` apunta a la
+  rama nueva. Cada una hace caer su aserto.
+
+### Known
+- Un pendiente propio que solo se liga a otro propio a traves de un tercero (2 saltos) ya no vuelve
+  por el hilo. Es lo que se acepto a cambio: ligalo directo con `pendiente.relate`.
+- Si la sesion CIERRA el paso que recibio, los pendientes ligados solo a ese paso ya no vuelven por
+  el hilo: un id cerrado no liga. Lo que nace en la sesion se liga al paso recibido al nacer, y eso
+  si sigue (es semilla propia).
+- El agente aun puede escribir a mano un paso de otro hilo; el audit no lo marca si el hilo esta
+  vacio. Lo que se cerro es el empuje del script y del audit, no el juicio del agente.
+
 ## [2.61.0] - 2026-10-15
 Origen: Victor (via `/goalspec:interview`) pego un snippet de otro proyecto cuya linea `Si ese paso
 es corto, suma…` sugeria un pendiente mientras el `Terminas cuando` del MISMO snippet lo mandaba a

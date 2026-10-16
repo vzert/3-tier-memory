@@ -6,11 +6,13 @@
 #
 #  1. Liga al nacer: `pendiente.add` en una sesion que arranco con `Retomamos:` queda con
 #     `_relacionado` a los ids del `Proximo paso` recibido, sin que el agente lo pida.
-#  2. Hilo recursivo: un pendiente a 2 saltos de `_relacionado` sale en el snippet.
+#  2. Hilo de un salto (2.62.0; en 2.57.0 era recursivo): el vecino directo sale, el de 2 no.
 #  3. Orden: en empate de prioridad el nuevo va antes que el heredado; un heredado saltado 2
 #     sesiones seguidas va antes que el nuevo (checkpoint-audit `snippet.hilo` y stamp-hilo.py).
 #  4. El paso recibido que no se cerro sigue en el hilo aunque nada lo ligue.
 #  5. Hasta 2 extras (la Baja solo sin Alta ni Media) y `quedan N en el hilo: <ids>`.
+#  8. (2.62.0) El hilo no cruza por ids cerrados ni a otro tema: caso real de otro proyecto.
+#  9. (2.62.0) El sello lee el id de `Retomamos:` en el prompt de un recordatorio de calendario.
 #
 # Uso: test-hilo-pendientes.sh   (exit 0 = todo verde)
 set -u
@@ -177,9 +179,10 @@ hilo_base() {
   pend Baja p-4444444444 "la baja de hoy" 2026-10-14-hoy
 }
 
-echo "== 2. hilo recursivo: el de 2 saltos de _relacionado sale en el snippet =="
+echo "== 2. hilo de un salto (2.62.0): el vecino directo sale, el de 2 saltos no =="
 hilo_base; OUT=$(retomar)
-chk "p-3333333333, el nieto, esta en el snippet" "1" "$(printf '%s\n' "$OUT" | grep -c 'p-3333333333')"
+chk "p-2222222222, vecino directo del paso, esta en el snippet" "1" "$(printf '%s\n' "$OUT" | grep -c 'p-2222222222')"
+chk "p-3333333333, el nieto (2 saltos), no esta" "0" "$(printf '%s\n' "$OUT" | grep -c 'p-3333333333')"
 chk "el suelto sin relacion no" "0" "$(printf '%s\n' "$OUT" | grep -c 'p-9999999999')"
 chk "ni el bloqueado ni el de _revisar futuro" "0" "$(printf '%s\n' "$OUT" | grep -c 'p-5555555555\|p-6666666666')"
 
@@ -188,7 +191,7 @@ chk "p-aaaaaaaaaa vuelve como extra" "1" "$(printf '%s\n' "$OUT" | grep '^Si ese
 
 echo "== 5. hasta 2 extras (Alta > Media; la Baja no) y quedan N =="
 chk "extras: el recibido Alta y el hermano Media, en ese orden" "1" "$(printf '%s\n' "$OUT" | grep -c '^Si ese paso es corto, suma en la misma sesion: p-aaaaaaaaaa (Alta) — el paso que recibio y no cerro; p-2222222222 (Media) — hermano\.$')"
-chk "quedan N con el resto, solo ids" "1" "$(printf '%s\n' "$OUT" | grep -c '^quedan 2 en el hilo: p-3333333333, p-4444444444\.$')"
+chk "quedan N con el resto, solo ids" "1" "$(printf '%s\n' "$OUT" | grep -c '^quedan 1 en el hilo: p-4444444444\.$')"
 chk "la linea quedan va dentro del fence, tras los extras" "quedan" "$(printf '%s\n' "$OUT" | awk '/^Si ese paso/{f=1;next} f&&NF{print $1; exit}')"
 memoria
 ficha 2026-10-14-hoy "Proximo paso: hacer el nuevo (p-1111111111)."
@@ -312,6 +315,54 @@ pend Media p-3333333333 "decidir con datos si las 3 colas siguen; va despues por
 OUT=$(retomar)
 chk "lo ya verificado y las decisiones del agente siguen siendo extra" "p-2222222222 p-3333333333" "$(EXTRAS | grep -o 'p-[0-9a-f]\{10\}' | tr '\n' ' ' | sed 's/ $//')"
 chk "el audit snippet.hilo no cambia: sigue viendo el hilo entero" "1" "$(audit | grep -c 'HECHO .*snippet.hilo.*(3 hacibles)')"
+
+echo "== 8. el hilo no cruza a otro tema (2.62.0, caso real de otro proyecto) =="
+# Un id cerrado no liga: p-cccccccccc cita a p-0000000000, que se cerro (no esta abierto); el paso
+# recibido fue p-0000000000. Con el cierre transitivo p-cccccccccc entraba por el cerrado.
+memoria
+ficha 2026-10-14-hoy "Proximo paso: hacer el nuevo (p-1111111111)." "hilo_paso: p-0000000000\nhilo_heredados: p-0000000000\nhilo_saltos:"
+pend Alta p-1111111111 "el nuevo" 2026-10-14-hoy " — _relacionado: p-0000000000_"
+pend Alta p-cccccccccc "de otro agente, cita al cerrado" 2026-10-10-otra " — _relacionado: p-0000000000_"
+chk "un pendiente que solo comparte un id cerrado no entra" "0" "$(python3 "$BIN/pendientes_afines.py" "$M/sessions/2026-10-14-hoy.md" --hilo --hoy 2026-10-14 | grep -c 'p-cccccccccc')"
+# El caso real: forma del grafo de otro proyecto, con ids, fichas y textos inventados. Antes de
+# escribir el snippet, 2.61.0 daba p-f000000009 (sombrilla del trabajo de otro agente) y 3 Bajas de
+# otro tema, todos a 2+ saltos y uno por un id cerrado. Lo propio no era hacible: el hilo es vacio.
+FX="$BIN/fixtures/hilo-ajeno"
+FS=2026-10-15-sesion-de-indices
+rm -rf "$M"; mkdir -p "$M/sessions"
+cp "$FX/_pendientes.md" "$M/"; cp "$FX/sessions/$FS.md" "$M/sessions/"
+chk "fixture: el hilo antes del snippet esta vacio" "" "$(python3 "$BIN/pendientes_afines.py" "$M/sessions/$FS.md" --hilo --hoy 2026-10-15)"
+chk "fixture: la semilla (p-f000000001) si esta en el grafo" "1" "$(grep -c '_id: p-f000000001_' "$M/_pendientes.md")"
+# El snippet que escribio el agente: con su propio paso (la sombrilla) como semilla, no arrastra
+# extras de otro tema.
+python3 - "$M/sessions/$FS.md" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read().replace("<filled in Step 8>", "```\nRetomamos: x.\n\nLee memory/sessions/2026-10-15-sesion-de-indices.md para el contexto completo.\n\nProximo paso: seguir el trabajo largo — `p-f000000009`.\n\nAntes de actuar, dime en 3 lineas donde quedamos.\n```")
+open(p, "w", encoding="utf-8").write(t)
+PY
+OUT=$(python3 "$BIN/print-como-retomar.py" "$M/sessions/$FS.md")
+chk "fixture: sin linea de extras" "0" "$(printf '%s\n' "$OUT" | grep -c '^Si ese paso es corto')"
+chk "fixture: sin linea quedan" "0" "$(printf '%s\n' "$OUT" | grep -c '^quedan')"
+# Con `Proximo paso: ninguno — …` el audit ya no exige la sombrilla ajena.
+python3 - "$M/sessions/$FS.md" <<'PY'
+import re, sys
+p = sys.argv[1]
+t = re.sub(r"^Proximo paso:.*$", "Proximo paso: ninguno — la medicion propia tiene fecha (2026-10-20), ver Recordatorios de calendario.", open(p, encoding="utf-8").read(), flags=re.M)
+open(p, "w", encoding="utf-8").write(t)
+PY
+OUT=$(python3 "$BIN/checkpoint-audit.py" "$M" --session-file "$M/sessions/$FS.md" --no-git --hoy 2026-10-15 --solo-snippet 2>&1)
+chk "fixture: el audit no marca SALTADO snippet.hilo con ninguno" "0" "$(printf '%s\n' "$OUT" | grep -c 'SALTADO .*snippet.hilo')"
+chk "fixture: snippet.hilo dice que no hay nada hacible" "1" "$(printf '%s\n' "$OUT" | grep -c 'HECHO .*snippet.hilo.*no tiene nada')"
+
+echo "== 9. sello desde un recordatorio de calendario (id en Retomamos:, sin Proximo paso:) =="
+memoria; ficha 2026-10-14-hoy "Proximo paso: x."
+# Forma real (un recordatorio pegado de otro proyecto): el pegado empieza en `Retomamos:` e `id:` va sin `_`.
+transcripcion "$T/t.jsonl" 'Retomamos: medir el efecto del indice antes de las 14:00 UTC id: p-aaaaaaaaaa\nContexto: memory/sessions/2026-10-13-ayer.md\nComprueba: algo. Despues: lo otro (p-bbbbbbbbbb).\nSi ya no aplica, cierralo con /checkpoint-3t.'
+python3 "$BIN/stamp-hilo.py" "$M/sessions/2026-10-14-hoy.md" --transcript "$T/t.jsonl" >/dev/null
+FM=$(sed -n '1,/^---$/p' "$M/sessions/2026-10-14-hoy.md")
+chk "hilo_paso toma el id de Retomamos:" "1" "$(printf '%s' "$FM" | grep -c '^hilo_paso: p-aaaaaaaaaa$')"
+chk "y no el de la linea Comprueba:" "0" "$(printf '%s' "$FM" | grep -c 'p-bbbbbbbbbb')"
 
 echo
 echo "pass=$pass fail=$fail"

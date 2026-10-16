@@ -233,9 +233,10 @@ def pendientes(path):
 # las Bajas (57-73 % nunca volvian). Las cinco piezas:
 #   (1) liga al nacer: journal-emit `pendiente.add` liga cada pendiente nuevo a los ids del
 #       `Proximo paso` que la sesion recibio (`paso_recibido_de`), sin criterio del agente;
-#   (2) hilo = lo que la sesion recibio + lo que nacio en ella + el paso que escribe, cerrado por
-#       `_relacionado` en las dos direcciones (los `plan-…`, un solo salto: un plan con 30
-#       pendientes volveria el hilo el backlog entero);
+#   (2) hilo = lo que la sesion recibio + lo que nacio en ella + el paso que escribe, mas sus
+#       vecinos directos por `_relacionado` en las dos direcciones (los `plan-…`, un solo salto: un
+#       plan con 30 pendientes volveria el hilo el backlog entero). Hasta 2.61.0 era el cierre
+#       transitivo; desde 2.62.0 es un salto, y solo por ids abiertos (ver hilo());
 #   (3) orden: prioridad; en empate el nuevo antes que el heredado, salvo el heredado que lleva 2
 #       sesiones seguidas saltado (`hilo_saltos` del sello), que va antes que todos;
 #   (4) el paso recibido que no se cerro sigue en el hilo (es un heredado mas);
@@ -283,6 +284,14 @@ def recibido(snippet):
                 stamp-hilo.py para leer los `hilo_saltos` de esa ficha."""
     paso = campo(snippet, "proximo paso:") or campo(snippet, "próximo paso:") \
         or campo(snippet, "proxima accion:") or campo(snippet, "próxima acción:")
+    if paso is None:
+        # El prompt de un recordatorio de calendario (Step 8c) no trae `Proximo paso:`: su id va en
+        # `Retomamos: … _id: p-…_`. Sin esto la sesion quedaba sin sello y su hilo solo tenia lo que
+        # nacia en ella (caso real de otro proyecto, 2026-10-15). Solo esa
+        # linea: las de abajo (`Contexto:`, `Comprueba: … Despues: <otro id>`) no son etiquetas del
+        # snippet y `campo` las juntaria.
+        paso = next((l for l in (snippet or "").splitlines()
+                     if l.strip().strip("*").strip().lower().startswith("retomamos:")), None)
     ids_paso, planes = anclas(paso)
     planes_c = sorted({canonica(x) for x in planes if canonica(x)})
     heredados = set(ids_paso)
@@ -349,6 +358,7 @@ def hilo(ficha_texto, pend_path, slug=None, hoy=None):
     nuevos = {p["id"] for p in todos if slug and p["origen"] == slug}
     miembros = set(heredados) | nuevos | ids_pp | {x for x in paso_rec if x.startswith("p-")}
     por_id = {p["id"]: p for p in todos}
+    nucleo = set(miembros)  # antes de los planes: lo que entra por un plan no abre otro salto
     # Los planes: los del paso que la ficha escribe, los del paso recibido y los que citan las
     # semillas. Un solo salto: no se expande por los planes de los que entran despues.
     planes = set(planes_pp) | {x for x in paso_rec if x.startswith("plan-")}
@@ -359,17 +369,19 @@ def hilo(ficha_texto, pend_path, slug=None, hoy=None):
     for p in todos:
         if {canonica(x) or x for x in p["rel"] if x.startswith("plan-")} & planes:
             miembros.add(p["id"])
-    cambio = True
-    while cambio:
-        cambio = False
-        for p in todos:
-            ids_rel = {x for x in p["rel"] if x.startswith("p-")}
-            if p["id"] in miembros and not ids_rel <= miembros:
-                miembros |= ids_rel
-                cambio = True
-            if p["id"] not in miembros and ids_rel & miembros:
-                miembros.add(p["id"])
-                cambio = True
+    # Un solo salto de `_relacionado` desde las semillas, y solo por ids ABIERTOS (2.62.0, regla de
+    # Victor del 2026-10-15; reemplaza el "a cualquier distancia" de 2.57.0). El cierre transitivo
+    # cruzaba de un tema a otro: en un proyecto real una sesion de indices llego en 7 saltos, uno
+    # por un pendiente ya cerrado, a la sombrilla de un trabajo que llevaba otro agente, y la propuso
+    # como `Proximo paso` (y el audit `snippet.hilo` la exigia). Un id cerrado o que ya no esta en
+    # `_pendientes.md` no liga nada: su trabajo termino, y lo que lo cita es de quien lo cite.
+    semillas = {i for i in nucleo if i in por_id}
+    for p in todos:
+        ids_rel = {x for x in p["rel"] if x.startswith("p-") and x in por_id}
+        if p["id"] in semillas:
+            miembros |= ids_rel
+        elif ids_rel & semillas:
+            miembros.add(p["id"])
 
     def grupo(p):
         if p["id"] not in nuevos and salt.get(p["id"], 0) >= 2:
