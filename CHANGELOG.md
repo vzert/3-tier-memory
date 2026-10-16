@@ -1,5 +1,57 @@
 # Changelog
 
+## [2.62.2] - 2026-10-16
+Origen: p-fb70d4600d, el limite declarado en 2.37.0. La poda de `_plans-index.md` guarda solo los 5
+planes cerrados mas recientes. Si ya quito la fila de un plan cerrado, el replay de un
+`plan.upsert --status active` viejo la volvia a insertar como `active`: el guardian de reversa solo
+miraba filas que existen.
+
+### Fixed
+- **La poda de planes deja registro.** Cada fila de plan que la poda quita anota
+  `poda-plan-<slug>` en `.journal/reabiertos.log`, con el ts del evento que la podo, ANTES de
+  escribir el indice (la misma escritura anotada de `promote-<slug>`).
+- **`plan.upsert` sin fila de un plan podado no lo reabre.** Si el evento trae un status que no es
+  de cierre, el plan no tiene fila, tiene registro `poda-plan-<slug>` y `plans/plan-<slug>.md` dice
+  `status: completed|abandoned|superseded`, el evento es noop con `WARN`. No va a cuarentena: un
+  replay no es un error. El frontmatter es la salida manual: para reabrir a proposito, poner
+  `status: active` en el frontmatter y reemitir el `plan.upsert`. Lee CRLF, comillas y mayusculas
+  (`status: "Completed"`). Cerrado -> cerrado sin fila se inserta como antes. Sin registro, sin
+  archivo regular, sin frontmatter, sin `status:` o con un status que no es de cierre, se inserta
+  como antes.
+- Por que hacen falta las dos condiciones: el frontmatter dice el estado de HOY, no el del momento
+  del evento. Un plan creado y cerrado en el mismo lote de pending/ ya tiene el archivo en
+  `completed` cuando el compactador llega a su primer upsert. Con solo el frontmatter, ese primer
+  registro se tomaba por replay y se perdian su fecha de creacion y su `(fase de plan-X)` (lo
+  encontro el adversario de la primera ronda). Sin registro de poda, "no hay fila" es el primer
+  registro.
+- La cuarentena `no-fila` de `plan.reopen` ya no manda solo a `plan.upsert --status active`: pide
+  antes poner `status: active` en el frontmatter. `/checkpoint-3t` Step 5 dice lo mismo.
+- `test-plan-reopen.sh` casos 17 y 18 (17 asertos; la suite pasa de 45 a 62). Contra 2.60.1
+  (`0be3486`) fallan 8: siete del guardian y el del registro (uno de los siete, `cerrado -> cerrado`,
+  cae en cascada: la fila reinsertada como active se cierra con la fecha vieja y la poda la vuelve
+  a quitar). Contra la primera version de este arreglo, que solo miraba el frontmatter, fallan 4:
+  el registro y los tres del caso 18.
+- `mutation-check.sh`: 5 casos nuevos (`m_plan_poda.py`). Quitar el guardian tumba 7 asertos; no
+  anotar la poda, 8; no exigir el registro, los 3 del caso 18; leer el status sin quitar comillas,
+  el de CRLF; frenar solo `completed`, el de `abandoned` y el de `cerrado -> cerrado`.
+
+### Known
+- Un plan podado antes de esta version no tiene registro: su fila sigue sin proteccion, como antes.
+- Un plan `--inline` (sin archivo ni slug en la fila) no se anota al podarse y sigue sin
+  proteccion, como antes.
+- Si la anotacion de la poda no se puede escribir, el evento que podaba (el upsert de OTRO plan) va
+  a cuarentena `no-registro` y el indice no cambia. Es lo que ya hacia `promote-<slug>`: sin
+  registro no se poda.
+- Un frontmatter con un status fuera de `completed|abandoned|superseded` (`cerrado-por-medicion`,
+  `implementado — ...`) no protege: cuenta solo la primera palabra, igual que la poda y el guardian
+  de la fila. Tampoco un plan cerrado en el indice cuyo archivo nadie paso a cerrado.
+- Un registro `poda-plan-<slug>` no caduca. Si un plan NUEVO reutiliza el slug de uno podado y se crea
+  y se cierra en el mismo lote de pending/ (el archivo ya dice cerrado), su primer upsert se toma
+  por replay y se pierden su fecha de creacion y su `(fase de plan-X)`: la misma perdida de la
+  ronda 1, que aqui pide las dos condiciones a la vez (lo encontro el adversario de la ronda 2).
+- La cuarentena `titulo-ambiguo` se evalua antes que este guardian: un replay viejo sobre un indice
+  con una fila del mismo titulo sin wikilink va a cuarentena en vez de a noop. Igual que antes.
+
 ## [2.62.1] - 2026-10-15
 Origen: p-92aa5de144. Desde 2.59.0 la revision del cierre de `/checkpoint-3t` va a un archivo y lo
 que ve el humano es una linea, pero fuera de un repo git el aviso entero (~2.000-2.800 caracteres)
