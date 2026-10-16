@@ -89,9 +89,14 @@ M = {
         ('        if isinstance(o, dict) and o.get("kind") == "peer" and not o.get("handback") \\',
          '        if isinstance(o, dict) and o.get("kind") == "peer" and True \\'),
         ('                and "senderTaskId" not in o:', "                and True:")],
+    "peer-team-cuenta": [
+        ('                and "senderTaskId" not in o:', "                and True:")],
     "peer-error-cuenta": [
         ('    if not a_quien or pos is None or b.get("id") not in envio_ok or not isinstance(inp.get("message"), str):',
          '    if not a_quien or pos is None or not isinstance(inp.get("message"), str):')],
+    "peer-fallo-sin-is-error": [
+        ('        return json.loads(_texto_resultado(bloque).strip()).get("success") is True',
+         "        return True")],
     "ninguno-ignora-descartado": [
         ("        if veredicto_adv == \"break\" and not vivos and not descartados_bugs:",
          "        if veredicto_adv == \"break\" and not vivos:")],

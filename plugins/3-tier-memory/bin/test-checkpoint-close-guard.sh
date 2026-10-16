@@ -1166,12 +1166,22 @@ if preg.startswith("peer"):
     msg = "1) revisar algo\n2) otra cosa" if preg == "peer-dos" else "Candidato: revisar algo. Recomiendo descartar."
     TAREA = "a1b2c3d4e5f607182"
     a([{"type": "tool_use", "id": "m1", "name": "SendMessage",
-        "input": {"to": TAREA if preg == "peer-sub" else SOCK, "summary": "Uno", "message": msg}}])
+        "input": {"to": TAREA if preg in ("peer-sub", "peer-team") else SOCK, "summary": "Uno", "message": msg}}])
     if preg == "peer-error":
+        # La forma real de un envio que no llego: SIN is_error, `success:false` en el texto (31 casos
+        # medidos en transcripts locales, 2026-10-15). `is_error` solo lo trae un rechazo de permisos.
+        u([{"type": "tool_result", "tool_use_id": "m1", "content": [{"type": "text",
+            "text": '{"success":false,"message":"Failed to send to uds:/tmp/cc-socks/9.sock: ENOENT"}'}]}])
+    elif preg == "peer-negado":
         u([{"type": "tool_result", "tool_use_id": "m1", "is_error": True,
-            "content": "<tool_use_error>No agent named x</tool_use_error>"}])
+            "content": "Permission for this action was denied by the Claude Code auto mode classifier."}])
     else:
         u([{"type": "tool_result", "tool_use_id": "m1", "content": '{"success":true}'}])
+    if preg == "peer-team":
+        # `senderTaskId` sin `handback` (forma real de un teammate): tampoco es el usuario.
+        R.append({"type": "user", "isMeta": True,
+                  "origin": {"kind": "peer", "from": TAREA, "name": TAREA, "senderTaskId": TAREA},
+                  "message": {"role": "user", "content": "Another Claude session sent a message:\n..."}})
     if preg == "peer-sub":
         # El informe final de un subagente: `kind` peer, `from` = id de la tarea, con `handback`
         # y `senderTaskId` (forma real, transcript d69ad375).
@@ -1179,7 +1189,7 @@ if preg.startswith("peer"):
                   "origin": {"kind": "peer", "from": TAREA, "name": TAREA, "senderTaskId": TAREA,
                              "handback": True, "handbackReportText": "decision: 1 descartado"},
                   "message": {"role": "user", "content": "Another Claude session sent a message:\n[Subagent hand-back] ..."}})
-    if preg in ("peer", "peer-dos", "peer-uno", "peer-error"):
+    if preg in ("peer", "peer-dos", "peer-uno", "peer-error", "peer-negado"):
         peer(SOCK)
     elif preg == "peer-cola":
         peer(SOCK, cola=True)
@@ -1249,6 +1259,10 @@ txc "$T/tc.jsonl" peer-antes
 chk "un mensaje del supervisor ANTERIOR al envio no es su respuesta: lo reclama" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
 txc "$T/tc.jsonl" peer-error
 chk "un SendMessage que fallo no cuenta aunque luego llegue un mensaje del supervisor: lo reclama" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-negado
+chk "un SendMessage negado por permisos (is_error) no cuenta: lo reclama" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-team
+chk "la respuesta de un teammate (senderTaskId sin handback) no cuenta: lo reclama" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
 txc "$T/tc.jsonl" peer-sub
 chk "sin supervisor (SendMessage a un subagente y su informe final): sigue exigiendo la pregunta" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
 cp "$FC" "$FC.bak"

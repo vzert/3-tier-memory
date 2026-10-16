@@ -234,8 +234,23 @@ def _origen_peer(r):
 
 
 pos_envio = {}         # tool_use_id de cada SendMessage -> su posicion en el transcript
-envio_ok = set()       # SendMessage cuyo tool_result volvio sin error (el envio salio)
+envio_ok = set()       # SendMessage cuyo tool_result dice `"success": true` (el envio salio)
 respuestas_peer = []   # (posicion, from, name) de cada mensaje que llego de otra sesion
+
+
+def _envio_salio(bloque):
+    # Un envio que no llega (socket ENOENT/ECONNREFUSED, "No agent named …") vuelve SIN `is_error`,
+    # con `{"success":false,…}` en el texto; `is_error` solo lo trae un rechazo de permisos o una
+    # llamada mal formada (adversario de 2.61.1: 31 y 6 casos reales). Se exige el `true`: un
+    # resultado que no se puede leer no prueba que el mensaje saliera.
+    if bloque.get("is_error"):
+        return False
+    try:
+        return json.loads(_texto_resultado(bloque).strip()).get("success") is True
+    except Exception:
+        return False
+
+
 for _i, r in enumerate(recs):
     _o = _origen_peer(r)
     if _o:
@@ -246,7 +261,7 @@ for _i, r in enumerate(recs):
         if r.get("type") == "assistant" and b.get("type") == "tool_use" and b.get("name") == "SendMessage":
             pos_envio.setdefault(b.get("id"), _i)
         elif r.get("type") == "user" and b.get("type") == "tool_result" \
-                and b.get("tool_use_id") in pos_envio and not b.get("is_error"):
+                and b.get("tool_use_id") in pos_envio and _envio_salio(b):
             envio_ok.add(b.get("tool_use_id"))
 envios_respondidos = set()  # SendMessage con respuesta posterior de su destinatario
 

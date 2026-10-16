@@ -13,12 +13,13 @@ aunque el usuario habia decidido los candidatos (sesion d69ad375, 2026-10-15).
   "peer"` y su `from` igual al `to` del envio (un `user` isMeta con la sesion ocupada, o un
   `attachment` queued_command con la sesion ociosa). El encabezado es el `summary` del mensaje, y un
   mensaje con candidatos numerados (`1)`, `2.`) cuenta una pregunta por numero. No cuenta sin
-  respuesta, con respuesta de otra sesion, con un mensaje anterior al envio, con el envio fallido, ni
-  a un subagente: su informe final tambien llega con `kind` peer y `from` = id de la tarea, pero trae
-  `handback`/`senderTaskId` y se descarta (adversario: 27 casos reales de ese par). Sin supervisor el
-  cierre sigue exigiendo la pregunta. Medido sobre el transcript real d69ad375, con
-  una COPIA de la memoria cuya ficha cita `pregunta: <summary>` en cada candidato: el hook de 2.60.2
-  bloquea por `candidatos_pregunta` y este pasa 7 preguntas y el audit da HECHO. La ficha real de esa
+  respuesta, con respuesta de otra sesion ni con un mensaje anterior al envio. Tampoco si el envio no
+  salio: el resultado del SendMessage tiene que decir `"success": true` (un envio que no llega vuelve
+  sin `is_error`, con `success:false` en el texto). Ni a un subagente o teammate: su informe final
+  tambien llega con `kind` peer y `from` = id de la tarea, pero trae `handback` o `senderTaskId` y se
+  descarta (adversario: 27 casos reales de ese par). Sin supervisor el cierre sigue exigiendo la pregunta. Medido sobre el transcript real d69ad375, con
+  una COPIA de la memoria cuya ficha cita `pregunta: <summary>` en cada candidato: el hook anterior
+  (2.60.2) bloquea por `candidatos_pregunta` y este pasa 7 preguntas y el audit da HECHO. La ficha real de esa
   sesion no lleva `pregunta:` (se escribio antes de esta version) y con ella el cierre sigue
   bloqueando: el arreglo vale para los cierres que siguen Step 3b tal como queda aqui.
 - Step 3b de `/checkpoint-3t` explica la forma supervisada; el `corrige` de
