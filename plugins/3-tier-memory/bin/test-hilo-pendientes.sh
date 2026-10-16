@@ -334,7 +334,10 @@ cp "$FX/_pendientes.md" "$M/"; cp "$FX/sessions/$FS.md" "$M/sessions/"
 chk "fixture: el hilo antes del snippet esta vacio" "" "$(python3 "$BIN/pendientes_afines.py" "$M/sessions/$FS.md" --hilo --hoy 2026-10-15)"
 chk "fixture: la semilla (p-f000000001) si esta en el grafo" "1" "$(grep -c '_id: p-f000000001_' "$M/_pendientes.md")"
 # El snippet que escribio el agente: con su propio paso (la sombrilla) como semilla, no arrastra
-# extras de otro tema.
+# extras de otro tema: las 3 Bajas a 2+ saltos (p-f00000000e, p-f000000012, p-f000000014) no salen ni
+# de extra ni en quedan. print-como-retomar.py usa la fecha real: un vecino directo del paso con
+# `_revisar` ya vencido SI puede salir (es del hilo), asi que se mira por id, no por la linea entera
+# (en CI del 2026-10-16 la linea de extras aparecio con ese vecino y la prueba por linea fallo).
 python3 - "$M/sessions/$FS.md" <<'PY'
 import sys
 p = sys.argv[1]
@@ -342,8 +345,8 @@ t = open(p, encoding="utf-8").read().replace("<filled in Step 8>", "```\nRetomam
 open(p, "w", encoding="utf-8").write(t)
 PY
 OUT=$(python3 "$BIN/print-como-retomar.py" "$M/sessions/$FS.md")
-chk "fixture: sin linea de extras" "0" "$(printf '%s\n' "$OUT" | grep -c '^Si ese paso es corto')"
-chk "fixture: sin linea quedan" "0" "$(printf '%s\n' "$OUT" | grep -c '^quedan')"
+chk "fixture: las Bajas de otro tema no van de extra" "0" "$(printf '%s\n' "$OUT" | grep '^Si ese paso es corto' | grep -c 'p-f00000000e\|p-f000000012\|p-f000000014')"
+chk "fixture: ni en quedan" "0" "$(printf '%s\n' "$OUT" | grep '^quedan' | grep -c 'p-f00000000e\|p-f000000012\|p-f000000014')"
 # Con `Proximo paso: ninguno — …` el audit ya no exige la sombrilla ajena.
 python3 - "$M/sessions/$FS.md" <<'PY'
 import re, sys
