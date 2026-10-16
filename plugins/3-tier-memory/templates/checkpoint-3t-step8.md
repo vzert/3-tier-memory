@@ -157,8 +157,13 @@ Reglas para llenar los slots:
   2. **El primero del hilo** (2.57.0, p-b282a8cfc4, regla de Victor del 2026-10-13). Correlo:
      `python3 "$JBIN/pendientes_afines.py" "$SESSION_FILE" --hilo` (desde 2.61.0 marca
      `[no va de extra: <motivo>]` lo que no saldra en la linea de extras; ver abajo). El hilo es lo que la sesion
-     recibio en su snippet (sello de 5c-bis), lo que nacio en ella y lo que esta ligado a eso por
-     `_relacionado`, en cualquier direccion y a cualquier distancia; solo lo que se puede hacer hoy.
+     recibio en su snippet (sello de 5c-bis), lo que nacio en ella y sus vecinos DIRECTOS por
+     `_relacionado`, en cualquier direccion: un solo salto, y solo por ids abiertos (2.62.0, regla
+     de Victor del 2026-10-15; reemplaza el "a cualquier distancia" de 2.57.0, que en un
+     proyecto real llevo en 7 saltos a una sesion de indices al trabajo que llevaba otro
+     agente). Solo lo que se puede hacer hoy. **Si el hilo sale vacio, el paso es el caso 5**
+     (`ninguno — <motivo>, ver Recordatorios de calendario`): no lo llenes con trabajo de otro hilo
+     o de otro agente, aunque sea Alta y este a la vista.
      Orden: prioridad; en empate el nuevo antes que el heredado, salvo un heredado que lleva 2
      sesiones seguidas sin ser el paso, que va primero. El paso recibido que no cerraste sigue ahi.
      `checkpoint-audit.py` (`snippet.hilo`) marca `SALTADO` un paso cuyo primer id sea de menor rango.
