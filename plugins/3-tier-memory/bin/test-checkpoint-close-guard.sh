@@ -717,16 +717,26 @@ chk "el reason visible senala el archivo en .git" "1" "$(razon_corta "$O" | grep
 chk "el archivo existe en .git del repo" "1" "$([ -f "$R/.git/3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
 chk "el archivo trae la revision y el cierre al final" "2" "$(razon "$O" | grep -cE '^REVISION DEL CIERRE:$|termina tu respuesta con el cierre')"
 # C1': el archivo trae, byte a byte, lo que el reason traia antes (el respaldo: git falla por algo
-# que no es "fuera de un repo" y el aviso va entero en el reason).
-FG="$T/git-falso"; mkdir -p "$FG"
-printf '#!/bin/sh\necho "fatal: detected dubious ownership in repository" >&2\nexit 128\n' > "$FG/git"; chmod +x "$FG/git"
-SIN=$(PATH="$FG:$PATH" corre_en "$T/t.jsonl" false - "$R")
+# que no es "fuera de un repo" y el aviso va entero en el reason). Con git real y un GIT_DIR que no
+# existe (`not a git repository: '<ruta>'`), que se comporta igual en las tres plataformas.
+SIN=$(GIT_DIR="$T/no-existe" corre_en "$T/t.jsonl" false - "$R")
 chk "el archivo es igual al aviso de antes (respaldo: va entero en el reason)" "1" "$(python3 -c '
 import json,sys
 a=json.loads(sys.argv[1])["reason"]; b=json.loads(sys.argv[2])["reason"]
 print(int(a==b))' "$O" "$SIN")"
-chk "git falla por otra cosa (safe.directory): el aviso entero sigue en el reason" "9" "$(razon_corta "$SIN" | grep -cE '^[1-9]\. ')"
-chk "git falla por otra cosa: no deja archivo en la carpeta" "0" "$(ls -A "$R" | grep -c 3t-revision)"
+chk "GIT_DIR roto: el aviso entero sigue en el reason" "9" "$(razon_corta "$SIN" | grep -cE '^[1-9]\. ')"
+chk "GIT_DIR roto: no deja archivo en la carpeta" "0" "$(ls -A "$R" | grep -c 3t-revision)"
+# `safe.directory` con un `git` falso que lo imita. Solo donde Python puede lanzarlo: en Windows
+# CreateProcess no ejecuta un script sin .exe y el hook encontraria el git real (CI 38845045684).
+FG="$T/git-falso"; mkdir -p "$FG"
+printf '#!/bin/sh\necho "fatal: detected dubious ownership in repository" >&2\nexit 128\n' > "$FG/git"; chmod +x "$FG/git"
+if PATH="$FG:$PATH" python3 -c 'import subprocess,sys;r=subprocess.run(["git","rev-parse"],capture_output=True,text=True);sys.exit("dubious" not in r.stderr)' 2>/dev/null; then
+  O3=$(PATH="$FG:$PATH" corre_en "$T/t.jsonl" false - "$R")
+  chk "git falla por otra cosa (safe.directory): el aviso entero sigue en el reason" "9" "$(razon_corta "$O3" | grep -cE '^[1-9]\. ')"
+  chk "git falla por otra cosa: no deja archivo en la carpeta" "0" "$(ls -A "$R" | grep -c 3t-revision)"
+else
+  echo "  (sin git falso ejecutable en esta plataforma: el caso safe.directory no corre)"
+fi
 # Un worktree cuyo gitdir ya no existe SI es un repo (`not a git repository: <ruta>`): respaldo, sin
 # dejar un archivo que no se puede excluir (adversario Sonnet 5.5 de 2.60.3).
 WR="$T/wt-roto"; mkdir -p "$WR"; echo "gitdir: $T/no-existe" > "$WR/.git"

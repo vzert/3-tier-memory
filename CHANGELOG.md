@@ -17,10 +17,11 @@ seguia saliendo en la terminal: `ruta_aviso()` no tenia donde dejar el archivo y
   --permission-mode default` en una carpeta sin git: Read lee el archivo, con la ruta absoluta y la
   relativa, sin pedir permiso (`permission_denials` vacio).
 - `test-checkpoint-close-guard.sh`: `corre` abre la sesion en una carpeta fuera de git del temporal
-  del test, no en `/tmp` (ahi dejaria el archivo). 14 asertos nuevos y 3 cambiados (7 rojos contra
+  del test, no en `/tmp` (ahi dejaria el archivo). 16 asertos nuevos y 3 cambiados (7 rojos contra
   2.60.2): fuera de git una linea y el archivo igual al aviso del repo, limpieza reentrante, sin git
-  instalado, `git init` antes de contestar, y el respaldo medido con un `git` falso que falla con
-  `dubious ownership` y con un worktree de gitdir roto. 203 → 217.
+  instalado, `git init` antes de contestar, y el respaldo medido con un `GIT_DIR` roto, un worktree
+  de gitdir roto y, donde Python puede lanzarlo (no en Windows), un `git` falso que falla con
+  `dubious ownership`. 203 → 219.
 
 ### Known
 - Fuera de git, un `git init` + `git add -A` hecho mientras la revision sigue sin contestar mete el
