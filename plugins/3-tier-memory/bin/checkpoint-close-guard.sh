@@ -227,7 +227,7 @@ def _origen_peer(r):
     for o in (r.get("origin"), (r.get("attachment") or {}).get("origin")):
         # El informe final de un subagente tambien llega con `kind == "peer"` y su `from` es el id
         # de la tarea, pero trae `handback`/`senderTaskId`: no es el usuario contestando (adversario
-        # de 2.61.1: 27 casos reales de SendMessage a un subagente seguido de su informe).
+        # de 2.62.3: 27 casos reales de SendMessage a un subagente seguido de su informe).
         if isinstance(o, dict) and o.get("kind") == "peer" and not o.get("handback") \
                 and "senderTaskId" not in o:
             return o
@@ -242,7 +242,7 @@ respuestas_peer = []   # (posicion, from, name) de cada mensaje que llego de otr
 def _envio_salio(bloque):
     # Un envio que no llega (socket ENOENT/ECONNREFUSED, "No agent named …") vuelve SIN `is_error`,
     # con `{"success":false,…}` en el texto; `is_error` solo lo trae un rechazo de permisos o una
-    # llamada mal formada (adversario de 2.61.1: 31 y 6 casos reales). Se exige el `true`: un
+    # llamada mal formada (adversario de 2.62.3: 31 y 6 casos reales). Se exige el `true`: un
     # resultado que no se puede leer no prueba que el mensaje saliera.
     if bloque.get("is_error"):
         return False
@@ -272,7 +272,7 @@ def _supervisor_lookout(sid):
     supervisa (`$LOOKOUT_STATE_DIR` o ~/.local/state/lookout, `sessions/<session_id>.json`, claves
     `address` y `supervisor`). Solo lectura. Sin marca, o una que no se entiende, devuelve vacio y no
     cuenta ningun SendMessage: cualquier otra sesion par no es quien pasa la decision del usuario
-    (adversario externo de 2.61.1). Depende del formato de lookout: si cambia, el fallo es exigir la
+    (adversario externo de 2.62.3). Depende del formato de lookout: si cambia, el fallo es exigir la
     pregunta de mas, que se ve, no dejarla pasar."""
     if not sid or "/" in sid or "\\" in sid or sid.startswith("."):
         return "", ""
@@ -303,7 +303,7 @@ SUP_DIR, SUP_NOMBRE = _supervisor_lookout(SID)
 SUPERVISOR = {v for v in (SUP_DIR, SUP_NOMBRE) if v}
 RESPONDE = {SUP_DIR} if SUP_DIR else SUPERVISOR
 # `nombre [ref]` es una direccion valida de SendMessage (desambigua dos sesiones con el mismo nombre)
-# y la respuesta vuelve con el nombre solo: se compara sin el ` [ref]` (adversario de 2.61.1).
+# y la respuesta vuelve con el nombre solo: se compara sin el ` [ref]` (adversario de 2.62.3).
 REF_FINAL = re.compile(r"\s+\[[^\]\s]+\]\s*$")
 
 

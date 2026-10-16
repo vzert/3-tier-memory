@@ -6,7 +6,7 @@ import io, sys
 # AskUserQuestion (sin pasarlo, contando uno sin resultado, o midiendo un turno sin /checkpoint-3t).
 # 2.54.0 (Hacerlo ahora): `hecho` exige `_verificado:`, pide pregunta como toda decision, y es decision.
 # 2.54.1 (re-checkpoint): las preguntas de un checkpoint anterior cuentan; las de otro turno, no.
-# 2.61.1 (p-1d0f012aa9): un SendMessage cuenta solo con respuesta posterior de su destinatario.
+# 2.62.3 (p-1d0f012aa9): un SendMessage cuenta solo con respuesta posterior de su destinatario.
 #
 # Uso: m_candidatos.py <fichero> <mutacion>
 # Patrones de una sola linea, sin "\n": el checkout de Windows trae CRLF (regla 322).
@@ -71,7 +71,7 @@ M = {
          '                if m.group(1).lower() in ("guardado", "descartado"):')],
     "hecho-no-es-decision": [
         ("(guardado|descartado|sin confirmar|hecho)\\b", "(guardado|descartado|sin confirmar)\\b")],
-    # p-1d0f012aa9 (2.61.1): sesion supervisada, la pregunta va por SendMessage al supervisor.
+    # p-1d0f012aa9 (2.62.3): sesion supervisada, la pregunta va por SendMessage al supervisor.
     "peer-no-cuenta": [
         ('        elif nombre == "SendMessage" and b.get("id") not in n_preg:', "        elif False:")],
     "peer-sin-respuesta-cuenta": [
@@ -97,7 +97,7 @@ M = {
     "peer-fallo-sin-is-error": [
         ('        return json.loads(_texto_resultado(bloque).strip()).get("success") is True',
          "        return True")],
-    # Ronda 3 de 2.61.1: solo cuenta el supervisor que nombra la marca de lookout.
+    # Ronda 3 de 2.62.3: solo cuenta el supervisor que nombra la marca de lookout.
     "peer-cualquier-destino": [
         ("    if a_quien not in SUPERVISOR or pos is None or b.get(\"id\") not in envio_ok \\",
          "    if pos is None or b.get(\"id\") not in envio_ok \\")],
