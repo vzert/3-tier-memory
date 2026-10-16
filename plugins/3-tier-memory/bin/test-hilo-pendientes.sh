@@ -175,7 +175,9 @@ hilo_base() {
   pend Alta p-9999999999 "suelto" 2026-09-01-vieja
   pend Media p-2222222222 "hermano" 2026-09-01-vieja " — _relacionado: p-1111111111_"
   pend Media p-3333333333 "nieto" 2026-09-01-vieja " — _relacionado: p-2222222222_"
-  pend Media p-6666666666 "con fecha" 2026-10-14-hoy " — _revisar: 2026-10-20_"
+  # `_revisar` lejano: retomar() usa la fecha real, y con 2026-10-20 este pendiente dejaba de ser
+  # futuro el 21-oct y tres asertos de las secciones 2 y 5 caian en main (2.62.x).
+  pend Media p-6666666666 "con fecha" 2026-10-14-hoy " — _revisar: 9999-12-31_"
   pend Baja p-4444444444 "la baja de hoy" 2026-10-14-hoy
 }
 
@@ -335,9 +337,9 @@ chk "fixture: el hilo antes del snippet esta vacio" "" "$(python3 "$BIN/pendient
 chk "fixture: la semilla (p-f000000001) si esta en el grafo" "1" "$(grep -c '_id: p-f000000001_' "$M/_pendientes.md")"
 # El snippet que escribio el agente: con su propio paso (la sombrilla) como semilla, no arrastra
 # extras de otro tema: las 3 Bajas a 2+ saltos (p-f00000000e, p-f000000012, p-f000000014) no salen ni
-# de extra ni en quedan. print-como-retomar.py usa la fecha real: un vecino directo del paso con
-# `_revisar` ya vencido SI puede salir (es del hilo), asi que se mira por id, no por la linea entera
-# (en CI del 2026-10-16 la linea de extras aparecio con ese vecino y la prueba por linea fallo).
+# de extra ni en quedan. print-como-retomar.py usa la fecha real, asi que los `_revisar` del fixture
+# van en 9999-12-31 y la comprobacion es por id: con la fecha del caso real (2026-10-15) un vecino directo
+# del paso salio de extra en CI del 2026-10-16 (es del hilo) y la prueba por linea entera fallo.
 python3 - "$M/sessions/$FS.md" <<'PY'
 import sys
 p = sys.argv[1]
