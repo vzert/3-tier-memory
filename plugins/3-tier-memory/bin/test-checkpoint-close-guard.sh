@@ -118,10 +118,13 @@ with open(out, "w", encoding="utf-8") as fh:
 PY
 }
 
+# `corre` abre la sesion en una carpeta fuera de git ($SG); desde p-92aa5de144 el aviso va ahi como
+# `.3t-revision-cierre-<id>.md`, igual que en una subcarpeta de un repo.
+SG="$T/sin-git"; mkdir -p "$SG"
 corre() {   # $1 transcript, $2 reentrante (true|false), $3 last_assistant_message (fichero o "-")
   local LAM=""; [ "$3" != "-" ] && [ -n "$3" ] && LAM="$(cat "$3")"
-  python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":sys.argv[2]=="true","last_assistant_message":sys.argv[3],"cwd":"/tmp"}))' "$1" "$2" "$LAM" \
-    | bash "$HOOK" 2>/dev/null | expande
+  python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":sys.argv[2]=="true","last_assistant_message":sys.argv[3],"cwd":sys.argv[4]}))' "$1" "$2" "$LAM" "$SG" \
+    | bash "$HOOK" 2>/dev/null | RAIZ_EXP="$SG" expande
 }
 # Desde 2.59.0 el `reason` del bloqueo solo senala el archivo con el aviso completo. `expande` pone
 # el contenido de ese archivo en `reason` y guarda el puntero en `puntero`: cada aserto de este test
@@ -713,13 +716,70 @@ chk "el reason visible no trae la lista" "0" "$(razon_corta "$O" | grep -c 'No c
 chk "el reason visible senala el archivo en .git" "1" "$(razon_corta "$O" | grep -cE 'Lee con Read `[^`]*[\\/]\.git[\\/]3t-revision-cierre-sin-sesion\.md`')"
 chk "el archivo existe en .git del repo" "1" "$([ -f "$R/.git/3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
 chk "el archivo trae la revision y el cierre al final" "2" "$(razon "$O" | grep -cE '^REVISION DEL CIERRE:$|termina tu respuesta con el cierre')"
-# C1': el archivo trae, byte a byte, lo que el reason traia antes (el mismo turno fuera de git).
-SIN=$(corre "$T/t.jsonl" false -)
-chk "el archivo es igual al aviso de antes (fuera de git va entero en el reason)" "1" "$(python3 -c '
+# C1': el archivo trae, byte a byte, lo que el reason traia antes (el respaldo: git falla por algo
+# que no es "fuera de un repo" y el aviso va entero en el reason). Con git real y un GIT_DIR que no
+# existe (`not a git repository: '<ruta>'`), que se comporta igual en las tres plataformas.
+SIN=$(GIT_DIR="$T/no-existe" corre_en "$T/t.jsonl" false - "$R")
+chk "el archivo es igual al aviso de antes (respaldo: va entero en el reason)" "1" "$(python3 -c '
 import json,sys
 a=json.loads(sys.argv[1])["reason"]; b=json.loads(sys.argv[2])["reason"]
 print(int(a==b))' "$O" "$SIN")"
-chk "fuera de git el aviso entero sigue en el reason" "9" "$(razon_corta "$SIN" | grep -cE '^[1-9]\. ')"
+chk "GIT_DIR roto: el aviso entero sigue en el reason" "9" "$(razon_corta "$SIN" | grep -cE '^[1-9]\. ')"
+chk "GIT_DIR roto: no deja archivo en la carpeta" "0" "$(ls -A "$R" | grep -c 3t-revision)"
+# `safe.directory` con un `git` falso que lo imita. Solo donde Python puede lanzarlo: en Windows
+# CreateProcess no ejecuta un script sin .exe y el hook encontraria el git real (CI 38845045684).
+FG="$T/git-falso"; mkdir -p "$FG"
+printf '#!/bin/sh\necho "fatal: detected dubious ownership in repository" >&2\nexit 128\n' > "$FG/git"; chmod +x "$FG/git"
+if PATH="$FG:$PATH" python3 -c 'import subprocess,sys;r=subprocess.run(["git","rev-parse"],capture_output=True,text=True);sys.exit("dubious" not in r.stderr)' 2>/dev/null; then
+  O3=$(PATH="$FG:$PATH" corre_en "$T/t.jsonl" false - "$R")
+  chk "git falla por otra cosa (safe.directory): el aviso entero sigue en el reason" "9" "$(razon_corta "$O3" | grep -cE '^[1-9]\. ')"
+  chk "git falla por otra cosa: no deja archivo en la carpeta" "0" "$(ls -A "$R" | grep -c 3t-revision)"
+else
+  echo "  (sin git falso ejecutable en esta plataforma: el caso safe.directory no corre)"
+fi
+# Un worktree cuyo gitdir ya no existe SI es un repo (`not a git repository: <ruta>`): respaldo, sin
+# dejar un archivo que no se puede excluir (adversario Sonnet 5.5 de 2.60.3).
+WR="$T/wt-roto"; mkdir -p "$WR"; echo "gitdir: $T/no-existe" > "$WR/.git"
+O=$(corre_en "$T/t.jsonl" false - "$WR")
+chk "worktree con gitdir roto: el aviso entero sigue en el reason" "9" "$(razon_corta "$O" | grep -cE '^[1-9]\. ')"
+chk "worktree con gitdir roto: no deja archivo" "0" "$(ls -A "$WR" | grep -c 3t-revision)"
+echo "== p-92aa5de144: fuera de git, lo que ve el humano es una linea; el aviso va en el cwd =="
+rm -f "$SG/.3t-revision-cierre-sin-sesion.md"
+O=$(corre "$T/t.jsonl" false -)
+chk "bloquea" "1" "$(bloquea "$O")"
+chk "el reason visible mide 300 caracteres o menos" "1" "$(razon_corta "$O" | python3 -c 'import sys;print(int(len(sys.stdin.read().strip())<=300))')"
+chk "el reason visible no trae la lista" "0" "$(razon_corta "$O" | grep -c 'No cuenta como falta')"
+chk "el reason senala el archivo del cwd" "1" "$(razon_corta "$O" | grep -cE 'Lee con Read `[^`]*sin-git[\\/]\.3t-revision-cierre-sin-sesion\.md`')"
+chk "el archivo es igual al aviso del repo" "1" "$(python3 -c '
+import json,sys
+print(int(json.loads(sys.argv[1])["reason"]==open(sys.argv[2],encoding="utf-8").read()))' "$SIN" "$SG/.3t-revision-cierre-sin-sesion.md")"
+corre "$T/t.jsonl" true - >/dev/null
+chk "reentrante sin contestar: se queda" "1" "$([ -f "$SG/.3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
+printf '%s\n' "$REV_OK" > "$T/rev-sg.txt"; corre "$T/t.jsonl" true "$T/rev-sg.txt" >/dev/null
+chk "reentrante contestada: borrado" "0" "$([ -f "$SG/.3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
+# Aviso escrito fuera de git y `git init` antes de contestar: la limpieza borra tambien el del cwd
+# (adversario externo de 2.60.3: `ruta_aviso()` ya apuntaba a .git/ y el del cwd se quedaba).
+GI="$T/git-init-despues"; mkdir -p "$GI"
+O=$(corre_en "$T/t.jsonl" false - "$GI")
+chk "git init despues: el aviso esta en el cwd" "1" "$([ -f "$GI/.3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
+git -C "$GI" init -q
+corre_en "$T/t.jsonl" true "$T/rev-sg.txt" "$GI" >/dev/null
+chk "git init despues: contestada, el del cwd se borra" "0" "$([ -f "$GI/.3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
+chk "git init despues: git add -A no lo ve" "0" "$(git -C "$GI" add -A && git -C "$GI" status --porcelain | grep -c 3t-revision)"
+# Sin git instalado: un PATH con lo que el hook usa, menos git.
+SB="$T/sin-bin"; mkdir -p "$SB"
+for c in bash sh python3 cat dirname basename pwd cd env sed tr head tail grep; do
+  w=$(command -v "$c" 2>/dev/null) && [ "${w#/}" != "$w" ] && ln -sf "$w" "$SB/$c"
+done
+# Solo si ese python arranca Y no ve git: en Windows la copia de python3 en $SB no arranca (127) y,
+# con `set -e`, el caso mataba el test (CI 38847564992).
+if [ -x "$SB/python3" ] && env PATH="$SB" python3 -c 'import shutil,sys;sys.exit(0 if shutil.which("git") is None else 1)' 2>/dev/null; then
+  O=$(PATH="$SB" corre "$T/t.jsonl" false -)
+  chk "sin git instalado: reason de una linea que senala el archivo" "1" "$(razon_corta "$O" | grep -c 'Lee con Read `[^`]*\.3t-revision-cierre-sin-sesion\.md`')"
+  rm -f "$SG/.3t-revision-cierre-sin-sesion.md"
+else
+  echo "  (sin un python que arranque sin git en el PATH: el caso sin git instalado no corre)"
+fi
 echo "== 2.59.0: el Stop reentrante borra el archivo solo con la revision contestada =="
 corre_en "$T/t.jsonl" true - "$R" >/dev/null
 chk "sin contestar: se queda" "1" "$([ -f "$R/.git/3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
@@ -1149,7 +1209,71 @@ u("guarda el checkpoint")
 if preg != "reimprime":
     a([{"type": "tool_use", "id": "t1", "name": "Skill", "input": {"skill": "checkpoint-3t"}}])
     u([{"type": "tool_result", "tool_use_id": "t1", "content": "Launching skill: checkpoint-3t"}])
-if preg not in ("sin", "reimprime"):
+SOCK = "uds:/tmp/cc-socks/9.sock"
+OTRA = "uds:/tmp/cc-socks/77.sock"
+def peer(de, cola=False, nombre="supervisor-x"):
+    # Las dos formas reales (transcript d69ad375, 2026-10-15): `user` isMeta con la sesion ocupada,
+    # `attachment` queued_command con la sesion ociosa. El `origin` lo escribe el harness.
+    o = {"kind": "peer", "from": de, "name": nombre}
+    txt = f'<cross-session-message from="{de}">decision: 1 descartado</cross-session-message>'
+    if cola:
+        R.append({"type": "attachment", "attachment": {"type": "queued_command", "prompt": txt, "origin": o}})
+    else:
+        R.append({"type": "user", "isMeta": True, "origin": o,
+                  "message": {"role": "user", "content": "Another Claude session sent a message:\n" + txt}})
+if preg.startswith("peer"):
+    if preg == "peer-antes":
+        peer(SOCK)
+    msg = "1) revisar algo\n2) otra cosa" if preg == "peer-dos" else "Candidato: revisar algo. Recomiendo descartar."
+    TAREA = "a1b2c3d4e5f607182"
+    a([{"type": "tool_use", "id": "m1", "name": "SendMessage",
+        "input": {"to": {"peer-sub": TAREA, "peer-team": TAREA, "peer-ref": "supervisor-x [abc123]",
+                         "peer-nombre": "supervisor-x", "peer-par": OTRA, "peer-ajeno": OTRA,
+                         "peer-team-nombre": "supervisor-x", "peer-sub-nombre": "supervisor-x"}.get(preg, SOCK),
+                  "summary": "Uno", "message": msg}}])
+    if preg == "peer-error":
+        # La forma real de un envio que no llego: SIN is_error, `success:false` en el texto (31 casos
+        # medidos en transcripts locales, 2026-10-15). `is_error` solo lo trae un rechazo de permisos.
+        u([{"type": "tool_result", "tool_use_id": "m1", "content": [{"type": "text",
+            "text": '{"success":false,"message":"Failed to send to uds:/tmp/cc-socks/9.sock: ENOENT"}'}]}])
+    elif preg == "peer-negado":
+        u([{"type": "tool_result", "tool_use_id": "m1", "is_error": True,
+            "content": "Permission for this action was denied by the Claude Code auto mode classifier."}])
+    else:
+        u([{"type": "tool_result", "tool_use_id": "m1", "content": '{"success":true}'}])
+    if preg in ("peer-team-nombre", "peer-sub-nombre"):
+        # Marca sin direccion (vale el nombre) y un teammate o subagente que se llama como el
+        # supervisor: su registro trae `senderTaskId` (y el subagente `handback`), no es el usuario.
+        o = {"kind": "peer", "from": "supervisor-x", "name": "supervisor-x", "senderTaskId": TAREA}
+        if preg == "peer-sub-nombre":
+            o["handback"] = True
+        R.append({"type": "user", "isMeta": True, "origin": o,
+                  "message": {"role": "user", "content": "Another Claude session sent a message:\n..."}})
+    if preg == "peer-team":
+        # `senderTaskId` sin `handback` (forma real de un teammate): tampoco es el usuario.
+        R.append({"type": "user", "isMeta": True,
+                  "origin": {"kind": "peer", "from": TAREA, "name": TAREA, "senderTaskId": TAREA},
+                  "message": {"role": "user", "content": "Another Claude session sent a message:\n..."}})
+    if preg == "peer-sub":
+        # El informe final de un subagente: `kind` peer, `from` = id de la tarea, con `handback`
+        # y `senderTaskId` (forma real, transcript d69ad375).
+        R.append({"type": "user", "isMeta": True,
+                  "origin": {"kind": "peer", "from": TAREA, "name": TAREA, "senderTaskId": TAREA,
+                             "handback": True, "handbackReportText": "decision: 1 descartado"},
+                  "message": {"role": "user", "content": "Another Claude session sent a message:\n[Subagent hand-back] ..."}})
+    if preg in ("peer", "peer-dos", "peer-uno", "peer-error", "peer-negado", "peer-ref", "peer-nombre"):
+        peer(SOCK)
+    elif preg == "peer-ajeno":
+        # El envio va a otra sesion; despues escribe el supervisor (por otra cosa): no es su respuesta.
+        peer(SOCK)
+    elif preg == "peer-par":
+        # Otra sesion par que contesta, pero no es el supervisor de la marca de lookout.
+        peer(OTRA, nombre="otra-sesion")
+    elif preg == "peer-cola":
+        peer(SOCK, cola=True)
+    elif preg == "peer-otro":
+        peer(OTRA)
+elif preg not in ("sin", "reimprime"):
     qs = {"dos": [{"question": "a", "header": "Uno"}, {"question": "b", "header": "Dos"}],
           "ajena": [{"question": "otra cosa", "header": "Otra"}]}.get(preg, [{"question": "a", "header": "Uno"}])
     a([{"type": "tool_use", "id": "q1", "name": "AskUserQuestion", "input": {"questions": qs}}])
@@ -1199,6 +1323,81 @@ txc "$T/tc.jsonl" ajena
 chk "una pregunta ajena a los candidatos no cubre la decision: lo reclama" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
 txc "$T/tc.jsonl" reimprime
 chk "un turno que solo reimprime el snippet no mide candidatos" "0" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+
+echo "== p-1d0f012aa9: sesion supervisada por lookout, la pregunta va por SendMessage al supervisor =="
+# La marca que lookout escribe para la sesion supervisada (`sessions/<session_id>.json`, formato
+# de lookout 0.13): solo cuenta un SendMessage a ese supervisor. $1 transcript, $2 LOOKOUT_STATE_DIR.
+LK="$T/lookout"; mkdir -p "$LK/sessions"
+printf '{"project_id": "p", "supervisor": "supervisor-x", "address": "uds:/tmp/cc-socks/9.sock", "nombre": "a"}\n' > "$LK/sessions/sess-sup.json"
+corre_sup() {
+  python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":False,"last_assistant_message":"","cwd":"/tmp","session_id":"sess-sup"}))' "$1" \
+    | LOOKOUT_STATE_DIR="$2" bash "$HOOK" 2>/dev/null | expande
+}
+txc "$T/tc.jsonl" peer
+chk "SendMessage al supervisor y su respuesta: no lo reclama" "0" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-cola
+chk "la respuesta llega en cola (queued_command, sesion ociosa): no lo reclama" "0" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-sinresp
+chk "SendMessage sin respuesta: no llego a nadie, lo reclama" "1" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-otro
+chk "la respuesta viene de otra sesion, no del destinatario: lo reclama" "1" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-antes
+chk "un mensaje del supervisor ANTERIOR al envio no es su respuesta: lo reclama" "1" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-error
+chk "un SendMessage que fallo no cuenta aunque luego llegue un mensaje del supervisor: lo reclama" "1" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-negado
+chk "un SendMessage negado por permisos (is_error) no cuenta: lo reclama" "1" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-team
+chk "la respuesta de un teammate (senderTaskId sin handback) no cuenta: lo reclama" "1" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-sub
+chk "sin supervisor (SendMessage a un subagente y su informe final): sigue exigiendo la pregunta" "1" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-ref
+chk "supervisor nombrado como \`nombre [ref]\`: no lo reclama" "0" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-nombre
+chk "supervisor nombrado por su nombre: no lo reclama" "0" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-par
+chk "otra sesion par que no es el supervisor de la marca: sigue exigiendo la pregunta" "1" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-ajeno
+chk "el envio va a otra sesion y despues escribe el supervisor: sigue exigiendo la pregunta" "1" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+mkdir -p "$T/lookout-nombre/sessions"
+printf '{"supervisor": "supervisor-x"}\n' > "$T/lookout-nombre/sessions/sess-sup.json"
+txc "$T/tc.jsonl" peer-nombre
+chk "marca sin direccion: vale la respuesta por el nombre del supervisor" "0" "$(corre_sup "$T/tc.jsonl" "$T/lookout-nombre" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-team-nombre
+chk "marca sin direccion y un teammate con el nombre del supervisor (senderTaskId): lo reclama" "1" "$(corre_sup "$T/tc.jsonl" "$T/lookout-nombre" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-sub-nombre
+chk "marca sin direccion y un subagente con el nombre del supervisor (handback): lo reclama" "1" "$(corre_sup "$T/tc.jsonl" "$T/lookout-nombre" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer
+mkdir -p "$T/lookout-vacio/sessions"
+chk "sin marca de lookout (sesion no supervisada): sigue exigiendo la pregunta" "1" "$(corre_sup "$T/tc.jsonl" "$T/lookout-vacio" | grep -c 'candidatos_pregunta')"
+mkdir -p "$T/lookout-roto/sessions"; printf 'no es json\n' > "$T/lookout-roto/sessions/sess-sup.json"
+chk "marca de lookout que no se entiende: sigue exigiendo la pregunta" "1" "$(corre_sup "$T/tc.jsonl" "$T/lookout-roto" | grep -c 'candidatos_pregunta')"
+mkdir -p "$T/lookout-dir-rota/sessions"
+printf '{"address": [], "supervisor": "supervisor-x"}\n' > "$T/lookout-dir-rota/sessions/sess-sup.json"
+txc "$T/tc.jsonl" peer-nombre
+chk "marca con address que no es texto: ilegible entera, no vale el nombre" "1" "$(corre_sup "$T/tc.jsonl" "$T/lookout-dir-rota" | grep -c 'candidatos_pregunta')"
+mkdir -p "$T/lookout-dir-vacia/sessions"
+printf '{"address": "", "supervisor": "supervisor-x"}\n' > "$T/lookout-dir-vacia/sessions/sess-sup.json"
+chk "marca con address vacia (lookout sin direccion): vale el nombre" "0" "$(corre_sup "$T/tc.jsonl" "$T/lookout-dir-vacia" | grep -c 'candidatos_pregunta')"
+mkdir -p "$T/lookout-dir-null/sessions" "$T/lookout-dir-blanca/sessions"
+printf '{"address": null, "supervisor": "supervisor-x"}\n' > "$T/lookout-dir-null/sessions/sess-sup.json"
+printf '{"address": "   ", "supervisor": "supervisor-x"}\n' > "$T/lookout-dir-blanca/sessions/sess-sup.json"
+chk "marca con address null: ilegible entera, no vale el nombre" "1" "$(corre_sup "$T/tc.jsonl" "$T/lookout-dir-null" | grep -c 'candidatos_pregunta')"
+chk "marca con address de solo espacios: ilegible entera, no vale el nombre" "1" "$(corre_sup "$T/tc.jsonl" "$T/lookout-dir-blanca" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer
+chk "la misma sesion por \`corre\` (sin session_id): sigue exigiendo la pregunta" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+cp "$FC" "$FC.bak"
+python3 - "$FC" <<'PY'
+import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+t=t.replace("- revisar algo — pregunta: Uno — recomendacion: descartar — decision: descartado\n",
+            "- revisar algo — pregunta: Uno — recomendacion: descartar — decision: descartado\n- otra cosa — pregunta: Uno — decision: descartado\n",1)
+open(p,"w",encoding="utf-8").write(t)
+PY
+txc "$T/tc.jsonl" peer-dos
+chk "dos decisiones y un SendMessage con dos candidatos numerados: no lo reclama" "0" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-uno
+chk "dos decisiones y un SendMessage sin numerar (una pregunta): lo reclama" "1" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+mv "$FC.bak" "$FC"
 
 echo "== p-ea8992fa7e: un segundo /checkpoint-3t que EDITA la ficha conserva las decisiones del primero =="
 # Turnos de la sesion: $2 = lista "ck:Encabezado" o "otro:Encabezado" (vacio tras ':' = sin
@@ -1254,8 +1453,8 @@ marco_ficha() {
   tx "$T/t.jsonl" skill "$F" - -
 }
 # En un repo git, como en una sesion real: la revision (con los avisos) va al archivo de 2.59.0 y
-# el reason visible solo lo senala. `corre` usa cwd=/tmp, fuera de git, donde el aviso entero se
-# queda en el reason: ese camino es el respaldo y se mide aparte al final.
+# el reason visible solo lo senala. `corre` abre la sesion fuera de git ($SG), donde el aviso va
+# en `.3t-revision-cierre-<id>.md` del cwd: se mide aparte al final.
 RM="$T/repo-marco"; rm -rf "$RM"; mkdir -p "$RM"; git -C "$RM" init -q
 AM="$RM/.git/3t-revision-cierre-sin-sesion.md"
 marco_ficha "resolver de raiz si Victor lo decide (p-daf3051915)."
@@ -1269,7 +1468,7 @@ marco_ficha "resolver de raiz (p-daf3051915)."
 corre_en "$T/t.jsonl" false - "$RM" >/dev/null
 chk "paso limpio: el archivo existe y no trae bloque de avisos" "1 0" "$([ -f "$AM" ] && echo 1 || echo 0) $(grep -c 'Avisos del marco' "$AM" 2>/dev/null)"
 marco_ficha "resolver de raiz si Victor lo decide (p-daf3051915)."
-chk "fuera de git (respaldo): los avisos van en el reason" "1" "$(razon "$(corre "$T/t.jsonl" false -)" | grep -c '^Avisos del marco del `Proximo paso`')"
+chk "fuera de git: los avisos van en el archivo del cwd" "1 1" "$(O=$(corre "$T/t.jsonl" false -); echo $(razon_corta "$O" | grep -c 'Lee con Read') $(razon "$O" | grep -c '^Avisos del marco del `Proximo paso`'))"
 
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
