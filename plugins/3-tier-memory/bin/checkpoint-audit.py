@@ -148,6 +148,9 @@ DESDE_PASO_ACCION = "2026-10-13"
 DESDE_HILO = "2026-10-13"
 # Desde 2.60.0 (p-88a7cc28c2) el `Proximo paso` sigue el marco de Step 8 (snippet.marco, aviso).
 DESDE_MARCO = "2026-10-14"
+# Desde 2.62.11 un snippet `ninguno` con un pendiente `_bloqueado` en la ficha sale como aviso
+# (snippet.ninguno_bloqueo): una decision del usuario no es un bloqueo. Incluye el caso real.
+DESDE_NINGUNO_BLOQUEO = "2026-10-16"
 # Tercer cierre de un defecto (2.53.0): el usuario decidio en Step 3b no abrirle pendiente.
 DESCARTADO_BUG = re.compile(r"_descartado:\s*(.*?)_(?=\s|$|[.,;:)\]—])", re.S)
 # `pendientes.candidatos` (2.53.0): desde aqui cada pendiente nuevo sale en `## Candidatos a
@@ -1572,6 +1575,31 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         else:
             h.append(Hallazgo(HECHO, "snippet.ninguno_defecto",
                               "`ninguno` sin defecto abierto registrado ni `break` sin cerrar"))
+
+    # 8-sexies-bis. `ninguno` con un pendiente de la ficha `_bloqueado` (2.62.11). Una decision del
+    # usuario no es un bloqueo: la toma el en la sesion siguiente, con el agente. Caso real
+    # (claude-vzert, 2026-10-16): `p-341fdf5e59` nacio con `--bloqueado-por "decisiones de Victor"`,
+    # el bloqueo lo saco de `Proximo paso` y el snippet salio `Ninguno`, con las decisiones
+    # escondidas. Quien espera el bloqueo es texto libre y no se clasifica (regla 216), asi que el
+    # estado es POR-DISENO: checkpoint-close-guard.sh lo pone en la revision del cierre, que bloquea
+    # una vez, y el agente contesta si el bloqueo espera a alguien que no es el usuario. Cuenta todo
+    # pendiente listado `- [ ]` en `## Pendientes` de la ficha, no solo los de `_origen` en esta
+    # sesion: el del caso real tenia `_origen` en un research.
+    if fecha_ficha and fecha_ficha >= DESDE_NINGUNO_BLOQUEO and "<filled in Step 8>" not in sec_retomar:
+        bloq_ficha = [i for i in dict.fromkeys(abiertos_ficha) if i in bloqueados]
+        if es_ninguno_snip and bloq_ficha:
+            h.append(Hallazgo(DISENO, "snippet.ninguno_bloqueo",
+                              f"el snippet dice `ninguno` y la ficha deja {len(bloq_ficha)} "
+                              "pendiente(s) `_bloqueado` (aviso, no bloquea)",
+                              [f"{i} `_bloqueado: {bloqueados[i]}`" for i in bloq_ficha],
+                              corrige="si lo que espera es una decision del usuario, no es bloqueo: "
+                                      "`journal-emit.py --type pendiente.block --id p-… "
+                                      "--desbloquear` y `Proximo paso: decidir con el usuario <que> "
+                                      "(p-…)`; si espera a alguien que no es el usuario, dilo en la "
+                                      "revision del cierre"))
+        else:
+            h.append(Hallazgo(HECHO, "snippet.ninguno_bloqueo",
+                              "sin `ninguno` sobre un pendiente `_bloqueado` de la ficha"))
 
     # 8-quater. `Sigue abierto:` solo nombra pendientes VIVOS (2.33.1, p-c72a33ae7a). Medido en vivo
     # en la sesion que construyo 2.33.0: tras el checkpoint se resolvio `p-477bb60303` (el push) y

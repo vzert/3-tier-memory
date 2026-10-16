@@ -310,7 +310,13 @@ Reglas para llenar los slots:
   candidato no es un `<next-step>` — es un pendiente futuro (con `--revisar` si depende de que
   pase tiempo, o con `_bloqueado:` y fuera de `Proximo paso` si depende de una decision, accion
   o condicion ajena), y el siguiente candidato de la escalera (o el caso 5, `ninguno`) es el que
-  corresponde. **Desde 2.33.0 esta pregunta tiene respaldo mecanico, pero solo si el pendiente
+  corresponde. **El usuario no esta FUERA de la sesion** (2.62.11): un pendiente que espera una
+  decision suya se hace de inmediato, en la sesion siguiente, con el agente al lado. Es un
+  `<next-step>` normal: `Proximo paso: decidir con el usuario <que decisiones, y donde estan
+  escritas> (p-…)`, una pregunta por decision con su recomendacion. Nunca lleva `_bloqueado:` y
+  nunca colapsa el snippet al caso 5: un `Ninguno` que esconde decisiones del usuario le quita la
+  unica forma de verlas (caso real, claude-vzert 2026-10-16, `p-341fdf5e59`). El audit lo avisa en
+  `snippet.ninguno_bloqueo` y el hook de cierre lo pregunta en la revision. **Desde 2.33.0 esta pregunta tiene respaldo mecanico, pero solo si el pendiente
   lleva el campo**: nace con `--bloqueado-por "<que espera>"` (Step 3b) o se lo pone
   `pendiente.block` (Step 3a), y entonces el audit rechaza citarlo en `Proximo paso`. El juicio de
   "esto espera a un tercero" se hace al CREAR el pendiente, no al leer su texto aqui (regla 216:
@@ -372,7 +378,8 @@ condicionales, no opcionales: si la informacion existe, la linea va.
 
 **8a. Persistir en el session file**:
 
-**Si el caso 5 aplica** (la sesion no dejo trabajo que retomar, en ningun lado), reemplaza el
+**Si el caso 5 aplica** (la sesion no dejo trabajo que retomar, en ningun lado; una decision del
+usuario que sigue abierta es trabajo que retomar), reemplaza el
 placeholder `<filled in Step 8>` con UNA linea, sin bloque de codigo — sin excepcion por
 pendientes Alta del backlog general (esos no entran aqui: los reporta el hook de inicio de sesion,
 y uno de ellos puede salir en el prompt opcional de Step 8e):

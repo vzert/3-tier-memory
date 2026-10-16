@@ -15,7 +15,8 @@ Tipos de evento:
   pendiente.add     --text T --prioridad Alta|Media|Baja --origen O [--creado YYYY-MM-DD]
                     [--revisar YYYY-MM-DD]   (ventana declarada; la lee expire-pendientes.py)
                     [--bloqueado-por "QUE"]  (espera a algo FUERA de la sesion: otra
-                    instalacion, un peer, un PR ajeno; checkpoint-audit.py rechaza un
+                    instalacion, un peer, un PR ajeno; nunca una decision del usuario,
+                    que va en el `Proximo paso`; checkpoint-audit.py rechaza un
                     `Proximo paso:` que cite un id con `_bloqueado:`)
                     [--relacionado p-<10 hex>|plan-<slug>]...  (repetible, 2.55.0: otro
                     pendiente o un plan con el que este va junto; lo lee pendientes_afines.py,

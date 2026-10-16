@@ -94,9 +94,11 @@ def fecha_futura(texto, hoy):
 # Una espera escrita solo en el texto: el paso depende de que otro decida, responda o actue.
 # Medido en 163 snippets con respuesta util (de 211): 27 % de problema contra 8 % de un paso
 # limpio. Se busca sin tildes.
+# `decidir con <alguien>` salio de la lista en 2.62.11: es la forma del paso que pone delante una
+# decision del usuario ("decidir con Victor D1-D5"), y el aviso le decia al agente que lo bloqueara,
+# que es justo como el snippet salio `Ninguno` en claude-vzert (p-341fdf5e59).
 ESPERA_AJENA = re.compile(
     r"\bsi\s+(?:\S+\s+){1,2}(?:lo\s+|la\s+)?(?:decide|aprueba|autoriza|confirma|acepta|quiere|da el ok)\b"
-    r"|\bdecidir\s+con\s+\S+"
     r"|\b(?:pedir(?:le)?|solicitar)\s+(?:el\s+|su\s+)?(?:permiso|autorizacion|aprobacion|ok|visto bueno)\b"
     r"|\b(?:cuando|en cuanto|una vez que|hasta que|despues de que)\s+(?:\S+\s+){1,3}?"
     r"(?:responda|conteste|apruebe|decida|autorice|confirme|actualice|publique)\b"
@@ -127,7 +129,8 @@ def senales_marco(paso):
     m = ESPERA_AJENA.search(_sin_tildes(paso))
     if m:
         out.append(f"espera una decision o accion de fuera de la sesion (\"{m.group(0).strip()}\"): "
-                   "si es asi, el pendiente lleva `_bloqueado:` y no va en el paso")
+                   "si es asi, el pendiente lleva `_bloqueado:` y no va en el paso; una decision "
+                   "del usuario no es espera: escribe el paso como `decidir con el usuario <que>`")
     ids = sorted(set(ID_P.findall(VER_TAMBIEN.sub("", paso))))
     if len(ids) >= 2:
         out.append(f"junta {len(ids)} pendientes ({', '.join(ids)}): un paso es un objetivo; el "

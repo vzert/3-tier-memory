@@ -1470,5 +1470,26 @@ chk "paso limpio: el archivo existe y no trae bloque de avisos" "1 0" "$([ -f "$
 marco_ficha "resolver de raiz si Victor lo decide (p-daf3051915)."
 chk "fuera de git: los avisos van en el archivo del cwd" "1 1" "$(O=$(corre "$T/t.jsonl" false -); echo $(razon_corta "$O" | grep -c 'Lee con Read') $(razon "$O" | grep -c '^Avisos del marco del `Proximo paso`'))"
 
+echo "== 2.62.11: Ninguno con un pendiente _bloqueado en la ficha: la revision pregunta por el bloqueo =="
+# bloqueo_ficha PEND: la ficha del caso 5 (snippet `Ninguno`) con fecha 2026-10-16 y esa linea en
+# `## Pendientes`. p-a4439fa8fd lleva `_bloqueado:` en _pendientes.md (armar); p-014255373e no.
+# Forma del caso real (claude-vzert, p-341fdf5e59): el bloqueo era "decisiones de Victor".
+bloqueo_ficha() {
+  armar "$M" -
+  python3 -c 'import sys;p=sys.argv[1];t=open(p,encoding="utf-8").read();t=t.replace("date: 2026-09-22","date: 2026-10-16",1).replace("## Pendientes\n- Ninguno","## Pendientes\n"+sys.argv[2],1);open(p,"w",encoding="utf-8").write(t)' "$F" "$1"
+  tx "$T/t.jsonl" skill "$F" - -
+}
+RB="$T/repo-bloqueo"; mkdir -p "$RB"; git -C "$RB" init -q
+AB="$RB/.git/3t-revision-cierre-sin-sesion.md"
+bloqueo_ficha '- [ ] Fase 0: decisiones de Victor — `p-a4439fa8fd`'
+OJ=$(corre_en "$T/t.jsonl" false - "$RB")
+chk "bloquea con la revision" "1" "$(bloquea "$OJ")"
+chk "la revision pregunta si el bloqueo espera a alguien que no es el usuario" "1" "$(grep -c 'El bloqueo espera a alguien que no es el usuario' "$AB" 2>/dev/null)"
+chk "y nombra el pendiente bloqueado" "1" "$(grep -c '^- p-a4439fa8fd `_bloqueado: que otra instalacion actualice el plugin`' "$AB" 2>/dev/null)"
+chk "y no lo cuenta como falta del cierre" "0" "$(grep -c 'checkpoint-audit.py snippet.ninguno_bloqueo:' "$AB" 2>/dev/null)"
+bloqueo_ficha '- [ ] otro sin bloqueo — `p-014255373e`'
+corre_en "$T/t.jsonl" false - "$RB" >/dev/null
+chk "Ninguno sin pendiente bloqueado en la ficha: no pregunta por el bloqueo" "1 0" "$([ -f "$AB" ] && echo 1 || echo 0) $(grep -c 'no es el usuario' "$AB" 2>/dev/null)"
+
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
