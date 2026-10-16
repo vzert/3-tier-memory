@@ -27,12 +27,12 @@ unset CLAUDE_CODE_SESSION_ID
 # Una corrida completa por maquina (p-524e2a5bf7). Varios agentes que esperaban a las suites ajenas
 # lanzaban la suite completa a la vez al terminar, y el Mac se quedaba sin memoria (2026-10-15/16).
 # El candado es una carpeta: `mkdir` es atomico en macOS, Linux y Git Bash, sin flock (macOS no lo
-# trae). La segunda corrida espera a la primera y lo dice en stderr. Va en el TMPDIR de ANTES de
-# tmp-propio (que lo cambia por corrida), asi que lo comparten todos los checkouts y worktrees del
-# mismo usuario. `--una` no lo toma: la llaman las suites desde dentro de una corrida completa.
+# trae). La siguiente corrida espera a la que lo tiene y lo dice en stderr. Ruta fija en /tmp, no en
+# TMPDIR: hay procesos de la misma maquina con su propio TMPDIR, y no compartian el candado
+# (adversario, ronda 3). `--una` no lo toma: la llaman las suites desde dentro de una corrida completa.
 # RUN_TESTS_CANDADO cambia la ruta (lo usa test-run-tests.sh para no esperar a la corrida que lo lanzo).
-CANDADO="${RUN_TESTS_CANDADO:-${TMPDIR:-/tmp}}"
-[ -z "${RUN_TESTS_CANDADO:-}" ] && CANDADO="${CANDADO%/}/3tm-run-tests.candado"
+CANDADO="${RUN_TESTS_CANDADO:-/tmp/3tm-run-tests.candado}"
+[ "${1:-}" = "--ruta-candado" ] && { echo "$CANDADO"; exit 0; }   # para test-run-tests.sh
 # Quita un candado abandonado. Si no puede (de otro usuario en un /tmp compartido), sale con error:
 # reintentar sin fin era un bucle sin pausa (adversario, ronda 1: 507 avisos en 3 s).
 candado_quita() {
@@ -50,19 +50,44 @@ candado_vivo() {
   case "$err" in *ermitted*) return 0 ;; esac
   return 1
 }
+# El candado que se vio con el pid $1 parece abandonado. Entre leer ese pid y decidir, su dueno pudo
+# soltarlo y otra corrida tomar uno nuevo en la misma ruta: borrarlo a ciegas dejaba dos suites a la
+# vez en cada liberacion con tres o mas en cola (adversario, ronda 3). Asi que se borra solo bajo un
+# sub-candado (`quitando`, que serializa a quienes quitan) y si el pid sigue siendo el que se vio.
+# Un `quitando` huerfano (quien quitaba murio a mitad) se fuerza tras 10 vueltas con el mismo pid.
+candado_abandonado() {  # <pid visto, vacio si no habia> <motivo>
+  if ! mkdir "$CANDADO/quitando" 2>/dev/null; then
+    [ -d "$CANDADO" ] || return 0
+    atascado=$(( atascado + 1 ))
+    if [ "$atascado" -ge 10 ] && [ "$(cat "$CANDADO/pid" 2>/dev/null)" = "$1" ]; then
+      echo "AVISO run-tests: quito el candado abandonado ($2; su sub-candado lleva 10 vueltas sin soltarse): $CANDADO" >&2
+      candado_quita "$2"; atascado=0
+    fi
+    return 0
+  fi
+  atascado=0
+  if [ "$(cat "$CANDADO/pid" 2>/dev/null)" != "$1" ]; then
+    rmdir "$CANDADO/quitando" 2>/dev/null; return 0   # ya es otro candado: no se toca
+  fi
+  echo "AVISO run-tests: quito el candado de una corrida que ya no existe ($2): $CANDADO" >&2
+  candado_quita "$2"
+}
 candado_toma() {
-  local quien vacio=0 avisado=0
-  while ! mkdir "$CANDADO" 2>/dev/null; do
+  local quien vacio=0 avisado=0 atascado=0
+  while :; do
+    if mkdir "$CANDADO" 2>/dev/null; then
+      # Si se lo quitaron entre el mkdir y escribir el pid, no es suyo: vuelve a la cola.
+      echo "$$" > "$CANDADO/pid" 2>/dev/null && [ "$(cat "$CANDADO/pid" 2>/dev/null)" = "$$" ] && break
+    fi
     quien=$(cat "$CANDADO/pid" 2>/dev/null)
+    # Solo pruebas: ensancha la ventana entre leer el pid y decidir (test-run-tests.sh, ronda 3).
+    [ -n "${RUN_TESTS_CANDADO_PAUSA:-}" ] && sleep "$RUN_TESTS_CANDADO_PAUSA"
     if [ -z "$quien" ]; then
-      # Recien creado: su dueno aun no escribe el pid. Vacio ~10 s = murio entre mkdir y escribirlo.
+      # Recien creado: su dueno aun no escribe el pid. Vacio 10 vueltas = murio entre mkdir y escribirlo.
       vacio=$(( vacio + 1 ))
-      if [ "$vacio" -ge 10 ]; then candado_quita "sin pid tras 10 s"; vacio=0; continue; fi
+      if [ "$vacio" -ge 10 ]; then candado_abandonado "" "sin pid tras 10 vueltas"; vacio=0; fi
     elif ! candado_vivo "$quien"; then
-      # Su dueno murio sin soltarlo (kill -9). Limite: dos corridas que lo vean a la vez pueden
-      # quitarlo las dos, y la segunda borrar el que la primera acaba de tomar.
-      echo "AVISO run-tests: quito el candado de una corrida que ya no existe (pid $quien): $CANDADO" >&2
-      candado_quita "pid $quien muerto"; continue
+      vacio=0; candado_abandonado "$quien" "pid $quien"
     else
       vacio=0
       if [ "$avisado" = 0 ]; then
@@ -71,9 +96,8 @@ candado_toma() {
         echo "  Si ese pid no es una corrida de run-tests.sh, borra el candado: rm -rf \"$CANDADO\"" >&2
       fi
     fi
-    sleep 1
+    sleep "${RUN_TESTS_CANDADO_ESPERA:-1}"
   done
-  echo "$$" > "$CANDADO/pid"
   [ "$avisado" = 1 ] && echo "run-tests: candado tomado; empiezo." >&2
   return 0
 }

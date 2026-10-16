@@ -438,6 +438,8 @@ caso_tools "--una toma el candado" run-tests.sh m_run_tests.py test-run-tests.sh
 caso_tools "no suelta el candado"  run-tests.sh m_run_tests.py test-run-tests.sh "y suelta el candado al terminar" no-suelta
 caso_tools "candado sin quitar"     run-tests.sh m_run_tests.py test-run-tests.sh "no se puede quitar no deja un bucle" quita-sin-comprobar
 caso_tools "pid ajeno por muerto"  run-tests.sh m_run_tests.py test-run-tests.sh "de otro usuario se respeta" permiso-es-muerto
+caso_tools "quita sin releer el pid" run-tests.sh m_run_tests.py test-run-tests.sh "ninguna quito el candado de otra" sin-releer
+caso_tools "candado en TMPDIR"     run-tests.sh m_run_tests.py test-run-tests.sh "el candado no depende de TMPDIR" candado-en-tmpdir
 
 echo
 if [ "$PEND" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $TOTAL)"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi

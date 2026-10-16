@@ -45,6 +45,12 @@ M = {
         ('  [ -e "$CANDADO" ] || return 0', '  return 0')],
     "permiso-es-muerto": [
         ('  case "$err" in *ermitted*) return 0 ;; esac', '  :')],
+    # Cae por la carrera de las ocho corridas con pausa: medido 3 de 3, no es determinista.
+    "sin-releer": [
+        ('  if [ "$(cat "$CANDADO/pid" 2>/dev/null)" != "$1" ]; then', '  if false; then')],
+    "candado-en-tmpdir": [
+        ('CANDADO="${RUN_TESTS_CANDADO:-/tmp/3tm-run-tests.candado}"',
+         'CANDADO="${RUN_TESTS_CANDADO:-${TMPDIR:-/tmp}/3tm-run-tests.candado}"')],
 }
 p, nombre = sys.argv[1], sys.argv[2]
 s = io.open(p, encoding="utf-8", newline="").read()
