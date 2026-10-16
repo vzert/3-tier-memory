@@ -21,7 +21,8 @@ seguia saliendo en la terminal: `ruta_aviso()` no tenia donde dejar el archivo y
   2.60.2): fuera de git una linea y el archivo igual al aviso del repo, limpieza reentrante, sin git
   instalado, `git init` antes de contestar, y el respaldo medido con un `GIT_DIR` roto, un worktree
   de gitdir roto y, donde Python puede lanzarlo (no en Windows), un `git` falso que falla con
-  `dubious ownership`. 203 → 219.
+  `dubious ownership`. 203 → 219. Los casos del `git` falso y de "sin git instalado" solo corren
+  donde la plataforma los permite (en Windows no: lo dicen en una linea y no cuentan).
 
 ### Known
 - Fuera de git, un `git init` + `git add -A` hecho mientras la revision sigue sin contestar mete el

@@ -771,10 +771,14 @@ SB="$T/sin-bin"; mkdir -p "$SB"
 for c in bash sh python3 cat dirname basename pwd cd env sed tr head tail grep; do
   w=$(command -v "$c" 2>/dev/null) && [ "${w#/}" != "$w" ] && ln -sf "$w" "$SB/$c"
 done
-if [ -x "$SB/python3" ] && ! env PATH="$SB" python3 -c 'import shutil,sys;sys.exit(shutil.which("git") is None)' 2>/dev/null; then
+# Solo si ese python arranca Y no ve git: en Windows la copia de python3 en $SB no arranca (127) y,
+# con `set -e`, el caso mataba el test (CI 38847564992).
+if [ -x "$SB/python3" ] && env PATH="$SB" python3 -c 'import shutil,sys;sys.exit(0 if shutil.which("git") is None else 1)' 2>/dev/null; then
   O=$(PATH="$SB" corre "$T/t.jsonl" false -)
   chk "sin git instalado: reason de una linea que senala el archivo" "1" "$(razon_corta "$O" | grep -c 'Lee con Read `[^`]*\.3t-revision-cierre-sin-sesion\.md`')"
   rm -f "$SG/.3t-revision-cierre-sin-sesion.md"
+else
+  echo "  (sin un python que arranque sin git en el PATH: el caso sin git instalado no corre)"
 fi
 echo "== 2.59.0: el Stop reentrante borra el archivo solo con la revision contestada =="
 corre_en "$T/t.jsonl" true - "$R" >/dev/null
