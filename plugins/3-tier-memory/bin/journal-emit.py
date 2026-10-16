@@ -36,6 +36,7 @@ Tipos de evento:
                     `--text-prefix` es el guardian contra la actualizacion perdida entre dos
                     sesiones: si no se pasa, se toma de la linea viva. Exige --text y/o
                     --prioridad. Sobre un pendiente ya cerrado o caducado no hace nada.
+                    Rechaza --nota: no tiene donde guardarla; va en el --text o en resolve --nota.
   pendiente.expire  --id ID --dias N [--line "<linea verbatim>"]   (caducidad por edad)
   pendiente.reopen  --id ID [--prioridad P]             (reversa de expire y de resolve)
   pendiente.window  --id ID --revisar YYYY-MM-DD                  (pone/actualiza la ventana)
@@ -923,7 +924,7 @@ def main():
     ap.add_argument("--id")
     ap.add_argument("--estado")
     ap.add_argument("--sesion", default="")
-    ap.add_argument("--nota", default="")
+    ap.add_argument("--nota", default=None)   # None = no se paso; pendiente.update lo distingue de ""
     ap.add_argument("--text-prefix")
     # pendiente.expire / pendiente.reopen
     ap.add_argument("--dias")
@@ -1121,7 +1122,7 @@ def main():
         if sup:
             if not text:
                 sys.exit("journal-emit: --supersedes necesita --text (la regla que reemplaza a la vieja)")
-            base["payload"].update({"supersedes": sup, "nota": una_linea(a.nota),
+            base["payload"].update({"supersedes": sup, "nota": una_linea(a.nota or ""),
                                     "quickref_prefix": qprefix,
                                     "fecha": date.today().isoformat()})
         elif qprefix:
@@ -1153,7 +1154,7 @@ def main():
             "numero": numero_por_prefijo(memory_dir, topic, mprefix),
             "motivo": motivo,
             "por": por,
-            "nota": una_linea(a.nota),
+            "nota": una_linea(a.nota or ""),
             "quickref_prefix": normalize_text(a.quickref_prefix or ""),
             "fecha": date.today().isoformat(),
         }
@@ -1312,6 +1313,12 @@ def main():
         pid = (a.id or "").strip()
         if not ID_RE.match(pid):
             sys.exit("journal-emit: --id debe tener la forma p-<10 hex>")
+        # El evento no tiene donde guardar una nota: ni la linea viva ni la fila mensual la llevan.
+        # Antes se descartaba sin avisar y quien la paso creia haberla dejado escrita (p-a37851219c).
+        if a.nota is not None:   # cualquier --nota pasada, aun vacia: quien la paso esperaba guardarla
+            sys.exit("journal-emit: pendiente.update no guarda --nota (no hay campo donde ponerla). "
+                     "Si la nota describe el pendiente, metela en el --text; si cierra el "
+                     "pendiente, va en pendiente.resolve --nota")
         # El texto que llega puede venir pegado de la linea entera (con sus `— _origen:` y su
         # `— _id:`). Esos sufijos los POSEE el compactador: si entraran aqui, la linea acabaria
         # con dos `_id:` y el pendiente dejaria de resolverse por id. Se quitan y se avisa.
@@ -1461,7 +1468,7 @@ def main():
         current = find_line_text(memory_dir, pid)
         prefix = current[:40] if current else ""
     base["payload"] = {"id": pid, "estado": estado, "sesion": normalize_text(a.sesion),
-                       "nota": normalize_text(a.nota), "text_prefix": normalize_text(prefix),
+                       "nota": normalize_text(a.nota or ""), "text_prefix": normalize_text(prefix),
                        "fecha": date.today().isoformat()}
     write_event(memory_dir, base)
     print(pid)

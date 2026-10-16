@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.62.4] - 2026-10-16
+Origen: medicion de p-dfc87d7b40 (2026-10-15). Al acotar ese pendiente con `pendiente.update`, la
+verificacion del checkout compartido se paso como `--nota`. El emisor salio con rc=0 y la descarto
+sin avisar: el evento no tiene campo para ella. La nota tuvo que ir dentro del `--text`
+(p-a37851219c).
+
+### Changed
+- **`pendiente.update` rechaza `--nota`** (cualquiera que se pase, aun vacia o de solo espacios): sale con error y no escribe evento. El mensaje dice donde
+  va la nota: en el `--text` si describe el pendiente, o en `pendiente.resolve --nota` si lo cierra.
+  Se eligio rechazar y no avisar porque con un aviso la nota igual se pierde. Ningun llamador del
+  repo (plantillas, bin/, tools/) pasa `--nota` a `pendiente.update`. Caso 14b de
+  `test-pendiente-update.sh`: sus 8 asertos de rechazo fallan contra 2.62.0.
+
+### Known
+- Los demas tipos que no usan `--nota` (p. ej. `pendiente.add`, `pendiente.expire`,
+  `pendiente.reopen`) la siguen descartando en silencio. Este cambio solo cubre `pendiente.update`.
+
 ## [2.62.3] - 2026-10-16
 Origen: p-1d0f012aa9. En una sesion supervisada por lookout (el plugin publico
 [vzert/lookout](https://github.com/vzert/lookout), que supervisa agentes en paneles), el supervisor bloquea
