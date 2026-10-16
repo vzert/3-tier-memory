@@ -93,6 +93,8 @@ If a user asks you to install this mod, follow these steps:
   (a session note, a plan, a research file), or `Origen: <text>` when it names none, and
   `Relacionado: <ids, plans>` from its `_relacionado`. Lines without data are left out. Nothing
   is sent: you decide whether to submit it. The mod never writes your memory.
+- An item marked `_retomar` (the next step of a `Retomamos` snippet, see VENCEN below) pastes the
+  whole snippet of its session note instead, ready to resume.
 - The list refreshes at session start, after every turn, and with `r` (pane focused) or the
   `actualizar` button.
 
@@ -102,7 +104,10 @@ If a user asks you to install this mod, follow these steps:
    today (not `_bloqueado`, no `_revisar` today or later, no future date in the text).
 2. **RELACIONADO AL TRABAJO ACTUAL** — the thread of that session (`_relacionado` links, shared
    plans, items created in it), as 3-tier-memory's `hilo()` computes it.
-3. **VENCEN** — `_revisar` today or past: Alta first, then the oldest.
+3. **VENCEN** — `_revisar` today or past, and `_retomar` today or past: Alta first, then the
+   oldest. `_retomar` (3-tier-memory 2.62.8+) is what `/checkpoint-3t` writes on the item its
+   `Próximo paso` cites, so a snippet you never pasted (pane closed, forgotten) stays here, as
+   `↻ hoy` and then `↻ N d`, until the item is closed. An item with a future `_revisar` waits.
 4. **ALTA PRIORIDAD** — Alta items with nothing blocking them.
 5. **EN CURSO** — any of the above that someone is already doing: its id appears in a commit made
    after the last checkpoint, or in a prompt typed in this session or in another session of the

@@ -1,5 +1,36 @@
 # Changelog
 
+## [2.62.8] - 2026-10-16
+Origen: pedido de Victor (via `/goalspec:interview`, decisiones d65-d68 por el supervisor lookout).
+El snippet `Retomamos:` de Step 8 se copia y se pega a mano: si el pane se cierra o se olvida, el
+paso queda enterrado. El mod `pendientes` solo veia el `Proximo paso` de la ULTIMA ficha, y el
+cierre de otra sesion lo desplazaba.
+
+### Added
+- **Step 8a2: `marcar-retomar.py`** pone `_retomar: HOY sessions/<slug>_` en cada `p-…` abierto que
+  cita el `Proximo paso:` del snippet (no lo que va tras "ver tambien"), por un evento nuevo,
+  `pendiente.retomar --id --retomar FECHA --ficha sessions/<slug>`, y compacta. Con `_revisar`
+  futuro no marca y avisa con `⚠` (el paso no debe ser trabajo de fecha futura). Un paso sin `p-…`
+  (un plan, `ninguno — …`) no marca nada. Nunca crea un pendiente.
+- Es un campo APARTE de `_revisar` (d68): con `_revisar` = hoy, el 🔔 de 8e de cualquier otro cierre
+  del dia sacaba el paso de otra sesion, y `hacible()` lo sacaba del hilo de la sesion que lo retoma
+  ese mismo dia. `_retomar` solo lo lee el mod; 8e, el hilo y el calendario no cambian.
+- `retomar` en las 7 expresiones que despojan metadatos y en `META_START_RE` (test 16 de
+  `test-pendiente-update.sh` sigue contando 7 iguales).
+- Mod `pendientes` 0.2.3: un `_retomar` de hoy o pasado sale en VENCEN (`↻ hoy`, luego `↻ N d`;
+  motivo `retomar hoy` / `retomar desde FECHA`) hasta que el pendiente se cierre, salvo con
+  `_revisar` futuro. El clic pega el snippet entero de la ficha de la marca (`retomar_snippet`, el
+  bloque `## Como retomar` sin fence); sin marca, lo de antes.
+- Pruebas: `test-marcar-retomar.sh` (40; incluye que 8e y `hacible()` dan lo mismo con la marca, y
+  el control de que con `_revisar` = hoy no), 13 casos nuevos en `test_pendientes_ahora.py` (fallan
+  con el script de 2.62.1) y uno en `pane.test.tsx` (falla con el `register.tsx` de 0.2.2).
+
+### Known
+- La marca se pone en el checkpoint. Un snippet rehecho despues sin volver a correr 8a2 deja la
+  marca con la ficha anterior (el texto de 8a2 lo dice).
+- Si el paso cita un pendiente, se marca ese; si el paso es un plan, no hay marca (d65 pedia el
+  pendiente citado; no se crea uno).
+
 ## [2.62.1] - 2026-10-15
 Origen: p-92aa5de144. Desde 2.59.0 la revision del cierre de `/checkpoint-3t` va a un archivo y lo
 que ve el humano es una linea, pero fuera de un repo git el aviso entero (~2.000-2.800 caracteres)
