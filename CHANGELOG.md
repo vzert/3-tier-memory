@@ -1,5 +1,22 @@
 # Changelog
 
+## [VERSION-POR-FIJAR] - 2026-10-15
+Origen: medicion de p-dfc87d7b40 (2026-10-15). Al acotar ese pendiente con `pendiente.update`, la
+verificacion del checkout compartido se paso como `--nota`. El emisor salio con rc=0 y la descarto
+sin avisar: el evento no tiene campo para ella. La nota tuvo que ir dentro del `--text`
+(p-a37851219c).
+
+### Changed
+- **`pendiente.update` rechaza `--nota`**: sale con error y no escribe evento. El mensaje dice donde
+  va la nota: en el `--text` si describe el pendiente, o en `pendiente.resolve --nota` si lo cierra.
+  Se eligio rechazar y no avisar porque con un aviso la nota igual se pierde. Ningun llamador del
+  repo (plantillas, bin/, tools/) pasa `--nota` a `pendiente.update`. Caso 14b de
+  `test-pendiente-update.sh`: sus 3 asertos fallan contra 2.62.0.
+
+### Known
+- Los demas tipos que no usan `--nota` (p. ej. `pendiente.add`, `pendiente.expire`,
+  `pendiente.reopen`) la siguen descartando en silencio. Este cambio solo cubre `pendiente.update`.
+
 ## [2.62.0] - 2026-10-15
 Origen: Victor (via `/goalspec:interview`) reporto snippets de cierre que mandaban al agente a trabajo
 de otro agente. Caso real en un proyecto que usa el plugin (2026-10-15): una sesion de indices
