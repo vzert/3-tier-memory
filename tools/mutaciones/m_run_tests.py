@@ -50,6 +50,10 @@ M = {
         ('  if [ "$(cat "$CANDADO/pid" 2>/dev/null)" != "$1" ]; then', '  if false; then')],
     "no-crea-espera": [
         ('    if [ ! -d "$CANDADO" ]; then', '    if false; then')],
+    "no-crea-corre": [
+        ('        exit 2', '        return 0')],
+    "pid-cero-vivo": [
+        ('  [ "$1" -gt 0 ] 2>/dev/null || return 1', '  :')],
     "candado-en-tmpdir": [
         ('CANDADO="${RUN_TESTS_CANDADO:-/tmp/3tm-run-tests.candado}"',
          'CANDADO="${RUN_TESTS_CANDADO:-${TMPDIR:-/tmp}/3tm-run-tests.candado}"')],

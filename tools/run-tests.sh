@@ -46,6 +46,10 @@ candado_quita() {
 # en la subshell: en glibc el mensaje se traduce ("Operacion no permitida"; adversario, ronda 2).
 candado_vivo() {
   local err
+  # Un pid vacio, no numerico o 0 no es de nadie: `kill -0 0` sale 0 (senala al propio grupo) y
+  # dejaba esperando sin fin (adversario, ronda 5). Solo sale de un archivo roto o hecho a mano.
+  case "$1" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$1" -gt 0 ] 2>/dev/null || return 1
   err=$(export LC_ALL=C; kill -0 "$1" 2>&1) && return 0
   case "$err" in *ermitted*) return 0 ;; esac
   return 1
@@ -82,12 +86,14 @@ candado_toma() {
     # mkdir fallo y la carpeta no existe: no es que otra corrida la tenga, es que no se puede crear
     # (/tmp de solo lectura en un sandbox, padre inexistente). Esperar ahi era colgarse sin decir nada
     # (adversario, ronda 4). Una vez puede ser el hueco entre que una suelta y otra toma; tres
-    # seguidas, no: sigue SIN candado, como antes de p-524e2a5bf7, y lo dice.
+    # seguidas, no. Y correr sin candado dejaba dos suites a la vez (ronda 5, unsafe): sale con rc 2
+    # y dice como apuntar el candado a otra carpeta (Victor, d64).
     if [ ! -d "$CANDADO" ]; then
       nocrea=$(( nocrea + 1 ))
       if [ "$nocrea" -ge 3 ]; then
-        echo "AVISO run-tests: no puedo crear el candado $CANDADO; corro SIN candado (otra corrida completa podria ir a la vez)." >&2
-        return 0
+        echo "ERROR run-tests: no puedo crear el candado $CANDADO, y sin el otra corrida completa podria ir a la vez." >&2
+        echo "  Apuntalo a una carpeta donde si se pueda escribir: RUN_TESTS_CANDADO=<carpeta>/3tm-run-tests.candado bash tools/run-tests.sh" >&2
+        exit 2
       fi
       sleep "${RUN_TESTS_CANDADO_ESPERA:-1}"; continue
     fi

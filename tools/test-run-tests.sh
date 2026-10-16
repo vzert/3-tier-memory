@@ -137,12 +137,12 @@ termina() {
     [ "$i" -ge $(( $2 * 5 )) ] && { kill "$1" 2>/dev/null; wait "$1" 2>/dev/null; return 1; }
     sleep 0.2; i=$(( i + 1 ))
   done
-  wait "$1" 2>/dev/null; return 0
+  wait "$1" 2>/dev/null; TERMINA_RC=$?; return 0   # rc del proceso, si es hijo de esta prueba
 }
 # completa <salida>: una corrida completa de la copia, en segundo plano; deja su pid en LANZADO.
-# Desacoplada de esta prueba (doble fork, la adopta init): una hija que termina queda zombi hasta el
-# wait, y kill -0 da vivo a un zombi, asi que el que espera nunca veia morir al dueno y el caso de
-# la carrera no probaba nada. `exec` conserva el pid que se anota.
+# Desacoplada de esta prueba (doble fork, la adopta init). Medido: con las corridas como hijas de esta
+# prueba, quitar la relectura del pid no tumbaba el caso de la carrera (0 de 3); desacopladas, 3 de 3.
+# La causa no esta medida (no son zombis: bash recoge a sus hijas). `exec` conserva el pid anotado.
 completa() {
   rm -f "$1.pid"
   ( RUN_TESTS_CANDADO="$CAND" RUN_TESTS_CANDADO_ESPERA=0.2 RUN_TESTS_CANDADO_PAUSA="${PAUSA:-}" RUN_MUTATION=0 \
@@ -199,12 +199,21 @@ else
 fi
 
 # Un candado que no se puede crear (padre inexistente, /tmp de solo lectura) colgaba la corrida sin
-# decir nada (adversario, ronda 4): ahora corre sin candado y lo avisa.
+# decir nada (adversario, ronda 4). Correr sin el dejaba dos suites a la vez (ronda 5): sale con rc 2.
 : > "$T/registro"; CAND_BUENO="$CAND"; CAND="$T/no-existe/candado"
 completa "$T/f"; f=$LANZADO; CAND="$CAND_BUENO"
 chk "un candado que no se puede crear no cuelga la corrida" "0" "$(termina "$f" 30; echo $?)"
+chk "y no corre la suite sin candado" "" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
+chk "y dice como apuntarlo con RUN_TESTS_CANDADO" "1" "$(grep -c 'RUN_TESTS_CANDADO=<carpeta>' "$T/f.err")"
+RUN_TESTS_CANDADO="$T/no-existe/candado" RUN_TESTS_CANDADO_ESPERA=0.1 bash "$R/tools/run-tests.sh" >/dev/null 2>&1 & h=$!
+TERMINA_RC=; termina "$h" 30; chk "y sale con rc 2" "0 2" "$? $TERMINA_RC"
+
+# Un pid 0 en el candado: kill -0 0 sale 0 y la corrida esperaba sin fin (adversario, ronda 5).
+mkdir "$CAND"; echo 0 > "$CAND/pid"; : > "$T/registro"
+completa "$T/g"; g=$LANZADO
+chk "un candado con pid 0 cuenta como abandonado: no espera sin fin" "0" "$(termina "$g" 30; echo $?)"
 chk "y corre su suite" "ini fin" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
-chk "y avisa que va sin candado" "1" "$(grep -c 'corro SIN candado' "$T/f.err")"
+rm -rf "$CAND"
 
 # Ruta fija, no del TMPDIR: procesos de la misma maquina con otro TMPDIR no compartian el candado.
 chk "el candado no depende de TMPDIR" "/tmp/3tm-run-tests.candado" \

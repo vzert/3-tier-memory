@@ -441,6 +441,8 @@ caso_tools "pid ajeno por muerto"  run-tests.sh m_run_tests.py test-run-tests.sh
 caso_tools "quita sin releer el pid" run-tests.sh m_run_tests.py test-run-tests.sh "ninguna quito el candado de otra" sin-releer
 caso_tools "candado en TMPDIR"     run-tests.sh m_run_tests.py test-run-tests.sh "el candado no depende de TMPDIR" candado-en-tmpdir
 caso_tools "candado no creable cuelga" run-tests.sh m_run_tests.py test-run-tests.sh "un candado que no se puede crear no cuelga" no-crea-espera
+caso_tools "sin candado corre igual" run-tests.sh m_run_tests.py test-run-tests.sh "y no corre la suite sin candado" no-crea-corre
+caso_tools "pid 0 por vivo"        run-tests.sh m_run_tests.py test-run-tests.sh "un candado con pid 0 cuenta como abandonado" pid-cero-vivo
 
 echo
 if [ "$PEND" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $TOTAL)"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi
