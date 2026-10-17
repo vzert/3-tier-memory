@@ -10,8 +10,8 @@
 #      un JSON a medias, que para Claude Code es "el hook no hizo nada";
 #   D. los avisos que solo puede resolver una persona (cuarentena, secretos, backfill) llegan a la persona;
 #   E. desde 2.63.0 ningun pendiente sale en el arranque, por ninguno de los dos canales, y sin
-#      ningun aviso para la persona no hay `systemMessage` (medido: el agente no usaba la lista,
-#      0 de 40 sesiones; a la persona le tapaba los avisos de comandos por correr).
+#      ningun aviso para la persona no hay `systemMessage` (medido: el agente uso la lista en
+#      1 de 40 sesiones; a la persona le tapaba los avisos de comandos por correr).
 #
 # Uso: test-session-start-json.sh   (exit 0 = todo verde)
 set -u
@@ -76,8 +76,20 @@ else:
     print(d.get("hookSpecificOutput", {}).get("additionalContext", ""))
 PYEOF
 
-echo "1. source=startup sin avisos: JSON solo con el canal del agente"
+echo "0. el primer arranque instala los comandos y se lo dice a la persona"
 P="$TMP/p1"; nuevo_proyecto "$P"
+correr "$P" startup > "$TMP/o0"
+check "la persona ve los comandos instalados" \
+  "$(python3 "$TMP/leer.py" "$TMP/o0" systemMessage | grep -c 'comandos nuevos del plugin instalados: /checkpoint-3t')" "1"
+check "el agente tambien" "$(python3 "$TMP/leer.py" "$TMP/o0" additionalContext | grep -c '^INSTALADO:')" "1"
+# Un comando local distinto del plugin se actualiza y tambien se avisa a la persona.
+printf 'viejo\n' > "$P/.claude/commands/status-3t.md"
+correr "$P" startup > "$TMP/o0b"
+check "la persona ve el comando actualizado" \
+  "$(python3 "$TMP/leer.py" "$TMP/o0b" systemMessage | grep -c 'comandos actualizados a la version nueva del plugin: /status-3t')" "1"
+
+echo "1. source=startup sin avisos: JSON solo con el canal del agente"
+# Tercer arranque del mismo proyecto: los comandos ya estan y no hay nada que avisar.
 correr "$P" startup > "$TMP/o1"
 check "parsea como JSON" "$(python3 -c "import json,sys;json.load(open(sys.argv[1]));print('si')" "$TMP/o1" 2>/dev/null)" "si"
 check "sin systemMessage: no hay nada que la persona deba correr" "$(python3 "$TMP/leer.py" "$TMP/o1" claves)" "hookSpecificOutput"

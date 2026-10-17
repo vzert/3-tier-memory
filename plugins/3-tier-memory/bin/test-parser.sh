@@ -87,7 +87,7 @@ elif echo "$OUT" | grep -qi 'duplic\|ya inyecta'; then
   fail "el aviso no dice que el volcado duplica al plugin" "$OUT"
 elif ! echo "$OUT" | grep -q 'vuelca [0-9]* B de pendientes crudos'; then
   fail "el aviso da el tamano del volcado" "$OUT"
-elif ! echo "$OUT" | grep -q '0 de 40' || ! echo "$OUT" | grep -q 'no lo borra por defecto'; then
+elif ! echo "$OUT" | grep -q '1 de 40' || ! echo "$OUT" | grep -q 'no lo borra por defecto'; then
   fail "el aviso da la medicion y que /migrate no borra por defecto" "$OUT"
 else
   PASS=$((PASS + 1)); echo "  ok   el aviso da tamano y medicion, sin llamarlo duplicado"

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Contrato de /migrate 2e con el volcado de pendientes de un hook propio del proyecto (2.63.0).
 #
-# Desde que session-start.sh dejo de inyectar pendientes (medido: el agente no usaba la lista,
-# 0 de 40 sesiones), un hook propio que vuelca _pendientes.md ya no DUPLICA nada. /migrate lo
+# Desde que session-start.sh dejo de inyectar pendientes (medido: el agente uso la lista en
+# 1 de 40 sesiones), un hook propio que vuelca _pendientes.md ya no DUPLICA nada. /migrate lo
 # leia como duplicado y media esa duplicacion con la linea "PENDIENTES ABIERTOS (N)" del plugin,
 # que ya no existe: con el texto viejo, el agente que corre /migrate buscaria una linea que nunca
 # llega. El consumidor de migrate.md es el modelo que lo ejecuta, asi que lo que se puede probar
@@ -33,7 +33,7 @@ printf '%s' "$SEC" | grep -q '\[PARTIAL\]\|OVERLAPS WITH THE PLUGIN' \
   || ok "el volcado ya no se rotula como solapado con el plugin"
 printf '%s' "$SEC" | grep -q '\[PENDIENTES\]' \
   && ok "el volcado tiene su propia etiqueta" || bad "el volcado tiene su propia etiqueta"
-printf '%s' "$SEC" | grep -q '0 of 40' \
+printf '%s' "$SEC" | grep -q '1 of 40' \
   && ok "2e da la medicion" || bad "2e da la medicion"
 printf '%s' "$SEC" | grep -q 'never remove it by default' \
   && ok "quitar el volcado nunca es el defecto" || bad "quitar el volcado nunca es el defecto"

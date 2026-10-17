@@ -94,10 +94,10 @@ That's it. `/checkpoint` saves your session, extracts action items, captures lea
 - **Two readers, two channels** — since 2.17.0 the SessionStart hook emits one JSON object: the
   agent gets `additionalContext` (counts, warnings, protocol) and **you** get a `systemMessage`
   only when there is something for you to run — `/consolidate-3t`, `/migrate-learnings-3t`,
-  `/backfill-3t`, a desynced command, a quarantined event, a secret in plain text. With nothing to
-  run, you see nothing. Since 2.63.0 no action item is printed at session start on either channel:
-  measured over the 40 most recent sessions of 7 projects, the agent never used the list it got
-  (0 of 40), and the human summary buried the commands above. Action items reach the agent per
+  `/backfill-3t`, a desynced command, a quarantined event, a secret in plain text — plus a line when
+  the session start installed, updated or renamed `-3t` commands. With none of that, you see nothing. Since 2.63.0 no action item is printed at session start on either channel:
+  measured over the 40 most recent sessions of 7 projects, the agent used an item of the list it
+  got in 1 of 40, and the human summary buried the commands above. Action items reach the agent per
   request instead (UserPromptSubmit recall), and you through the pendientes sidebar and the
   checkpoint's closing blocks
 - **Hooks** — tell you at session start which memory commands are due, apply pending journal events, surface relevant memory per prompt, detect unregistered files, optional strict guard on the indexes

@@ -327,7 +327,7 @@ fi
 
 # Hook local que vuelca pendientes (deteccion, warning-only). Hasta 2.62 se llamaba "duplicado":
 # el plugin inyectaba los pendientes ALTA y este volcado se le sumaba. Desde que el plugin dejo de
-# inyectarlos (medido: el agente no usaba la lista, 0 de 40 sesiones) ya no duplica nada, pero sigue
+# inyectarlos (medido: el agente uso la lista en 1 de 40 sesiones) ya no duplica nada, pero sigue
 # costando su tamano en cada sesion por el mismo tipo de texto que se midio sin uso. Se avisa con el
 # tamano y la medicion y se ofrece quitarlo en /migrate, que nunca lo borra sin que la persona elija.
 # Vive aqui y no solo en /migrate porque /migrate es opt-in y se corre una vez al adoptar: esta es
@@ -460,7 +460,7 @@ else:
     cost = "vuelca los pendientes crudos (hoy el archivo esta vacio, pero crece con el)"
 print(f"HOOK DE PENDIENTES: {script}{extra}, registrado en .claude/{settings}, {cost} "
       f"en cada sesion. El plugin dejo de inyectar pendientes al arrancar porque, medido, el agente "
-      f"no usaba esa lista (0 de 40 sesiones); los cruza contra cada peticion. "
+      f"uso esa lista en 1 de 40 sesiones; los cruza contra cada peticion. "
       f"Corre /migrate si quieres quitar ese volcado: lo ofrece como opcion y no lo borra por defecto.")
 DUPEOF
 )
@@ -499,9 +499,8 @@ else
   # CLI: sin pendientes en el arranque (2.63.0). Hasta aqui este bloque inyectaba al agente los
   # pendientes ALTA y sin clasificar (hasta 25) y a la persona un resumen (conteo, ALTA viejos,
   # los mas antiguos). Medido 2026-10-16 sobre las 40 sesiones mas recientes de 7 proyectos con
-  # el bloque en contexto: el agente no cito ni uso un item de la lista en ninguna (0/40), y de
-  # 43 pendientes cerrados solo 1 estaba en la lista y lo habia nombrado el usuario en su
-  # retomada. Costaba ~3.6 KB por sesion. A la persona tampoco le servia: tapaba los avisos de
+  # el bloque en contexto, leyendo cada sesion entera: el agente uso un item de la lista en 1 de
+  # 40, y de 46 pendientes cerrados ese fue el unico que salio de la lista. Costaba ~3.6 KB por sesion. A la persona tampoco le servia: tapaba los avisos de
   # comandos por correr (consolidar, migrar, backfill) que si son suyos. Los pendientes llegan
   # por donde si se usan: recall.sh cruza cada peticion contra ellos (UserPromptSubmit), el
   # sidebar de pendientes, y el Como retomar y los recordatorios del cierre del checkpoint.
@@ -573,6 +572,9 @@ done
 
 if [ -n "$MIGRATED" ]; then
   out "MIGRADO:$MIGRATED (renamed to avoid collisions with global skills)."
+  # Los cambios de comandos llegan tambien a la persona desde 2.63.0: son el "update" que Victor
+  # pidio ver al arrancar (d72), y con los pendientes fuera es lo que le dice que algo cambio.
+  human "MEMORIA: comandos renombrados con sufijo -3t:$MIGRATED."
   out ""
 fi
 
@@ -598,11 +600,13 @@ done
 
 if [ -n "$INSTALLED" ]; then
   out "INSTALADO:$INSTALLED (nuevos comandos del plugin)."
+  human "MEMORIA: comandos nuevos del plugin instalados:$INSTALLED."
   out ""
 fi
 
 if [ -n "$UPDATED" ]; then
   out "ACTUALIZADO:$UPDATED se actualizaron a la version mas reciente del plugin."
+  human "MEMORIA: comandos actualizados a la version nueva del plugin:$UPDATED."
   out ""
 fi
 
