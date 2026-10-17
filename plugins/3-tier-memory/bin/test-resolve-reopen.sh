@@ -392,19 +392,48 @@ chk "sale del archivo" "0" "$(arch "$ID")"
 chk "anota el reopen" "1" "$(vivas "reopen-$ID")"
 chk "y el cierre revertido" "1" "$(vivas "$ID")"
 
-echo "== 25. pasada muerta entre archivo y mensual: cuarentena con el motivo cierto =="
-# Residuo declarado (p-c103c7df05): no se termina solo. Lo que no puede hacer es decir que se cerro
-# antes de 2.31.0 y aconsejar un pendiente.add, que duplicaria la linea viva.
+echo "== 25. pasada muerta entre archivo y mensual: el reintento limpia la fila mensual =="
+# Hasta 2.62.2 era un residuo declarado (p-c103c7df05) y acababa en cuarentena mensual-cerrada con
+# la fila a mano. La clave reopen-<id> con el ts de ESTE reopen la escribio su propia pasada: con
+# la linea viva y fuera del archivo, lo que falta es solo la fila mensual.
 fixture; cerrar
 cp "$M/pendientes/2026-09.md" "$T/mes.bak"
 emit_cap --type pendiente.reopen --id "$ID"; REOPEN=$EV
 compact --quiet >/dev/null
 cp "$T/mes.bak" "$M/pendientes/2026-09.md"
 replay "$REOPEN"
+chk "sin cuarentena" "0" "$(cuar)"
+chk "la fila mensual vuelve identica" "$F0" "$(fila "$ID")"
+chk "la linea sigue viva una vez" "1" "$(grep -c "_id: ${ID}_" "$M/_pendientes.md")"
+chk "no repite la anotacion del reopen" "1" "$(vivas "reopen-$ID")"
+
+echo "== 26. la misma pasada muerta SIN la clave reopen-<id>: cuarentena con el motivo cierto =="
+# Sin el registro de este reopen (un compactador anterior a 2.60.1) no hay nada escrito por la
+# operacion que diga que la fila cerrada es suya: sigue siendo cuarentena, y el motivo no puede
+# aconsejar un pendiente.add, que duplicaria la linea viva.
+fixture; cerrar
+cp "$M/pendientes/2026-09.md" "$T/mes.bak"
+emit_cap --type pendiente.reopen --id "$ID"; REOPEN=$EV
+compact --quiet >/dev/null
+cp "$T/mes.bak" "$M/pendientes/2026-09.md"
+: > "$M/.journal/reabiertos.log"
+replay "$REOPEN"
 chk "cuarentena 1" "1" "$(cuar)"
 has "motivo mensual-cerrada" "$(motivo)" "mensual-cerrada"
 chk "no aconseja pendiente.add" "0" "$(motivo | grep -c 'Reabrelo con un pendiente.add')"
 chk "la linea sigue viva una vez" "1" "$(grep -c "_id: ${ID}_" "$M/_pendientes.md")"
+
+echo "== 27. lo mismo que el caso 25 por la via de expire =="
+fixture
+emit --type pendiente.expire --id "$ID" --dias 40 >/dev/null; compact --quiet >/dev/null
+cp "$M/pendientes/2026-09.md" "$T/mes.bak"
+emit_cap --type pendiente.reopen --id "$ID"; REOPEN=$EV
+compact --quiet >/dev/null
+cp "$T/mes.bak" "$M/pendientes/2026-09.md"
+replay "$REOPEN"
+chk "sin cuarentena" "0" "$(cuar)"
+chk "la fila mensual vuelve identica" "$F0" "$(fila "$ID")"
+chk "fuera de _caducados.md" "0" "$(cad "$ID")"
 
 echo
 echo "pass=$pass fail=$fail"

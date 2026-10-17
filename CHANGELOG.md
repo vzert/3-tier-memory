@@ -1,5 +1,39 @@
 # Changelog
 
+## [2.62.9] - 2026-10-17
+Origen: p-c103c7df05, ultimo paso de la Fase 3 de la familia de correccion y reversa del journal.
+Los residuos de muerte del proceso que declararon 2.40.0 y 2.60.1 se deciden uno por uno: uno se
+arregla y tres quedan en Known con su salida a mano.
+
+### Fixed
+- **Un `pendiente.reopen` que murio entre sacar la linea del archivo y limpiar la fila mensual se
+  termina en el reintento.** Antes iba a la cuarentena `mensual-cerrada` y la fila se limpiaba a
+  mano. Si `.journal/reabiertos.log` tiene la clave `reopen-<id>` con el ts de ESTE reopen (la
+  escribio su propia pasada antes de tocar nada), el reintento vacia las celdas Resuelto y Sesion
+  resolucion. Sin esa clave (la pasada la hizo un compactador anterior a 2.60.1) sigue la
+  cuarentena con el mismo motivo. Vale para un cierre por resolve y por expire.
+- `test-resolve-reopen.sh` casos 25-27: contra 2.62.2 fallan 4 asertos (casos 25 y 27). Mutaciones
+  `tools/mutaciones/m_reopen_mensual.py` (sin-terminar, sin-pedir-registro) en mutation-check.
+
+### Known
+Residuos de muerte del proceso que se aceptan. Ya estaban en versiones anteriores; cerrarlos pediria
+decidir con el estado del indice, que no distingue "aplicado" de "anotado y no escrito".
+- **Muerte entre anotar y escribir el indice en `plan.reopen`, `research.rename` y
+  `session.amend`** (desde 2.37.0, 2.38.0 y 2.40.0). Un kill no lanza excepcion, asi que
+  `escribir_anotado` no anula la anotacion; el reintento ve su propio ts anotado y archiva el evento
+  como replay sin aplicarlo. Salida a mano: emitir otra vez el mismo evento. Lleva un ts nuevo, sin
+  anotar, y se aplica.
+- **Falla la anulacion y tambien mover el evento a `quarantine/`** (desde 2.40.0). Pide dos fallos
+  de escritura a la vez; el compactador sale con error y la anotacion queda viva. Salida a mano:
+  agregar a `.journal/reabiertos.log` la linea `<clave><TAB>-<ts><TAB><fecha>` que anula la
+  anotacion y dejar el evento en `pending/`, o emitirlo otra vez.
+- **`pendiente.reopen` muerto despues de escribir el indice, con un cierre NUEVO aplicado antes del
+  reintento** (desde 2.58.0). Quedan dos entradas archivadas y el reintento lee la primera, asi que
+  reabre y deshace ese cierre. `pending/` se procesa en orden de nombre y el nombre empieza por el ts
+  en nanosegundos, asi que el reintento corre antes que un cierre emitido despues: solo pasa con el
+  reloj de otra maquina por detras o con un evento devuelto a `pending/` a mano. Salida a mano:
+  emitir otro `pendiente.resolve` del pendiente.
+
 ## [2.62.8] - 2026-10-16
 Origen: pedido de Victor (via `/goalspec:interview`, decisiones d65-d68 por el supervisor lookout).
 El snippet `Retomamos:` de Step 8 se copia y se pega a mano: si el pane se cierra o se olvida, el
