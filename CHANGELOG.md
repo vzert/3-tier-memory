@@ -34,6 +34,12 @@ igual que dos suites.
 
 ### Known
 - Sigue abierto p-7c1fa85c1e: un candado cuyo pid lo reusa otro proceso vivo hace esperar sin fin.
+- Un candado escrito a mano con el pid de un ANTECESOR de mutation-check (la shell que lo lanza) y ese
+  mismo pid en `RUN_TESTS_CANDADO_DUENO` lo salta (adversario externo, ronda 3). Se queda asi
+  (Victor, d119): quien escribe a mano el candado y la variable, con su mismo usuario, tambien puede
+  borrar el candado, y una ficha o una comprobacion del comando se falsifican igual. Por accidente
+  no pasa: la variable solo la exporta run-tests, y el pid de un antecesor solo acaba en el candado
+  si un pid se reusa (p-7c1fa85c1e).
 
 ## [2.62.7] - 2026-10-16
 Origen: p-524e2a5bf7. Varios agentes que esperaban a las suites ajenas lanzaban `tools/run-tests.sh`
