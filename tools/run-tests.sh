@@ -31,6 +31,9 @@ unset CLAUDE_CODE_SESSION_ID
 # TMPDIR: hay procesos de la misma maquina con su propio TMPDIR, y no compartian el candado
 # (adversario, ronda 3). `--una` no lo toma: la llaman las suites desde dentro de una corrida completa.
 # RUN_TESTS_CANDADO cambia la ruta (lo usa test-run-tests.sh para no esperar a la corrida que lo lanzo).
+# `--con-candado <comando...>` corre ese comando con el candado tomado: asi lo toma mutation-check.sh
+# lanzado solo (p-4be2b6ea23). Quien lo tiene exporta RUN_TESTS_CANDADO_DUENO con su pid, y
+# mutation-check no lo pide si ese pid es el del candado: dentro de una corrida se esperaria a si mismo.
 CANDADO="${RUN_TESTS_CANDADO:-/tmp/3tm-run-tests.candado}"
 [ "${1:-}" = "--ruta-candado" ] && { echo "$CANDADO"; exit 0; }   # para test-run-tests.sh
 # Quita un candado abandonado. Si no puede (de otro usuario en un /tmp compartido), sale con error:
@@ -77,7 +80,7 @@ candado_abandonado() {  # <pid visto, vacio si no habia> <motivo>
   candado_quita "$2"
 }
 candado_toma() {
-  local quien vacio=0 avisado=0 atascado=0 nocrea=0
+  local quien vacio=0 avisado=0 atascado=0 nocrea=0 ini; ini=$(date +%s)
   while :; do
     if mkdir "$CANDADO" 2>/dev/null; then
       # Si se lo quitaron entre el mkdir y escribir el pid, no es suyo: vuelve a la cola.
@@ -109,6 +112,12 @@ candado_toma() {
       vacio=0; candado_abandonado "$quien" "pid $quien"
     else
       vacio=0
+      # Solo pruebas: una espera con tope. Una copia rota que espera sin fin a la corrida que la lanzo
+      # la cuelga entera, y matarla no basta: bash espera a su hijo antes de morir (medido, 2.63.1).
+      if [ -n "${RUN_TESTS_CANDADO_TOPE:-}" ] && [ $(( $(date +%s) - ini )) -ge "$RUN_TESTS_CANDADO_TOPE" ]; then
+        echo "ERROR run-tests: RUN_TESTS_CANDADO_TOPE=$RUN_TESTS_CANDADO_TOPE s esperando el candado (pid $quien)." >&2
+        exit 3
+      fi
       if [ "$avisado" = 0 ]; then
         avisado=1
         echo "run-tests: otra corrida (pid $quien) tiene el candado; espero a que termine." >&2
@@ -127,10 +136,13 @@ candado_suelta() { [ "$(cat "$CANDADO/pid" 2>/dev/null)" = "$$" ] && rm -rf "$CA
 [ -f tools/tmp-propio.sh ] && . tools/tmp-propio.sh
 if [ "${1:-}" != "--una" ]; then
   candado_toma
+  export RUN_TESTS_CANDADO_DUENO=$$
   # Un solo trap EXIT: bash lo corre tambien al morir por INT/TERM/HUP (ver tmp-propio.sh), y este
   # reemplaza el de tmp-propio, asi que lo repite.
   trap 'type _tp_limpia >/dev/null 2>&1 && _tp_limpia; candado_suelta' EXIT
 fi
+# El comando de --con-candado sale con su rc; el trap de arriba suelta el candado.
+if [ "${1:-}" = "--con-candado" ]; then shift; "$@"; exit $?; fi
 FALLOS=0
 FALLIDAS=""
 TOTAL=0

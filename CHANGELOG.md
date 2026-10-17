@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.63.1] - 2026-10-17
+Origen: p-4be2b6ea23. `tools/mutation-check.sh` lanzado solo es tan pesado como la suite completa y
+no tomaba el candado de 2.62.7: dos a la vez, o uno junto a un `run-tests.sh`, cargaban la maquina
+igual que dos suites.
+
+### Added
+- **`tools/mutation-check.sh` lanzado solo toma el mismo candado que `tools/run-tests.sh`.** Se
+  relanza dentro de `run-tests.sh --con-candado <comando...>`, un modo nuevo que toma el candado,
+  corre el comando y sale con su rc. Quien tiene el candado exporta `RUN_TESTS_CANDADO_DUENO` con su
+  pid. mutation-check no lo pide si ese pid es el del candado: dentro de una corrida completa, o en
+  sus tandas de `MUT_JOBS`, se esperaria a si mismo. La variable sola no basta: una heredada que no
+  casa con el candado (las copias de `test-run-tests.sh` corren con su propio candado dentro del
+  runner real) no lo salta.
+- `test-run-tests.sh`: 11 asertos (70 → 81) con una copia de mutation-check cortada tras su candado
+  y un cuerpo que anota en el registro: tres mutation-check sueltos y una corrida completa lanzados a
+  la vez corren uno tras otro y los tres corren su cuerpo; dentro de una corrida completa
+  mutation-check sale ok sin esperarse; un `RUN_TESTS_CANDADO_DUENO` que no casa espera.
+  `RUN_TESTS_CANDADO_TOPE` (solo pruebas) pone tope a la espera: una copia rota que espera a la
+  corrida que la lanzo no muere con kill, porque bash espera a su hijo antes de correr el trap
+  (medido: 29 s de un `sleep 30`).
+- `mutation-check.sh`: 4 mutaciones nuevas (`m_mutation_check.py` y `sin-con-candado`), medidas con
+  un candado de runner tomado; `caso_tools` acepta la variable que apunta a la copia (7o argumento).
+
+### Known
+- Sigue abierto p-7c1fa85c1e: un candado cuyo pid lo reusa otro proceso vivo hace esperar sin fin.
+
 ## [2.62.7] - 2026-10-16
 Origen: p-524e2a5bf7. Varios agentes que esperaban a las suites ajenas lanzaban `tools/run-tests.sh`
 completo a la vez al terminar, y el Mac se quedaba sin memoria (2026-10-15/16, 4 o mas en cola).
