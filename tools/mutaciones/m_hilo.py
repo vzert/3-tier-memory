@@ -74,8 +74,9 @@ M = {
     "audit-sin-ninguno-bloqueo": [("        if es_ninguno_snip and bloq_ficha:", "        if False:")],
     "ninguno-bloqueo-solo-sesion": [("bloq_ficha = [i for i in dict.fromkeys(abiertos_ficha) if i in bloqueados]",
                                      "bloq_ficha = [i for i in dict.fromkeys(abiertos_ficha) if i in bloqueados and i in origenes_abiertos(memory_dir) and origenes_abiertos(memory_dir)[i] == slug]")],
-    "marco-decidir-con-usuario": [('r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b)\\S+"', 'r"|\\bdecidir\\s+con\\s+\\S+"')],
-    "marco-sin-decidir-con": [('r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b)\\S+"', 'r"|\\bnunca-calza-esto"')],
+    "marco-decidir-con-usuario": [('r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b(?!\\s*-|\\s+(?:extern|final|ajen|client|del?\\s)))\\S+"', 'r"|\\bdecidir\\s+con\\s+\\S+"')],
+    "marco-sin-decidir-con": [('r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b(?!\\s*-|\\s+(?:extern|final|ajen|client|del?\\s)))\\S+"', 'r"|\\bnunca-calza-esto"')],
+    "usuario-sin-apellido": [('r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b(?!\\s*-|\\s+(?:extern|final|ajen|client|del?\\s)))\\S+"', 'r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b)\\S+"')],
     "guard-sin-bloqueo": [("        if avisos_bloqueo:", "        if False:")],
 }
 

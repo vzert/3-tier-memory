@@ -589,7 +589,11 @@ En la ficha los nombres no cambian (`## Candidatos a pendiente`, `descartado`): 
 Recomienda `descartar` dos casos que la memoria del plugin ya midio como ruido: un pendiente de
 propagacion ("verificar que la otra instalacion actualizo"), que ningun agente puede avanzar, y uno
 cuyo unico actor es el usuario o un tercero, sin nada que hacer aqui (es una espera, no trabajo).
-Algo que tu puedes correr no tiene al usuario como unico actor: eso es `Hacerlo ahora`. Si el usuario contesta con "Other", sigue su texto (puede
+Algo que tu puedes correr no tiene al usuario como unico actor: eso es `Hacerlo ahora`. Una
+decision que el usuario toma con el agente en la sesion siguiente (opciones ya escritas, una
+pregunta por decision) tampoco es esa espera: recomienda `Guardar`, sin `--bloqueado-por`, para que
+Step 8 la ponga en `Proximo paso` (2.62.11; descartarla deja el snippet en `Ninguno`, que es el
+mismo defecto por otra puerta). Si el usuario contesta con "Other", sigue su texto (puede
 reescribir el pendiente). **Si cierra el modal sin responder, o lo rechaza, el candidato se
 descarta.**
 

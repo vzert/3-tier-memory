@@ -75,6 +75,7 @@ chk "y el paso pasa snippet.proximo_paso" "1" "$(printf '%s\n' "$OUT" | grep -c 
 senales() { python3 -c "import importlib.util,sys;s=importlib.util.spec_from_file_location('a','$BIN/pendientes_afines.py');m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(len(m.senales_marco(sys.argv[1])))" "$1"; }
 chk "el marco sigue avisando una espera condicional" "1" "$(senales 'publicar si Victor lo decide (p-341fdf5e59).')"
 chk "y decidir con un tercero (un proveedor externo)" "1" "$(senales 'decidir con el proveedor externo el formato (p-341fdf5e59).')"
+chk "un usuario con apellido es un tercero: usuario externo, usuario final, usuario-final, usuario del cliente" "1 1 1 1" "$(senales 'decidir con el usuario externo el formato (p-341fdf5e59).') $(senales 'decidir con el usuario final (p-341fdf5e59).') $(senales 'decidir con el usuario-final (p-341fdf5e59).') $(senales 'decidir con el usuario del cliente (p-341fdf5e59).')"
 chk "decidir con el usuario (con o sin articulo) no es senal" "0 0" "$(senales 'decidir con el usuario D4 (p-341fdf5e59).') $(senales 'decidir con usuario D4 (p-341fdf5e59).')"
 
 echo "== 2a. bloque completo con un pendiente bloqueado en la ficha: no es ninguno, no avisa =="
@@ -100,6 +101,7 @@ TPL="$BIN/../templates"
 chk "Step 3b (--bloqueado-por) lo dice" "1" "$(grep -c 'Una decision del usuario NUNCA es bloqueo' "$TPL/checkpoint-3t.md")"
 chk "Step 3b ya no pone 'una decision de otra persona' como bloqueo" "0" "$(grep -c 'una decision de otra$' "$TPL/checkpoint-3t.md")"
 chk "Step 3a lo dice" "1" "$(grep -c 'never a decision of the user' "$TPL/checkpoint-3t.md")"
+chk "Step 3b no recomienda descartar una decision del usuario" "1" "$(grep -c 'tampoco es esa espera: recomienda `Guardar`' "$TPL/checkpoint-3t.md")"
 chk "Step 8 lo dice" "1" "$(grep -c 'El usuario no esta FUERA de la sesion' "$TPL/checkpoint-3t-step8.md")"
 chk "el punto 5 del marco de Step 8 ya no manda bloquear una espera del usuario" "1 0" "$(grep -c 'decision \*\*del usuario\*\*, el paso es esa decision' "$TPL/checkpoint-3t-step8.md") $(grep -c 'una accion de fuera de la sesion, no es paso. Ponle' "$TPL/checkpoint-3t-step8.md")"
 chk "la cabecera de uso de journal-emit.py lo dice" "1" "$(sed -n '1,60p' "$BIN/journal-emit.py" | grep -c 'nunca una decision del usuario')"
