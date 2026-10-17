@@ -1492,7 +1492,8 @@ says so explicitly.
 
 El detalle de este paso vive en su propio fichero, junto a este template (2.42.0: era el 37 % del
 texto y se leia en el mismo bloque que todo lo demas). Imprimelo AHORA y siguelo entero — 8a
-persistir el snippet en la ficha, 8b imprimirlo con `print-como-retomar.py`, 8c recordatorios de
+persistir el snippet en la ficha, 8a2 marcar para retomar el pendiente del `Proximo paso`
+(`marcar-retomar.py`, 2.62.8), 8b imprimirlo con `print-como-retomar.py`, 8c recordatorios de
 calendario, 8d recomendaciones de research (ya no van en el cierre), 8e el pendiente que vence hoy
 o el opcional. Desde 2.43.0 las salidas de 8b, 8e y 8c no se pegan en este turno: van al final de
 tu respuesta a la revision del cierre, en ese orden y cada una con su emoji (ver 8b):
