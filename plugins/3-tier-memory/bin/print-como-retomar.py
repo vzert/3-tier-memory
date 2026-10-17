@@ -26,16 +26,16 @@ snippet de 6 lineas, con o sin condicionales), imprime una cabecera con el emoji
 DENTRO de un fence ``` (2.44.0): pegado en la respuesta, el fence es lo que sale en color, y es el
 unico bloque del cierre que va en color (Victor lo comprobo el 2026-10-01). Sin separadores ni
 texto de introduccion: el emoji marca donde empieza el bloque.
-Afines (2.55.0): si el snippet es un bloque y su `Proximo paso:` cita un `p-…` o un `plan-…`, mete
-justo debajo una linea `Si ese paso es corto, suma en la misma sesion: …` con hasta 2 pendientes
-Alta/Media ligados por `_relacionado:` (pendientes_afines.py). Se calcula EN VIVO desde
+Extras (2.55.0; la regla de hoy es la del hilo, abajo): si el snippet es un bloque y su
+`Proximo paso:` cita un `p-…` o un `plan-…`, mete justo debajo una linea `Si ese paso es corto,
+suma en la misma sesion: …` con hasta 2 pendientes del hilo. Se calcula EN VIVO desde
 `_pendientes.md`, igual que el bloque de Step 8e: no se guarda en la ficha, y el hook de cierre,
 que vuelve a correr este script, compara contra el estado real. Si la ficha ya trae esa linea
 (escrita a mano), no se duplica.
-Hilo (2.57.0, p-b282a8cfc4): los extras ya no salen solo de `_relacionado` sino del hilo entero
-(lo que la sesion recibio, sellado por stamp-hilo.py; lo que nacio en ella; y, desde 2.62.0, sus
-vecinos DIRECTOS por `_relacionado`, solo por ids abiertos: el cierre transitivo de 2.57.0
-cruzaba al trabajo de otro agente), y debajo va `quedan N en el hilo: <ids>` con lo que no entro. Ver
+Hilo (2.57.0, p-b282a8cfc4; de un salto desde 2.62.0): lo que la sesion recibio, sellado por
+stamp-hilo.py; lo que nacio en ella; y sus vecinos DIRECTOS por `_relacionado`, solo por ids
+abiertos (el cierre transitivo de 2.57.0 cruzaba al trabajo de otro agente). En 2.55.0 los extras
+salian solo de `_relacionado`. Debajo va `quedan N en el hilo: <ids>` con lo que no entro. Ver
 pendientes_afines.py, "El hilo".
 Si la seccion esta vacia o dice solo el placeholder (`<filled in Step 8>`), no imprime nada y
 sale con codigo 1 — Step 8a todavia no corrio.

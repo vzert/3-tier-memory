@@ -226,6 +226,9 @@ caso "extras: espera un OK" pendientes_afines.py m_hilo.py $T "pruebas en vivo y
 caso "extras: en vivo pegado al verbo" pendientes_afines.py m_hilo.py $T "lo ya verificado y las decisiones del agente siguen siendo extra" extras-vivo-laxo
 caso "extras: no ESPERA_AJENA" pendientes_afines.py m_hilo.py $T "lo ya verificado y las decisiones del agente siguen siendo extra" extras-ok-con-ajena
 caso "extras: filtrados van a quedan" pendientes_afines.py m_hilo.py $T "las siete van a quedan" extras-filtra-quedan
+caso "hilo: Bash con barras invertidas" pendientes_afines.py m_hilo.py $T "Bash con barras invertidas escribe la ficha" bash-sin-barras
+caso "hilo: message no-objeto" pendientes_afines.py m_hilo.py $T "message no-objeto: stamp-hilo sella sin traceback" message-no-dict
+caso "hilo: audit del caso 5 colapsado" checkpoint-audit.py m_hilo.py $T "colapsado con un heredado hacible: SALTADO snippet.hilo" audit-colapsado-sin-hilo
 
 echo "Contrato de check-project-dir-fallback.py (2.41.4): cada pieza, rota, tumba su aserto"
 caso "verde respaldo" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " respaldo: exit 0" r1-sin-quitar-forma
