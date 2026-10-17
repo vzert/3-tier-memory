@@ -33,7 +33,8 @@ unset CLAUDE_CODE_SESSION_ID
 # RUN_TESTS_CANDADO cambia la ruta (lo usa test-run-tests.sh para no esperar a la corrida que lo lanzo).
 # `--con-candado <comando...>` corre ese comando con el candado tomado: asi lo toma mutation-check.sh
 # lanzado solo (p-4be2b6ea23). Quien lo tiene exporta RUN_TESTS_CANDADO_DUENO con su pid, y
-# mutation-check no lo pide si ese pid es el del candado: dentro de una corrida se esperaria a si mismo.
+# mutation-check no lo pide si ese pid es el del candado y un antecesor suyo: dentro de una corrida se
+# esperaria a si mismo.
 CANDADO="${RUN_TESTS_CANDADO:-/tmp/3tm-run-tests.candado}"
 [ "${1:-}" = "--ruta-candado" ] && { echo "$CANDADO"; exit 0; }   # para test-run-tests.sh
 # Quita un candado abandonado. Si no puede (de otro usuario en un /tmp compartido), sale con error:
