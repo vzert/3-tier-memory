@@ -6,8 +6,7 @@ medir si al agente si. Se midio sobre las 40 sesiones mas recientes de 7 proyect
 contexto, leyendo cada sesion entera: el agente uso un item de su lista en 1 de 40 (en 383cd006
 reconocio a media sesion el pendiente ALTA del arnes de mutacion, sin haberlo visto en otra parte, y
 lo llevo al checkpoint, donde se cerro). De 46 pendientes cerrados en esas sesiones con el id escrito
-en el comando, ese fue el unico que salio de la lista; 13 llamadas de cierre en 4 sesiones pasan el id
-por variable o script y no se pudieron asignar. La lista costaba de media ~3.6 KB y 29 lineas por sesion. Una primera medicion
+en el comando, ese fue el unico que salio de la lista (no cuenta `p-0123456789`, un id de prueba). La lista costaba de media ~3.6 KB y 29 lineas por sesion. Una primera medicion
 que solo miraba los 3 primeros turnos dio 0/40 y 43 cerrados; el adversario externo la rompio.
 Decisiones de Victor via el supervisor (d70-d72, d104, d107: seguir con 1 de 40).
 
@@ -23,6 +22,9 @@ Decisiones de Victor via el supervisor (d70-d72, d104, d107: seguir con 1 de 40)
   indices. Sin nada de eso no hay mensaje.
 - **`BACKFILL PENDIENTE` llega tambien a la persona** (antes solo al agente), como CONSOLIDAR y
   MIGRAR: correr `/backfill-3t` lo decide ella.
+- **`MIGRADO` ya no rompe el JSON del arranque** (fallo previo, de 2.62.6 o antes): `$old_cmd→`
+  hacia que bash tomara el primer byte de la flecha como parte del nombre de la variable y dejaba
+  UTF-8 invalido en la salida; el JSON no parseaba y el hook caia a texto plano. Ahora `${old_cmd}→`.
 - **Los cambios de comandos llegan tambien a la persona:** `INSTALADO`, `ACTUALIZADO` y `MIGRADO`
   (comandos `-3t` instalados, actualizados o renombrados por el arranque) tienen su linea en
   `systemMessage`. Es el "update" que Victor pidio ver al abrir sesion.

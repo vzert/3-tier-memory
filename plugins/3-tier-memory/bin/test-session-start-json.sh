@@ -88,6 +88,15 @@ correr "$P" startup > "$TMP/o0b"
 check "la persona ve el comando actualizado" \
   "$(python3 "$TMP/leer.py" "$TMP/o0b" systemMessage | grep -c 'comandos actualizados a la version nueva del plugin: /status-3t')" "1"
 
+echo "0b. un comando viejo sin sufijo se renombra, el JSON sigue valido y la persona lo ve"
+PM="$TMP/pm"; nuevo_proyecto "$PM"; mkdir -p "$PM/.claude/commands"
+printf 'viejo\n' > "$PM/.claude/commands/checkpoint.md"
+correr "$PM" startup > "$TMP/om"
+check "sigue siendo JSON valido (la flecha no rompe el UTF-8)" \
+  "$(python3 -c "import json,sys;json.load(open(sys.argv[1]));print('si')" "$TMP/om" 2>/dev/null)" "si"
+check "la persona ve el renombre" \
+  "$(python3 "$TMP/leer.py" "$TMP/om" systemMessage | grep -c 'renombrados con sufijo -3t: /checkpoint→/checkpoint-3t')" "1"
+
 echo "1. source=startup sin avisos: JSON solo con el canal del agente"
 # Tercer arranque del mismo proyecto: los comandos ya estan y no hay nada que avisar.
 correr "$P" startup > "$TMP/o1"

@@ -501,7 +501,7 @@ else
   # los mas antiguos). Medido 2026-10-16 sobre las 40 sesiones mas recientes de 7 proyectos con
   # el bloque en contexto, leyendo cada sesion entera: el agente uso un item de la lista en 1 de
   # 40, y de 46 pendientes cerrados con el id escrito en el comando ese fue el unico que salio de
-  # la lista (los cerrados con el id en una variable no se pudieron asignar). Costaba ~3.6 KB por sesion. A la persona tampoco le servia: tapaba los avisos de
+  # la lista. Costaba ~3.6 KB por sesion. A la persona tampoco le servia: tapaba los avisos de
   # comandos por correr (consolidar, migrar, backfill) que si son suyos. Los pendientes llegan
   # por donde si se usan: recall.sh cruza cada peticion contra ellos (UserPromptSubmit), el
   # sidebar de pendientes, y el Como retomar y los recordatorios del cierre del checkpoint.
@@ -567,7 +567,10 @@ for old_cmd in checkpoint status audit backfill; do
   NEW_FILE="$CMDS_DIR/${old_cmd}-3t.md"
   if [ -f "$OLD_FILE" ] && [ ! -f "$NEW_FILE" ]; then
     mv "$OLD_FILE" "$NEW_FILE"
-    MIGRATED="$MIGRATED /$old_cmd→/${old_cmd}-3t"
+    # Llaves obligatorias: sin ellas bash toma el primer byte de la flecha (UTF-8 0xE2) como parte
+    # del nombre `$old_cmd…`, la expansion queda vacia y deja 0x86 0x92 sueltos. Ese UTF-8 invalido
+    # tumbaba el JSON entero y el hook caia a texto plano (medido en 2.62.6 y 2.63.0, adversario).
+    MIGRATED="$MIGRATED /${old_cmd}→/${old_cmd}-3t"
   fi
 done
 
