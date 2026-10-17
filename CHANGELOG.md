@@ -1,5 +1,45 @@
 # Changelog
 
+## [2.62.7] - 2026-10-16
+Origen: p-524e2a5bf7. Varios agentes que esperaban a las suites ajenas lanzaban `tools/run-tests.sh`
+completo a la vez al terminar, y el Mac se quedaba sin memoria (2026-10-15/16, 4 o mas en cola).
+
+### Added
+- **`tools/run-tests.sh` toma un candado de una corrida completa por maquina.** Es una carpeta en una
+  ruta fija, `/tmp/3tm-run-tests.candado` (no en TMPDIR: hay procesos de la misma maquina con su
+  propio TMPDIR); `mkdir` es atomico en macOS, Linux y Git Bash, sin flock. La siguiente corrida
+  espera a la que lo tiene y lo dice en stderr, con el comando para borrar el candado si el pid no es
+  una corrida. Un candado cuyo pid ya no existe (kill -9) se quita con aviso, bajo un sub-candado y
+  releyendo el pid: sin eso, con tres o mas en cola, el que esperaba veia morir al dueno justo al
+  soltarlo y borraba el candado que otra corrida acababa de tomar. Si no se puede quitar (de otro
+  usuario en un /tmp compartido), la corrida sale con un ERROR que lo dice, sin reintentar. Un pid
+  vivo de otro usuario (kill -0 falla por permiso) cuenta como vivo; kill corre con `LC_ALL=C`
+  porque en glibc su mensaje se traduce. Si el candado no se puede crear (/tmp de solo lectura en
+  un sandbox), tras 3 intentos la corrida sale con rc 2 y dice como apuntarlo con
+  `RUN_TESTS_CANDADO`, en vez de esperar sin fin o de correr sin candado (Victor, d64). Un pid vacio,
+  no numerico o 0 cuenta como abandonado (`kill -0 0` sale 0).
+  `--una` no lo toma. `RUN_TESTS_CANDADO` cambia la ruta.
+- `test-run-tests.sh`: 21 asertos (49 → 70) con una copia del runner en un repo minimo: ocho
+  corridas lanzadas a la vez corren una tras otra, las siete que esperan lo dicen y ninguna quita el
+  candado de otra (con una pausa solo de prueba, `RUN_TESTS_CANDADO_PAUSA`, que ensancha la
+  carrera), el candado se suelta, uno de un pid muerto no bloquea, uno que no se puede quitar sale
+  con error y un solo aviso, uno de un pid ajeno vivo se respeta, uno que no se puede crear no
+  cuelga ni corre sin candado (sale con rc 2), uno con pid 0 no espera sin fin, la ruta no depende de TMPDIR, y
+  `--una` no espera. Las corridas van desacopladas de la prueba: como hijas suyas, quitar la relectura del pid no
+  tumbaba el caso (medido 0 de 3; la causa no esta medida). Toda
+  espera tiene tope. Los casos de chmod 555 y del pid ajeno solo corren donde la plataforma los
+  permite (no en Windows ni como root): lo dicen en una linea y no cuentan.
+- `mutation-check.sh`: 11 mutaciones del candado; cada una tumba su aserto (la que quita la relectura
+  del pid cae por la carrera de ocho corridas: 3 de 3 medidas, no determinista).
+
+### Known
+- Solo se ordenan las corridas que traen este codigo: un checkout o worktree anterior a esta version
+  sigue corriendo sin candado hasta que se ponga al dia.
+- Si el pid de un candado viejo lo reusa otro proceso vivo, la corrida espera sin fin. El aviso en
+  stderr lo dice una vez, con el `rm -rf` exacto. En CI no pasa: cada runner empieza limpio.
+- `tools/mutation-check.sh` lanzado solo es tan pesado como la suite y no toma el candado.
+- Coste: `test-run-tests.sh` pasa de ~11 s a ~25 s (medido en el Mac); mutation-check lo corre en
+  cada una de sus mutaciones de run-tests, asi que el job de ubuntu tarda unos minutos mas.
 ## [2.62.6] - 2026-10-16
 Origen: el adversario de 2.62.0 (PR #27) midio con una fecha forzada que `test-hilo-pendientes.sh`
 caia en main desde el 2026-10-21: `retomar()` usa la fecha real y un pendiente de la prueba tenia
