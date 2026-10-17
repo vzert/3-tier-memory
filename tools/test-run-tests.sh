@@ -11,6 +11,10 @@
 set -u
 RT="${RUN_TESTS:-$(cd "$(dirname "$0")" && pwd)/run-tests.sh}"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+# Candado propio para toda llamada a run-tests.sh de esta prueba. Dentro de una corrida completa el
+# candado real lo tiene el runner que lanzo esta prueba: si un `--una` lo pidiera (la mutacion
+# una-con-candado de mutation-check), esperaria sin fin. Colgo el CI del PR #35 cinco horas.
+export RUN_TESTS_CANDADO="$T/candado-de-las-llamadas"
 pass=0; fail=0
 chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: esperaba '$2', salio '$3'"; fi; }
 # veredicto <suite>: la primera palabra de la linea que imprime run-tests.sh (ok / skip / FALLA)
