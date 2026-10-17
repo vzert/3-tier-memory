@@ -72,7 +72,9 @@ OUT=$(audit)
 chk "snippet.ninguno_bloqueo HECHO" "1" "$(printf '%s\n' "$OUT" | grep -c 'HECHO .*snippet.ninguno_bloqueo')"
 chk "decidir con el usuario no es espera ajena en snippet.marco" "1" "$(printf '%s\n' "$OUT" | grep -c 'HECHO .*snippet.marco')"
 chk "y el paso pasa snippet.proximo_paso" "1" "$(printf '%s\n' "$OUT" | grep -c 'HECHO .*snippet.proximo_paso')"
-senales() { python3 -c "import importlib.util,sys;s=importlib.util.spec_from_file_location('a','$BIN/pendientes_afines.py');m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(len(m.senales_marco(sys.argv[1])))" "$1"; }
+# La ruta va como argumento, no dentro del codigo: en Git Bash MSYS convierte `/d/a/...` en los
+# argumentos, pero no dentro de un string de `-c` (fallo en windows-latest, platforms de 2.62.11).
+senales() { python3 -c "import importlib.util,sys;s=importlib.util.spec_from_file_location('a',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(len(m.senales_marco(sys.argv[2])))" "$BIN/pendientes_afines.py" "$1"; }
 chk "el marco sigue avisando una espera condicional" "1" "$(senales 'publicar si Victor lo decide (p-341fdf5e59).')"
 chk "y decidir con un tercero (un proveedor externo)" "1" "$(senales 'decidir con el proveedor externo el formato (p-341fdf5e59).')"
 chk "un usuario con apellido es un tercero: usuario externo, usuario final, usuario-final, usuario del cliente" "1 1 1 1" "$(senales 'decidir con el usuario externo el formato (p-341fdf5e59).') $(senales 'decidir con el usuario final (p-341fdf5e59).') $(senales 'decidir con el usuario-final (p-341fdf5e59).') $(senales 'decidir con el usuario del cliente (p-341fdf5e59).')"
