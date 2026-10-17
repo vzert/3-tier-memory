@@ -137,12 +137,14 @@ eq "con --memory-dir memory relativo, tambien el principal" "$n" "2"
 
 echo "== un hook real lee la memoria del principal desde el worktree"
 printf -- '- [ ] item visible desde el worktree — _creado: 2026-10-07_\n' > "$M/memory/_pendientes.md"
-printf '# idx\n' > "$M/memory/_learnings.md"
+printf '# idx\n\n## Quick Reference\n\n1. regla del principal\n\n## Related\n' > "$M/memory/_learnings.md"
 H="$TMP/home"; mkdir -p "$H"
 out=$(printf '{"cwd":"%s","session_id":"x","hook_event_name":"SessionStart","source":"startup"}' "$W" \
   | HOME="$H" CLAUDE_PROJECT_DIR="$W" CLAUDE_PLUGIN_ROOT="$(dirname "$BIN")" bash "$BIN/session-start.sh" 2>/dev/null)
-case "$out" in *"item visible desde el worktree"*) ok "session-start lanzado en el worktree ve los pendientes del principal" ;;
-  *) bad "session-start lanzado en el worktree no ve los pendientes del principal: ${out:0:300}" ;; esac
+# Desde 2.63.0 el arranque no imprime pendientes; la senal de que leyo la memoria del principal es el
+# conteo de reglas de SU _learnings.md (la copia del worktree no tiene ninguno).
+case "$out" in *"REGLAS CRITICAS: 1"*) ok "session-start lanzado en el worktree lee la memoria del principal" ;;
+  *) bad "session-start lanzado en el worktree no lee la memoria del principal: ${out:0:300}" ;; esac
 if [ -e "$W/memory/_pendientes.md" ] || [ -d "$W/memory/.journal" ]; then
   bad "session-start escribio memoria en el worktree"
 else ok "session-start no escribio memoria en el worktree"; fi

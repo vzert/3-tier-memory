@@ -325,11 +325,13 @@ if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -f "${CLAUDE_PLUGIN_ROOT}/bin/ensure-frontm
   fi
 fi
 
-# Hook local duplicado (deteccion, warning-only). Un hook propio del proyecto que vuelca
-# _pendientes.md se SUMA a este bloque en vez de reemplazarlo — el usuario paga el corpus
-# dos veces, una cruda y una curada, cada sesion. Vive aqui y no solo en /migrate porque
-# /migrate es opt-in y se corre una vez al adoptar: esta es la unica superficie que alcanza
-# a cada instalacion sin que nadie pida nada.
+# Hook local que vuelca pendientes (deteccion, warning-only). Hasta 2.62 se llamaba "duplicado":
+# el plugin inyectaba los pendientes ALTA y este volcado se le sumaba. Desde que el plugin dejo de
+# inyectarlos (medido: el agente no usaba la lista, 0 de 40 sesiones) ya no duplica nada, pero sigue
+# costando su tamano en cada sesion por el mismo tipo de texto que se midio sin uso. Se avisa con el
+# tamano y la medicion y se ofrece quitarlo en /migrate, que nunca lo borra sin que la persona elija.
+# Vive aqui y no solo en /migrate porque /migrate es opt-in y se corre una vez al adoptar: esta es
+# la unica superficie que alcanza a cada instalacion sin que nadie pida nada.
 if [ -n "$CLAUDE_PROJECT_DIR" ]; then
   DUP_HOOK=$(CLAUDE_PROJECT_DIR="$CLAUDE_PROJECT_DIR" MEMORY_DIR="$MEMORY_DIR" python3 <<'DUPEOF' 2>/dev/null
 import json, os, re, shlex, sys
@@ -456,9 +458,10 @@ elif size > 0:
     cost = f"vuelca {size} B de pendientes crudos"
 else:
     cost = "vuelca los pendientes crudos (hoy el archivo esta vacio, pero crece con el)"
-print(f"HOOK DUPLICADO: {script}{extra}, registrado en .claude/{settings}, {cost} "
-      f"que este bloque ya inyecta curado — se suma, no reemplaza. "
-      f"Corre /migrate para recortarlo conservando lo que ese hook tenga de propio.")
+print(f"HOOK DE PENDIENTES: {script}{extra}, registrado en .claude/{settings}, {cost} "
+      f"en cada sesion. El plugin dejo de inyectar pendientes al arrancar porque, medido, el agente "
+      f"no usaba esa lista (0 de 40 sesiones); los cruza contra cada peticion. "
+      f"Corre /migrate si quieres quitar ese volcado: lo ofrece como opcion y no lo borra por defecto.")
 DUPEOF
 )
   if [ -n "$DUP_HOOK" ]; then
@@ -493,269 +496,15 @@ if [ "$IS_PAPERCLIP_AGENT" = true ]; then
     fi
   fi
 else
-  # CLI: inject pendientes (as directive with inline list) + learnings
-  if [ -f "$MEMORY_DIR/_pendientes.md" ]; then
-    # El resumen para la persona no vuelve por stdout: se escribe aqui. Ver el bloque
-    # "BLOQUE DE LA PERSONA" mas abajo para por que no se usa una sentinela.
-    PEND_HUMANO=$(mktemp 2>/dev/null || echo "")
-    PENDIENTES_OUTPUT=$(PENDIENTES_FILE="$MEMORY_DIR/_pendientes.md" HUMANO_FILE="$PEND_HUMANO" python3 <<'PYEOF' 2>/dev/null
-import os, re, sys
-from datetime import date
-
-# La garantia de UTF-8 vive AQUI, con el codigo que imprime, no solo en el `export` del guion que
-# lo llama: este bloque tambien se ejecuta suelto (test-parser lo extrae de aqui), y una garantia
-# que depende de quien te invoque no es una garantia. En Windows, python codifica stdout con la
-# pagina de codigos local cuando va a una tuberia y los guiones largos salian como `?`.
-try: sys.stdout.reconfigure(encoding="utf-8")
-except Exception: pass
-
-STALE_DAYS = 30  # a pendiente older than this is flagged as suspect-stale
-# Umbral propio para ALTA (p-d05b70d364), mas corto que STALE_DAYS a proposito: un adversario
-# (subagente en Opus, ronda 1) midio contra el caso real que motivo este pendiente — un Alta
-# creado el mismo dia que se escribio el pendiente — y con STALE_DAYS=30 ese caso no habria
-# avisado a la persona hasta un mes despues, justo el defecto que este cambio existe para cerrar.
-# 7 dias: una semana sin que el agente lo cierre por su cuenta es la senal de que hace falta la
-# persona, sin ahogar el aviso en cada sesion con Altas que llevan uno o dos dias abiertos.
-ALTA_STALE_DAYS = 7
-
-def days_old(created):
-    m = re.match(r"(\d{4})-(\d{2})-(\d{2})", created or "")
-    if not m:
-        return None
-    try:
-        d = date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-    except ValueError:
-        return None
-    return (date.today() - d).days
-
-path = os.environ.get("PENDIENTES_FILE", "")
-try:
-    with open(path, encoding="utf-8") as f:
-        content = f.read()
-except Exception:
-    sys.exit(0)
-
-PRIORITY_ORDER = ["alta", "media", "baja", "otros"]
-# Secciones no reconocidas caen en "otros" en vez de descartarse: un archivo con
-# encabezados custom perdia esos items Y reportaba un total falso en el header.
-# Secciones de documentacion/cierre. Anclado al FINAL a proposito: con match por prefijo,
-# "## Scope expansion tasks" o "## Notas pendientes" —secciones vivas— se tragaban enteras.
-# Se admite solo un sufijo acotado (parentesis, fecha, "este archivo"), nunca texto libre.
-NON_PENDIENTE_RE = re.compile(
-    r"^## (?:c[oó]mo usar(?: este archivo)?|related|relacionad[oa]s?|completad[oa]s?"
-    r"|scope|notas?)\s*(?:\([^)]*\)|[-–—:]?\s*\d{4}-\d{2}-\d{2})?\s*$")
-buckets = {p: [] for p in PRIORITY_ORDER}
-odd_sections = []   # headers fuera del esquema de prioridad
-skipped = 0         # items bajo secciones cerradas, excluidos a proposito
-skip_sections = []  # que secciones los contienen (se reportan, no se ocultan)
-seen_headers = set()
-dup_headers = []
-# Un item puede vivir antes del primer "## " (preambulo del archivo). Descartarlo es el
-# mismo fallo silencioso que este parser vino a arreglar, asi que arranca en "otros".
-current = "otros"
-current_skip_header = ""
-_lines = content.splitlines()
-_first = next((i for i, l in enumerate(_lines) if l.strip()), None)
-_fm_open = _first is not None and _lines[_first].strip() == "---"
-for idx, line in enumerate(_lines):
-    s = line.strip()
-    low = s.lower()
-    if _fm_open:
-        if idx == _first:
-            continue
-        if s == "---":
-            _fm_open = False
-        continue
-    if low.startswith("## "):
-        if low in seen_headers:
-            dup_headers.append(s)
-        seen_headers.add(low)
-    if low.startswith("## alta"):
-        current = "alta"
-    elif low.startswith("## media"):
-        current = "media"
-    elif low.startswith("## baja"):
-        current = "baja"
-    elif low.startswith("## "):
-        if NON_PENDIENTE_RE.match(low):
-            current = "skip"
-            current_skip_header = s
-        else:
-            current = "otros"
-            odd_sections.append(s)
-    elif current == "skip" and re.match(r"^- \[ \]", s):
-        skipped += 1   # item en seccion cerrada (Completados/Scope): no se inyecta a proposito
-        skip_sections.append(current_skip_header)
-    elif current and re.match(r"^- \[ \]", s):
-        m = re.search(r"_creado:\s*(\d{4}-\d{2}-\d{2})", s)
-        created = m.group(1) if m else None
-        text = s[6:]
-        text = re.sub(r"\s*—\s*_origen:[^—]*", "", text)
-        text = re.sub(r"\s*—\s*_creado:[^—]*", "", text)
-        text = re.sub(r"\s*—\s*_id:[^—]*", "", text)   # identidad del journal (v2.12.0), no es texto
-        text = re.sub(r"\s*—\s*_revisar:[^—]*", "", text)  # ventana declarada (v2.13.0), no es texto
-        text = text.strip()
-        buckets[current].append((created or "9999", text))
-
-total = sum(len(v) for v in buckets.values())
-
-# Auto-verificacion del parseo. Un fallo de parseo aqui es INVISIBLE: el header
-# imprime un total plausible y nadie lo compara contra el archivo (unifi-expert
-# inyecto 0 de 15 pendientes durante meses y se veia igual que "no hay nada").
-# Estas dos senales convierten cualquier drift de estructura en algo que se ve.
-raw_total = len(re.findall(r"(?m)^[ \t]*- \[ \]", content)) - skipped
-notes = []
-if odd_sections:
-    uniq = list(dict.fromkeys(odd_sections))
-    shown_secs = ", ".join(uniq[:3]) + (f" [+{len(uniq) - 3} mas]" if len(uniq) > 3 else "")
-    notes.append("seccion(es) fuera del esquema Alta/Media/Baja, cuyos items se inyectan "
-                 "arriba como SIN CLASIFICAR: "
-                 + shown_secs
-                 + " — mueve esos items a Alta/Media/Baja prioridad para que se prioricen")
-if dup_headers:
-    notes.append("encabezado(s) duplicado(s): " + ", ".join(dict.fromkeys(dup_headers)))
-if skipped:
-    uniq_skip = list(dict.fromkeys(skip_sections))
-    notes.append(f"{skipped} item(s) '- [ ]' bajo secciones cerradas ("
-                 + ", ".join(uniq_skip[:3])
-                 + (f" [+{len(uniq_skip) - 3} mas]" if len(uniq_skip) > 3 else "")
-                 + ") — no se inyectan")
-if raw_total != total:
-    notes.append(f"el archivo tiene {raw_total} lineas '- [ ]' pero se clasificaron {total} "
-                 f"— {abs(raw_total - total)} quedaron fuera del conteo")
-if total == 0:
-    # Sin items clasificados el bloque no se imprime — pero si el archivo TENIA lineas
-    # "- [ ]" en algun lado, callarse aqui es exactamente el fallo original.
-    if notes:
-        print("ESTRUCTURA de _pendientes.md: " + "; ".join(notes) + ".")
-    sys.exit(0)
-
-for k in buckets:
-    buckets[k].sort(key=lambda x: x[0])
-
-selected = []
-for prio in PRIORITY_ORDER:
-    for it in buckets[prio]:
-        selected.append((prio, it))
-
-# El cuerpo completo de un pendiente puede pasar de 900 chars; inyectarlo entero en
-# CADA sesion ahoga el prompt real del usuario. Se trunca a la primera frase util —
-# el detalle vive en _pendientes.md, que el agente abre si el item resulta relevante.
-BODY_CAP = 120
-
-def shorten(text):
-    if len(text) <= BODY_CAP:
-        return text
-    cut = text[:BODY_CAP]
-    sp = cut.rfind(" ")
-    if sp > BODY_CAP * 0.6:
-        cut = cut[:sp]
-    cut = cut.rstrip(" ,;:—-")
-    if cut.count("**") % 2:  # no dejar un bold abierto
-        cut += "**"
-    return cut + "…"
-
-# --- BLOQUE DEL AGENTE: conteo + ALTA inline + instruccion.
-# Hasta 2.17.0 listaba tambien MEDIA/BAJA hasta un cap de 10 y cerraba con "[+N mas]".
-# Lo medido: el agente veia el inventario entero en CADA sesion y los pendientes seguian
-# subiendo igual (2026-09-11: 54 abiertos, 14 con mas de 30 dias). Cerrar un pendiente es una
-# decision de la persona, y hasta esta version el inventario no llegaba a ninguna persona.
-# La relevancia por peticion ya la cubre recall.sh (UserPromptSubmit, v2.8.0) — es lo que de
-# verdad hace que el agente cruce peticion vs memoria, y llega en el momento que importa.
-# Queda ALTA inline (regla 20 de _learnings.md: contenido, no contadores, que sigue viva para
-# lo urgente) y el resto vive en _pendientes.md, que el agente abre cuando la peticion lo pide.
-# `otros` entra con ALTA, no con el resto: no son items de prioridad media, son items que
-# NADIE ha clasificado (seccion fuera del esquema, o preambulo del archivo). Esconderlos es
-# el fallo de la regla 11 de _learnings.md — descartar y luego contar — que este parser vino
-# a arreglar: el archivo de unifi-expert inyectaba 0 de 15 y el header decia 15.
-CEILING = 25
-altas = [x for x in selected if x[0] == "alta"]
-otros = [x for x in selected if x[0] == "otros"]
-shown = (altas + otros)[:CEILING]
-
-print(f"PENDIENTES ABIERTOS ({total}), {len(shown)} de prioridad ALTA o sin clasificar. Antes de responder, "
-      f"verifica si la peticion del usuario se relaciona con alguno de estos items o con el "
-      f"resto de memory/_pendientes.md — si lo resuelves durante la sesion, marcalo en "
-      f"/checkpoint-3t:")
-print()
-if shown:
-    last = None
-    for prio, (created, text) in shown:
-        if prio != last:
-            print("ALTA:" if prio == "alta" else "SIN CLASIFICAR:")
-            last = prio
-        if created != "9999":
-            age = days_old(created)
-            stale = " ⚠ posible stale — reconciliar" if age is not None and age > STALE_DAYS else ""
-            print(f"  - [ ] {shorten(text)} — _creado: {created}_{stale}")
-        else:
-            print(f"  - [ ] {shorten(text)}")
-    if len(altas) + len(otros) > CEILING:
-        print(f"[+ {len(altas) + len(otros) - CEILING} de ALTA o sin clasificar mas — abre _pendientes.md]")
-else:
-    print("  (ninguno de prioridad ALTA ni sin clasificar — el resto esta en memory/_pendientes.md)")
-
-if any(days_old(c) is not None and days_old(c) > STALE_DAYS for _, (c, _t) in shown):
-    print()
-    print(f"Items marcados ⚠ tienen >{STALE_DAYS} dias sin cerrar — probables candidatos a resolved/abandoned en /triage-3t (desde 2.28.0 el Step 3a del checkpoint solo cubre lo que toco la sesion y lo que vence hoy).")
-
-if notes:
-    print()
-    print("ESTRUCTURA de _pendientes.md: " + "; ".join(notes) + ".")
-
-# --- BLOQUE DE LA PERSONA. Va a un fichero aparte, NO a stdout: la primera version lo
-# separaba con una sentinela en la misma salida, y un pendiente cuyo texto contuviera esa
-# sentinela partia el mensaje por donde no debia — mandando texto del pendiente al canal de
-# la persona y perdiendo el resto. Con dos destinos distintos esa clase de fallo no existe.
-# Es corto a proposito: un aviso que ocupa media pantalla en cada arranque se aprende a
-# ignorar, y entonces vuelve a no existir.
-hpath = os.environ.get("HUMANO_FILE", "")
-if hpath:
-    viejos = sorted([(c, t) for _p, (c, t) in selected if c != "9999"], key=lambda x: x[0])
-    stale_n = sum(1 for c, _t in viejos if (days_old(c) or 0) > STALE_DAYS)
-    # Pendientes ALTA que llevan abiertos mas de ALTA_STALE_DAYS (p-d05b70d364): ADITIVO sobre
-    # "los mas antiguos" de abajo, nunca lo reemplaza. Una version anterior de este bloque usaba
-    # `elif` — si habia algun Alta viejo, el listado generico (cualquier prioridad) desaparecia
-    # entero, incluyendo pendientes SIN clasificar (bucket "otros") y pendientes Media/Baja de
-    # cientos de dias. Un adversario (subagente en Opus) lo reprodujo: un pendiente de 255 dias
-    # se volvia invisible para la persona en cuanto aparecia un solo Alta de 44 dias. La
-    # duplicacion ocasional (un mismo item en las dos listas) se acepta a cambio de no esconder
-    # nunca un pendiente que ya se estaba avisando antes de este cambio.
-    altas_viejas = sorted(
-        [(c, t) for _p, (c, t) in selected if _p == "alta" and c != "9999" and (days_old(c) or 0) > ALTA_STALE_DAYS],
-        key=lambda x: x[0],
-    )
-    cab = f"MEMORIA 3T — {total} pendientes abiertos"
-    cab += f", {stale_n} sin cerrar desde hace mas de {STALE_DAYS} dias." if stale_n else "."
-    lineas = [cab]
-    if altas_viejas:
-        lineas.append(f"{len(altas_viejas)} de prioridad ALTA sin cerrar desde hace mas de {ALTA_STALE_DAYS} dias:")
-        for c, t in altas_viejas[:3]:
-            lineas.append(f"  · {shorten(t)}  ({c}, {days_old(c)} dias)")
-        if len(altas_viejas) > 3:
-            lineas.append(f"  [+ {len(altas_viejas) - 3} mas de ALTA]")
-    if viejos[:3]:
-        lineas.append("Los mas antiguos:")
-        for c, t in viejos[:3]:
-            lineas.append(f"  · {shorten(t)}  ({c}, {days_old(c)} dias)")
-    lineas.append("Cierra o descarta con /triage-3t: el barrido del backlog es suyo, no del checkpoint.")
-    try:
-        with open(hpath, "w", encoding="utf-8") as fh:
-            fh.write("\n".join(lineas) + "\n")
-    except Exception:
-        pass   # sin canal a la persona esta sesion; el del agente no depende de esto
-PYEOF
-)
-
-    if [ -n "$PENDIENTES_OUTPUT" ]; then
-      out "$PENDIENTES_OUTPUT"
-      out ""
-    fi
-    if [ -n "$PEND_HUMANO" ]; then
-      [ -s "$PEND_HUMANO" ] && human "$(cat "$PEND_HUMANO")"
-      rm -f "$PEND_HUMANO"
-    fi
-  fi
+  # CLI: sin pendientes en el arranque (2.63.0). Hasta aqui este bloque inyectaba al agente los
+  # pendientes ALTA y sin clasificar (hasta 25) y a la persona un resumen (conteo, ALTA viejos,
+  # los mas antiguos). Medido 2026-10-16 sobre las 40 sesiones mas recientes de 7 proyectos con
+  # el bloque en contexto: el agente no cito ni uso un item de la lista en ninguna (0/40), y de
+  # 43 pendientes cerrados solo 1 estaba en la lista y lo habia nombrado el usuario en su
+  # retomada. Costaba ~3.6 KB por sesion. A la persona tampoco le servia: tapaba los avisos de
+  # comandos por correr (consolidar, migrar, backfill) que si son suyos. Los pendientes llegan
+  # por donde si se usan: recall.sh cruza cada peticion contra ellos (UserPromptSubmit), el
+  # sidebar de pendientes, y el Como retomar y los recordatorios del cierre del checkpoint.
 
   if [ -f "$MEMORY_DIR/_learnings.md" ]; then
     LEARNINGS_COUNT=$(sed -n '/## Quick Reference/,/## Related/p' "$MEMORY_DIR/_learnings.md" 2>/dev/null | grep -cE '^([0-9]+\.|[-*] )')
@@ -1012,6 +761,9 @@ PYEOF
 )
   if [ -n "$REMAINING" ] && [ "$REMAINING" -gt 0 ]; then
     out "BACKFILL PENDIENTE: $REMAINING sesiones sin procesar. Run /backfill-3t to import past sessions."
+    # A los dos canales desde 2.63.0, como CONSOLIDAR y MIGRAR: correr /backfill-3t lo decide la
+    # persona, y con los pendientes fuera del arranque estos avisos son lo unico que se le muestra.
+    human "BACKFILL PENDIENTE: $REMAINING sesiones sin procesar. Corre /backfill-3t para importarlas."
     out ""
   fi
 fi

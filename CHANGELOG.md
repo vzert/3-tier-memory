@@ -1,5 +1,59 @@
 # Changelog
 
+## [2.63.0] - 2026-10-16
+Origen: Victor noto que la lista de pendientes que veia al abrir cada sesion no le servia, y pidio
+medir si al agente si. Se midio sobre las 40 sesiones mas recientes de 7 proyectos con el bloque en
+contexto: el agente no cito ni uso un item de su lista en ninguna (0/40); de 43 pendientes cerrados
+en esas sesiones, solo 1 estaba en la lista, y lo habia nombrado el usuario en su retomada. La lista
+costaba de media ~3.6 KB y 29 lineas por sesion. Decisiones de Victor via el supervisor (d70-d72, d104).
+
+### Changed
+- **SessionStart ya no imprime pendientes, por ningun canal.** Se van la lista del agente
+  (`PENDIENTES ABIERTOS (N)`, ALTA y sin clasificar, hasta 25, con `⚠ posible stale`) y el resumen
+  de la persona (`MEMORIA 3T — N pendientes abiertos`, ALTA viejos, los mas antiguos, `/triage-3t`),
+  junto con el parser de `_pendientes.md` que los alimentaba. Los pendientes siguen llegando por
+  donde si se usan: `recall.sh` (UserPromptSubmit) los cruza contra cada peticion, el sidebar de
+  pendientes, y el Como retomar y los recordatorios del cierre del checkpoint.
+- **La persona ve solo lo que le toca correr.** `systemMessage` sale solo si hay algo: consolidar,
+  migrar learnings, backfill, comandos desincronizados, cuarentena del journal, secretos, deriva de
+  indices. Sin nada de eso no hay mensaje.
+- **`BACKFILL PENDIENTE` llega tambien a la persona** (antes solo al agente), como CONSOLIDAR y
+  MIGRAR: correr `/backfill-3t` lo decide ella.
+- **El aviso `HOOK DUPLICADO` pasa a `HOOK DE PENDIENTES`.** Un hook propio del proyecto que vuelca
+  `_pendientes.md` ya no duplica nada del plugin. El aviso da su tamano y la medicion, y dice que
+  `/migrate` ofrece quitarlo sin borrarlo por defecto.
+- **`/migrate` 2e:** el volcado se rotula `[PENDIENTES]` (antes `[PARTIAL]`, "solapado con el
+  plugin") y ya no se mide con la linea `PENDIENTES ABIERTOS`, que no existe. Opcion 1 (por defecto):
+  quitar solo lo `[DUPLICATE]` y conservar el volcado; opcion 2: quitar tambien el volcado; opcion 3:
+  borrar el script, solo si nada es `[CUSTOM]`.
+- README: "Two readers, two channels" y la linea de Hooks describen el arranque nuevo; las senales
+  de pendientes de mas de 30 dias quedan en `/status-3t` y `/audit-3t`.
+- Learning 3tier-memory-system#43 (y la linea 20 del Quick Reference), "Inyecta contenido, no
+  contadores" de v2.7.0, reescrita con la medicion por `learning.update`.
+
+### Tests
+- `test-session-start-json.sh`: sin avisos no hay `systemMessage`; ningun texto de pendiente en
+  ningun canal (tampoco en el respaldo de texto plano); con cuarentena, `systemMessage` lleva el
+  aviso y ningun pendiente; `BACKFILL PENDIENTE: 2` en los dos canales con un HOME falso. Se fue el
+  caso 9 (sentinela en el texto de un pendiente): ya no llega texto de pendientes a ningun canal.
+  Contra el session-start.sh de 2.62.6: 8 asertos rojos.
+- `test-parser.sh`: salen los 8 casos del parser que se fue; el detector comprueba el marcador
+  nuevo y un caso nuevo (el aviso no dice "duplic", da el tamano, la medicion y que /migrate no
+  borra por defecto). Contra 2.62.6: 11 rojos.
+- `test-migrate-volcado-pendientes.sh` (nuevo): el texto de la seccion 2e que lee el modelo. Contra
+  el migrate.md de 2.62.6: 8 de 8 rojos.
+- `test-memory-home.sh`: la senal de que el arranque en un worktree lee la memoria del principal
+  pasa de un pendiente a `REGLAS CRITICAS: 1` de su `_learnings.md`.
+- A mano: `recall.sh` con una peticion parecida a un pendiente ALTA lo sigue mostrando
+  (`[pendiente] Migrar el arnes de mutacion…`).
+
+### Known
+- El aviso del hook propio y `/migrate` citan la medicion de la lista del plugin (ALTA y sin
+  clasificar, cortada a ~120 caracteres). Un volcado que imprime cada item entero no se midio; por
+  eso quitarlo es opcion explicita y no la de por defecto.
+- Ya nada comprueba la estructura de `_pendientes.md` al arrancar (el aviso `ESTRUCTURA` iba con el
+  parser). `build-recall-index.py` y el sidebar tienen sus propios parsers; no se revisaron aqui.
+
 ## [2.62.6] - 2026-10-16
 Origen: el adversario de 2.62.0 (PR #27) midio con una fecha forzada que `test-hilo-pendientes.sh`
 caia en main desde el 2026-10-21: `retomar()` usa la fecha real y un pendiente de la prueba tenia
