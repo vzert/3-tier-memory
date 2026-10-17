@@ -237,6 +237,54 @@ def main():
         dn = correr(mem, lib)
         check("sin pendientes", dn["ok"] is False and dn["error"].startswith("no hay "))
 
+    # `_retomar` (0.2.3, 3-tier-memory 2.62.8): el paso de un snippet que no se pego sale en vence
+    # desde su fecha hasta que se cierre, y trae el snippet de su ficha para el clic.
+    with tempfile.TemporaryDirectory() as tmp:
+        mem = os.path.join(tmp, "memory")
+        os.makedirs(os.path.join(mem, "sessions"))
+        with open(os.path.join(mem, "_pendientes.md"), "w", encoding="utf-8") as fh:
+            fh.write("# Pendientes\n\n## Media prioridad\n\n"
+                     "- [ ] Paso sin pegar — _creado: 2026-10-01_ — _id: p-1212121212_"
+                     " — _retomar: 2026-10-12 sessions/2026-10-12-r_\n"
+                     "- [ ] Paso de ficha borrada — _creado: 2026-10-01_ — _id: p-3434343434_"
+                     " — _retomar: 2026-10-11 sessions/2026-10-11-borrada_\n"
+                     "- [ ] Paso de manana — _creado: 2026-10-01_ — _id: p-5656565656_"
+                     " — _retomar: 2026-10-14 sessions/2026-10-12-r_\n"
+                     "- [ ] Paso con revisar futuro — _creado: 2026-10-01_ — _id: p-7878787878_"
+                     " — _revisar: 2026-10-30_ — _retomar: 2026-10-12 sessions/2026-10-12-r_\n"
+                     "- [ ] Vencido normal — _creado: 2026-10-01_ — _id: p-9090909090_ — _revisar: 2026-10-05_\n")
+        with open(os.path.join(mem, "sessions", "2026-10-12-r.md"), "w", encoding="utf-8") as fh:
+            fh.write("# r\n\n## Como retomar\n\n```\nRetomamos: r.\n\nProximo paso: hacer p-1212121212.\n```\n"
+                     "\n## Commits\n\nnada\n")
+        # Otra sesion cerro despues con otro paso: es justo el caso que entierra el snippet.
+        with open(os.path.join(mem, "sessions", "2026-10-13-otra.md"), "w", encoding="utf-8") as fh:
+            fh.write("# otra\n\n## Como retomar\n\nNinguno — cerro todo.\n")
+        dr = correr(mem, lib)
+        todos = {i["id"]: i for i in dr["items"] + dr["resto"]}
+        check("retomar: la ultima ficha es la de otra sesion", dr["ficha"] == "2026-10-13-otra.md")
+        r1 = todos.get("p-1212121212", {})
+        check("retomar: sale en vence", r1.get("grupo") == "vence")
+        check("retomar: motivo con su fecha", r1.get("motivo") == "retomar desde 2026-10-12")
+        check("retomar: dias desde la marca", r1.get("dias") == 1)
+        check("retomar: trae el snippet sin fence ni otras secciones",
+              r1.get("retomar_snippet") == "Retomamos: r.\n\nProximo paso: hacer p-1212121212.")
+        check("retomar: fecha y ficha", (r1.get("retomar"), r1.get("retomar_ficha")) ==
+              ("2026-10-12", "memory/sessions/2026-10-12-r.md"))
+        r2 = todos.get("p-3434343434", {})
+        check("retomar: ficha borrada sigue en vence, sin snippet",
+              r2.get("grupo") == "vence" and r2.get("retomar_snippet") is None)
+        check("retomar: fecha futura no sale", "p-5656565656" not in todos)
+        check("retomar: con _revisar futuro no sale", "p-7878787878" not in todos)
+        r5 = todos.get("p-9090909090", {})
+        check("sin _retomar, vence como antes y sin snippet",
+              r5.get("motivo") == "vencido 2026-10-05" and r5.get("retomar") is None)
+        check("retomar: el mas viejo primero", [i["id"] for i in dr["items"] + dr["resto"]][:3] ==
+              ["p-9090909090", "p-3434343434", "p-1212121212"])
+        check("retomar: cuenta en vencidos", dr["resumen"]["vencidos"] == 3)
+        dh = correr(mem, lib, "--hoy", "2026-10-12")
+        rh = {i["id"]: i for i in dh["items"] + dh["resto"]}.get("p-1212121212", {})
+        check("retomar: el mismo dia dice retomar hoy", (rh.get("motivo"), rh.get("dias")) == ("retomar hoy", 0))
+
     for f in fallos:
         print("FALLA:", f)
     if fallos:

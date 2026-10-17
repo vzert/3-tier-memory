@@ -421,6 +421,24 @@ Antes de actuar, dime en 3 lineas donde quedamos.
 ```
 ````
 
+**8a2. Marcar para retomar el pendiente del `Proximo paso` (2.62.8)** — justo despues de 8a:
+
+```bash
+python3 "$JBIN/marcar-retomar.py" "$SESSION_FILE"
+```
+
+Pone `_retomar: HOY sessions/<slug>_` en cada `p-…` abierto que cite el `Proximo paso:` (lo que va
+tras "ver tambien" no), por evento (`pendiente.retomar`) y compactando. El mod pendientes lo saca en
+VENCEN ("retomar hoy"; desde manana, "retomar desde FECHA") hasta que el pendiente se cierre, y el
+clic pega el snippet de esta ficha. Asi un snippet que no se pego —pane cerrado, olvido— no se
+pierde entre los demas pendientes (decision de Victor, 2026-10-16). Es un campo aparte de
+`_revisar` a proposito: 8e, el hilo y el calendario lo ignoran, asi que no sale como 🔔 en el cierre
+de otra sesion ni saca el pendiente del hilo. Si un id tiene `_revisar` futuro, no lo marca y lo
+avisa con `⚠`: el `Proximo paso` no debe ser trabajo de fecha futura (regla de 8a), corrige el paso.
+Un paso sin `p-…` (un plan, `ninguno — …`) no marca nada y no imprime nada. Su salida (`📌`, `·`,
+`⚠`) no va en el cierre; si sale `⚠`, arregla el paso antes de 8b. La marca entra en el commit de
+8f con lo demas. Si reescribes el snippet despues, vuelve a correrlo: la marca nombra esta ficha.
+
 **8b. Imprimir al terminal — corre el script, no redactes el bloque otra vez**:
 
 ```bash

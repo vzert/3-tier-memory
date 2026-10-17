@@ -7,7 +7,8 @@ Uso: pendientes-ahora.py --memory-dir DIR [--hoy AAAA-MM-DD] [--max N] [--lib DI
 Orden (tres grupos, sin repetir un id):
   1. hilo  — los ids del `Proximo paso` de la ultima ficha que sigan abiertos, y luego el hilo
              de esa ficha (pendientes_afines.hilo: _relacionado, planes, nuevos de la sesion).
-  2. vence — `_revisar` de hoy o pasado: vencidos primero (el mas viejo arriba), luego hoy.
+  2. vence — `_revisar` de hoy o pasado, o `_retomar` de hoy o pasado sin `_revisar` futuro (el
+             paso de un snippet que no se pego; 3-tier-memory 2.62.8): el mas viejo arriba.
   3. alta  — Alta sin `_bloqueado`, sin `_revisar` futuro y sin fecha futura en el texto.
 Tope `--max` (7 por defecto) repartido por cupos (hilo 3, vence 2, alta 2; lo que un grupo no
 usa lo rellena el siguiente en orden); el resto se cuenta en `quedan`. Dentro de vence, Alta antes
@@ -21,11 +22,12 @@ el Proximo paso.
 Contexto del clic: cada elegido lleva `origen` (rutas memory/... que existen, de su `_origen`),
 `origen_texto` (el `_origen` tal cual si no nombra ningun archivo que exista; si no, null) y
 `relacionado` (los valores de su `_relacionado`), para que el pendiente pegado al prompt diga que
-leer.
+leer. Con `_retomar`, ademas `retomar`, `retomar_ficha` y `retomar_snippet` (el bloque `## Como
+retomar` de esa ficha, sin fence): el clic pega el snippet entero.
 
 No escribe nada. No copia el parser: importa pendientes_afines.py del plugin 3-tier-memory
 (--lib, o $THREE_TIER_BIN, o el repo del proyecto, o la version mas alta del cache). La excepcion
-son `_origen` y `_relacionado`, que lee de la linea (ver contexto_por_id).
+son `_origen`, `_relacionado` y `_retomar`, que lee de la linea (ver contexto_por_id).
 Si algo falla, sale 0 con {"ok": false, "error": ...}: el mod lo pinta en vez de callar.
 """
 import datetime
@@ -144,6 +146,11 @@ def dias_vencido(revisar, hoy):
 CAMPO = r"—\s*_{}:\s*(.*?)_?\s*(?=—\s*_[^\s_:]+:|$)"
 ORIGEN_CAMPO = re.compile(CAMPO.format("origen"))
 RELACIONADO_CAMPO = re.compile(CAMPO.format("relacionado"))
+# `_retomar: FECHA sessions/<slug>_` (3-tier-memory 2.62.8, marcar-retomar.py en Step 8): el pendiente
+# que cita el `Proximo paso` de esa ficha. Sale en "vence" desde FECHA hasta que se cierre, y el clic
+# pega el snippet de la ficha. Un campo aparte de `_revisar`: 8e y el hilo no lo ven.
+RETOMAR_CAMPO = re.compile(r"—\s*_retomar:\s*(\d{4}-\d{2}-\d{2})\s+(sessions/[\w.-]+?)_?\s*(?=—|$)")
+FENCE = re.compile(r"^```[^\n]*\n(.*?)\n```\s*$", re.S)
 # [[sessions/x]], [[plans/plan-x|alias]] o una ruta suelta sessions/x(.md)
 DESTINO = re.compile(r"\[\[([^\]|#]+)|(?<![\w/])((?:sessions|plans|research)/[\w.-]+)")
 ID_LINEA = re.compile(r"_id:\s*(p-[0-9a-f]{10})")
@@ -178,17 +185,46 @@ def contexto_por_id(pend_path, memory_dir):
             # sigue siendo una pista. Con archivo, el texto sobra.
             crudo = mo.group(1).strip() if mo and not origen else ""
             out[m.group(1)] = {"origen": origen, "origen_texto": crudo or None,
-                               "relacionado": relacionado}
+                               "relacionado": relacionado, "retomar": retomar_de(s, raiz)}
     return out
 
 
-def item(p, grupo, motivo, pa, hoy, ctx=None):
+def retomar_de(linea, raiz):
+    """{"fecha", "ficha", "snippet"} de `_retomar:`, o None. `snippet` es el bloque `## Como retomar`
+    de la ficha sin el fence (None si la ficha no existe, sale de memory/ o no trae bloque)."""
+    m = RETOMAR_CAMPO.search(linea)
+    if not m:
+        return None
+    rel = m.group(2) + ".md"
+    real = os.path.realpath(os.path.join(raiz, rel))
+    snippet = None
+    if os.path.commonpath([raiz, real]) == raiz and os.path.isfile(real):
+        try:
+            with open(real, encoding="utf-8") as fh:
+                sec = re.search(r"^## Como retomar[^\n]*\n(.*?)(?=^## |\Z)", fh.read(), re.M | re.S)
+        except (OSError, UnicodeDecodeError):
+            sec = None
+        f = FENCE.match(sec.group(1).strip()) if sec else None
+        snippet = f.group(1).strip() if f else None
+    return {"fecha": m.group(1), "ficha": "memory/" + rel, "snippet": snippet}
+
+
+def retomar_vigente(c, p, hoy):
+    """La fecha de `_retomar` si ya llego (<= hoy) y el pendiente no espera un `_revisar` futuro."""
+    r = (c or {}).get("retomar")
+    if not r or r["fecha"] > hoy or (p.get("revisar") and p["revisar"] > hoy):
+        return None
+    return r["fecha"]
+
+
+def item(p, grupo, motivo, pa, hoy, ctx=None, vence=None):
     texto = " ".join(p["texto"].split())
     c = (ctx or {}).get(p["id"], {})
+    r = c.get("retomar")
     return {
         "etiqueta": etiqueta_y_resto(texto)[0],
         "titulo_auto": titulo_auto(texto),
-        "dias": dias_vencido(p.get("revisar"), hoy),
+        "dias": dias_vencido(vence or p.get("revisar"), hoy),
         "edad": dias_vencido(p.get("creado"), hoy),
         "id": p["id"],
         "prio": p["prio"],
@@ -201,6 +237,9 @@ def item(p, grupo, motivo, pa, hoy, ctx=None):
         "origen": c.get("origen", []),
         "origen_texto": c.get("origen_texto"),
         "relacionado": c.get("relacionado", []),
+        "retomar": r["fecha"] if r else None,
+        "retomar_ficha": r["ficha"] if r else None,
+        "retomar_snippet": r["snippet"] if r else None,
     }
 
 
@@ -369,10 +408,10 @@ def calcular(memory_dir, hoy, maximo, lib=None, session_id=None, projects_root=N
 
     elegidos, vistos = [], set()
 
-    def poner(p, grupo, motivo):
+    def poner(p, grupo, motivo, vence=None):
         if p.get("id") and p["id"] not in vistos:
             vistos.add(p["id"])
-            elegidos.append(item(p, grupo, motivo, pa, hoy, ctx))
+            elegidos.append(item(p, grupo, motivo, pa, hoy, ctx, vence))
 
     ficha = ultima_ficha(memory_dir)
     paso_texto = None
@@ -393,11 +432,23 @@ def calcular(memory_dir, hoy, maximo, lib=None, session_id=None, projects_root=N
             for p in pa.hilo(texto, pend_path, slug, hoy):
                 poner(p, "hilo", "ligado al paso")
 
-    vencen = [p for p in todos if p.get("revisar") and p["revisar"] <= hoy]
+    # La fecha que vence: `_revisar` de hoy o pasado y, si no, `_retomar` ya llegado (el paso de un
+    # snippet que no se pego). Con las dos, manda la mas vieja.
+    def vence(p):
+        fechas = [f for f in (p["revisar"] if p.get("revisar") and p["revisar"] <= hoy else None,
+                              retomar_vigente(ctx.get(p["id"]), p, hoy)) if f]
+        return min(fechas) if fechas else None
+
+    def motivo_vence(p, f):
+        if f != p.get("revisar"):
+            return "retomar hoy" if f == hoy else f"retomar desde {f}"
+        return "vence hoy" if f == hoy else f"vencido {f}"
+
+    vencen = [p for p in todos if vence(p)]
     rango = {"Alta": 0, "Media": 1}
-    vencen.sort(key=lambda p: (rango.get(p["prio"], 2), p["revisar"], p["fila"]))
+    vencen.sort(key=lambda p: (rango.get(p["prio"], 2), vence(p), p["fila"]))
     for p in vencen:
-        poner(p, "vence", "vence hoy" if p["revisar"] == hoy else f"vencido {p['revisar']}")
+        poner(p, "vence", motivo_vence(p, vence(p)), vence(p))
 
     for p in todos:
         if (p["prio"] == "Alta" and not p["bloqueado"]
@@ -420,8 +471,8 @@ def calcular(memory_dir, hoy, maximo, lib=None, session_id=None, projects_root=N
         "totales": {g: sum(1 for e in elegidos if e["grupo"] == g) for g, _ in CUPO},
         "resumen": {
             "abiertos": abiertos,
-            "vencidos": sum(1 for p in vencen if p["revisar"] < hoy),
-            "hoy": sum(1 for p in vencen if p["revisar"] == hoy),
+            "vencidos": sum(1 for p in vencen if vence(p) < hoy),
+            "hoy": sum(1 for p in vencen if vence(p) == hoy),
             "alta": sum(1 for p in todos if p["prio"] == "Alta"),
             "bloqueados": sum(1 for p in todos if p["bloqueado"]),
         },

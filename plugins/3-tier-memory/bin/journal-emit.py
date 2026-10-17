@@ -42,6 +42,10 @@ Tipos de evento:
   pendiente.expire  --id ID --dias N [--line "<linea verbatim>"]   (caducidad por edad)
   pendiente.reopen  --id ID [--prioridad P]             (reversa de expire y de resolve)
   pendiente.window  --id ID --revisar YYYY-MM-DD                  (pone/actualiza la ventana)
+  pendiente.retomar --id ID --retomar YYYY-MM-DD --ficha sessions/<slug>
+                    Pone o cambia `_retomar: FECHA sessions/<slug>_`: el pendiente que cita el
+                    `Proximo paso` de esa ficha, para que el mod pendientes lo saque en VENCEN.
+                    Solo lo lee el mod; 8e, el hilo y el calendario lo ignoran (2.62.8).
   pendiente.block   --id ID (--bloqueado-por "QUE" | --desbloquear)
                     Pone, cambia o quita `_bloqueado: QUE_` en un pendiente VIVO. Existe para
                     marcar en Step 3a uno que nacio sin el campo; no cambia el id.
@@ -203,6 +207,9 @@ SCHEMA_VERSION = 1
 PRIORIDADES = ("Alta", "Media", "Baja")
 ESTADOS = ("resolved", "superseded", "abandoned")
 ID_RE = re.compile(r"^p-[0-9a-f]{10}$")
+# La ficha de `_retomar:` (2.62.8): sessions/<slug>, sin espacios, sin `—` y sin `_` final (el `_`
+# cierra el campo en la linea de Tier 2). La misma expresion en journal-compact.py.
+FICHA_RETOMAR_RE = re.compile(r"^sessions/[A-Za-z0-9][A-Za-z0-9._-]*(?<!_)$")
 SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 RESEARCH_STATUS = ("active", "completed")
@@ -534,7 +541,7 @@ def strip_meta(text):
     # Las mismas claves que `META_RE` en repair-dualwrite.py, que re-deriva este hash para
     # detectar ids inventados. Si divergen, todo pendiente con la clave que falte se reporta
     # como id inventado. Si anades una clave aqui, anadela alli.
-    text = re.sub(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado|bloqueado|relacionado):[^—]*", "", text)
+    text = re.sub(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado|bloqueado|relacionado|retomar):[^—]*", "", text)
     return text.strip()
 
 
@@ -906,6 +913,7 @@ def main():
     ap.add_argument("--type", required=True,
                     choices=["pendiente.add", "pendiente.resolve", "pendiente.update",
                              "pendiente.expire", "pendiente.reopen", "pendiente.window",
+                             "pendiente.retomar",
                              "pendiente.block", "pendiente.relate", "pendiente.adopt",
                              "session.add", "session.amend",
                              "learning.add", "learning.update", "learning.retire",
@@ -919,6 +927,8 @@ def main():
     ap.add_argument("--origen")
     ap.add_argument("--creado")
     ap.add_argument("--revisar")
+    ap.add_argument("--retomar")                          # pendiente.retomar (2.62.8)
+    ap.add_argument("--ficha")                            # pendiente.retomar
     ap.add_argument("--bloqueado-por", dest="bloqueado_por")
     ap.add_argument("--desbloquear", action="store_true")
     ap.add_argument("--relacionado", action="append", default=[])   # pendiente.add / .relate
@@ -1371,6 +1381,26 @@ def main():
         if not fecha_real(rev):
             sys.exit("journal-emit: pendiente.window necesita --revisar con una fecha real")
         base["payload"] = {"id": pid, "revisar": rev, "fecha": date.today().isoformat()}
+        write_event(memory_dir, base)
+        print(pid)
+        return
+
+    if a.type == "pendiente.retomar":
+        pid = (a.id or "").strip()
+        if not ID_RE.match(pid):
+            sys.exit("journal-emit: --id debe tener la forma p-<10 hex>")
+        ret = (a.retomar or "").strip()
+        # fecha_real (fromisoformat) acepta `20261016` y `2026-W42-5`: el compactador los cuarentena
+        # y el mod no los lee. Aqui solo AAAA-MM-DD.
+        if not (re.fullmatch(r"\d{4}-\d{2}-\d{2}", ret) and fecha_real(ret)):
+            sys.exit("journal-emit: pendiente.retomar necesita --retomar AAAA-MM-DD con una fecha real")
+        ficha = (a.ficha or "").strip()
+        if ficha.endswith(".md"):
+            ficha = ficha[:-3]
+        if not FICHA_RETOMAR_RE.fullmatch(ficha):
+            sys.exit("journal-emit: pendiente.retomar necesita --ficha sessions/<slug>")
+        base["payload"] = {"id": pid, "retomar": ret, "ficha": ficha,
+                           "fecha": date.today().isoformat()}
         write_event(memory_dir, base)
         print(pid)
         return
