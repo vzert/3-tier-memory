@@ -24,9 +24,113 @@ BIN="plugins/3-tier-memory/bin"
 # Claude Code donde corre. Las suites no son esa sesion: sin esto, correr el runner desde Claude Code
 # dependeria de como arranco la sesion de quien lo corre.
 unset CLAUDE_CODE_SESSION_ID
+# Una corrida completa por maquina (p-524e2a5bf7). Varios agentes que esperaban a las suites ajenas
+# lanzaban la suite completa a la vez al terminar, y el Mac se quedaba sin memoria (2026-10-15/16).
+# El candado es una carpeta: `mkdir` es atomico en macOS, Linux y Git Bash, sin flock (macOS no lo
+# trae). La siguiente corrida espera a la que lo tiene y lo dice en stderr. Ruta fija en /tmp, no en
+# TMPDIR: hay procesos de la misma maquina con su propio TMPDIR, y no compartian el candado
+# (adversario, ronda 3). `--una` no lo toma: la llaman las suites desde dentro de una corrida completa.
+# RUN_TESTS_CANDADO cambia la ruta (lo usa test-run-tests.sh para no esperar a la corrida que lo lanzo).
+CANDADO="${RUN_TESTS_CANDADO:-/tmp/3tm-run-tests.candado}"
+[ "${1:-}" = "--ruta-candado" ] && { echo "$CANDADO"; exit 0; }   # para test-run-tests.sh
+# Quita un candado abandonado. Si no puede (de otro usuario en un /tmp compartido), sale con error:
+# reintentar sin fin era un bucle sin pausa (adversario, ronda 1: 507 avisos en 3 s).
+candado_quita() {
+  rm -rf "$CANDADO" 2>/dev/null
+  [ -e "$CANDADO" ] || return 0
+  echo "ERROR run-tests: no puedo quitar el candado abandonado $CANDADO ($1). Borralo a mano o usa otro RUN_TESTS_CANDADO." >&2
+  exit 2
+}
+# Vivo: kill -0 sale 0, o falla por permiso (un proceso de otro usuario existe; adversario, ronda 1:
+# con pid=1 lo daba por muerto y robaba el candado). Muerto: "No such process". LC_ALL=C exportado
+# en la subshell: en glibc el mensaje se traduce ("Operacion no permitida"; adversario, ronda 2).
+candado_vivo() {
+  local err
+  # Un pid vacio, no numerico o 0 no es de nadie: `kill -0 0` sale 0 (senala al propio grupo) y
+  # dejaba esperando sin fin (adversario, ronda 5). Solo sale de un archivo roto o hecho a mano.
+  case "$1" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$1" -gt 0 ] 2>/dev/null || return 1
+  err=$(export LC_ALL=C; kill -0 "$1" 2>&1) && return 0
+  case "$err" in *ermitted*) return 0 ;; esac
+  return 1
+}
+# El candado que se vio con el pid $1 parece abandonado. Entre leer ese pid y decidir, su dueno pudo
+# soltarlo y otra corrida tomar uno nuevo en la misma ruta: borrarlo a ciegas dejaba dos suites a la
+# vez en cada liberacion con tres o mas en cola (adversario, ronda 3). Asi que se borra solo bajo un
+# sub-candado (`quitando`, que serializa a quienes quitan) y si el pid sigue siendo el que se vio.
+# Un `quitando` huerfano (quien quitaba murio a mitad) se fuerza tras 10 vueltas con el mismo pid.
+candado_abandonado() {  # <pid visto, vacio si no habia> <motivo>
+  if ! mkdir "$CANDADO/quitando" 2>/dev/null; then
+    [ -d "$CANDADO" ] || return 0
+    atascado=$(( atascado + 1 ))
+    if [ "$atascado" -ge 10 ] && [ "$(cat "$CANDADO/pid" 2>/dev/null)" = "$1" ]; then
+      echo "AVISO run-tests: quito el candado abandonado ($2; su sub-candado lleva 10 vueltas sin soltarse): $CANDADO" >&2
+      candado_quita "$2"; atascado=0
+    fi
+    return 0
+  fi
+  atascado=0
+  if [ "$(cat "$CANDADO/pid" 2>/dev/null)" != "$1" ]; then
+    rmdir "$CANDADO/quitando" 2>/dev/null; return 0   # ya es otro candado: no se toca
+  fi
+  echo "AVISO run-tests: quito el candado de una corrida que ya no existe ($2): $CANDADO" >&2
+  candado_quita "$2"
+}
+candado_toma() {
+  local quien vacio=0 avisado=0 atascado=0 nocrea=0
+  while :; do
+    if mkdir "$CANDADO" 2>/dev/null; then
+      # Si se lo quitaron entre el mkdir y escribir el pid, no es suyo: vuelve a la cola.
+      echo "$$" > "$CANDADO/pid" 2>/dev/null && [ "$(cat "$CANDADO/pid" 2>/dev/null)" = "$$" ] && break
+    fi
+    # mkdir fallo y la carpeta no existe: no es que otra corrida la tenga, es que no se puede crear
+    # (/tmp de solo lectura en un sandbox, padre inexistente). Esperar ahi era colgarse sin decir nada
+    # (adversario, ronda 4). Una vez puede ser el hueco entre que una suelta y otra toma; tres
+    # seguidas, no. Y correr sin candado dejaba dos suites a la vez (ronda 5, unsafe): sale con rc 2
+    # y dice como apuntar el candado a otra carpeta (Victor, d64).
+    if [ ! -d "$CANDADO" ]; then
+      nocrea=$(( nocrea + 1 ))
+      if [ "$nocrea" -ge 3 ]; then
+        echo "ERROR run-tests: no puedo crear el candado $CANDADO, y sin el otra corrida completa podria ir a la vez." >&2
+        echo "  Apuntalo a una carpeta donde si se pueda escribir: RUN_TESTS_CANDADO=<carpeta>/3tm-run-tests.candado bash tools/run-tests.sh" >&2
+        exit 2
+      fi
+      sleep "${RUN_TESTS_CANDADO_ESPERA:-1}"; continue
+    fi
+    nocrea=0
+    quien=$(cat "$CANDADO/pid" 2>/dev/null)
+    # Solo pruebas: ensancha la ventana entre leer el pid y decidir (test-run-tests.sh, ronda 3).
+    [ -n "${RUN_TESTS_CANDADO_PAUSA:-}" ] && sleep "$RUN_TESTS_CANDADO_PAUSA"
+    if [ -z "$quien" ]; then
+      # Recien creado: su dueno aun no escribe el pid. Vacio 10 vueltas = murio entre mkdir y escribirlo.
+      vacio=$(( vacio + 1 ))
+      if [ "$vacio" -ge 10 ]; then candado_abandonado "" "sin pid tras 10 vueltas"; vacio=0; fi
+    elif ! candado_vivo "$quien"; then
+      vacio=0; candado_abandonado "$quien" "pid $quien"
+    else
+      vacio=0
+      if [ "$avisado" = 0 ]; then
+        avisado=1
+        echo "run-tests: otra corrida (pid $quien) tiene el candado; espero a que termine." >&2
+        echo "  Si ese pid no es una corrida de run-tests.sh, borra el candado: rm -rf \"$CANDADO\"" >&2
+      fi
+    fi
+    sleep "${RUN_TESTS_CANDADO_ESPERA:-1}"
+  done
+  [ "$avisado" = 1 ] && echo "run-tests: candado tomado; empiezo." >&2
+  return 0
+}
+# Solo el suyo: si se lo quitaron por muerto y otra corrida lo tomo, no lo borra.
+candado_suelta() { [ "$(cat "$CANDADO/pid" 2>/dev/null)" = "$$" ] && rm -rf "$CANDADO"; return 0; }
 # Un temporal propio para toda la corrida, borrado tambien si la matan (p-292d06c4c0). Con `-f`:
 # test-run-tests corre una COPIA de este script desde otra carpeta, donde no esta (y ya va anidada).
 [ -f tools/tmp-propio.sh ] && . tools/tmp-propio.sh
+if [ "${1:-}" != "--una" ]; then
+  candado_toma
+  # Un solo trap EXIT: bash lo corre tambien al morir por INT/TERM/HUP (ver tmp-propio.sh), y este
+  # reemplaza el de tmp-propio, asi que lo repite.
+  trap 'type _tp_limpia >/dev/null 2>&1 && _tp_limpia; candado_suelta' EXIT
+fi
 FALLOS=0
 FALLIDAS=""
 TOTAL=0

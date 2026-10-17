@@ -52,7 +52,7 @@ M = {
     # print-como-retomar.py
     "print-sin-slug": [("                                        slug=slug)", "                                        slug=None)")],
     # checkpoint-audit.py
-    "audit-todos-los-ids": [("citados = ID_PENDIENTE.findall(pp)[:1]", "citados = ID_PENDIENTE.findall(pp)")],
+    "audit-todos-los-ids": [("citados = ID_PENDIENTE.findall(paso)[:1]", "citados = ID_PENDIENTE.findall(paso)")],
     "audit-sin-hilo": [('if mejor is not None and mejor <= rango[primero["id"]]:', "if True:")],
     # El marco del Proximo paso (2.60.0): pendientes_afines.senales_marco, el audit y el hook.
     "marco-sin-espera": [("m = ESPERA_AJENA.search(_sin_tildes(paso))", "m = None")],
@@ -65,6 +65,11 @@ M = {
     "marco-saltado": [('h.append(Hallazgo(DISENO, "snippet.marco",', 'h.append(Hallazgo(SALTADO, "snippet.marco",')],
     "marco-con-ninguno": [('            and not pp.lower().startswith(("ninguno", "nada accionable")):', "            and True:")],
     "guard-sin-marco": [("        if avisos_marco:", "        if False:")],
+    # Notas de los revisores de 2.57.0 (p-3f22a1cba1).
+    "bash-sin-barras": [('str(inp.get("command") or "").replace("\\\\", "/")):', 'str(inp.get("command") or "")):')],
+    "message-no-dict": [('if not isinstance(d, dict) or not isinstance(d.get("message"), dict):', "if False:"),
+                        ('if not (isinstance(d, dict) and isinstance(d.get("message"), dict)):', "if False:")],
+    "audit-colapsado-sin-hilo": [('colapsado = ("```" not in sec_retomar', 'colapsado = False and ("```" not in sec_retomar')],
 }
 
 p, nombre = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""

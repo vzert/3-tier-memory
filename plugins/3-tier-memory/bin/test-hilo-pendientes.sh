@@ -175,7 +175,9 @@ hilo_base() {
   pend Alta p-9999999999 "suelto" 2026-09-01-vieja
   pend Media p-2222222222 "hermano" 2026-09-01-vieja " — _relacionado: p-1111111111_"
   pend Media p-3333333333 "nieto" 2026-09-01-vieja " — _relacionado: p-2222222222_"
-  pend Media p-6666666666 "con fecha" 2026-10-14-hoy " — _revisar: 2026-10-20_"
+  # `_revisar` lejano: retomar() usa la fecha real, y con 2026-10-20 este pendiente dejaba de ser
+  # futuro el 21-oct y tres asertos de las secciones 2 y 5 caian en main (2.62.x).
+  pend Media p-6666666666 "con fecha" 2026-10-14-hoy " — _revisar: 9999-12-31_"
   pend Baja p-4444444444 "la baja de hoy" 2026-10-14-hoy
 }
 
@@ -335,9 +337,9 @@ chk "fixture: el hilo antes del snippet esta vacio" "" "$(python3 "$BIN/pendient
 chk "fixture: la semilla (p-f000000001) si esta en el grafo" "1" "$(grep -c '_id: p-f000000001_' "$M/_pendientes.md")"
 # El snippet que escribio el agente: con su propio paso (la sombrilla) como semilla, no arrastra
 # extras de otro tema: las 3 Bajas a 2+ saltos (p-f00000000e, p-f000000012, p-f000000014) no salen ni
-# de extra ni en quedan. print-como-retomar.py usa la fecha real: un vecino directo del paso con
-# `_revisar` ya vencido SI puede salir (es del hilo), asi que se mira por id, no por la linea entera
-# (en CI del 2026-10-16 la linea de extras aparecio con ese vecino y la prueba por linea fallo).
+# de extra ni en quedan. print-como-retomar.py usa la fecha real, asi que los `_revisar` del fixture
+# van en 9999-12-31 y la comprobacion es por id: con la fecha del caso real (2026-10-15) un vecino directo
+# del paso salio de extra en CI del 2026-10-16 (es del hilo) y la prueba por linea entera fallo.
 python3 - "$M/sessions/$FS.md" <<'PY'
 import sys
 p = sys.argv[1]
@@ -366,6 +368,52 @@ python3 "$BIN/stamp-hilo.py" "$M/sessions/2026-10-14-hoy.md" --transcript "$T/t.
 FM=$(sed -n '1,/^---$/p' "$M/sessions/2026-10-14-hoy.md")
 chk "hilo_paso toma el id de Retomamos:" "1" "$(printf '%s' "$FM" | grep -c '^hilo_paso: p-aaaaaaaaaa$')"
 chk "y no el de la linea Comprueba:" "0" "$(printf '%s' "$FM" | grep -c 'p-bbbbbbbbbb')"
+
+echo "== 10. notas de los revisores de 2.57.0 (p-3f22a1cba1) =="
+# (1) Un Bash que escribe la ficha con barras invertidas (Windows) la escribio igual que con `/`.
+memoria; ficha 2026-10-14-hoy "Proximo paso: x."
+python3 - "$T/bs.jsonl" <<'PY'
+import json, sys
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    fh.write(json.dumps({"type": "user", "timestamp": "2026-10-14T15:00:00Z", "message": {"role": "user", "content": "Retomamos: demo.\n\nProximo paso: p-aaaaaaaaaa."}}) + "\n")
+    fh.write(json.dumps({"type": "assistant", "timestamp": "2026-10-14T15:10:00Z", "message": {"content": [
+        {"type": "tool_use", "name": "Bash", "input": {"command": "cat > memory\\sessions\\2026-10-14-hoy.md <<'X'\nx\nX"}}]}}) + "\n")
+PY
+chk "Bash con barras invertidas escribe la ficha" "True" "$(python3 -c "import sys; sys.path.insert(0, sys.argv[1]); import pendientes_afines as a; print(a.escribio_la_ficha(sys.argv[2], '2026-10-14-hoy.md'))" "$BIN" "$T/bs.jsonl")"
+# (2) Una linea con `message` que no es un objeto se salta; no tumba stamp-hilo.py.
+python3 - "$T/bs.jsonl" <<'PY'
+import json, sys
+p = sys.argv[1]
+t = open(p, encoding="utf-8").read()
+raro = [{"type": "user", "timestamp": "2026-10-14T14:59:00Z", "message": "texto plano"},
+        {"type": "assistant", "timestamp": "2026-10-14T14:59:30Z", "message": ["2026-10-14-hoy.md"]}]
+open(p, "w", encoding="utf-8").write("".join(json.dumps(x) + "\n" for x in raro) + t)
+PY
+chk "message no-objeto: stamp-hilo sella sin traceback" "sellado=1 motivo=sellada" "$(python3 "$BIN/stamp-hilo.py" "$M/sessions/2026-10-14-hoy.md" --transcript "$T/bs.jsonl" 2>&1 | tail -1)"
+# (3) El docstring de print-como-retomar.py ya no describe la regla de 2.55.0 como vigente.
+chk "docstring sin 'ligados por _relacionado'" "0" "$(grep -c 'ligados por `_relacionado' "$BIN/print-como-retomar.py")"
+# (4) El caso 5 colapsado (`Ninguno — …` sin bloque) con un heredado hacible en el hilo es el mismo
+# hueco que `Proximo paso: ninguno` dentro del bloque: snippet.hilo tambien lo mira.
+colapsa() {
+  python3 - "$M/sessions/2026-10-14-hoy.md" "$1" <<'PY'
+import re, sys
+p, linea = sys.argv[1], sys.argv[2]
+t = open(p, encoding="utf-8").read()
+t = re.sub(r"## Como retomar\n\n```.*?```\n", lambda _: "## Como retomar\n\n" + linea + "\n", t, flags=re.S)
+open(p, "w", encoding="utf-8").write(t)
+PY
+}
+memoria
+ficha 2026-10-14-hoy "Proximo paso: x." "hilo_paso: p-aaaaaaaaaa\nhilo_heredados: p-aaaaaaaaaa\nhilo_saltos:"
+pend Alta p-aaaaaaaaaa "el paso que recibio y no cerro" 2026-10-13-ayer
+colapsa "Ninguno — no queda nada."
+chk "colapsado con un heredado hacible: SALTADO snippet.hilo" "1" "$(audit | grep -c 'SALTADO .*snippet.hilo')"
+chk "y nombra al heredado como el primero" "1" "$(audit | grep -c 'el primero es p-aaaaaaaaaa (Alta, heredado)')"
+memoria
+ficha 2026-10-14-hoy "Proximo paso: x." "hilo_paso: p-aaaaaaaaaa\nhilo_heredados: p-aaaaaaaaaa\nhilo_saltos:"
+pend Alta p-aaaaaaaaaa "el paso recibido, espera" 2026-10-13-ayer " — _bloqueado: otra instalacion_"
+colapsa "Ninguno — lo recibido espera a otra instalacion."
+chk "colapsado y el hilo sin nada hacible: HECHO" "1" "$(audit | grep -c 'HECHO .*snippet.hilo.*no tiene nada')"
 
 echo
 echo "pass=$pass fail=$fail"
