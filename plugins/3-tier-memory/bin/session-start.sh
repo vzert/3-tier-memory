@@ -10,7 +10,7 @@ export PYTHONUTF8=1 PYTHONIOENCODING=utf-8
 
 # sella-huellas: no (lee e invoca a otros; los indices los escribe el compactador)
 # 3-tier-memory plugin: SessionStart hook
-# Injects open pendientes AND learnings at session start
+# Injects the learnings count and the notices of memory commands due (no pendientes since 2.63.0)
 
 source "$(dirname "$0")/resolve-project-dir.sh"
 
@@ -500,7 +500,8 @@ else
   # pendientes ALTA y sin clasificar (hasta 25) y a la persona un resumen (conteo, ALTA viejos,
   # los mas antiguos). Medido 2026-10-16 sobre las 40 sesiones mas recientes de 7 proyectos con
   # el bloque en contexto, leyendo cada sesion entera: el agente uso un item de la lista en 1 de
-  # 40, y de 46 pendientes cerrados ese fue el unico que salio de la lista. Costaba ~3.6 KB por sesion. A la persona tampoco le servia: tapaba los avisos de
+  # 40, y de 46 pendientes cerrados con el id escrito en el comando ese fue el unico que salio de
+  # la lista (los cerrados con el id en una variable no se pudieron asignar). Costaba ~3.6 KB por sesion. A la persona tampoco le servia: tapaba los avisos de
   # comandos por correr (consolidar, migrar, backfill) que si son suyos. Los pendientes llegan
   # por donde si se usan: recall.sh cruza cada peticion contra ellos (UserPromptSubmit), el
   # sidebar de pendientes, y el Como retomar y los recordatorios del cierre del checkpoint.

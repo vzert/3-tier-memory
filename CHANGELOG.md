@@ -5,8 +5,9 @@ Origen: Victor noto que la lista de pendientes que veia al abrir cada sesion no 
 medir si al agente si. Se midio sobre las 40 sesiones mas recientes de 7 proyectos con el bloque en
 contexto, leyendo cada sesion entera: el agente uso un item de su lista en 1 de 40 (en 383cd006
 reconocio a media sesion el pendiente ALTA del arnes de mutacion, sin haberlo visto en otra parte, y
-lo llevo al checkpoint, donde se cerro). De 46 pendientes cerrados en esas sesiones, ese fue el unico
-que salio de la lista. La lista costaba de media ~3.6 KB y 29 lineas por sesion. Una primera medicion
+lo llevo al checkpoint, donde se cerro). De 46 pendientes cerrados en esas sesiones con el id escrito
+en el comando, ese fue el unico que salio de la lista; 13 llamadas de cierre en 4 sesiones pasan el id
+por variable o script y no se pudieron asignar. La lista costaba de media ~3.6 KB y 29 lineas por sesion. Una primera medicion
 que solo miraba los 3 primeros turnos dio 0/40 y 43 cerrados; el adversario externo la rompio.
 Decisiones de Victor via el supervisor (d70-d72, d104, d107: seguir con 1 de 40).
 
@@ -36,8 +37,14 @@ Decisiones de Victor via el supervisor (d70-d72, d104, d107: seguir con 1 de 40)
   de pendientes de mas de 30 dias quedan en `/status-3t` y `/audit-3t`.
 - Learning 3tier-memory-system#43 (y la linea 20 del Quick Reference), "Inyecta contenido, no
   contadores" de v2.7.0, reescrita con la medicion por `learning.update`. Las reglas #45 (`_creado:`
-  "habilita ordenar en SessionStart") y #46 ("SessionStart sigue inyectando pendientes") y la linea
-  del formato en `commands/setup-memory.md` dejan de decir que el arranque usa los pendientes.
+  "habilita ordenar en SessionStart"), #46 ("SessionStart sigue inyectando pendientes"), #51
+  (`⚠ posible stale` en SessionStart) y #220 ("ese backlog lo reporta el hook de inicio") se
+  reescriben; #91 (el orden del bloque de pendientes) se retira como obsoleta. La linea del formato
+  en `commands/setup-memory.md`, "Hooks not firing" del README y la cabecera de `session-start.sh`
+  dejan de decir que el arranque usa los pendientes.
+- `templates/checkpoint-3t-step8.md`: las tres razones de "no repitas el backlog Alta en el cierre"
+  decian que ya lo reporta el hook de inicio de sesion; ahora nombran el sidebar y el recall. La
+  regla de no repetirlo no cambia.
 
 ### Tests
 - `test-session-start-json.sh`: sin avisos no hay `systemMessage`; ningun texto de pendiente en

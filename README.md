@@ -307,7 +307,7 @@ Make sure `/3-tier-memory:setup-memory` ran successfully — it creates `.claude
 
 ### Hooks not firing
 
-The plugin's hooks (action items + learnings injection at session start) activate after install + restart. If they don't fire, run `/doctor` inside Claude Code to check for plugin errors.
+The plugin's hooks (session-start notices and learnings count, per-prompt recall of rules and action items) activate after install + restart. If they don't fire, run `/doctor` inside Claude Code to check for plugin errors.
 
 ### Check installed version
 
