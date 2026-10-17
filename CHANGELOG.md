@@ -10,12 +10,15 @@ decision de otra persona" como bloqueo valido, y el aviso `snippet.marco` de 2.6
 `decidir con <alguien>` como espera ajena y pedia bloquear el pendiente.
 
 ### Fixed
-- **Una decision del usuario ya no es un bloqueo.** Step 3a, Step 3b (`--bloqueado-por`), Step 8 y la
-  cabecera de uso de `journal-emit.py` lo dicen: el usuario la toma en la sesion siguiente, con el
+- **Una decision del usuario ya no es un bloqueo.** Step 3a, Step 3b (`--bloqueado-por`), Step 8 (la
+  escalera, el caso 5 y el punto 5 del marco del paso, que mandaba bloquear una espera de Victor), la
+  cabecera de uso de `journal-emit.py` y su `--help` de `--bloqueado-por` lo dicen: el usuario la toma en la sesion siguiente, con el
   agente al lado, y el snippet la pone delante con `Proximo paso: decidir con el usuario <que> (p-…)`.
   El caso 5 (`Ninguno`) no aplica mientras quede una decision del usuario abierta.
-- **`decidir con <alguien>` ya no es senal de `snippet.marco`.** Era la forma del paso arreglado, y el
-  aviso le pedia al agente que lo bloqueara.
+- **`decidir con el usuario` ya no es senal de `snippet.marco`.** Es la forma que Step 8 pide para el
+  paso arreglado, y el aviso le pedia al agente que lo bloqueara. `decidir con <otro>` (un nombre, un
+  proveedor) sigue avisando, porque puede ser un tercero, y el aviso ahora dice que una decision del
+  usuario no es espera.
 
 ### Added
 - **`checkpoint-audit.py` `snippet.ninguno_bloqueo`** (POR-DISEÑO, fichas desde 2026-10-16): el
@@ -24,8 +27,10 @@ decision de otra persona" como bloqueo valido, y el aviso `snippet.marco` de 2.6
   revision del cierre, que bloquea una vez, con la pregunta: ¿el bloqueo espera a alguien que no es
   el usuario? Si es una decision del usuario, el agente lo desbloquea y rehace el snippet; si espera
   a alguien de fuera, lo dice en la ultima linea de la revision.
-- `bin/test-ninguno-bloqueo.sh` (15 casos, 11 rojos contra 2.62.5) y una seccion en
-  `test-checkpoint-close-guard.sh` (2 rojos contra 2.62.5).
+- `bin/test-ninguno-bloqueo.sh` (21 comprobaciones en 6 escenarios, 16 rojas contra 2.62.5) y una
+  seccion en `test-checkpoint-close-guard.sh` (5 comprobaciones, 2 rojas contra 2.62.5). Cinco
+  mutaciones nuevas en `tools/mutaciones/m_hilo.py` (aviso del audit, origen en research, el marco
+  deja `decidir con el usuario`, un tercero sigue avisando, el hook pregunta).
 
 ### Known
 - Quien espera un bloqueo es texto libre y no se clasifica (regla 216). El aviso sale tambien para un

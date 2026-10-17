@@ -706,8 +706,9 @@ existe: `journal-emit.py --type pendiente.block --id p-… --bloqueado-por "…"
 lo marcaba. La regla en prosa de Step 8 ya lo prohibia y no bastaba. Desde 2.60.0 un `Proximo
 paso:` que escribe la espera en el texto sin el campo ("si Victor lo decide", "pedir permiso")
 sale como aviso `POR-DISEÑO` en `snippet.marco`. Es una red de formato que no bloquea. El campo
-sigue siendo la via que el audit hace cumplir. `decidir con <alguien>` dejo de ser senal en
-2.62.11: es la forma del paso que pone delante una decision del usuario.
+sigue siendo la via que el audit hace cumplir. `decidir con el usuario` dejo de ser senal en
+2.62.11: es la forma del paso que pone delante una decision del usuario (`decidir con <otro>`
+sigue avisando: puede ser un tercero).
 
 **`--revisar` cuando el pendiente nombra una fecha futura** (`revisar el 2026-09-22`, `target
 2026-10-01`, `T+7` resuelto a fecha). Escribe la fecha **como campo**, no solo en prosa: el

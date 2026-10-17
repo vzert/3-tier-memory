@@ -201,9 +201,12 @@ Reglas para llenar los slots:
   4. **Sin historia.** El porque, el estado y las comprobaciones previas ("Antes: (1) leer…, (2)…")
      van a `## Estado` o `## Contexto` de la ficha; el snippet ya manda leerla. `No repitas` queda
      para callejones sin salida.
-  5. **Sin esperas de Victor ni de terceros** (p-3d1c7ab131): si el paso solo espera una decision o
-     una accion de fuera de la sesion, no es paso. Ponle `_bloqueado:` al pendiente y baja por la
-     escalera (ver la pregunta de mas abajo).
+  5. **Sin esperas de Victor ni de terceros** (p-3d1c7ab131): un paso que espera a que alguien
+     decida para luego actuar ("publicar si Victor lo decide") no es paso. Si lo que espera es una
+     decision **del usuario**, el paso es esa decision: `decidir con el usuario <que> (p-…)`, como
+     en la regla 3; nunca `_bloqueado:` (2.62.11). Si espera una decision o accion de un tercero,
+     de fuera de la sesion, ponle `_bloqueado:` al pendiente y baja por la escalera (ver la pregunta
+     de mas abajo).
   6. **Palabras simples:** el usuario tambien lo lee.
   7. **Unos 300 caracteres**, como guia y no como tope. Los umbrales acordados (el parrafo "Incluye
      aqui los umbrales…", mas abajo) si caben.
