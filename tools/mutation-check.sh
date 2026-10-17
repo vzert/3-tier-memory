@@ -181,6 +181,12 @@ caso "afines en direccion inversa" pendientes_afines.py m_relacionado.py $T "la 
 caso "afines Alta primero" pendientes_afines.py m_relacionado.py $T "el Alta ligado va primero aunque sea mas nuevo" afines-sin-prioridad
 caso "afines tope de 2" pendientes_afines.py m_relacionado.py $T "con 3 elegibles salen solo 2" afines-sin-tope
 caso "hermano de la tabla primero" plan-siguiente-hermano.py m_relacionado.py $T "y no desplaza a la fila de la tabla" hermano-fuera-primero
+# Fila de plan podada (2.62.2, p-fb70d4600d): el frontmatter del plan frena el replay viejo.
+caso "poda sin guardian"   journal-compact.py m_plan_poda.py test-plan-reopen.sh "el replay active NO reinserta la fila" sin-guardian
+caso "poda sin comillas"   journal-compact.py m_plan_poda.py test-plan-reopen.sh "frontmatter CRLF, con comillas" sin-comillas
+caso "poda solo completed" journal-compact.py m_plan_poda.py test-plan-reopen.sh "abandoned en el frontmatter tambien frena" solo-completed
+caso "poda sin registro"   journal-compact.py m_plan_poda.py test-plan-reopen.sh "el replay active NO reinserta la fila" sin-registro-poda
+caso "poda sin pedir registro" journal-compact.py m_plan_poda.py test-plan-reopen.sh "conserva fase y fecha de creacion" sin-condicion-registro
 T=test-hilo-pendientes.sh
 caso "hilo: liga al nacer" journal-emit.py m_hilo.py $T "el evento trae _relacionado al paso recibido, campo en 2 lineas" liga-sin-auto
 caso "hilo: liga no hereda en backfill" journal-emit.py m_hilo.py $T "ficha de otra fecha, backfill: no hereda el snippet de la sesion en curso" liga-sin-guardia
@@ -220,6 +226,9 @@ caso "extras: espera un OK" pendientes_afines.py m_hilo.py $T "pruebas en vivo y
 caso "extras: en vivo pegado al verbo" pendientes_afines.py m_hilo.py $T "lo ya verificado y las decisiones del agente siguen siendo extra" extras-vivo-laxo
 caso "extras: no ESPERA_AJENA" pendientes_afines.py m_hilo.py $T "lo ya verificado y las decisiones del agente siguen siendo extra" extras-ok-con-ajena
 caso "extras: filtrados van a quedan" pendientes_afines.py m_hilo.py $T "las siete van a quedan" extras-filtra-quedan
+caso "hilo: Bash con barras invertidas" pendientes_afines.py m_hilo.py $T "Bash con barras invertidas escribe la ficha" bash-sin-barras
+caso "hilo: message no-objeto" pendientes_afines.py m_hilo.py $T "message no-objeto: stamp-hilo sella sin traceback" message-no-dict
+caso "hilo: audit del caso 5 colapsado" checkpoint-audit.py m_hilo.py $T "colapsado con un heredado hacible: SALTADO snippet.hilo" audit-colapsado-sin-hilo
 
 echo "Contrato de check-project-dir-fallback.py (2.41.4): cada pieza, rota, tumba su aserto"
 caso "verde respaldo" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " respaldo: exit 0" r1-sin-quitar-forma
@@ -412,6 +421,22 @@ caso "guard turno sin ckpt"    checkpoint-close-guard.sh $L test-checkpoint-clos
 caso "guard sin encabezados"   checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "una pregunta ajena a los candidatos" guard-sin-encabezados
 caso "hecho sin pregunta"      checkpoint-audit.py $L $S "CH5: hecho sin ninguna pregunta" hecho-no-pregunta
 caso "hecho no es decision"    checkpoint-audit.py $L $S "CH1: hecho con evidencia" hecho-no-es-decision
+caso "peer no cuenta"          checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "SendMessage al supervisor y su respuesta" peer-no-cuenta
+caso "peer sin respuesta"      checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "SendMessage sin respuesta" peer-sin-respuesta-cuenta
+caso "peer respuesta anterior" checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "ANTERIOR al envio" peer-respuesta-anterior
+caso "peer sin cola"           checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "la respuesta llega en cola" peer-sin-cola
+caso "peer un numero"          checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "un SendMessage con dos candidatos numerados" peer-un-numero
+caso "peer handback cuenta"    checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "un subagente con el nombre del supervisor" peer-handback-cuenta
+caso "peer envio fallido"      checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "negado por permisos" peer-error-cuenta
+caso "peer fallo sin is_error" checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "un SendMessage que fallo" peer-fallo-sin-is-error
+caso "peer teammate cuenta"    checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "un teammate con el nombre del supervisor" peer-team-cuenta
+caso "peer cualquier destino"  checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "el envio va a otra sesion" peer-cualquier-destino
+caso "peer responde por nombre" checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "la respuesta viene de otra sesion" peer-responde-por-nombre
+caso "peer sin ref"            checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "nombre .ref." peer-sin-ref
+caso "peer sin marca"          checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "corre. .sin session_id." peer-sin-marca
+caso "peer nombre sin dir"     checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "marca sin direccion" peer-nombre-sin-dir
+caso "peer marca rota vale"    checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "address que no es texto" peer-marca-rota-vale
+caso "peer marca null vale"    checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "address null" peer-marca-null-vale
 
 # Filtro de ignoradas de checkpoint-commit.py (issue #11): cada pieza del arreglo con su aserto.
 I=m_commit_ignoradas.py; C=test-checkpoint-commit.sh

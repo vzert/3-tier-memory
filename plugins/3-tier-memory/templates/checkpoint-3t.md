@@ -603,6 +603,17 @@ modal vuelve con una respuesta, hay alguien contestando. Sin pantalla, no pregun
 nada. Cada candidato queda con decision
 `sin confirmar`. No cuenta como pendiente, no sale al inicio de sesion, y queda escrito en la ficha.
 
+**Sesion supervisada por lookout** (te bloquea `AskUserQuestion` y te manda preguntar por
+`SendMessage`): la pregunta va al supervisor por `SendMessage`, a la direccion que te dio, y el se la
+pasa al usuario. Un
+solo mensaje con los candidatos numerados (`1)`, `2)`…), uno por numero, con su recomendacion, y el
+`summary` del mensaje hace de encabezado: cada linea de la ficha cita `pregunta: <summary>`. Espera
+su respuesta antes de escribir las decisiones. El hook de cierre cuenta ese mensaje como tantas
+preguntas como numeros lleva, solo si va al supervisor que nombra la marca de lookout de esta
+sesion y solo si despues llego un mensaje desde su direccion, o desde su nombre si la marca no trae
+direccion (sin respuesta no llego a nadie, igual
+que un modal sin resultado). Otro supervisor, o cualquier otra sesion, no cuenta (p-1d0f012aa9).
+
 **3. Escribe la decision en la ficha**, en `## Candidatos a pendiente` (reemplaza el placeholder de
 Step 2), una linea por candidato:
 
@@ -620,8 +631,8 @@ El id de `guardado` sale del stdout de `journal-emit.py` (abajo). `checkpoint-au
 un id que exista, si un `hecho` no trae `_verificado: <evidencia>_`, si un pendiente abierto que nacio en esta sesion (`_origen` = esta ficha) no sale
 como `guardado`, si hay mas `_descartado:` en `## Bugs fixed` que lineas `descartado`/`sin
 confirmar` aqui, o si falta la seccion cuando habia algo de eso que decidir. El hook de cierre
-anade `pendientes.candidatos_pregunta`: toma las preguntas de los `AskUserQuestion` de cada turno
-de esta sesion que corrio `/checkpoint-3t` y que llegaron al usuario (respondidos, o rechazados por
+anade `pendientes.candidatos_pregunta`: toma las preguntas de los `AskUserQuestion` (y de los
+`SendMessage` respondidos de una sesion supervisada, arriba) de cada turno de esta sesion que corrio `/checkpoint-3t` y que llegaron al usuario (respondidos, o rechazados por
 el con el texto de arriba) y, desde 2.54.0, exige que cada decision `guardado`, `hecho` o
 `descartado` cite con `pregunta:` el encabezado de una de ellas; cada pregunta cubre una sola
 decision. Una decision sin `pregunta:`, con un encabezado que no llego al usuario, o con uno que ya
@@ -983,7 +994,10 @@ Do NOT skip this step. Actively scan the conversation for these signals:
   2.37.0 an upsert that moves the status backwards is dropped with a WARN (that is what stops a
   replayed old event from un-closing a plan). Emit
   `python3 "$JBIN/journal-emit.py" --type plan.reopen --slug <slug>` (add `--title "<Plan title>"`
-  for an `--inline` plan), then update the plan file's frontmatter yourself.
+  for an `--inline` plan), then update the plan file's frontmatter yourself. If the pruning already
+  removed its row (`plan.reopen` quarantines `no-fila`), set `status: active` in the frontmatter
+  FIRST and then emit `plan.upsert --status active`: since 2.62.2 an upsert with no row whose plan
+  file still says closed is dropped with a WARN, as an old replay.
 - Add wikilink in session log ## Plans section and ## Related
 
 **Fallback (no JBIN)**: add/update the row in memory/_plans-index.md by hand.
