@@ -87,7 +87,7 @@ Create ALL of these files in `MEMORY_DIR/`. Use today's date for `created` and `
 - Current Status section (brief project state)
 - Memory Rules section
 
-**_pendientes.md** — Aggregator with Alta/Media/Baja prioridad sections, "Como usar" instructions, Related links. Each item uses format `- [ ] <texto> — _origen: [[sessions/...]]_ — _creado: YYYY-MM-DD_` so SessionStart can sort by age.
+**_pendientes.md** — Aggregator with Alta/Media/Baja prioridad sections, "Como usar" instructions, Related links. Each item uses format `- [ ] <texto> — _origen: [[sessions/...]]_ — _creado: YYYY-MM-DD_` so `/status-3t`, `/audit-3t` and the per-prompt recall can tell its age.
 
 **_session-index.md** — The table MUST start under a header that is the literal, exact text `## Sessions` (not a translation, not a reworded variant like "## Historial de Sesiones" — `bin/journal-compact.py` matches this string verbatim as its anchor). Since 2.24.0, if this exact header is missing entirely, the compactor creates it automatically the first time a `session.add` event is applied, so a wrong-worded header no longer quarantines anything — but it still leaves the wrong-worded section behind as dead, disconnected content, with a second "## Sessions" table appended after it holding every row from then on. Use the literal text from the start; there is no automatic migration of the old section's rows. Table with columns: Fecha, Sesion, Status, Resumen, Commit. Empty rows. Convention section.
 
