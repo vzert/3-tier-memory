@@ -204,14 +204,14 @@ chk "la fila mensual quedo cerrada" "1" "$(printf '%s' "$(fila "$ID")" | grep -c
 echo "== 16. las 7 expresiones que despojan metadatos son IDENTICAS caracter a caracter =="
 # No basta con decirlo en un comentario: eso es justo lo que decia el comentario de
 # `journal-emit.strip_meta` mientras `repair-dualwrite.META_RE` ya habia divergido (learning 148).
-N=$(grep -ho 'r"\\s\*—\\s\*_(?:origen|creado|id|revisar|actualizado|bloqueado|relacionado):\[^—\]\*"' \
+N=$(grep -ho 'r"\\s\*—\\s\*_(?:origen|creado|id|revisar|actualizado|bloqueado|relacionado|retomar):\[^—\]\*"' \
       "$BIN/journal-emit.py" "$BIN/journal-compact.py" "$BIN/repair-dualwrite.py" \
       "$BIN/enrich-memory.py" "$BIN/expire-pendientes.py" "$BIN/triage-scan.py" \
       "$BIN/build-recall-index.py" | sort -u | wc -l | tr -d ' ')
 # Se cuenta la CADENA COMPLETA del despojador, no el juego de claves suelto: journal-compact.py
 # lleva ademas `META_START_RE`, que usa las mismas claves para localizar donde empieza la cola y
 # no para borrarla. Contar el fragmento la daria por un octavo despojador que no existe.
-C=$(grep -hoc 'r"\\s\*—\\s\*_(?:origen|creado|id|revisar|actualizado|bloqueado|relacionado):\[^—\]\*"' \
+C=$(grep -hoc 'r"\\s\*—\\s\*_(?:origen|creado|id|revisar|actualizado|bloqueado|relacionado|retomar):\[^—\]\*"' \
       "$BIN/journal-emit.py" "$BIN/journal-compact.py" "$BIN/repair-dualwrite.py" \
       "$BIN/enrich-memory.py" "$BIN/expire-pendientes.py" "$BIN/triage-scan.py" \
       "$BIN/build-recall-index.py" | awk '{s+=$1} END{print s+0}')   # no bc: Git Bash de Windows no lo trae

@@ -302,3 +302,31 @@ test('el clic pega tambien que leer: la ficha de origen, o su texto, y lo relaci
     'p-dddddddddd: Sin nada',
   ])
 })
+
+// 0.2.3: un pendiente con `_retomar` (el paso de un snippet que no se pego) sale con ↻ y el clic pega
+// el snippet entero de su ficha; uno sin `_retomar` sigue pegando id y texto.
+test('retomar: ↻ en vez de ●, y el clic pega el snippet de la ficha', async ($, on) => {
+  const reloj = mock.clock(on)
+  mock.store(on)
+  const SNIPPET = 'Retomamos: demo.\n\nLee memory/sessions/2026-10-16-uno.md para el contexto completo.\n\nProximo paso: hacer p-9999999999.\n\nTerminas cuando: pasa.'
+  const visto = motor(on, JSON.stringify({
+    ...AHORA,
+    items: [
+      it('p-9999999999', 'vence', 'retomar desde 2026-10-12', {
+        texto: 'Paso sin pegar', titulo_auto: 'Paso sin pegar', dias: 1,
+        retomar: '2026-10-12', retomar_ficha: 'memory/sessions/2026-10-16-uno.md', retomar_snippet: SNIPPET,
+      }),
+      it('p-bbbbbbbbbb', 'vence', 'vencido 2026-09-26', { texto: 'Algo que vencio', titulo_auto: 'Algo que vencio', dias: 17 }),
+    ],
+    resto: [],
+    quedan: 0,
+  }))
+  await $.command.run({ command: 'pendientes-ahora' })
+  await reloj.advance(1)
+  const ui = await $.ui.mount({ ...pane(40), surface: 'terminal' })
+  expect(await ui.find({ text: '↻ 1 d' })).toBeDefined()
+  expect(await ui.find({ text: '● 17 d' })).toBeDefined()
+  await ui.press({ key: 'p-9999999999' })
+  await ui.press({ key: 'p-bbbbbbbbbb' })
+  expect(visto.fills).toEqual([SNIPPET, 'p-bbbbbbbbbb: Algo que vencio'])
+})

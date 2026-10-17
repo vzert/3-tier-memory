@@ -67,7 +67,9 @@ export function insignia(p: Pendiente): { texto: string; color: 'warning' | 'err
     return { texto: `◐ ${[donde, commits].filter(Boolean).join(' · ')}`, color: 'suggestion' }
   }
   if (p.dias === null || p.dias === undefined) return null
-  return p.dias === 0 ? { texto: '● hoy', color: 'warning' } : { texto: `● ${p.dias} d`, color: 'error' }
+  // Un snippet sin pegar (`_retomar`) lleva ↻ en vez de ●: no vencio una fecha, quedo un paso.
+  const marca = p.grupo === 'vence' && p.motivo.startsWith('retomar') ? '↻' : '●'
+  return p.dias === 0 ? { texto: `${marca} hoy`, color: 'warning' } : { texto: `${marca} ${p.dias} d`, color: 'error' }
 }
 
 // Filas que ocupa una lista: por seccion su cabecera y la linea en blanco, por tarjeta dos.
@@ -192,7 +194,9 @@ export async function titular($: EngineInterface): Promise<void> {
 
 // Lo que pega el clic: el pendiente y, debajo, que leer para retomarlo (como el Retomamos de una
 // ficha). Un estado de una version anterior (sin origen ni relacionado) pega solo id y texto.
+// Con `_retomar` (el paso de un snippet que no se pego), el snippet entero de su ficha (0.2.3).
 export function textoAlPrompt(p: Pendiente): string {
+  if (p.retomar_snippet) return p.retomar_snippet
   const extra: string[] = []
   const origen = p.origen ?? []
   if (origen.length > 0) extra.push(`Lee ${origen.join(', ')} para el contexto.`)
