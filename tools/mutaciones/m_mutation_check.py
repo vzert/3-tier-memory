@@ -5,12 +5,15 @@ import io, sys
 # Uso: m_mutation_check.py <fichero> <mutacion>
 # Patrones de una sola linea, sin "\n": el checkout de Windows trae CRLF (regla 322).
 # Cada sustitucion tiene que calzar EXACTAMENTE una vez; si no, imprime 0 -> SIN PROBAR.
-SI = 'if [ "$(cat "$(bash tools/run-tests.sh --ruta-candado)/pid" 2>/dev/null)" != "${RUN_TESTS_CANDADO_DUENO:-ninguno}" ]; then'
+SI = 'if [ "$(cat "$(bash tools/run-tests.sh --ruta-candado)/pid" 2>/dev/null)" != "${RUN_TESTS_CANDADO_DUENO:-ninguno}" ] \\'
+VIVO = '   || ! kill -0 "$RUN_TESTS_CANDADO_DUENO" 2>/dev/null; then'
 M = {
     "sin-candado": [
         ('  exec bash tools/run-tests.sh --con-candado bash tools/mutation-check.sh "$@"', '  :')],
-    "siempre-pide": [(SI, 'if true; then')],
-    "solo-la-variable": [(SI, 'if [ -z "${RUN_TESTS_CANDADO_DUENO:-}" ]; then')],
+    "siempre-pide": [(SI, 'if true \\')],
+    "solo-la-variable": [(SI, 'if [ -z "${RUN_TESTS_CANDADO_DUENO:-}" ] \\'), (VIVO, '   ; then')],
+    "dueno-muerto-vale": [(VIVO, '   ; then')],
+    "relanza-sin-fin": [('  if [ "${MUT_RELANZADO:-}" = "$PPID" ]; then', '  if false; then')],
 }
 p, nombre = sys.argv[1], sys.argv[2]
 s = io.open(p, encoding="utf-8", newline="").read()

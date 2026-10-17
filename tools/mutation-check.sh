@@ -25,9 +25,19 @@ cd "$(cd "$(dirname "$0")/.." && pwd)" || exit 2
 # junto a otro o junto a una corrida completa, cargaba la maquina igual que dos suites a la vez.
 # Solo, se relanza dentro de `run-tests.sh --con-candado`. Dentro de una corrida que ya lo tiene
 # (run-tests, o una tanda de abajo) no lo pide: se esperaria a si mismo. Dentro = el pid que exporto
-# quien lo tomo es el del candado. Una variable heredada sola no basta: test-run-tests corre copias
-# con su propio candado DENTRO del runner real, y la del runner no casa con el de la prueba.
-if [ "$(cat "$(bash tools/run-tests.sh --ruta-candado)/pid" 2>/dev/null)" != "${RUN_TESTS_CANDADO_DUENO:-ninguno}" ]; then
+# quien lo tomo es el del candado, y sigue vivo. Una variable heredada sola no basta: test-run-tests
+# corre copias con su propio candado DENTRO del runner real, y la del runner no casa con el de la
+# prueba; y un candado abandonado (kill -9) con el pid de una corrida muerta no es de nadie.
+if [ "$(cat "$(bash tools/run-tests.sh --ruta-candado)/pid" 2>/dev/null)" != "${RUN_TESTS_CANDADO_DUENO:-ninguno}" ] \
+   || ! kill -0 "$RUN_TESTS_CANDADO_DUENO" 2>/dev/null; then
+  # Relanzado una vez (su padre es el run-tests al que se paso) y aun no lo ve: run-tests no lo tomo.
+  # Relanzarse otra vez era una cadena sin fin de procesos: con la mutacion sin-candado de run-tests,
+  # 1752 en 25 s (adversario, 2.63.1). Sale con error.
+  if [ "${MUT_RELANZADO:-}" = "$PPID" ]; then
+    echo "ERROR mutation-check: relanzado por run-tests.sh --con-candado y no veo su candado; no me relanzo otra vez." >&2
+    exit 2
+  fi
+  export MUT_RELANZADO=$$
   exec bash tools/run-tests.sh --con-candado bash tools/mutation-check.sh "$@"
 fi
 # --- hasta aqui el candado: test-run-tests.sh corta aqui su copia de este script ---
@@ -483,6 +493,8 @@ caso_tools "sin --con-candado"     run-tests.sh m_run_tests.py test-run-tests.sh
 caso_tools "mutation-check sin candado" mutation-check.sh m_mutation_check.py test-run-tests.sh "tres mutation-check sueltos y una corrida completa" sin-candado MUTATION_CHECK
 caso_tools "se espera a si mismo"  mutation-check.sh m_mutation_check.py test-run-tests.sh "dentro de una corrida completa no se espera a si mismo" siempre-pide MUTATION_CHECK
 caso_tools "dueno sin mirar el pid" mutation-check.sh m_mutation_check.py test-run-tests.sh "una variable heredada que no casa con el candado no lo salta" solo-la-variable MUTATION_CHECK
+caso_tools "dueno muerto vale"     mutation-check.sh m_mutation_check.py test-run-tests.sh "un dueno heredado que ya murio no vale: quita el abandonado" dueno-muerto-vale MUTATION_CHECK
+caso_tools "se relanza sin fin"    mutation-check.sh m_mutation_check.py test-run-tests.sh "un relanzado que no ve el candado no se relanza sin fin" relanza-sin-fin MUTATION_CHECK
 
 echo
 if [ "$PEND" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $TOTAL)"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi

@@ -142,7 +142,8 @@ if [ "${1:-}" != "--una" ]; then
   trap 'type _tp_limpia >/dev/null 2>&1 && _tp_limpia; candado_suelta' EXIT
 fi
 # El comando de --con-candado sale con su rc; el trap de arriba suelta el candado.
-if [ "${1:-}" = "--con-candado" ]; then shift; "$@"; exit $?; fi
+# Los avisos de restos viejos de tmp-propio van antes: el comando hereda el temporal y no los junta.
+if [ "${1:-}" = "--con-candado" ]; then shift; type tmp_propio_avisos >/dev/null 2>&1 && tmp_propio_avisos; "$@"; exit $?; fi
 FALLOS=0
 FALLIDAS=""
 TOTAL=0

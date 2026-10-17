@@ -241,9 +241,10 @@ echo "== candado: mutation-check.sh lanzado solo (p-4be2b6ea23) =="
 sed -n '1,/^# --- hasta aqui el candado/p' "$MC" > "$R/tools/mutation-check.sh"
 printf 'echo mc-ini >> "%s"; sleep 1; echo mc-fin >> "%s"; echo "LAS EVALUABLES DISCRIMINAN (de 1)"\n' \
   "$T/registro" "$T/registro" >> "$R/tools/mutation-check.sh"
+chk "mutation-check.sh tiene la marca donde se corta su copia" "1" "$(grep -c '^# --- hasta aqui el candado' "$MC")"
 chk "la copia lleva el candado de mutation-check" "1" "$(grep -c '^  exec bash tools/run-tests.sh --con-candado' "$R/tools/mutation-check.sh")"
 # Tres sueltos y una completa a la vez, no dos (regla: con dos no se ve la carrera de la liberacion).
-: > "$T/registro"; pids=""; TOPE=20
+: > "$T/registro"; pids=""; TOPE=40
 for i in 1 2 3; do completa "$T/m$i" mutation-check.sh; pids="$pids $LANZADO"; done
 completa "$T/mr"; pids="$pids $LANZADO"; TOPE=
 rcs=""; for p in $pids; do termina "$p" 90; rcs="$rcs$?"; done
@@ -267,6 +268,23 @@ DUENO=1; completa "$T/o" mutation-check.sh; o=$LANZADO; DUENO=
 chk "una variable heredada que no casa con el candado no lo salta: espera" "1" "$(termina "$o" 4; echo $?)"
 chk "y no corre su cuerpo" "" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
 rm -rf "$CAND"
+
+# Un candado abandonado con el pid de una corrida muerta, y ese mismo pid heredado: no es de nadie.
+bash -c 'exit 0' & muerto=$!; wait "$muerto"
+mkdir "$CAND"; echo "$muerto" > "$CAND/pid"; : > "$T/registro"
+DUENO=$muerto; completa "$T/q" mutation-check.sh; q=$LANZADO; DUENO=
+chk "un dueno heredado que ya murio no vale: toma el candado" "0" "$(termina "$q" 30; echo $?)"
+chk "un dueno heredado que ya murio no vale: quita el abandonado y corre" "1 mc-ini mc-fin" \
+  "$(grep -c 'ya no existe' "$T/q.err") $(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
+
+# Relanzado una vez y sin ver aun el candado: sale con error, no se relanza sin fin. Se simula con
+# MUT_RELANZADO igual al pid de esta prueba, que es su padre.
+: > "$T/registro"
+( cd "$T" && MUT_RELANZADO=$$ RUN_TESTS_CANDADO="$CAND" RUN_TESTS_CANDADO_DUENO= RUN_TESTS_CANDADO_TOPE=10 \
+    exec bash "$R/tools/mutation-check.sh" >"$T/s.out" 2>"$T/s.err" ) & s=$!
+TERMINA_RC=; termina "$s" 20
+chk "un relanzado que no ve el candado no se relanza sin fin: sale con rc 2" "0 2" "$? $TERMINA_RC"
+chk "y lo dice" "1" "$(grep -c 'no me relanzo otra vez' "$T/s.err")"
 
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
