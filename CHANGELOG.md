@@ -31,6 +31,10 @@ igual que dos suites.
 
 ### Known
 - Sigue abierto p-7c1fa85c1e: un candado cuyo pid lo reusa otro proceso vivo hace esperar sin fin.
+- mutation-check no comprueba que el dueno sea un `run-tests.sh` antecesor suyo: un candado con el
+  pid de un proceso vivo cualquiera y ese mismo pid en `RUN_TESTS_CANDADO_DUENO` lo salta (adversario
+  externo, ronda 2). Hay que escribir los dos a mano, o que se junten p-7c1fa85c1e y una variable
+  heredada de una corrida muerta. Ver la ascendencia pide `ps`, que en Git Bash es otro.
 
 ## [2.62.7] - 2026-10-16
 Origen: p-524e2a5bf7. Varios agentes que esperaban a las suites ajenas lanzaban `tools/run-tests.sh`

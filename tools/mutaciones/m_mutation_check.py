@@ -6,7 +6,7 @@ import io, sys
 # Patrones de una sola linea, sin "\n": el checkout de Windows trae CRLF (regla 322).
 # Cada sustitucion tiene que calzar EXACTAMENTE una vez; si no, imprime 0 -> SIN PROBAR.
 SI = 'if [ "$(cat "$(bash tools/run-tests.sh --ruta-candado)/pid" 2>/dev/null)" != "${RUN_TESTS_CANDADO_DUENO:-ninguno}" ] \\'
-VIVO = '   || ! kill -0 "$RUN_TESTS_CANDADO_DUENO" 2>/dev/null; then'
+VIVO = '   || ! kill -0 "${RUN_TESTS_CANDADO_DUENO:-}" 2>/dev/null; then'
 M = {
     "sin-candado": [
         ('  exec bash tools/run-tests.sh --con-candado bash tools/mutation-check.sh "$@"', '  :')],
