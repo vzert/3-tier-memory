@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.62.6] - 2026-10-16
+Origen: el adversario de 2.62.0 (PR #27) midio con una fecha forzada que `test-hilo-pendientes.sh`
+caia en main desde el 2026-10-21: `retomar()` usa la fecha real y un pendiente de la prueba tenia
+`_revisar: 2026-10-20`; al dejar de ser futuro, 3 asertos de las secciones 2 y 5 fallaban
+(pass=67 fail=3 a 2026-10-21). Solo cambia la prueba; el plugin no.
+
+### Fixed
+- `test-hilo-pendientes.sh`: `p-6666666666` lleva `_revisar: 9999-12-31`.
+- `bin/fixtures/hilo-ajeno/_pendientes.md`: sus 7 `_revisar` (2026-10-15 a 2026-10-29) pasan a
+  9999-12-31. Las comprobaciones con `--hoy 2026-10-15` los siguen viendo futuros, como en el caso
+  real, y las que corren con la fecha real ya no cambian de un dia a otro.
+- Se eligio la fecha lejana y no un `--hoy` en `print-como-retomar.py`: lo segundo cambiaria el
+  producto para arreglar una prueba.
+
+### Tests
+- Con `date.today()` forzado a 2026-10-16, 2026-10-21, 2027-06-01, 2030-01-01, 2100-01-01 y
+  9999-12-31: 76/76 en todas, con la seccion 10 de 2.62.5 incluida (9999-12-31 es la fecha mas
+  alta de Python: no caduca); la prueba de 2.62.1 daba 67/70 a 2026-10-21. Las 51 mutaciones de
+  `m_hilo.py` y `m_relacionado.py` caen por su aserto.
+
 ## [2.62.5] - 2026-10-16
 Origen: las cuatro notas menores de los revisores de 2.57.0 (p-3f22a1cba1). Cada una tiene su
 prueba en la seccion 10 de `test-hilo-pendientes.sh`, roja contra 2.62.0, y su mutacion en
