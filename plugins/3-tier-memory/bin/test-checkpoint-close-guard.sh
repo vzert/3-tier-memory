@@ -1209,7 +1209,71 @@ u("guarda el checkpoint")
 if preg != "reimprime":
     a([{"type": "tool_use", "id": "t1", "name": "Skill", "input": {"skill": "checkpoint-3t"}}])
     u([{"type": "tool_result", "tool_use_id": "t1", "content": "Launching skill: checkpoint-3t"}])
-if preg not in ("sin", "reimprime"):
+SOCK = "uds:/tmp/cc-socks/9.sock"
+OTRA = "uds:/tmp/cc-socks/77.sock"
+def peer(de, cola=False, nombre="supervisor-x"):
+    # Las dos formas reales (transcript d69ad375, 2026-10-15): `user` isMeta con la sesion ocupada,
+    # `attachment` queued_command con la sesion ociosa. El `origin` lo escribe el harness.
+    o = {"kind": "peer", "from": de, "name": nombre}
+    txt = f'<cross-session-message from="{de}">decision: 1 descartado</cross-session-message>'
+    if cola:
+        R.append({"type": "attachment", "attachment": {"type": "queued_command", "prompt": txt, "origin": o}})
+    else:
+        R.append({"type": "user", "isMeta": True, "origin": o,
+                  "message": {"role": "user", "content": "Another Claude session sent a message:\n" + txt}})
+if preg.startswith("peer"):
+    if preg == "peer-antes":
+        peer(SOCK)
+    msg = "1) revisar algo\n2) otra cosa" if preg == "peer-dos" else "Candidato: revisar algo. Recomiendo descartar."
+    TAREA = "a1b2c3d4e5f607182"
+    a([{"type": "tool_use", "id": "m1", "name": "SendMessage",
+        "input": {"to": {"peer-sub": TAREA, "peer-team": TAREA, "peer-ref": "supervisor-x [abc123]",
+                         "peer-nombre": "supervisor-x", "peer-par": OTRA, "peer-ajeno": OTRA,
+                         "peer-team-nombre": "supervisor-x", "peer-sub-nombre": "supervisor-x"}.get(preg, SOCK),
+                  "summary": "Uno", "message": msg}}])
+    if preg == "peer-error":
+        # La forma real de un envio que no llego: SIN is_error, `success:false` en el texto (31 casos
+        # medidos en transcripts locales, 2026-10-15). `is_error` solo lo trae un rechazo de permisos.
+        u([{"type": "tool_result", "tool_use_id": "m1", "content": [{"type": "text",
+            "text": '{"success":false,"message":"Failed to send to uds:/tmp/cc-socks/9.sock: ENOENT"}'}]}])
+    elif preg == "peer-negado":
+        u([{"type": "tool_result", "tool_use_id": "m1", "is_error": True,
+            "content": "Permission for this action was denied by the Claude Code auto mode classifier."}])
+    else:
+        u([{"type": "tool_result", "tool_use_id": "m1", "content": '{"success":true}'}])
+    if preg in ("peer-team-nombre", "peer-sub-nombre"):
+        # Marca sin direccion (vale el nombre) y un teammate o subagente que se llama como el
+        # supervisor: su registro trae `senderTaskId` (y el subagente `handback`), no es el usuario.
+        o = {"kind": "peer", "from": "supervisor-x", "name": "supervisor-x", "senderTaskId": TAREA}
+        if preg == "peer-sub-nombre":
+            o["handback"] = True
+        R.append({"type": "user", "isMeta": True, "origin": o,
+                  "message": {"role": "user", "content": "Another Claude session sent a message:\n..."}})
+    if preg == "peer-team":
+        # `senderTaskId` sin `handback` (forma real de un teammate): tampoco es el usuario.
+        R.append({"type": "user", "isMeta": True,
+                  "origin": {"kind": "peer", "from": TAREA, "name": TAREA, "senderTaskId": TAREA},
+                  "message": {"role": "user", "content": "Another Claude session sent a message:\n..."}})
+    if preg == "peer-sub":
+        # El informe final de un subagente: `kind` peer, `from` = id de la tarea, con `handback`
+        # y `senderTaskId` (forma real, transcript d69ad375).
+        R.append({"type": "user", "isMeta": True,
+                  "origin": {"kind": "peer", "from": TAREA, "name": TAREA, "senderTaskId": TAREA,
+                             "handback": True, "handbackReportText": "decision: 1 descartado"},
+                  "message": {"role": "user", "content": "Another Claude session sent a message:\n[Subagent hand-back] ..."}})
+    if preg in ("peer", "peer-dos", "peer-uno", "peer-error", "peer-negado", "peer-ref", "peer-nombre"):
+        peer(SOCK)
+    elif preg == "peer-ajeno":
+        # El envio va a otra sesion; despues escribe el supervisor (por otra cosa): no es su respuesta.
+        peer(SOCK)
+    elif preg == "peer-par":
+        # Otra sesion par que contesta, pero no es el supervisor de la marca de lookout.
+        peer(OTRA, nombre="otra-sesion")
+    elif preg == "peer-cola":
+        peer(SOCK, cola=True)
+    elif preg == "peer-otro":
+        peer(OTRA)
+elif preg not in ("sin", "reimprime"):
     qs = {"dos": [{"question": "a", "header": "Uno"}, {"question": "b", "header": "Dos"}],
           "ajena": [{"question": "otra cosa", "header": "Otra"}]}.get(preg, [{"question": "a", "header": "Uno"}])
     a([{"type": "tool_use", "id": "q1", "name": "AskUserQuestion", "input": {"questions": qs}}])
@@ -1259,6 +1323,81 @@ txc "$T/tc.jsonl" ajena
 chk "una pregunta ajena a los candidatos no cubre la decision: lo reclama" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
 txc "$T/tc.jsonl" reimprime
 chk "un turno que solo reimprime el snippet no mide candidatos" "0" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+
+echo "== p-1d0f012aa9: sesion supervisada por lookout, la pregunta va por SendMessage al supervisor =="
+# La marca que lookout escribe para la sesion supervisada (`sessions/<session_id>.json`, formato
+# de lookout 0.13): solo cuenta un SendMessage a ese supervisor. $1 transcript, $2 LOOKOUT_STATE_DIR.
+LK="$T/lookout"; mkdir -p "$LK/sessions"
+printf '{"project_id": "p", "supervisor": "supervisor-x", "address": "uds:/tmp/cc-socks/9.sock", "nombre": "a"}\n' > "$LK/sessions/sess-sup.json"
+corre_sup() {
+  python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":False,"last_assistant_message":"","cwd":"/tmp","session_id":"sess-sup"}))' "$1" \
+    | LOOKOUT_STATE_DIR="$2" bash "$HOOK" 2>/dev/null | expande
+}
+txc "$T/tc.jsonl" peer
+chk "SendMessage al supervisor y su respuesta: no lo reclama" "0" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-cola
+chk "la respuesta llega en cola (queued_command, sesion ociosa): no lo reclama" "0" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-sinresp
+chk "SendMessage sin respuesta: no llego a nadie, lo reclama" "1" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-otro
+chk "la respuesta viene de otra sesion, no del destinatario: lo reclama" "1" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-antes
+chk "un mensaje del supervisor ANTERIOR al envio no es su respuesta: lo reclama" "1" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-error
+chk "un SendMessage que fallo no cuenta aunque luego llegue un mensaje del supervisor: lo reclama" "1" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-negado
+chk "un SendMessage negado por permisos (is_error) no cuenta: lo reclama" "1" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-team
+chk "la respuesta de un teammate (senderTaskId sin handback) no cuenta: lo reclama" "1" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-sub
+chk "sin supervisor (SendMessage a un subagente y su informe final): sigue exigiendo la pregunta" "1" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-ref
+chk "supervisor nombrado como \`nombre [ref]\`: no lo reclama" "0" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-nombre
+chk "supervisor nombrado por su nombre: no lo reclama" "0" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-par
+chk "otra sesion par que no es el supervisor de la marca: sigue exigiendo la pregunta" "1" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-ajeno
+chk "el envio va a otra sesion y despues escribe el supervisor: sigue exigiendo la pregunta" "1" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+mkdir -p "$T/lookout-nombre/sessions"
+printf '{"supervisor": "supervisor-x"}\n' > "$T/lookout-nombre/sessions/sess-sup.json"
+txc "$T/tc.jsonl" peer-nombre
+chk "marca sin direccion: vale la respuesta por el nombre del supervisor" "0" "$(corre_sup "$T/tc.jsonl" "$T/lookout-nombre" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-team-nombre
+chk "marca sin direccion y un teammate con el nombre del supervisor (senderTaskId): lo reclama" "1" "$(corre_sup "$T/tc.jsonl" "$T/lookout-nombre" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-sub-nombre
+chk "marca sin direccion y un subagente con el nombre del supervisor (handback): lo reclama" "1" "$(corre_sup "$T/tc.jsonl" "$T/lookout-nombre" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer
+mkdir -p "$T/lookout-vacio/sessions"
+chk "sin marca de lookout (sesion no supervisada): sigue exigiendo la pregunta" "1" "$(corre_sup "$T/tc.jsonl" "$T/lookout-vacio" | grep -c 'candidatos_pregunta')"
+mkdir -p "$T/lookout-roto/sessions"; printf 'no es json\n' > "$T/lookout-roto/sessions/sess-sup.json"
+chk "marca de lookout que no se entiende: sigue exigiendo la pregunta" "1" "$(corre_sup "$T/tc.jsonl" "$T/lookout-roto" | grep -c 'candidatos_pregunta')"
+mkdir -p "$T/lookout-dir-rota/sessions"
+printf '{"address": [], "supervisor": "supervisor-x"}\n' > "$T/lookout-dir-rota/sessions/sess-sup.json"
+txc "$T/tc.jsonl" peer-nombre
+chk "marca con address que no es texto: ilegible entera, no vale el nombre" "1" "$(corre_sup "$T/tc.jsonl" "$T/lookout-dir-rota" | grep -c 'candidatos_pregunta')"
+mkdir -p "$T/lookout-dir-vacia/sessions"
+printf '{"address": "", "supervisor": "supervisor-x"}\n' > "$T/lookout-dir-vacia/sessions/sess-sup.json"
+chk "marca con address vacia (lookout sin direccion): vale el nombre" "0" "$(corre_sup "$T/tc.jsonl" "$T/lookout-dir-vacia" | grep -c 'candidatos_pregunta')"
+mkdir -p "$T/lookout-dir-null/sessions" "$T/lookout-dir-blanca/sessions"
+printf '{"address": null, "supervisor": "supervisor-x"}\n' > "$T/lookout-dir-null/sessions/sess-sup.json"
+printf '{"address": "   ", "supervisor": "supervisor-x"}\n' > "$T/lookout-dir-blanca/sessions/sess-sup.json"
+chk "marca con address null: ilegible entera, no vale el nombre" "1" "$(corre_sup "$T/tc.jsonl" "$T/lookout-dir-null" | grep -c 'candidatos_pregunta')"
+chk "marca con address de solo espacios: ilegible entera, no vale el nombre" "1" "$(corre_sup "$T/tc.jsonl" "$T/lookout-dir-blanca" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer
+chk "la misma sesion por \`corre\` (sin session_id): sigue exigiendo la pregunta" "1" "$(corre "$T/tc.jsonl" false - | grep -c 'candidatos_pregunta')"
+cp "$FC" "$FC.bak"
+python3 - "$FC" <<'PY'
+import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
+t=t.replace("- revisar algo — pregunta: Uno — recomendacion: descartar — decision: descartado\n",
+            "- revisar algo — pregunta: Uno — recomendacion: descartar — decision: descartado\n- otra cosa — pregunta: Uno — decision: descartado\n",1)
+open(p,"w",encoding="utf-8").write(t)
+PY
+txc "$T/tc.jsonl" peer-dos
+chk "dos decisiones y un SendMessage con dos candidatos numerados: no lo reclama" "0" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+txc "$T/tc.jsonl" peer-uno
+chk "dos decisiones y un SendMessage sin numerar (una pregunta): lo reclama" "1" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
+mv "$FC.bak" "$FC"
 
 echo "== p-ea8992fa7e: un segundo /checkpoint-3t que EDITA la ficha conserva las decisiones del primero =="
 # Turnos de la sesion: $2 = lista "ck:Encabezado" o "otro:Encabezado" (vacio tras ':' = sin

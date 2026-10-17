@@ -54,6 +54,10 @@ Fase 2 (sesiones, reglas, planes, research) — mismo principio, anclas de tabla
                    .journal/reabiertos.log ANTES de tocar el indice. Un plan.upsert que
                    retroceda el status (cerrado -> no cerrado) es noop con WARN, y el replay de
                    un cierre anterior al reopen tambien: reabrir solo se hace con este evento.
+                   Fila ya podada (2.62.2): la poda anota `poda-plan-<slug>` en reabiertos.log;
+                   un plan.upsert con status no cerrado, sin fila, con ese registro y con el
+                   frontmatter de plans/plan-<slug>.md en cerrado es noop con WARN. Para
+                   reabrirlo se pone 'status: active' en el frontmatter y se reemite el upsert.
   research.upsert  fila en '## Active Research' o '## Completed Research' por
                    [[research/<slug>]] o Tema; completed la mueve de Active a Completed y un
                    research completado no vuelve a Active (monotono: reabrir es a mano). La celda
@@ -1009,6 +1013,9 @@ def anotar_reabierto(mem, pid, ev, que="la reapertura"):
     - `promote-<slug>` (planes, `plan.upsert --promote`): el ts del evento que promovio la fila
       (inline) del plan. `promote_inline_row` lo busca por igualdad: el replay de esa promocion,
       cuando la fila ya no esta, sigue como upsert normal en vez de ir a cuarentena.
+    - `poda-plan-<slug>` (planes, 2.62.2): el ts del evento cuya escritura podo la fila del plan
+      (0 si no traia). Solo cuenta que exista: `apply_plan_upsert` frena un upsert no cerrado sin
+      fila si el plan tiene este registro Y su frontmatter dice cerrado (p-fb70d4600d).
 
     Una linea `clave<TAB>-ts<TAB>fecha` ANULA una anotacion anterior de esa clave y ese ts (2.40.0,
     `desanotar`): se escribe cuando el indice no se pudo escribir despues de anotar. Un compactador
@@ -3189,6 +3196,30 @@ def plan_con_archivo(mem, slug):
     return os.path.isfile(os.path.join(mem, "plans", f"plan-{slug}.md"))
 
 
+def status_frontmatter_plan(mem, slug):
+    """Primer token (en minusculas) de `status:` en el frontmatter de plans/plan-<slug>.md, o "".
+
+    Solo un archivo regular con `---` en la primera linea y su cierre en las 40 siguientes; sin
+    eso, o si no se puede leer, "". Lo usa el guardian de la fila podada de apply_plan_upsert."""
+    if not plan_con_archivo(mem, slug):
+        return ""
+    try:
+        lines = read_lines(os.path.join(mem, "plans", f"plan-{slug}.md"))
+    except (OSError, UnicodeDecodeError):
+        return ""
+    if not lines or lines[0].strip() != "---":
+        return ""
+    fin = next((i for i in range(1, min(len(lines), 40)) if lines[i].strip() == "---"), None)
+    if fin is None:
+        return ""
+    for i in range(1, fin):
+        m = re.match(r"^status:\s*(.*?)\s*$", lines[i])
+        if m:
+            v = m.group(1).strip().strip("'\"").lower().split()
+            return v[0] if v else ""
+    return ""
+
+
 def inline_title_row(lines, rows, tplain):
     """La fila `(inline)` de `rows` cuyo titulo plano es `tplain`, o None. Es el fallback por
     titulo de plan.upsert y plan.reopen cuando find_plan_rows no encuentra el wikilink del slug.
@@ -3478,6 +3509,22 @@ def apply_plan_upsert(mem, p):
                 log(f"WARN plan.upsert: plan-{slug} se reabrio DESPUES de este cierre — el evento "
                     f"no se reaplica. Si hay que cerrarlo otra vez, emite un plan.upsert nuevo.")
                 return False
+    if hit is None and status and status.split() and status.lower().split()[0] not in PLAN_CERRADO \
+            and ts_registrados(mem, f"poda-plan-{slug}"):
+        # Fila podada (p-fb70d4600d): la poda de cerrados ya quito la fila, y el guardian de arriba
+        # solo mira filas que existen. El replay de un `--status active` viejo la reinsertaba como
+        # active (limite declarado en 2.37.0). Hacen falta las dos cosas: el registro de la poda
+        # (la fila existio y la poda la quito; sin el, es el primer registro del plan, aunque su
+        # archivo ya diga cerrado porque se creo y cerro en el mismo lote) y el frontmatter en un
+        # status de cierre (la salida manual: quien reabre a proposito lo pone en active). Sin
+        # registro, sin archivo o sin frontmatter, se inserta como siempre.
+        fm = status_frontmatter_plan(mem, slug)
+        if fm in PLAN_CERRADO:
+            log(f"WARN plan.upsert: plan-{slug} no tiene fila (la poda la quito) y su frontmatter "
+                f"dice 'status: {fm}' — el evento lo pasaria a '{status.split()[0]}' y no se "
+                f"aplica (un replay viejo no reabre un plan cerrado). Para reabrirlo a proposito: "
+                f"pon 'status: active' en plans/plan-{slug}.md y reemite este plan.upsert.")
+            return False
     if parent:
         # Defensa en profundidad: journal-emit.py ya rechaza parent==slug antes de emitir el
         # evento, pero compact es el limite de confianza real (un evento a mano puede saltarselo)
@@ -3588,17 +3635,31 @@ def apply_plan_upsert(mem, p):
         st = c[1].lower().split()
         if st and st[0] in PLAN_CERRADO and DATE_RE.match(c[2]):
             done.append((i, c[2]))
+    podados = []
     if len(done) > MAX_PLANS_DONE:
         done.sort(key=lambda x: (x[1], -x[0]), reverse=True)
+        for i, _ in done[MAX_PLANS_DONE:]:
+            pm = re.search(r"\[\[plans/plan-([A-Za-z0-9._-]+)(?:\\\|[^\]]*)?\]\]",
+                           split_cells(lines[i])[0])
+            if pm:
+                podados.append(pm.group(1))
         delete_rows(lines, [i for i, _ in done[MAX_PLANS_DONE:]])
     if lines == orig:
         return False
     bump_updated(lines)
     ts = int(p.get("_ts") or 0)
+    anotaciones = []
     if promoting and ts:
         # Anotar ANTES de escribir: sin el registro, el replay de esta promocion despues de que la
         # poda se lleve la fila iria a cuarentena sin-fila-inline (ver promote_inline_row).
-        escribir_anotado(mem, [(f"promote-{slug}", ts, "la promocion")], path, lines)
+        anotaciones.append((f"promote-{slug}", ts, "la promocion"))
+    # La poda deja registro (p-fb70d4600d): sin el, "no hay fila" no distingue un plan podado de uno
+    # que aun no se registro, y el guardian de la fila podada frenaba el primer upsert de un plan
+    # creado y cerrado en el mismo lote (adversario de 2.62.2, ronda 1). Las filas (inline) no
+    # tienen slug y no se anotan.
+    anotaciones += [(f"poda-plan-{s}", ts, "la poda") for s in podados]
+    if anotaciones:
+        escribir_anotado(mem, anotaciones, path, lines)
     else:
         atomic_write(path, lines)
     return True
@@ -3643,8 +3704,9 @@ def apply_plan_reopen(mem, p):
         raise Quarantine(
             f"no-fila: plan-{slug} no tiene fila en _plans-index.md. O la poda la quito (solo se "
             f"guardan los {MAX_PLANS_DONE} cerrados mas recientes), o es un plan --inline y falta "
-            f"--title. Un plan sin fila se vuelve a registrar con plan.upsert --status active: el "
-            f"guardian de reversa solo mira filas que existen.")
+            f"--title. Un plan sin fila se vuelve a registrar con plan.upsert --status active, "
+            f"despues de poner 'status: active' en el frontmatter de plans/plan-{slug}.md: si el "
+            f"frontmatter dice cerrado, ese upsert se toma por un replay viejo y no se aplica.")
     cells = pad(split_cells(lines[hit]), 6)
     st = cells[1].lower().split()
     if not st or st[0] not in PLAN_CERRADO:

@@ -173,6 +173,24 @@ RC=0; emit --type pendiente.update --id "$ID" >/dev/null 2>&1 || RC=$?
 chk "sale con error" "1" "$([ "$RC" -ne 0 ] && echo 1 || echo 0)"
 chk "no dejo evento pendiente" "0" "$(ls "$M/.journal/pending" 2>/dev/null | grep -c '\.json$' | tr -d ' ')"
 
+echo "== 14b. --nota se rechaza: no hay donde guardarla (p-a37851219c) =="
+# Antes salia rc=0 y la nota se perdia sin avisar; quien la paso creia que quedo escrita.
+fixture
+RC=0; E=$(emit --type pendiente.update --id "$ID" --text "$NUEVO" --nota "verificado en el checkout" 2>&1 >/dev/null) || RC=$?
+chk "sale con error" "1" "$([ "$RC" -ne 0 ] && echo 1 || echo 0)"
+chk "dice que no la guarda" "1" "$(printf '%s' "$E" | grep -c 'no guarda --nota')"
+chk "dice que va en el --text" "1" "$(printf '%s' "$E" | grep -c 'metela en el --text')"
+chk "y la alternativa de cierre" "1" "$(printf '%s' "$E" | grep -c 'pendiente.resolve --nota')"
+chk "no dejo evento pendiente" "0" "$(ls "$M/.journal/pending" 2>/dev/null | grep -c '\.json$' | tr -d ' ')"
+
+RC=0; emit --type pendiente.update --id "$ID" --text "$NUEVO" --nota "   " >/dev/null 2>&1 || RC=$?
+chk "una --nota de solo espacios tambien se rechaza" "1" "$([ "$RC" -ne 0 ] && echo 1 || echo 0)"
+chk "y tampoco deja evento" "0" "$(ls "$M/.journal/pending" 2>/dev/null | grep -c '\.json$' | tr -d ' ')"
+
+RC=0; emit --type pendiente.update --id "$ID" --text "$NUEVO" --nota "" >/dev/null 2>&1 || RC=$?
+chk "una --nota vacia explicita tambien se rechaza" "1" "$([ "$RC" -ne 0 ] && echo 1 || echo 0)"
+chk "sin --nota el update sigue pasando" "0" "$(emit --type pendiente.update --id "$ID" --text "$NUEVO" >/dev/null 2>&1; echo $?)"
+
 echo "== 15. resolve DESPUES de un update: el prefijo se toma del texto nuevo =="
 fixture
 emit --type pendiente.update --id "$ID" --text "$NUEVO" >/dev/null
