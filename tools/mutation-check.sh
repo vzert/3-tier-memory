@@ -283,6 +283,11 @@ echo "Dedup al emitir de learning.add (2.47.0): vecinos, bloqueo, forma y learni
 caso "vecinos por stdout"      journal-emit.py m_learning_dedup.py test-learning-dedup.sh "stdout tiene una sola linea" vecinos-por-stdout
 caso "sin bloqueo"             journal-emit.py m_learning_dedup.py test-learning-dedup.sh "casi igual sin --decision: rc 1" sin-bloqueo
 caso "solo-vecinos escribe"    journal-emit.py m_learning_dedup.py test-learning-dedup.sh "solo-vecinos: ningun evento" solo-vecinos-escribe
+T=test-nota-sin-lector.sh
+caso "--nota sin lector"        journal-emit.py m_nota_sin_lector.py $T "pendiente.expire con nota texto sale con error" sin-rechazo
+caso "--nota en learning.add"   journal-emit.py m_nota_sin_lector.py $T "learning.add sin --supersedes con nota texto sale con error" add-sin-rechazo
+caso "--nota por verdad"        journal-emit.py m_nota_sin_lector.py $T "pendiente.add con nota vacia sale con error" nota-por-verdad
+caso "--nota lector de mas"     journal-emit.py m_nota_sin_lector.py $T "pendiente.add con nota texto sale con error" lector-de-mas
 caso "sin identidad"           journal-emit.py m_learning_dedup.py test-learning-dedup.sh "mismo texto sin --decision: rc 0" sin-identidad
 caso "decision fuera"          journal-emit.py m_learning_dedup.py test-learning-dedup.sh "la decision viaja en el payload" decision-fuera-del-payload
 caso "reemplaza sin supersedes" journal-emit.py m_learning_dedup.py test-learning-dedup.sh "reemplaza:2 lleva supersedes 2" reemplaza-sin-supersedes
