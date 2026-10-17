@@ -9,32 +9,31 @@ igual que dos suites.
 - **`tools/mutation-check.sh` lanzado solo toma el mismo candado que `tools/run-tests.sh`.** Se
   relanza dentro de `run-tests.sh --con-candado <comando...>`, un modo nuevo que toma el candado,
   corre el comando y sale con su rc. Quien tiene el candado exporta `RUN_TESTS_CANDADO_DUENO` con su
-  pid. mutation-check no lo pide si ese pid es el del candado y sigue vivo: dentro de una corrida
+  pid. mutation-check no lo pide si ese pid es el del candado y es un antecesor suyo (sube por los
+  ppid: `/proc/<pid>/ppid` en Git Bash, `ps -o ppid=` en macOS y Linux): dentro de una corrida
   completa, o en sus tandas de `MUT_JOBS`, se esperaria a si mismo. La variable sola no basta: una
   heredada que no casa con el candado (las copias de `test-run-tests.sh` corren con su propio candado
-  dentro del runner real) no lo salta, y la de una corrida muerta con su candado abandonado tampoco
-  (adversario externo). Relanzado una vez y sin ver aun el candado, sale con rc 2 en vez de
+  dentro del runner real) no lo salta; la de una corrida muerta con su candado abandonado tampoco, ni
+  un candado con el pid de un proceso vivo ajeno y ese pid en la variable (adversario externo,
+  rondas 1 y 2). Un pid 0 o no numerico no vale. Relanzado una vez y sin ver aun el candado, sale con rc 2 en vez de
   relanzarse otra vez: con la mutacion `sin-candado` de run-tests eso era una cadena sin fin de
   procesos (1752 en 25 s; adversario). `--con-candado` imprime los avisos de restos viejos de
   tmp-propio antes del comando: el mutation-check de dentro va anidado y ya no los juntaba.
-- `test-run-tests.sh`: 16 asertos (70 → 86) con una copia de mutation-check cortada tras su candado
+- `test-run-tests.sh`: 18 asertos (70 → 88) con una copia de mutation-check cortada tras su candado
   y un cuerpo que anota en el registro: tres mutation-check sueltos y una corrida completa lanzados a
   la vez corren uno tras otro y los tres corren su cuerpo; dentro de una corrida completa
   mutation-check sale ok sin esperarse; un `RUN_TESTS_CANDADO_DUENO` que no casa espera; uno de un
-  pid muerto no vale; un relanzado que no ve el candado sale con rc 2; la marca de corte existe.
+  pid muerto no vale; uno falsificado con un pid vivo ajeno espera; un relanzado que no ve el
+  candado sale con rc 2; la marca de corte existe.
   `RUN_TESTS_CANDADO_TOPE` (solo pruebas) pone tope a la espera: una copia rota que espera a la
   corrida que la lanzo no muere con kill, porque bash espera a su hijo antes de correr el trap
   (medido: 29 s de un `sleep 30`).
-- `mutation-check.sh`: 6 mutaciones nuevas (`m_mutation_check.py` y `sin-con-candado`);
+- `mutation-check.sh`: 7 mutaciones nuevas (`m_mutation_check.py` y `sin-con-candado`);
   `caso_tools` acepta la variable que apunta a la copia (7o argumento). Medido con el mutation-check
   real lanzado solo, que tomo el candado real: 297 de 297 discriminan, 47 procesos como maximo.
 
 ### Known
 - Sigue abierto p-7c1fa85c1e: un candado cuyo pid lo reusa otro proceso vivo hace esperar sin fin.
-- mutation-check no comprueba que el dueno sea un `run-tests.sh` antecesor suyo: un candado con el
-  pid de un proceso vivo cualquiera y ese mismo pid en `RUN_TESTS_CANDADO_DUENO` lo salta (adversario
-  externo, ronda 2). Hay que escribir los dos a mano, o que se junten p-7c1fa85c1e y una variable
-  heredada de una corrida muerta. Ver la ascendencia pide `ps`, que en Git Bash es otro.
 
 ## [2.62.7] - 2026-10-16
 Origen: p-524e2a5bf7. Varios agentes que esperaban a las suites ajenas lanzaban `tools/run-tests.sh`

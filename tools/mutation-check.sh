@@ -25,13 +25,26 @@ cd "$(cd "$(dirname "$0")/.." && pwd)" || exit 2
 # junto a otro o junto a una corrida completa, cargaba la maquina igual que dos suites a la vez.
 # Solo, se relanza dentro de `run-tests.sh --con-candado`. Dentro de una corrida que ya lo tiene
 # (run-tests, o una tanda de abajo) no lo pide: se esperaria a si mismo. Dentro = el pid que exporto
-# quien lo tomo es el del candado, y sigue vivo. Una variable heredada sola no basta: test-run-tests
-# corre copias con su propio candado DENTRO del runner real, y la del runner no casa con el de la
-# prueba; y un candado abandonado (kill -9) con el pid de una corrida muerta no es de nadie. Un pid 0
-# o no numerico tampoco: `kill -0 0` sale 0, como en candado_vivo de run-tests (adversario, ronda 2).
+# quien lo tomo es el del candado, y es un antecesor de este proceso. Una variable heredada sola no
+# basta: test-run-tests corre copias con su propio candado DENTRO del runner real, y la del runner no
+# casa con el de la prueba; un candado abandonado (kill -9) con el pid de una corrida muerta no es de
+# nadie; y un candado con el pid de un proceso vivo ajeno, con ese pid en la variable, tampoco
+# (adversario externo, ronda 2). Un pid 0 o no numerico no vale (`kill -0 0` sale 0).
+# 0 si el pid $1 es un antecesor de este proceso. ppid: /proc/<pid>/ppid en Git Bash (MSYS), donde
+# ps no tiene -o; `ps -o ppid=` en macOS y Linux. Si no se puede leer, no es antecesor: se relanza.
+es_antecesor() {
+  local p=$$ i=0
+  while [ "$i" -lt 64 ] && [ "$p" -gt 1 ] 2>/dev/null; do
+    [ "$p" = "$1" ] && return 0
+    if [ -r "/proc/$p/ppid" ]; then p=$(cat "/proc/$p/ppid" 2>/dev/null)
+    else p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' '); fi
+    i=$(( i + 1 ))
+  done
+  return 1
+}
 if [ "$(cat "$(bash tools/run-tests.sh --ruta-candado)/pid" 2>/dev/null)" != "${RUN_TESTS_CANDADO_DUENO:-ninguno}" ] \
    || ! [ "${RUN_TESTS_CANDADO_DUENO:-0}" -gt 0 ] 2>/dev/null \
-   || ! kill -0 "${RUN_TESTS_CANDADO_DUENO:-}" 2>/dev/null; then
+   || ! es_antecesor "${RUN_TESTS_CANDADO_DUENO:-}"; then
   # Relanzado una vez (su padre es el run-tests al que se paso) y aun no lo ve: run-tests no lo tomo.
   # Relanzarse otra vez era una cadena sin fin de procesos: con la mutacion sin-candado de run-tests,
   # 1752 en 25 s (adversario, 2.63.1). Sale con error.
@@ -496,6 +509,8 @@ caso_tools "mutation-check sin candado" mutation-check.sh m_mutation_check.py te
 caso_tools "se espera a si mismo"  mutation-check.sh m_mutation_check.py test-run-tests.sh "dentro de una corrida completa no se espera a si mismo" siempre-pide MUTATION_CHECK
 caso_tools "dueno sin mirar el pid" mutation-check.sh m_mutation_check.py test-run-tests.sh "una variable heredada que no casa con el candado no lo salta" solo-la-variable MUTATION_CHECK
 caso_tools "dueno muerto vale"     mutation-check.sh m_mutation_check.py test-run-tests.sh "un dueno heredado que ya murio no vale: quita el abandonado" dueno-muerto-vale MUTATION_CHECK
+caso_tools "falsificado con pid ajeno" mutation-check.sh m_mutation_check.py test-run-tests.sh "un candado falsificado con un pid vivo ajeno como dueno no lo salta" dueno-muerto-vale MUTATION_CHECK
+caso_tools "cualquiera es antecesor" mutation-check.sh m_mutation_check.py test-run-tests.sh "un candado falsificado con un pid vivo ajeno como dueno no lo salta" ascendencia-cualquiera MUTATION_CHECK
 caso_tools "se relanza sin fin"    mutation-check.sh m_mutation_check.py test-run-tests.sh "un relanzado que no ve el candado no se relanza sin fin" relanza-sin-fin MUTATION_CHECK
 
 echo

@@ -277,6 +277,15 @@ chk "un dueno heredado que ya murio no vale: toma el candado" "0" "$(termina "$q
 chk "un dueno heredado que ya murio no vale: quita el abandonado y corre" "1 mc-ini mc-fin" \
   "$(grep -c 'ya no existe' "$T/q.err") $(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
 
+# Un candado con el pid de un proceso vivo ajeno, y ese pid en la variable: no es un antecesor de
+# mutation-check, asi que espera en vez de saltarse el candado (adversario externo, ronda 2).
+sleep 60 & ajeno=$!
+mkdir "$CAND"; echo "$ajeno" > "$CAND/pid"; : > "$T/registro"
+DUENO=$ajeno; completa "$T/v" mutation-check.sh; v=$LANZADO; DUENO=
+chk "un candado falsificado con un pid vivo ajeno como dueno no lo salta: espera" "1" "$(termina "$v" 4; echo $?)"
+chk "y no corre su cuerpo con el falsificado" "" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
+kill "$ajeno" 2>/dev/null; wait "$ajeno" 2>/dev/null; rm -rf "$CAND"
+
 # Relanzado una vez y sin ver aun el candado: sale con error, no se relanza sin fin. Se simula con
 # MUT_RELANZADO igual al pid de esta prueba, que es su padre.
 : > "$T/registro"
