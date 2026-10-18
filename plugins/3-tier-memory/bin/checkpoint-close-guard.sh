@@ -518,6 +518,10 @@ anexo = []          # lo que falto al final, para mostrarselo al usuario (cierre
 # la revision del cierre, que ya bloquea una vez, para que el agente rehaga el `Proximo paso` o diga
 # por que se queda. Sin esto nadie los leia: Step 8 escribe el snippet despues de Step 7a.
 avisos_marco = []
+# Avisos `snippet.ninguno_bloqueo` (2.62.11): `Ninguno` con un pendiente `_bloqueado` en la ficha.
+# Mismo camino que snippet.marco: viajan en la revision, que bloquea una vez, con la pregunta de si
+# el bloqueo espera a alguien que no es el usuario (caso real: claude-vzert, p-341fdf5e59).
+avisos_bloqueo = []
 presentes = []      # (orden, lineas, texto) de cada bloque del cierre, para medir orden y cola
 # Texto tolerado DESPUES del ultimo bloque del cierre: los separadores `───` que imprimen los
 # scripts y una linea corta. Mas que eso ya empuja el cierre hacia arriba (adversario de 2.43.0:
@@ -785,6 +789,8 @@ def revisar(ficha):
                 problemas.append(pref + f"checkpoint-audit.py {x['clave']}: {x['detalle']} — {detalle}")
             elif x.get("clave") == "snippet.marco" and x.get("estado") != "HECHO":
                 avisos_marco.extend(pref + l for l in (x.get("lineas") or [x.get("detalle", "")]))
+            elif x.get("clave") == "snippet.ninguno_bloqueo" and x.get("estado") != "HECHO":
+                avisos_bloqueo.extend(pref + l for l in (x.get("lineas") or [x.get("detalle", "")]))
     except Exception:
         pass
 
@@ -1052,6 +1058,16 @@ else:
                 "son redes de formato y pueden fallar). Para cada uno, rehaz el paso en la ficha y en "
                 "el snippet, o di en la linea " + str(len(REVISION_ITEMS)) + " de la revision por que "
                 "se queda asi:\n" + "\n".join(f"- {a}" for a in avisos_marco))
+        if avisos_bloqueo:
+            partes.append(
+                "El snippet dice `Ninguno` y la ficha deja pendiente(s) `_bloqueado` "
+                "(checkpoint-audit.py snippet.ninguno_bloqueo; no bloquea). ¿El bloqueo espera a "
+                "alguien que no es el usuario? Una decision del usuario no es bloqueo: la toma el en "
+                "la sesion siguiente, con el agente. Si es eso, desbloquealo (`journal-emit.py --type "
+                "pendiente.block --id p-… --desbloquear`) y rehaz el snippet con `Proximo paso: "
+                "decidir con el usuario <que> (p-…)`. Si espera a alguien de fuera, di a quien en la "
+                "linea " + str(len(REVISION_ITEMS)) + " de la revision:\n"
+                + "\n".join(f"- {a}" for a in avisos_bloqueo))
         if cierre_final:
             # Al final y una sola vez: se generan DESPUES de la revision, asi que ya reflejan lo que
             # corregiste en ella, y quedan como lo ultimo que ve el usuario.

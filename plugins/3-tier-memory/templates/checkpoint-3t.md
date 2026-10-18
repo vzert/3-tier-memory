@@ -420,7 +420,8 @@ Para los pendientes DENTRO del alcance, clasifica cada uno en exactamente uno de
 - **resolved** — the work described was completed in this session, directly or indirectly (e.g., the user asked for X and X happens to satisfy the pendiente).
 - **still-open** — the work is still pending and was not touched this session.
   If a still-open item that touches this session's work **waits on something outside the
-  session** (another install, a peer, a foreign PR) and its line has no `_bloqueado:`, mark it:
+  session** (another install, a peer, a foreign PR — never a decision of the user, which the
+  next session takes with the agent) and its line has no `_bloqueado:`, mark it:
   `journal-emit.py --type pendiente.block --id p-… --bloqueado-por "<what it waits for>"`.
   Without the field, Step 8 can promote it to `Proximo paso` (see Step 3b, `--bloqueado-por`).
   If a still-open item clearly goes with a pendiente or plan this session touched and its line
@@ -588,7 +589,11 @@ En la ficha los nombres no cambian (`## Candidatos a pendiente`, `descartado`): 
 Recomienda `descartar` dos casos que la memoria del plugin ya midio como ruido: un pendiente de
 propagacion ("verificar que la otra instalacion actualizo"), que ningun agente puede avanzar, y uno
 cuyo unico actor es el usuario o un tercero, sin nada que hacer aqui (es una espera, no trabajo).
-Algo que tu puedes correr no tiene al usuario como unico actor: eso es `Hacerlo ahora`. Si el usuario contesta con "Other", sigue su texto (puede
+Algo que tu puedes correr no tiene al usuario como unico actor: eso es `Hacerlo ahora`. Una
+decision que el usuario toma con el agente en la sesion siguiente (opciones ya escritas, una
+pregunta por decision) tampoco es esa espera: recomienda `Guardar`, sin `--bloqueado-por`, para que
+Step 8 la ponga en `Proximo paso` (2.62.11; descartarla deja el snippet en `Ninguno`, que es el
+mismo defecto por otra puerta). Si el usuario contesta con "Other", sigue su texto (puede
 reescribir el pendiente). **Si cierra el modal sin responder, o lo rechaza, el candidato se
 descarta.**
 
@@ -686,9 +691,17 @@ ultimas fichas de dos proyectos, 2026-10-13). Para ligar uno que ya existe:
 lista; `--sin-relacion` la quita).
 
 **`--bloqueado-por` cuando el pendiente espera a algo FUERA de esta sesion**: otra instalacion
-que tiene que actualizar, un peer, un mantenedor ajeno, un PR de otro repo, una decision de otra
-persona. Decidelo al CREAR el pendiente, respondiendo "¿se puede hacer de inmediato, sin esperar
-a nadie?". El compactador anade `— _bloqueado: <que>_` a la linea de Tier 2. Ese campo tiene un
+que tiene que actualizar, un peer, un mantenedor ajeno, un PR de otro repo, una decision de un
+tercero que no es el usuario. Decidelo al CREAR el pendiente, respondiendo "¿se puede hacer de
+inmediato, sin esperar a nadie?". **Una decision del usuario NUNCA es bloqueo** (2.62.11): el
+usuario la toma en la sesion siguiente, con el agente al lado, asi que el pendiente se queda sin
+`--bloqueado-por` y el snippet de Step 8 lo pone delante con `Proximo paso: decidir con el usuario
+<que decisiones, donde estan> (p-…)`. Caso real (claude-vzert, 2026-10-16): `p-341fdf5e59` nacio
+con `--bloqueado-por "decisiones de Victor"`, el snippet salio `Ninguno` y las decisiones quedaron
+escondidas; Victor lo senalo: "si no me muestras las decisiones pendientes, ¿como se supone que las
+tome?". Desde 2.62.11 `checkpoint-audit.py` avisa (`snippet.ninguno_bloqueo`, POR-DISEÑO) cuando el
+snippet dice `ninguno` y la ficha deja un pendiente `_bloqueado`, y el hook de cierre pregunta en la
+revision si ese bloqueo espera a alguien que no es el usuario. El compactador anade `— _bloqueado: <que>_` a la linea de Tier 2. Ese campo tiene un
 consumidor: `checkpoint-audit.py` rechaza (`snippet.proximo_paso`) un `Proximo paso:` que cite
 ese id. El pendiente sigue en `## Pendientes` de la ficha. No cambia el id. Para un pendiente que ya
 existe: `journal-emit.py --type pendiente.block --id p-… --bloqueado-por "…"` (o
@@ -697,7 +710,9 @@ existe: `journal-emit.py --type pendiente.block --id p-… --bloqueado-por "…"
 lo marcaba. La regla en prosa de Step 8 ya lo prohibia y no bastaba. Desde 2.60.0 un `Proximo
 paso:` que escribe la espera en el texto sin el campo ("si Victor lo decide", "pedir permiso")
 sale como aviso `POR-DISEÑO` en `snippet.marco`. Es una red de formato que no bloquea. El campo
-sigue siendo la via que el audit hace cumplir.
+sigue siendo la via que el audit hace cumplir. `decidir con el usuario` dejo de ser senal en
+2.62.11: es la forma del paso que pone delante una decision del usuario (`decidir con <otro>`
+sigue avisando: puede ser un tercero).
 
 **`--revisar` cuando el pendiente nombra una fecha futura** (`revisar el 2026-09-22`, `target
 2026-10-01`, `T+7` resuelto a fecha). Escribe la fecha **como campo**, no solo en prosa: el
