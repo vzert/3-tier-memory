@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.63.3] - 2026-10-17
+Origen: la sesion 4237bac9 de este repo (ficha `2026-10-16-hilo-un-salto-snippet-ajeno`), antes de
+cualquier /checkpoint-3t y sin ficha propia, recibio dos veces el aviso `bugs.veredicto_break`: nombrar
+en `## Bugs fixed` el hallazgo del adversario. Medido pasando su transcript por el guard: lo disparo
+un `sed -i '' … plugins/3-tier-memory/bin/print-como-retomar.py plugins/3-tier-memory/bin/pendientes_afines.py`.
+El guard tomo `pendientes_afines.py` como ficha y le corrio `checkpoint-audit.py` con el `break` de la
+sesion.
+
+### Fixed
+- **`checkpoint-close-guard.sh` solo toma como ficha un argumento `sessions/*.md` de
+  `print-como-retomar.py`** (p-bea9639b92). Un comando que edita o lee el fuente del script y nombra
+  otro archivo despues ya no le pide al agente nombrar el veredicto del adversario en un archivo que
+  no es una ficha. Es una mitad del arreglo de p-1fe14aa592, que sigue abierto con la otra: disparar
+  solo con la invocacion real del script, no con cualquier mencion. Una ruta con variables (`"$SF"`,
+  p-e1799cd04c) sigue igual.
+
+### Added
+- Caso en `test-checkpoint-close-guard.sh` con la forma real del `sed` y un `break` en la sesion:
+  silencio en la vuelta normal y en la reentrante (cae 2 de 2 con el guard de 2.62.11).
+- Mutacion `ficha-cualquiera` (`tools/mutaciones/m_ficha_sesion.py`): quita el filtro y el caso cae.
+
 ## [2.62.11] - 2026-10-16
 Origen: un cierre real de claude-vzert (2026-10-16, ficha `2026-10-16-canal-agentes-entre-maquinas`).
 El pendiente de la Fase 0 de un plan (`p-341fdf5e59`) nacio con `--bloqueado-por "decisiones de
