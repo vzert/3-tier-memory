@@ -25,6 +25,8 @@ Tipos de evento:
                     [--transcript RUTA] o la de CLAUDE_CODE_SESSION_ID). Lo avisa por stderr.
                     Imprime el id (p-<10 hex>) por stdout.                              (Fase 1)
   pendiente.resolve --id ID --estado resolved|superseded|abandoned [--sesion S] [--nota N]
+                    --nota solo la guardan resolve, learning.retire y learning.add --supersedes;
+                    los demas tipos salen con error si la reciben, aun vacia (2.62.10).
   pendiente.update  --id ID [--text T] [--prioridad Alta|Media|Baja] [--text-prefix P]
                     Corrige el texto y/o la prioridad de un pendiente VIVO conservando su id.
                     El id es el hash con el que NACIO, no el del texto de hoy: cambiarlo
@@ -902,6 +904,10 @@ def dedup_al_emitir(memory_dir, topic, text, decision, solo_vecinos):
                  f"  - es otra leccion → --decision nueva.")
 
 
+# Los tipos que leen --nota. pendiente.update la rechaza con su propio mensaje (2.62.4).
+NOTA_LECTORES = ("pendiente.resolve", "pendiente.update", "learning.retire", "learning.add")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Emite un evento al journal de memory/.")
     ap.add_argument("--type", required=True,
@@ -983,6 +989,14 @@ def main():
     # learning.update: enlace Quick Reference -> regla (F7, 2.51.0)
     ap.add_argument("--quickref-regla", dest="quickref_regla", default="")
     a = ap.parse_args()
+
+    # --nota solo la guardan los tipos de NOTA_LECTORES (learning.add, solo con --supersedes; se
+    # mira abajo). En cualquier otro se descartaba sin avisar y quien la paso creia haberla dejado
+    # escrita (p-3bf672997c, como p-a37851219c en pendiente.update, que tiene su propio mensaje).
+    if a.nota is not None and a.type not in NOTA_LECTORES:   # aun vacia: quien la paso esperaba guardarla
+        sys.exit(f"journal-emit: {a.type} no guarda --nota (el evento no tiene campo donde ponerla). "
+                 "Solo la guardan pendiente.resolve, learning.retire y learning.add --supersedes; "
+                 "si la nota describe lo que emites, metela en el --text")
 
     memory_dir = resolve_memory_dir(a.memory_dir)
     if not os.path.isdir(memory_dir):
@@ -1122,6 +1136,9 @@ def main():
         decision = decision_de(a.decision, a.supersedes, sup, memory_dir, topic)
         if decision and decision.startswith("reemplaza:"):
             sup = int(decision.split(":")[1])     # reemplaza:N es --supersedes N (F2)
+        if a.nota is not None and not sup:   # la nota solo va en la marca de la regla reemplazada
+            sys.exit("journal-emit: learning.add solo guarda --nota con --supersedes N (o --decision "
+                     "reemplaza:N): va en la marca de la regla vieja. Sin eso, metela en el --text")
         if text:
             dedup_al_emitir(memory_dir, topic, text, decision, a.solo_vecinos)
             if a.solo_vecinos:

@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.62.10] - 2026-10-16
+Origen: el Known de 2.62.4 (p-3bf672997c). `pendiente.update` ya rechazaba `--nota`, pero los
+demas tipos que no la leen salian con rc=0, escribian el evento y la descartaban sin avisar.
+
+### Changed
+- **`journal-emit` rechaza `--nota` en todo tipo que no la guarda** (cualquiera que se pase, aun
+  vacia o de solo espacios: se compara con `None`): sale con error y no escribe evento. La guardan
+  solo `pendiente.resolve`, `learning.retire` y `learning.add` con `--supersedes N` (o
+  `--decision reemplaza:N`); `learning.add` sin eso tambien la rechaza. `pendiente.update` sigue
+  con su mensaje de 2.62.4. Ningun llamador del repo (plantillas, commands, bin/, hooks/, tools/,
+  pruebas) pasa `--nota` a un tipo que no la lee, salvo las pruebas negativas que esperan el
+  rechazo (`test-nota-sin-lector.sh` y el caso 14b de `test-pendiente-update.sh`).
+- `test-nota-sin-lector.sh` nuevo: rechazo en `pendiente.add`, `expire`, `reopen`, `window`,
+  `session.add`, `plan.upsert`, `learning.update` y `learning.add` sin `--supersedes`, con nota
+  de texto, vacia y de espacios; cada uno con su control sin `--nota`, y los tres lectores como
+  control. 64 de sus 77 asertos fallan contra 2.62.4. Cuatro casos nuevos en
+  `tools/mutation-check.sh` (`m_nota_sin_lector.py`).
+
+### Known
+- La prueba cubre una muestra de los tipos, no los 19: el rechazo es una sola condicion antes de
+  cualquier rama por tipo, asi que los demas pasan por el mismo `if`.
+
 ## [2.62.9] - 2026-10-17
 Origen: p-c103c7df05, ultimo paso de la Fase 3 de la familia de correccion y reversa del journal.
 Los residuos de muerte del proceso que declararon 2.40.0 y 2.60.1 se deciden uno por uno: uno se
