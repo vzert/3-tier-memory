@@ -18,8 +18,9 @@ para generar el bloque completo cuando el caso 5 aplica.** Caso real (2026-09-17
 alguno suelto que calificaria para la antigua linea `Sigue abierto` — la excepcion anterior ("si hay un Alta que
 agregar, bloque completo") volvia inalcanzable el colapso a una linea en la practica, justo cuando
 la sesion no dejo nada accionable hoy (los unicos pendientes de esa sesion tenian `_revisar`
-futuro y ya su propio recordatorio de calendario). Ese backlog Alta ya lo reporta otro canal (el
-hook de inicio de sesion cuenta los pendientes Alta abiertos) — no hace falta repetirlo en un
+futuro y ya su propio recordatorio de calendario). Ese backlog Alta ya lo muestran otros canales (el
+sidebar de pendientes a la persona, el recall por peticion al agente y `/triage-3t`; desde 2.63.0 el
+hook de inicio de sesion ya no los muestra) — no hace falta repetirlo en un
 bloque pensado para "copia y pega esto en una sesion nueva, ahora mismo". El caso 5 colapsa a una
 linea sin excepcion (ver 8a).
 
@@ -110,7 +111,7 @@ Reglas para llenar los slots:
      de 8a, sin condicion nueva que agregarle ahi. **Un pendiente Alta de OTRA sesion, sin relacion
      con esta, no cuenta para esta cuenta** — mismo criterio que ya rige el colapso general (ver
      mas arriba, "Un pendiente Alta del backlog general... NO es motivo para generar el bloque
-     completo"): ese backlog ya lo reporta el hook de inicio de sesion, y exigirlo aqui volveria el
+     completo"): ese backlog ya lo muestran el sidebar de pendientes y el recall por peticion, y exigirlo aqui volveria el
      colapso inalcanzable en la practica, el mismo defecto que 2.25.9 ya cerro para casos 2-3. Si en
      cambio queda un pendiente propio que se puede hacer ya, el caso 5 no aplica (sigue siendo el
      caso 1, no colapsa): el bloque completo de 6 lineas se genera igual, con la media-linea de
@@ -384,8 +385,8 @@ condicionales, no opcionales: si la informacion existe, la linea va.
 **Si el caso 5 aplica** (la sesion no dejo trabajo que retomar, en ningun lado; una decision del
 usuario que sigue abierta es trabajo que retomar), reemplaza el
 placeholder `<filled in Step 8>` con UNA linea, sin bloque de codigo — sin excepcion por
-pendientes Alta del backlog general (esos no entran aqui: los reporta el hook de inicio de sesion,
-y uno de ellos puede salir en el prompt opcional de Step 8e):
+pendientes Alta del backlog general (esos no entran aqui: los muestran el sidebar de pendientes y el
+recall por peticion, y uno de ellos puede salir en el prompt opcional de Step 8e):
 
 ```markdown
 ## Como retomar
