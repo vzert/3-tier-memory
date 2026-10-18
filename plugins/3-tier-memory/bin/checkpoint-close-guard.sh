@@ -201,7 +201,9 @@ con_error = set()      # tool_use_id cuyo tool_result vino con is_error
 # otro texto (InputValidationError, herramienta no disponible sin pantalla) no llego a nadie.
 RECHAZO_USUARIO = re.compile(r"The user doesn't want to proceed with this tool use")
 SESION_RE = re.compile(r"(?:^|/)memory/sessions/[^/]+\.md$")
-FICHA_RE = re.compile(r"(?:^|/)sessions/[^/]+\.md$")  # argumento de print-como-retomar.py
+# Argumento de print-como-retomar.py. Acepta `\`: en Windows resolver() (normpath) deja la ruta con
+# barras invertidas.
+FICHA_RE = re.compile(r"(?:^|[/\\])sessions[/\\][^/\\]+\.md$")
 MARCAS_EDIT = ("## Como retomar", "Proximo paso:", "Próximo paso:", "## Recordatorios de calendario")
 
 
