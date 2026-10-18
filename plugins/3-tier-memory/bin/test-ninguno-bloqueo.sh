@@ -78,6 +78,8 @@ senales() { python3 -c "import importlib.util,sys;s=importlib.util.spec_from_fil
 chk "el marco sigue avisando una espera condicional" "1" "$(senales 'publicar si Victor lo decide (p-341fdf5e59).')"
 chk "y decidir con un tercero (un proveedor externo)" "1" "$(senales 'decidir con el proveedor externo el formato (p-341fdf5e59).')"
 chk "un usuario con apellido es un tercero: usuario externo, usuario final, usuario-final, usuario del cliente" "1 1 1 1" "$(senales 'decidir con el usuario externo el formato (p-341fdf5e59).') $(senales 'decidir con el usuario final (p-341fdf5e59).') $(senales 'decidir con el usuario-final (p-341fdf5e59).') $(senales 'decidir con el usuario del cliente (p-341fdf5e59).')"
+chk "un complemento del usuario no lo vuelve tercero: de la tienda, del equipo, finalmente" "0 0 0" "$(senales 'decidir con el usuario de la tienda el horario (p-341fdf5e59).') $(senales 'decidir con el usuario del equipo el horario (p-341fdf5e59).') $(senales 'decidir con el usuario finalmente el horario (p-341fdf5e59).')"
+chk "y un tercero escrito con de/del sigue avisando: de otra empresa, del proveedor, de cliente" "1 1 1" "$(senales 'decidir con el usuario de otra empresa el horario (p-341fdf5e59).') $(senales 'decidir con el usuario del proveedor el horario (p-341fdf5e59).') $(senales 'decidir con el usuario de cliente el horario (p-341fdf5e59).')"
 chk "decidir con el usuario (con o sin articulo) no es senal" "0 0" "$(senales 'decidir con el usuario D4 (p-341fdf5e59).') $(senales 'decidir con usuario D4 (p-341fdf5e59).')"
 
 echo "== 2a. bloque completo con un pendiente bloqueado en la ficha: no es ninguno, no avisa =="

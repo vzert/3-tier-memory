@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.63.4] - 2026-10-17
+Origen: `p-c501ad10c6`, abierto al cerrar 2.62.11. La excepcion del usuario de `snippet.marco` trataba
+como tercero a cualquier `usuario` seguido de `de`/`del` o de una palabra que empieza por `final`.
+
+### Fixed
+- **Un complemento del usuario ya no lo vuelve tercero en `snippet.marco`.** `decidir con el usuario
+  de la tienda`, `decidir con el usuario del equipo` y `decidir con el usuario finalmente` daban el
+  aviso de espera ajena, que pide bloquear el pendiente: lo que 2.62.11 prohibe para una decision del
+  usuario. Ahora `de`/`del` solo avisa seguido de cliente, proveedor, tercero u otr(o/a), y `final`
+  solo como palabra entera. `usuario externo`, `usuario final`, `usuario-final`, `usuario del cliente`
+  y `proveedor externo` siguen avisando. Es formato, no juicio: un tercero escrito de otra forma
+  (`usuario de soporte`) no avisa.
+
+### Tests
+- `test-ninguno-bloqueo.sh`: dos asertos nuevos (los tres complementos dan 0; `de otra empresa`,
+  `del proveedor`, `de cliente` dan 1). Contra 2.62.11 cae el primero.
+- `tools/mutation-check.sh`: mutacion `usuario-complemento-tercero` (vuelve a la excepcion de
+  2.62.11) tumba ese aserto.
+
 ## [2.62.11] - 2026-10-16
 Origen: un cierre real de claude-vzert (2026-10-16, ficha `2026-10-16-canal-agentes-entre-maquinas`).
 El pendiente de la Fase 0 de un plan (`p-341fdf5e59`) nacio con `--bloqueado-por "decisiones de
