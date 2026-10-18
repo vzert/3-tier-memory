@@ -202,9 +202,12 @@ Reglas para llenar los slots:
   4. **Sin historia.** El porque, el estado y las comprobaciones previas ("Antes: (1) leer…, (2)…")
      van a `## Estado` o `## Contexto` de la ficha; el snippet ya manda leerla. `No repitas` queda
      para callejones sin salida.
-  5. **Sin esperas de Victor ni de terceros** (p-3d1c7ab131): si el paso solo espera una decision o
-     una accion de fuera de la sesion, no es paso. Ponle `_bloqueado:` al pendiente y baja por la
-     escalera (ver la pregunta de mas abajo).
+  5. **Sin esperas de Victor ni de terceros** (p-3d1c7ab131): un paso que espera a que alguien
+     decida para luego actuar ("publicar si Victor lo decide") no es paso. Si lo que espera es una
+     decision **del usuario**, el paso es esa decision: `decidir con el usuario <que> (p-…)`, como
+     en la regla 3; nunca `_bloqueado:` (2.62.11). Si espera una decision o accion de un tercero,
+     de fuera de la sesion, ponle `_bloqueado:` al pendiente y baja por la escalera (ver la pregunta
+     de mas abajo).
   6. **Palabras simples:** el usuario tambien lo lee.
   7. **Unos 300 caracteres**, como guia y no como tope. Los umbrales acordados (el parrafo "Incluye
      aqui los umbrales…", mas abajo) si caben.
@@ -311,7 +314,13 @@ Reglas para llenar los slots:
   candidato no es un `<next-step>` — es un pendiente futuro (con `--revisar` si depende de que
   pase tiempo, o con `_bloqueado:` y fuera de `Proximo paso` si depende de una decision, accion
   o condicion ajena), y el siguiente candidato de la escalera (o el caso 5, `ninguno`) es el que
-  corresponde. **Desde 2.33.0 esta pregunta tiene respaldo mecanico, pero solo si el pendiente
+  corresponde. **El usuario no esta FUERA de la sesion** (2.62.11): un pendiente que espera una
+  decision suya se hace de inmediato, en la sesion siguiente, con el agente al lado. Es un
+  `<next-step>` normal: `Proximo paso: decidir con el usuario <que decisiones, y donde estan
+  escritas> (p-…)`, una pregunta por decision con su recomendacion. Nunca lleva `_bloqueado:` y
+  nunca colapsa el snippet al caso 5: un `Ninguno` que esconde decisiones del usuario le quita la
+  unica forma de verlas (caso real, claude-vzert 2026-10-16, `p-341fdf5e59`). El audit lo avisa en
+  `snippet.ninguno_bloqueo` y el hook de cierre lo pregunta en la revision. **Desde 2.33.0 esta pregunta tiene respaldo mecanico, pero solo si el pendiente
   lleva el campo**: nace con `--bloqueado-por "<que espera>"` (Step 3b) o se lo pone
   `pendiente.block` (Step 3a), y entonces el audit rechaza citarlo en `Proximo paso`. El juicio de
   "esto espera a un tercero" se hace al CREAR el pendiente, no al leer su texto aqui (regla 216:
@@ -373,7 +382,8 @@ condicionales, no opcionales: si la informacion existe, la linea va.
 
 **8a. Persistir en el session file**:
 
-**Si el caso 5 aplica** (la sesion no dejo trabajo que retomar, en ningun lado), reemplaza el
+**Si el caso 5 aplica** (la sesion no dejo trabajo que retomar, en ningun lado; una decision del
+usuario que sigue abierta es trabajo que retomar), reemplaza el
 placeholder `<filled in Step 8>` con UNA linea, sin bloque de codigo — sin excepcion por
 pendientes Alta del backlog general (esos no entran aqui: los muestran el sidebar de pendientes y el
 recall por peticion, y uno de ellos puede salir en el prompt opcional de Step 8e):
@@ -421,6 +431,24 @@ Terminas cuando: haya un veredicto con numero (entra / no entra) y, si entra, el
 Antes de actuar, dime en 3 lineas donde quedamos.
 ```
 ````
+
+**8a2. Marcar para retomar el pendiente del `Proximo paso` (2.62.8)** — justo despues de 8a:
+
+```bash
+python3 "$JBIN/marcar-retomar.py" "$SESSION_FILE"
+```
+
+Pone `_retomar: HOY sessions/<slug>_` en cada `p-…` abierto que cite el `Proximo paso:` (lo que va
+tras "ver tambien" no), por evento (`pendiente.retomar`) y compactando. El mod pendientes lo saca en
+VENCEN ("retomar hoy"; desde manana, "retomar desde FECHA") hasta que el pendiente se cierre, y el
+clic pega el snippet de esta ficha. Asi un snippet que no se pego —pane cerrado, olvido— no se
+pierde entre los demas pendientes (decision de Victor, 2026-10-16). Es un campo aparte de
+`_revisar` a proposito: 8e, el hilo y el calendario lo ignoran, asi que no sale como 🔔 en el cierre
+de otra sesion ni saca el pendiente del hilo. Si un id tiene `_revisar` futuro, no lo marca y lo
+avisa con `⚠`: el `Proximo paso` no debe ser trabajo de fecha futura (regla de 8a), corrige el paso.
+Un paso sin `p-…` (un plan, `ninguno — …`) no marca nada y no imprime nada. Su salida (`📌`, `·`,
+`⚠`) no va en el cierre; si sale `⚠`, arregla el paso antes de 8b. La marca entra en el commit de
+8f con lo demas. Si reescribes el snippet despues, vuelve a correrlo: la marca nombra esta ficha.
 
 **8b. Imprimir al terminal — corre el script, no redactes el bloque otra vez**:
 

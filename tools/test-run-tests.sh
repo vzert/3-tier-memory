@@ -11,6 +11,10 @@
 set -u
 RT="${RUN_TESTS:-$(cd "$(dirname "$0")" && pwd)/run-tests.sh}"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+# Candado propio para toda llamada a run-tests.sh de esta prueba. Dentro de una corrida completa el
+# candado real lo tiene el runner que lanzo esta prueba: si un `--una` lo pidiera (la mutacion
+# una-con-candado de mutation-check), esperaria sin fin. Colgo el CI del PR #35 cinco horas.
+export RUN_TESTS_CANDADO="$T/candado-de-las-llamadas"
 pass=0; fail=0
 chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: esperaba '$2', salio '$3'"; fi; }
 # veredicto <suite>: la primera palabra de la linea que imprime run-tests.sh (ok / skip / FALLA)
@@ -118,6 +122,112 @@ for ult in "RESULT pass=1 fail=0 skip=3" "RESULT: pass=1 fail=0 skip=10" "PASS=5
   chk "un skip=N>0 es salto parcial: «${ult}»" "skip" "$(veredicto "$T/salto$n.sh")"
 done
 chk "una suite roja sigue siendo FALLA" "FALLA" "$(veredicto "$T/roja.sh")"
+
+# p-524e2a5bf7: dos corridas completas a la vez dejaban al Mac sin memoria. Una COPIA de run-tests.sh
+# en un repo minimo: su unica suite que corre (test-lenta) anota ini/fin en un registro; las demas
+# no existen y fallan al instante. RUN_TESTS_CANDADO propio: el candado de la corrida que lanzo esta
+# prueba no debe verse. Toda espera tiene tope: un candado roto no cuelga la prueba, sale FALLA.
+echo "== candado: una corrida completa por maquina (p-524e2a5bf7) =="
+R="$T/repo"; mkdir -p "$R/tools" "$R/plugins/3-tier-memory/bin" "$T/bin"
+cp "$RT" "$R/tools/run-tests.sh"
+printf 'echo ini >> "%s"; sleep 1; echo fin >> "%s"; echo "pass=1 fail=0"\n' "$T/registro" "$T/registro" \
+  > "$R/plugins/3-tier-memory/bin/test-lenta.sh"
+printf '#!/bin/sh\nexit 1\n' > "$T/bin/claude"; chmod +x "$T/bin/claude"   # sin el CLI real: no tarda
+CAND="$T/candado"
+# termina <pid> <segundos>: 0 si el proceso acaba a tiempo; si no, lo mata y devuelve 1.
+termina() {
+  local i=0
+  while kill -0 "$1" 2>/dev/null; do
+    [ "$i" -ge $(( $2 * 5 )) ] && { kill "$1" 2>/dev/null; wait "$1" 2>/dev/null; return 1; }
+    sleep 0.2; i=$(( i + 1 ))
+  done
+  wait "$1" 2>/dev/null; TERMINA_RC=$?; return 0   # rc del proceso, si es hijo de esta prueba
+}
+# completa <salida>: una corrida completa de la copia, en segundo plano; deja su pid en LANZADO.
+# Desacoplada de esta prueba (doble fork, la adopta init). Medido: con las corridas como hijas de esta
+# prueba, quitar la relectura del pid no tumbaba el caso de la carrera (0 de 3); desacopladas, 3 de 3.
+# La causa no esta medida (no son zombis: bash recoge a sus hijas). `exec` conserva el pid anotado.
+completa() {
+  rm -f "$1.pid"
+  ( RUN_TESTS_CANDADO="$CAND" RUN_TESTS_CANDADO_ESPERA=0.2 RUN_TESTS_CANDADO_PAUSA="${PAUSA:-}" RUN_MUTATION=0 \
+      PATH="$T/bin:$PATH" bash -c 'echo $$ > "$0.pid"; exec bash "$1" >"$0.out" 2>"$0.err"' "$1" "$R/tools/run-tests.sh" & )
+  local i=0; while [ ! -s "$1.pid" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$(( i + 1 )); done
+  LANZADO=$(cat "$1.pid" 2>/dev/null)
+}
+# Ocho a la vez, no dos (adversario, ronda 3): con un tercero en cola, el que espera veia morir al
+# dueno justo al soltarlo y borraba el candado que otro acababa de tomar. Con dos no se ve.
+: > "$T/registro"; pids=""
+# PAUSA=0.5 ensancha la ventana entre leer el pid y decidir: sin el sub-candado, el choque sale.
+PAUSA=0.5; for i in 1 2 3 4 5 6 7 8; do completa "$T/r$i"; pids="$pids $LANZADO"; done; PAUSA=
+rcs=""; for p in $pids; do termina "$p" 120; rcs="$rcs$?"; done
+chk "las ocho corridas terminan" "00000000" "$rcs"
+chk "una tras otra: ninguna suite empieza antes de que acabe la anterior" \
+  "ini fin ini fin ini fin ini fin ini fin ini fin ini fin ini fin" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
+chk "las siete que esperaron lo dicen en stderr" "7" "$(cat "$T"/r?.err | grep -c 'espero a que termine')"
+chk "ninguna quito el candado de otra por muerto" "0" "$(cat "$T"/r?.err | grep -c 'ya no existe')"
+chk "y suelta el candado al terminar" "no" "$([ -e "$CAND" ] && echo si || echo no)"
+
+# Un candado de una corrida muerta (kill -9) no bloquea para siempre.
+bash -c 'exit 0' & muerto=$!; wait "$muerto"
+mkdir "$CAND"; echo "$muerto" > "$CAND/pid"; : > "$T/registro"
+completa "$T/c"; c=$LANZADO
+chk "con el candado de un pid muerto, la corrida no se queda esperando" "0" "$(termina "$c" 30; echo $?)"
+chk "y corre su suite" "ini fin" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
+chk "y avisa que lo quito" "1" "$(grep -c 'ya no existe' "$T/c.err")"
+
+# Adversario, ronda 1: un candado abandonado que no se puede borrar (de otro usuario en un /tmp
+# compartido) hacia un bucle sin pausa y sin fin. Ahora sale con error. Se simula con chmod 555,
+# solo donde chmod de verdad impide borrar (no en Windows, ni como root).
+mkdir "$T/sonda"; : > "$T/sonda/f"; chmod 555 "$T/sonda"
+if rm -f "$T/sonda/f" 2>/dev/null; then
+  echo "  (sin probar aqui: chmod 555 no impide borrar; no cuenta) candado que no se puede quitar"
+else
+  bash -c 'exit 0' & muerto=$!; wait "$muerto"
+  mkdir "$CAND"; echo "$muerto" > "$CAND/pid"; chmod 555 "$CAND"
+  completa "$T/d"; d=$LANZADO
+  chk "un candado abandonado que no se puede quitar no deja un bucle sin fin" "0" "$(termina "$d" 15; echo $?)"
+  chk "y sale con error que lo dice" "1" "$(grep -c 'no puedo quitar el candado' "$T/d.err")"
+  chk "un solo aviso, no uno por vuelta" "1" "$(grep -c 'quito el candado' "$T/d.err")"
+  chmod 755 "$CAND"; rm -rf "$CAND"
+fi
+chmod 755 "$T/sonda"
+# Un pid vivo de otro usuario (kill -0 falla por permiso) no es un candado muerto: no se lo roba.
+if [ "$( (export LC_ALL=C; kill -0 1) 2>&1 | grep -c ermitted)" = 1 ]; then
+  mkdir "$CAND"; echo 1 > "$CAND/pid"
+  completa "$T/e"; e=$LANZADO
+  chk "el candado de un pid vivo de otro usuario se respeta: sigue esperando" "1" "$(termina "$e" 4; echo $?)"
+  chk "y avisa que espera" "1" "$(grep -c 'espero a que termine' "$T/e.err")"
+  rm -rf "$CAND"
+else
+  echo "  (sin probar aqui: kill -0 1 no falla por permiso; no cuenta) pid vivo de otro usuario"
+fi
+
+# Un candado que no se puede crear (padre inexistente, /tmp de solo lectura) colgaba la corrida sin
+# decir nada (adversario, ronda 4). Correr sin el dejaba dos suites a la vez (ronda 5): sale con rc 2.
+: > "$T/registro"; CAND_BUENO="$CAND"; CAND="$T/no-existe/candado"
+completa "$T/f"; f=$LANZADO; CAND="$CAND_BUENO"
+chk "un candado que no se puede crear no cuelga la corrida" "0" "$(termina "$f" 30; echo $?)"
+chk "y no corre la suite sin candado" "" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
+chk "y dice como apuntarlo con RUN_TESTS_CANDADO" "1" "$(grep -c 'RUN_TESTS_CANDADO=<carpeta>' "$T/f.err")"
+RUN_TESTS_CANDADO="$T/no-existe/candado" RUN_TESTS_CANDADO_ESPERA=0.1 bash "$R/tools/run-tests.sh" >/dev/null 2>&1 & h=$!
+TERMINA_RC=; termina "$h" 30; chk "y sale con rc 2" "0 2" "$? $TERMINA_RC"
+
+# Un pid 0 en el candado: kill -0 0 sale 0 y la corrida esperaba sin fin (adversario, ronda 5).
+mkdir "$CAND"; echo 0 > "$CAND/pid"; : > "$T/registro"
+completa "$T/g"; g=$LANZADO
+chk "un candado con pid 0 cuenta como abandonado: no espera sin fin" "0" "$(termina "$g" 30; echo $?)"
+chk "y corre su suite" "ini fin" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
+rm -rf "$CAND"
+
+# Ruta fija, no del TMPDIR: procesos de la misma maquina con otro TMPDIR no compartian el candado.
+chk "el candado no depende de TMPDIR" "/tmp/3tm-run-tests.candado" \
+  "$(env -u RUN_TESTS_CANDADO TMPDIR="$T/otro" bash "$R/tools/run-tests.sh" --ruta-candado)"
+
+# --una lo llaman las suites DENTRO de una corrida completa: con el candado tomado no espera.
+mkdir "$CAND"; echo "$$" > "$CAND/pid"
+RUN_TESTS_CANDADO="$CAND" bash "$R/tools/run-tests.sh" --una prueba bash "$T/skip.sh" >/dev/null 2>&1 & u=$!
+chk "--una no toma el candado: no espera a la corrida que lo tiene" "0" "$(termina "$u" 10; echo $?)"
+rm -rf "$CAND"
 
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

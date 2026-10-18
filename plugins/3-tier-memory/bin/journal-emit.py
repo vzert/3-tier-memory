@@ -15,7 +15,8 @@ Tipos de evento:
   pendiente.add     --text T --prioridad Alta|Media|Baja --origen O [--creado YYYY-MM-DD]
                     [--revisar YYYY-MM-DD]   (ventana declarada; la lee expire-pendientes.py)
                     [--bloqueado-por "QUE"]  (espera a algo FUERA de la sesion: otra
-                    instalacion, un peer, un PR ajeno; checkpoint-audit.py rechaza un
+                    instalacion, un peer, un PR ajeno; nunca una decision del usuario,
+                    que va en el `Proximo paso`; checkpoint-audit.py rechaza un
                     `Proximo paso:` que cite un id con `_bloqueado:`)
                     [--relacionado p-<10 hex>|plan-<slug>]...  (repetible, 2.55.0: otro
                     pendiente o un plan con el que este va junto; lo lee pendientes_afines.py,
@@ -25,6 +26,8 @@ Tipos de evento:
                     [--transcript RUTA] o la de CLAUDE_CODE_SESSION_ID). Lo avisa por stderr.
                     Imprime el id (p-<10 hex>) por stdout.                              (Fase 1)
   pendiente.resolve --id ID --estado resolved|superseded|abandoned [--sesion S] [--nota N]
+                    --nota solo la guardan resolve, learning.retire y learning.add --supersedes;
+                    los demas tipos salen con error si la reciben, aun vacia (2.62.10).
   pendiente.update  --id ID [--text T] [--prioridad Alta|Media|Baja] [--text-prefix P]
                     Corrige el texto y/o la prioridad de un pendiente VIVO conservando su id.
                     El id es el hash con el que NACIO, no el del texto de hoy: cambiarlo
@@ -40,6 +43,10 @@ Tipos de evento:
   pendiente.expire  --id ID --dias N [--line "<linea verbatim>"]   (caducidad por edad)
   pendiente.reopen  --id ID [--prioridad P]             (reversa de expire y de resolve)
   pendiente.window  --id ID --revisar YYYY-MM-DD                  (pone/actualiza la ventana)
+  pendiente.retomar --id ID --retomar YYYY-MM-DD --ficha sessions/<slug>
+                    Pone o cambia `_retomar: FECHA sessions/<slug>_`: el pendiente que cita el
+                    `Proximo paso` de esa ficha, para que el mod pendientes lo saque en VENCEN.
+                    Solo lo lee el mod; 8e, el hilo y el calendario lo ignoran (2.62.8).
   pendiente.block   --id ID (--bloqueado-por "QUE" | --desbloquear)
                     Pone, cambia o quita `_bloqueado: QUE_` en un pendiente VIVO. Existe para
                     marcar en Step 3a uno que nacio sin el campo; no cambia el id.
@@ -201,6 +208,9 @@ SCHEMA_VERSION = 1
 PRIORIDADES = ("Alta", "Media", "Baja")
 ESTADOS = ("resolved", "superseded", "abandoned")
 ID_RE = re.compile(r"^p-[0-9a-f]{10}$")
+# La ficha de `_retomar:` (2.62.8): sessions/<slug>, sin espacios, sin `—` y sin `_` final (el `_`
+# cierra el campo en la linea de Tier 2). La misma expresion en journal-compact.py.
+FICHA_RETOMAR_RE = re.compile(r"^sessions/[A-Za-z0-9][A-Za-z0-9._-]*(?<!_)$")
 SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 RESEARCH_STATUS = ("active", "completed")
@@ -532,7 +542,7 @@ def strip_meta(text):
     # Las mismas claves que `META_RE` en repair-dualwrite.py, que re-deriva este hash para
     # detectar ids inventados. Si divergen, todo pendiente con la clave que falte se reporta
     # como id inventado. Si anades una clave aqui, anadela alli.
-    text = re.sub(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado|bloqueado|relacionado):[^—]*", "", text)
+    text = re.sub(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado|bloqueado|relacionado|retomar):[^—]*", "", text)
     return text.strip()
 
 
@@ -895,11 +905,16 @@ def dedup_al_emitir(memory_dir, topic, text, decision, solo_vecinos):
                  f"  - es otra leccion → --decision nueva.")
 
 
+# Los tipos que leen --nota. pendiente.update la rechaza con su propio mensaje (2.62.4).
+NOTA_LECTORES = ("pendiente.resolve", "pendiente.update", "learning.retire", "learning.add")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Emite un evento al journal de memory/.")
     ap.add_argument("--type", required=True,
                     choices=["pendiente.add", "pendiente.resolve", "pendiente.update",
                              "pendiente.expire", "pendiente.reopen", "pendiente.window",
+                             "pendiente.retomar",
                              "pendiente.block", "pendiente.relate", "pendiente.adopt",
                              "session.add", "session.amend",
                              "learning.add", "learning.update", "learning.retire",
@@ -913,7 +928,11 @@ def main():
     ap.add_argument("--origen")
     ap.add_argument("--creado")
     ap.add_argument("--revisar")
-    ap.add_argument("--bloqueado-por", dest="bloqueado_por")
+    ap.add_argument("--retomar")                          # pendiente.retomar (2.62.8)
+    ap.add_argument("--ficha")                            # pendiente.retomar
+    ap.add_argument("--bloqueado-por", dest="bloqueado_por",
+                    help="que espera, FUERA de la sesion (otra instalacion, un peer, un PR ajeno); "
+                         "nunca una decision del usuario, que va en el Proximo paso")
     ap.add_argument("--desbloquear", action="store_true")
     ap.add_argument("--relacionado", action="append", default=[])   # pendiente.add / .relate
     ap.add_argument("--sin-relacion", dest="sin_relacion", action="store_true")
@@ -973,6 +992,14 @@ def main():
     # learning.update: enlace Quick Reference -> regla (F7, 2.51.0)
     ap.add_argument("--quickref-regla", dest="quickref_regla", default="")
     a = ap.parse_args()
+
+    # --nota solo la guardan los tipos de NOTA_LECTORES (learning.add, solo con --supersedes; se
+    # mira abajo). En cualquier otro se descartaba sin avisar y quien la paso creia haberla dejado
+    # escrita (p-3bf672997c, como p-a37851219c en pendiente.update, que tiene su propio mensaje).
+    if a.nota is not None and a.type not in NOTA_LECTORES:   # aun vacia: quien la paso esperaba guardarla
+        sys.exit(f"journal-emit: {a.type} no guarda --nota (el evento no tiene campo donde ponerla). "
+                 "Solo la guardan pendiente.resolve, learning.retire y learning.add --supersedes; "
+                 "si la nota describe lo que emites, metela en el --text")
 
     memory_dir = resolve_memory_dir(a.memory_dir)
     if not os.path.isdir(memory_dir):
@@ -1112,6 +1139,9 @@ def main():
         decision = decision_de(a.decision, a.supersedes, sup, memory_dir, topic)
         if decision and decision.startswith("reemplaza:"):
             sup = int(decision.split(":")[1])     # reemplaza:N es --supersedes N (F2)
+        if a.nota is not None and not sup:   # la nota solo va en la marca de la regla reemplazada
+            sys.exit("journal-emit: learning.add solo guarda --nota con --supersedes N (o --decision "
+                     "reemplaza:N): va en la marca de la regla vieja. Sin eso, metela en el --text")
         if text:
             dedup_al_emitir(memory_dir, topic, text, decision, a.solo_vecinos)
             if a.solo_vecinos:
@@ -1354,6 +1384,26 @@ def main():
         if not fecha_real(rev):
             sys.exit("journal-emit: pendiente.window necesita --revisar con una fecha real")
         base["payload"] = {"id": pid, "revisar": rev, "fecha": date.today().isoformat()}
+        write_event(memory_dir, base)
+        print(pid)
+        return
+
+    if a.type == "pendiente.retomar":
+        pid = (a.id or "").strip()
+        if not ID_RE.match(pid):
+            sys.exit("journal-emit: --id debe tener la forma p-<10 hex>")
+        ret = (a.retomar or "").strip()
+        # fecha_real (fromisoformat) acepta `20261016` y `2026-W42-5`: el compactador los cuarentena
+        # y el mod no los lee. Aqui solo AAAA-MM-DD.
+        if not (re.fullmatch(r"\d{4}-\d{2}-\d{2}", ret) and fecha_real(ret)):
+            sys.exit("journal-emit: pendiente.retomar necesita --retomar AAAA-MM-DD con una fecha real")
+        ficha = (a.ficha or "").strip()
+        if ficha.endswith(".md"):
+            ficha = ficha[:-3]
+        if not FICHA_RETOMAR_RE.fullmatch(ficha):
+            sys.exit("journal-emit: pendiente.retomar necesita --ficha sessions/<slug>")
+        base["payload"] = {"id": pid, "retomar": ret, "ficha": ficha,
+                           "fecha": date.today().isoformat()}
         write_event(memory_dir, base)
         print(pid)
         return
