@@ -252,6 +252,7 @@ completo a la vez al terminar, y el Mac se quedaba sin memoria (2026-10-15/16, 4
 - `tools/mutation-check.sh` lanzado solo es tan pesado como la suite y no toma el candado.
 - Coste: `test-run-tests.sh` pasa de ~11 s a ~25 s (medido en el Mac); mutation-check lo corre en
   cada una de sus mutaciones de run-tests, asi que el job de ubuntu tarda unos minutos mas.
+
 ## [2.62.6] - 2026-10-16
 Origen: el adversario de 2.62.0 (PR #27) midio con una fecha forzada que `test-hilo-pendientes.sh`
 caia en main desde el 2026-10-21: `retomar()` usa la fecha real y un pendiente de la prueba tenia
