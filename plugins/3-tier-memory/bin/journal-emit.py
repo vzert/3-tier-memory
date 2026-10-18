@@ -15,7 +15,8 @@ Tipos de evento:
   pendiente.add     --text T --prioridad Alta|Media|Baja --origen O [--creado YYYY-MM-DD]
                     [--revisar YYYY-MM-DD]   (ventana declarada; la lee expire-pendientes.py)
                     [--bloqueado-por "QUE"]  (espera a algo FUERA de la sesion: otra
-                    instalacion, un peer, un PR ajeno; checkpoint-audit.py rechaza un
+                    instalacion, un peer, un PR ajeno; nunca una decision del usuario,
+                    que va en el `Proximo paso`; checkpoint-audit.py rechaza un
                     `Proximo paso:` que cite un id con `_bloqueado:`)
                     [--relacionado p-<10 hex>|plan-<slug>]...  (repetible, 2.55.0: otro
                     pendiente o un plan con el que este va junto; lo lee pendientes_afines.py,
@@ -981,7 +982,9 @@ def main():
     ap.add_argument("--revisar")
     ap.add_argument("--retomar")                          # pendiente.retomar (2.62.8)
     ap.add_argument("--ficha")                            # pendiente.retomar
-    ap.add_argument("--bloqueado-por", dest="bloqueado_por")
+    ap.add_argument("--bloqueado-por", dest="bloqueado_por",
+                    help="que espera, FUERA de la sesion (otra instalacion, un peer, un PR ajeno); "
+                         "nunca una decision del usuario, que va en el Proximo paso")
     ap.add_argument("--desbloquear", action="store_true")
     ap.add_argument("--relacionado", action="append", default=[])   # pendiente.add / .relate
     ap.add_argument("--sin-relacion", dest="sin_relacion", action="store_true")

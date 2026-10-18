@@ -70,6 +70,14 @@ M = {
     "message-no-dict": [('if not isinstance(d, dict) or not isinstance(d.get("message"), dict):', "if False:"),
                         ('if not (isinstance(d, dict) and isinstance(d.get("message"), dict)):', "if False:")],
     "audit-colapsado-sin-hilo": [('colapsado = ("```" not in sec_retomar', 'colapsado = False and ("```" not in sec_retomar')],
+    # 2.62.11: una decision del usuario no es bloqueo (test-ninguno-bloqueo.sh).
+    "audit-sin-ninguno-bloqueo": [("        if es_ninguno_snip and bloq_ficha:", "        if False:")],
+    "ninguno-bloqueo-solo-sesion": [("bloq_ficha = [i for i in dict.fromkeys(abiertos_ficha) if i in bloqueados]",
+                                     "bloq_ficha = [i for i in dict.fromkeys(abiertos_ficha) if i in bloqueados and i in origenes_abiertos(memory_dir) and origenes_abiertos(memory_dir)[i] == slug]")],
+    "marco-decidir-con-usuario": [('r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b(?!\\s*-|\\s+(?:extern|final|ajen|client|del?\\s)))\\S+"', 'r"|\\bdecidir\\s+con\\s+\\S+"')],
+    "marco-sin-decidir-con": [('r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b(?!\\s*-|\\s+(?:extern|final|ajen|client|del?\\s)))\\S+"', 'r"|\\bnunca-calza-esto"')],
+    "usuario-sin-apellido": [('r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b(?!\\s*-|\\s+(?:extern|final|ajen|client|del?\\s)))\\S+"', 'r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b)\\S+"')],
+    "guard-sin-bloqueo": [("        if avisos_bloqueo:", "        if False:")],
 }
 
 p, nombre = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""

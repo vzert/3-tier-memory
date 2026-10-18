@@ -232,6 +232,12 @@ caso "extras: filtrados van a quedan" pendientes_afines.py m_hilo.py $T "las sie
 caso "hilo: Bash con barras invertidas" pendientes_afines.py m_hilo.py $T "Bash con barras invertidas escribe la ficha" bash-sin-barras
 caso "hilo: message no-objeto" pendientes_afines.py m_hilo.py $T "message no-objeto: stamp-hilo sella sin traceback" message-no-dict
 caso "hilo: audit del caso 5 colapsado" checkpoint-audit.py m_hilo.py $T "colapsado con un heredado hacible: SALTADO snippet.hilo" audit-colapsado-sin-hilo
+caso "decision del usuario: aviso del audit" checkpoint-audit.py m_hilo.py test-ninguno-bloqueo.sh "POR-DISEÑO snippet.ninguno_bloqueo" audit-sin-ninguno-bloqueo
+caso "decision del usuario: origen en research" checkpoint-audit.py m_hilo.py test-ninguno-bloqueo.sh "POR-DISEÑO snippet.ninguno_bloqueo" ninguno-bloqueo-solo-sesion
+caso "decision del usuario: el marco la deja" pendientes_afines.py m_hilo.py test-ninguno-bloqueo.sh "decidir con el usuario no es espera ajena" marco-decidir-con-usuario
+caso "decision del usuario: un tercero avisa" pendientes_afines.py m_hilo.py test-ninguno-bloqueo.sh "y decidir con un tercero" marco-sin-decidir-con
+caso "decision del usuario: usuario externo avisa" pendientes_afines.py m_hilo.py test-ninguno-bloqueo.sh "un usuario con apellido es un tercero" usuario-sin-apellido
+caso "decision del usuario: el hook pregunta" checkpoint-close-guard.sh m_hilo.py test-checkpoint-close-guard.sh "la revision pregunta si el bloqueo espera" guard-sin-bloqueo
 
 echo "Contrato de check-project-dir-fallback.py (2.41.4): cada pieza, rota, tumba su aserto"
 caso "verde respaldo" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " respaldo: exit 0" r1-sin-quitar-forma
