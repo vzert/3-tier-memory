@@ -19,6 +19,12 @@ export type Pendiente = {
   origen?: string[]
   origen_texto?: string | null
   relacionado?: string[]
+  // `_retomar` (3-tier-memory 2.62.8): el paso de un snippet `Retomamos:` de esa ficha. El clic pega
+  // `retomar_snippet` (el bloque de la ficha, sin fence) en vez del pendiente. Opcionales: un estado
+  // anterior a 0.2.3 no los trae.
+  retomar?: string | null
+  retomar_ficha?: string | null
+  retomar_snippet?: string | null
 }
 
 export type Ahora = {

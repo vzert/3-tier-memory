@@ -134,7 +134,7 @@ HEADERS = {"alta": "## Alta prioridad", "media": "## Media prioridad", "baja": "
 ACTUALIZADO_RE = re.compile(r"\s*—\s*_actualizado: \d{4}-\d{2}-\d{2}_")
 # Donde empieza la cola de metadatos de una linea de Tier 2. La cola se conserva VERBATIM en un
 # update: contiene `_origen:`/`_creado:`/`_id:`/`_revisar:` y cualquier clave que otro escribiera.
-META_START_RE = re.compile(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado|bloqueado|relacionado):")
+META_START_RE = re.compile(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado|bloqueado|relacionado|retomar):")
 SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$")   # tambien guarda contra '../'
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 CELL_SPLIT = re.compile(r"(?<!\\)\|")   # un `\|` dentro de una celda (alias de wikilink) no separa
@@ -406,7 +406,7 @@ def find_id_line(lines, pid):
 
 def line_text(line):
     s = line.strip()[5:].strip()
-    return normalize_text(re.sub(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado|bloqueado|relacionado):[^—]*", "", s))
+    return normalize_text(re.sub(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado|bloqueado|relacionado|retomar):[^—]*", "", s))
 
 
 def header_index(lines, prio):
@@ -1284,6 +1284,32 @@ def apply_window(mem, p):
 
 
 BLOQUEADO_RE = re.compile(r"\s*—\s*_bloqueado:[^—]*")
+RETOMAR_RE = re.compile(r"\s*—\s*_retomar:[^—]*")
+# La misma expresion que journal-emit.py: sessions/<slug> sin espacios, `—` ni `_` final.
+FICHA_RETOMAR_RE = re.compile(r"^sessions/[A-Za-z0-9][A-Za-z0-9._-]*(?<!_)$")
+
+
+def apply_retomar(mem, p):
+    """Pone o cambia `_retomar: FECHA sessions/<slug>_` en la linea de Tier 2, sin tocar el resto
+    (2.62.8). Lo escribe Step 8 de /checkpoint-3t (marcar-retomar.py) en el pendiente que cita el
+    `Proximo paso`, y solo lo lee el mod pendientes. Es un campo aparte de `_revisar` a proposito:
+    con `_revisar` = hoy, el 🔔 de 8e de cada cierre del dia sacaba el paso de otra sesion y el hilo
+    dejaba de proponerlo (hacible)."""
+    path = os.path.join(mem, "_pendientes.md")
+    if not os.path.isfile(path):
+        raise Quarantine("no-index: _pendientes.md no existe")
+    lines = read_lines(path)
+    i = find_id_line(lines, p["id"])
+    if i is None:
+        log(f"WARN retomar: no hay linea abierta con id {p['id']}")
+        return False
+    nueva = RETOMAR_RE.sub("", lines[i].rstrip("\n"))
+    nueva = f"{nueva} — _retomar: {p['retomar']} {p['ficha']}_"
+    if nueva == lines[i]:
+        return False                      # idempotente
+    lines[i] = nueva
+    atomic_write(path, lines)
+    return True
 
 
 def apply_block(mem, p):
@@ -1671,8 +1697,14 @@ def apply_reopen(mem, p):
             # Vive en el indice y no en el archivo, pero la fila mensual sigue cerrada: una pasada
             # anterior murio entre sacar la linea del archivo y limpiar la mensual. El motivo de
             # abajo ("cerrado antes de 2.31.0, usa pendiente.add") seria falso aqui y su consejo
-            # duplicaria una linea viva (adversario de 2.60.1, ronda 3). Sigue siendo cuarentena:
-            # terminar esa pasada es p-c103c7df05.
+            # duplicaria una linea viva (adversario de 2.60.1, ronda 3).
+            # Si ESTE reopen ya consta (`ya_anotado`), esa pasada fue la suya: la clave la escribio
+            # la propia operacion, no se deduce del estado. Lo unico que le faltaba es la fila
+            # mensual, y se termina aqui (p-c103c7df05). Sin la clave (un compactador anterior a
+            # 2.60.1) nada escrito por la operacion dice que la fila cerrada sea suya: cuarentena.
+            if ya_anotado:
+                limpiar_mensual_reabierto(mem, p["id"], donde)
+                return True
             raise Quarantine(
                 f"mensual-cerrada: {p['id']} ya vive en _pendientes.md, pero su fila mensual sigue "
                 f"{donde}. Una pasada anterior murio antes de limpiarla: vacia a mano las celdas "
@@ -1768,22 +1800,31 @@ def apply_reopen(mem, p):
             atomic_write(cpath, clines)
             break
 
-    found = find_monthly_row(mem, p["id"])
-    if found:
-        mpath, mlines, i, cells, cmap = found
-        # Una fila sin columna `Sesion resolucion` no pudo guardar el "expired —...", asi que la
-        # marca de caducado es la FECHA: se limpia igual, y no se exige la nota para reabrir.
-        # `origen == "resuelto"`: la celda Sesion lleva la nota de cierre (sesion — estado —
-        # nota), no "expired", asi que la condicion de expire no la cubria. Ningun evento
-        # deshacia estas dos celdas — es literalmente el paso que hubo que hacer a mano el
-        # 2026-09-19 al reabrir p-532174ff63 (pendiente p-d949b88e8a).
-        if origen == "resuelto" or cells[COL_SESION].startswith("expired") or \
-                (COL_SESION not in cmap and cells[COL_RESUELTO]):
-            cells[COL_RESUELTO] = ""
-            cells[COL_SESION] = ""
-            mlines[i] = render_row(cells, cmap)
-            atomic_write(mpath, mlines)
+    limpiar_mensual_reabierto(mem, p["id"], origen)
     return True
+
+
+def limpiar_mensual_reabierto(mem, pid, origen):
+    """Vacia las celdas Resuelto y Sesion resolucion de la fila mensual de un pendiente reabierto.
+    Devuelve True si la fila cambio."""
+    found = find_monthly_row(mem, pid)
+    if not found:
+        return False
+    mpath, mlines, i, cells, cmap = found
+    # Una fila sin columna `Sesion resolucion` no pudo guardar el "expired —...", asi que la
+    # marca de caducado es la FECHA: se limpia igual, y no se exige la nota para reabrir.
+    # `origen == "resuelto"`: la celda Sesion lleva la nota de cierre (sesion — estado —
+    # nota), no "expired", asi que la condicion de expire no la cubria. Ningun evento
+    # deshacia estas dos celdas — es literalmente el paso que hubo que hacer a mano el
+    # 2026-09-19 al reabrir p-532174ff63 (pendiente p-d949b88e8a).
+    if origen == "resuelto" or cells[COL_SESION].startswith("expired") or \
+            (COL_SESION not in cmap and cells[COL_RESUELTO]):
+        cells[COL_RESUELTO] = ""
+        cells[COL_SESION] = ""
+        mlines[i] = render_row(cells, cmap)
+        atomic_write(mpath, mlines)
+        return True
+    return False
 
 
 def find_monthly_row(mem, pid):
@@ -4195,6 +4236,20 @@ def validate(ev):
             date.fromisoformat(str(p.get("revisar", "")))
         except (ValueError, TypeError):
             raise Quarantine("malformed: pendiente.window sin 'revisar' con fecha real")
+    elif t == "pendiente.retomar":
+        if not p.get("id"):
+            raise Quarantine("malformed: pendiente.retomar sin 'id'")
+        # fromisoformat solo no basta: acepta `20261016` y `2026-W42-5`, que el mod no lee.
+        # fullmatch y no match: con `$`, `sessions/x\n` pasaba y partia la linea de Tier 2.
+        ret = str(p.get("retomar", ""))
+        try:
+            date.fromisoformat(ret)
+        except (ValueError, TypeError):
+            raise Quarantine("malformed: pendiente.retomar sin 'retomar' con fecha real")
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", ret):
+            raise Quarantine("malformed: pendiente.retomar sin 'retomar' AAAA-MM-DD")
+        if not FICHA_RETOMAR_RE.fullmatch(str(p.get("ficha", ""))):
+            raise Quarantine("malformed: pendiente.retomar sin 'ficha' sessions/<slug>")
     elif t == "pendiente.block":
         if not p.get("id"):
             raise Quarantine("malformed: pendiente.block sin 'id'")
@@ -4453,6 +4508,8 @@ def apply_event(mem, ev):
         return apply_reopen(mem, p)
     if t == "pendiente.window":
         return apply_window(mem, p)
+    if t == "pendiente.retomar":
+        return apply_retomar(mem, p)
     if t == "pendiente.block":
         return apply_block(mem, p)
     if t == "pendiente.relate":

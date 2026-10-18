@@ -187,6 +187,9 @@ caso "poda sin comillas"   journal-compact.py m_plan_poda.py test-plan-reopen.sh
 caso "poda solo completed" journal-compact.py m_plan_poda.py test-plan-reopen.sh "abandoned en el frontmatter tambien frena" solo-completed
 caso "poda sin registro"   journal-compact.py m_plan_poda.py test-plan-reopen.sh "el replay active NO reinserta la fila" sin-registro-poda
 caso "poda sin pedir registro" journal-compact.py m_plan_poda.py test-plan-reopen.sh "conserva fase y fecha de creacion" sin-condicion-registro
+# Reopen muerto entre el archivo y la fila mensual (p-c103c7df05): la clave reopen-<id> termina la pasada.
+caso "reopen termina la mensual" journal-compact.py m_reopen_mensual.py test-resolve-reopen.sh "la fila mensual vuelve identica" sin-terminar
+caso "reopen mensual sin registro" journal-compact.py m_reopen_mensual.py test-resolve-reopen.sh "motivo mensual-cerrada" sin-pedir-registro
 T=test-hilo-pendientes.sh
 caso "hilo: liga al nacer" journal-emit.py m_hilo.py $T "el evento trae _relacionado al paso recibido, campo en 2 lineas" liga-sin-auto
 caso "hilo: liga no hereda en backfill" journal-emit.py m_hilo.py $T "ficha de otra fecha, backfill: no hereda el snippet de la sesion en curso" liga-sin-guardia
@@ -292,6 +295,11 @@ echo "Dedup al emitir de learning.add (2.47.0): vecinos, bloqueo, forma y learni
 caso "vecinos por stdout"      journal-emit.py m_learning_dedup.py test-learning-dedup.sh "stdout tiene una sola linea" vecinos-por-stdout
 caso "sin bloqueo"             journal-emit.py m_learning_dedup.py test-learning-dedup.sh "casi igual sin --decision: rc 1" sin-bloqueo
 caso "solo-vecinos escribe"    journal-emit.py m_learning_dedup.py test-learning-dedup.sh "solo-vecinos: ningun evento" solo-vecinos-escribe
+T=test-nota-sin-lector.sh
+caso "--nota sin lector"        journal-emit.py m_nota_sin_lector.py $T "pendiente.expire con nota texto sale con error" sin-rechazo
+caso "--nota en learning.add"   journal-emit.py m_nota_sin_lector.py $T "learning.add sin --supersedes con nota texto sale con error" add-sin-rechazo
+caso "--nota por verdad"        journal-emit.py m_nota_sin_lector.py $T "pendiente.add con nota vacia sale con error" nota-por-verdad
+caso "--nota lector de mas"     journal-emit.py m_nota_sin_lector.py $T "pendiente.add con nota texto sale con error" lector-de-mas
 caso "sin identidad"           journal-emit.py m_learning_dedup.py test-learning-dedup.sh "mismo texto sin --decision: rc 0" sin-identidad
 caso "decision fuera"          journal-emit.py m_learning_dedup.py test-learning-dedup.sh "la decision viaja en el payload" decision-fuera-del-payload
 caso "reemplaza sin supersedes" journal-emit.py m_learning_dedup.py test-learning-dedup.sh "reemplaza:2 lleva supersedes 2" reemplaza-sin-supersedes
@@ -463,6 +471,17 @@ caso_tools "skip=N a cero" run-tests.sh m_run_tests.py test-run-tests.sh "un ski
 caso_tools "dos cuentas de saltos" run-tests.sh m_run_tests.py test-run-tests.sh "FALLA, no salto: «RESULT pass=1 fail=0 skip=2, 3 saltados»" dos-cuentas
 caso_tools "resumen por prefijo" run-tests.sh m_run_tests.py test-run-tests.sh "FALLA con «TODO VERDE de la seccion 3»" resumen-prefijo
 caso_tools "sin bash -n previo" run-tests.sh m_run_tests.py test-run-tests.sh "y lo dice: bash -n" sin-bash-n
+caso_tools "sin candado"           run-tests.sh m_run_tests.py test-run-tests.sh "una tras otra" sin-candado
+caso_tools "candado muerto bloquea" run-tests.sh m_run_tests.py test-run-tests.sh "con el candado de un pid muerto" muerto-bloquea
+caso_tools "--una toma el candado" run-tests.sh m_run_tests.py test-run-tests.sh "--una no toma el candado" una-con-candado
+caso_tools "no suelta el candado"  run-tests.sh m_run_tests.py test-run-tests.sh "y suelta el candado al terminar" no-suelta
+caso_tools "candado sin quitar"     run-tests.sh m_run_tests.py test-run-tests.sh "no se puede quitar no deja un bucle" quita-sin-comprobar
+caso_tools "pid ajeno por muerto"  run-tests.sh m_run_tests.py test-run-tests.sh "de otro usuario se respeta" permiso-es-muerto
+caso_tools "quita sin releer el pid" run-tests.sh m_run_tests.py test-run-tests.sh "ninguna quito el candado de otra" sin-releer
+caso_tools "candado en TMPDIR"     run-tests.sh m_run_tests.py test-run-tests.sh "el candado no depende de TMPDIR" candado-en-tmpdir
+caso_tools "candado no creable cuelga" run-tests.sh m_run_tests.py test-run-tests.sh "un candado que no se puede crear no cuelga" no-crea-espera
+caso_tools "sin candado corre igual" run-tests.sh m_run_tests.py test-run-tests.sh "y no corre la suite sin candado" no-crea-corre
+caso_tools "pid 0 por vivo"        run-tests.sh m_run_tests.py test-run-tests.sh "un candado con pid 0 cuenta como abandonado" pid-cero-vivo
 
 echo
 if [ "$PEND" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $TOTAL)"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi
