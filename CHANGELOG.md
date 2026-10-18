@@ -15,6 +15,9 @@ sesion.
   no es una ficha. Es una mitad del arreglo de p-1fe14aa592, que sigue abierto con la otra: disparar
   solo con la invocacion real del script, no con cualquier mencion. Una ruta con variables (`"$SF"`,
   p-e1799cd04c) sigue igual.
+  El filtro es `sessions/*.md` (`FICHA_RE`), no `memory/sessions/*.md` (`SESION_RE`): con este
+  ultimo caen 24 asertos existentes cuya memoria de prueba no vive en `memory/`. Acepta tambien `\`,
+  porque en Windows `resolver()` (normpath) deja la ruta con barras invertidas.
 
 ### Added
 - Caso en `test-checkpoint-close-guard.sh` con la forma real del `sed` y un `break` en la sesion:
