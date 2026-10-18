@@ -8,7 +8,10 @@
 #      hooks.json apagaria el hook entero justo cuando el agente acaba de perder el contexto;
 #   C. si la serializacion falla, sale texto plano con el bloque del agente y exit 0 — nunca
 #      un JSON a medias, que para Claude Code es "el hook no hizo nada";
-#   D. los avisos que solo puede resolver una persona (cuarentena, secretos) llegan a la persona.
+#   D. los avisos que solo puede resolver una persona (cuarentena, secretos, backfill) llegan a la persona;
+#   E. desde 2.63.0 ningun pendiente sale en el arranque, por ninguno de los dos canales, y sin
+#      ningun aviso para la persona no hay `systemMessage` (medido: el agente uso la lista en
+#      1 de 40 sesiones; a la persona le tapaba los avisos de comandos por correr).
 #
 # Uso: test-session-start-json.sh   (exit 0 = todo verde)
 set -u
@@ -45,6 +48,15 @@ type: index
 EOF
 }
 
+# Mismo proyecto con un aviso que solo resuelve la persona (cuarentena del journal): sirve para
+# probar el canal de la persona ahora que los pendientes ya no lo llenan.
+proyecto_con_aviso() {
+  nuevo_proyecto "$1"
+  mkdir -p "$1/memory/.journal/quarantine"
+  echo '{"roto":true}' > "$1/memory/.journal/quarantine/ev.json"
+  echo 'ancla borrada' > "$1/memory/.journal/quarantine/ev.reason"
+}
+
 # Corre el hook con un payload de SessionStart y devuelve stdout crudo.
 correr() {
   local proj="$1" src="$2"
@@ -64,103 +76,77 @@ else:
     print(d.get("hookSpecificOutput", {}).get("additionalContext", ""))
 PYEOF
 
-echo "1. source=startup: un JSON con los dos canales"
+echo "0. el primer arranque instala los comandos y se lo dice a la persona"
 P="$TMP/p1"; nuevo_proyecto "$P"
+correr "$P" startup > "$TMP/o0"
+check "la persona ve los comandos instalados" \
+  "$(python3 "$TMP/leer.py" "$TMP/o0" systemMessage | grep -c 'comandos nuevos del plugin instalados: /checkpoint-3t')" "1"
+check "el agente tambien" "$(python3 "$TMP/leer.py" "$TMP/o0" additionalContext | grep -c '^INSTALADO:')" "1"
+# Un comando local distinto del plugin se actualiza y tambien se avisa a la persona.
+printf 'viejo\n' > "$P/.claude/commands/status-3t.md"
+correr "$P" startup > "$TMP/o0b"
+check "la persona ve el comando actualizado" \
+  "$(python3 "$TMP/leer.py" "$TMP/o0b" systemMessage | grep -c 'comandos actualizados a la version nueva del plugin: /status-3t')" "1"
+
+echo "0b. un comando viejo sin sufijo se renombra, el JSON sigue valido y la persona lo ve"
+PM="$TMP/pm"; nuevo_proyecto "$PM"; mkdir -p "$PM/.claude/commands"
+printf 'viejo\n' > "$PM/.claude/commands/checkpoint.md"
+correr "$PM" startup > "$TMP/om"
+check "sigue siendo JSON valido (la flecha no rompe el UTF-8)" \
+  "$(python3 -c "import json,sys;json.load(open(sys.argv[1]));print('si')" "$TMP/om" 2>/dev/null)" "si"
+check "la persona ve el renombre" \
+  "$(python3 "$TMP/leer.py" "$TMP/om" systemMessage | grep -c 'renombrados con sufijo -3t: /checkpoint→/checkpoint-3t')" "1"
+
+echo "1. source=startup sin avisos: JSON solo con el canal del agente"
+# Tercer arranque del mismo proyecto: los comandos ya estan y no hay nada que avisar.
 correr "$P" startup > "$TMP/o1"
 check "parsea como JSON" "$(python3 -c "import json,sys;json.load(open(sys.argv[1]));print('si')" "$TMP/o1" 2>/dev/null)" "si"
-check "lleva los dos campos" "$(python3 "$TMP/leer.py" "$TMP/o1" claves)" "hookSpecificOutput,systemMessage"
+check "sin systemMessage: no hay nada que la persona deba correr" "$(python3 "$TMP/leer.py" "$TMP/o1" claves)" "hookSpecificOutput"
 
-echo "2. el mensaje a la persona rotula el ALTA viejo Y conserva el listado generico (aditivo, no reemplaza)"
-SM=$(python3 "$TMP/leer.py" "$TMP/o1" systemMessage)
-check "cuenta los 3 pendientes" "$(printf '%s' "$SM" | grep -c '3 pendientes abiertos')" "1"
-check "nombra el ALTA viejo (aparece en las dos secciones: rotulado y en el generico)" \
-  "$(printf '%s' "$SM" | grep -c 'Item de alta que lleva abierto')" "2"
-check "lo rotula como ALTA" \
-  "$(printf '%s' "$SM" | grep -c 'de prioridad ALTA sin cerrar')" "1"
-check "el Media viejo NO queda tapado por el ALTA (regresion que encontro el adversario, ronda 2)" \
-  "$(printf '%s' "$SM" | grep -c 'Item de media viejisimo')" "1"
-check "dice el comando" "$(printf '%s' "$SM" | grep -c '/triage-3t')" "1"
-
-echo "2b. sin ALTA viejo (umbral propio, mas corto que el generico), no se rotula ALTA pero el generico sigue"
-# Fecha calculada en el momento de correr el test (no un literal fijo): un literal cercano al
-# umbral se vuelve un item viejo por su cuenta con el paso de los dias y el test empieza a fallar
-# solo — lo encontro un adversario (subagente en Opus) reproduciendo el mismo fixture con una
-# fecha ya vieja. ALTA_STALE_DAYS=7: "ayer" esta comodamente por debajo para cualquier fecha futura.
-FECHA_ALTA_RECIENTE=$(python3 -c "import datetime;print((datetime.date.today()-datetime.timedelta(days=1)).isoformat())")
-P1B="$TMP/p1b"
-mkdir -p "$P1B/memory/sessions" "$P1B/memory/.journal/pending"
-cat > "$P1B/memory/_pendientes.md" <<EOF
----
-type: index
----
-# Pendientes
-
-## Alta prioridad
-
-- [ ] Item de alta reciente — _origen: [[sessions/x]]_ — _creado: ${FECHA_ALTA_RECIENTE}_
-
-## Media prioridad
-
-- [ ] Item de media viejisimo — _origen: [[sessions/x]]_ — _creado: 2026-01-02_
-
-## Related
-EOF
-correr "$P1B" startup > "$TMP/o1b"
-SM1B=$(python3 "$TMP/leer.py" "$TMP/o1b" systemMessage)
-check "sin ALTA viejo no se rotula ALTA" "$(printf '%s' "$SM1B" | grep -c 'de prioridad ALTA sin cerrar')" "0"
-check "el listado generico sigue (siempre, no solo sin ALTA viejo)" "$(printf '%s' "$SM1B" | grep -c 'Los mas antiguos:')" "1"
-check "y nombra el Media viejo ahi" "$(printf '%s' "$SM1B" | grep -c 'Item de media viejisimo')" "1"
-
-echo "2c. un pendiente SIN clasificar (bucket 'otros', header fuera del esquema) no se esconde por un ALTA viejo"
-# Reproduce el segundo hallazgo del adversario: con `elif` (version anterior) un item bajo un
-# header custom (ni Alta/Media/Baja) desaparecia del canal de la persona en cuanto aparecia un
-# ALTA viejo, porque `altas_viejas` solo mira la seccion "alta" y el listado generico dejaba de
-# imprimirse. Ahora el generico es incondicional, asi que sigue apareciendo.
-P1C="$TMP/p1c"
-mkdir -p "$P1C/memory/sessions" "$P1C/memory/.journal/pending"
-cat > "$P1C/memory/_pendientes.md" <<'EOF'
----
-type: index
----
-# Pendientes
-
-## Alta prioridad
-
-- [ ] Item de alta viejo — _origen: [[sessions/x]]_ — _creado: 2026-01-05_
-
-## Bloqueadores del port
-
-- [ ] Item sin clasificar viejisimo — _origen: [[sessions/x]]_ — _creado: 2026-01-01_
-
-## Related
-EOF
-correr "$P1C" startup > "$TMP/o1c"
-SM1C=$(python3 "$TMP/leer.py" "$TMP/o1c" systemMessage)
-check "rotula el ALTA viejo" "$(printf '%s' "$SM1C" | grep -c 'de prioridad ALTA sin cerrar')" "1"
-check "el item sin clasificar NO desaparece (regresion que encontro el adversario, ronda 2)" \
-  "$(printf '%s' "$SM1C" | grep -c 'Item sin clasificar viejisimo')" "1"
-
-echo "3. el bloque del agente lleva ALTA inline y NO lista MEDIA"
+echo "2. ningun pendiente sale en el arranque, por ningun canal"
 AC=$(python3 "$TMP/leer.py" "$TMP/o1" additionalContext)
-check "la ALTA va inline" "$(printf '%s' "$AC" | grep -c 'Item de alta que lleva abierto')" "1"
-check "las MEDIA no se listan" "$(printf '%s' "$AC" | grep -c 'Item de media')" "0"
-check "el total sigue estando" "$(printf '%s' "$AC" | grep -c 'PENDIENTES ABIERTOS (3)')" "1"
+check "el agente no recibe la lista" "$(printf '%s' "$AC" | grep -c 'PENDIENTES ABIERTOS')" "0"
+check "ni el texto de un ALTA" "$(grep -c 'Item de alta que lleva abierto' "$TMP/o1")" "0"
+check "ni el de un MEDIA" "$(grep -c 'Item de media' "$TMP/o1")" "0"
+check "ni el resumen viejo de la persona" "$(grep -c 'MEMORIA 3T\|Cierra o descarta\|Los mas antiguos' "$TMP/o1")" "0"
+check "el agente sigue recibiendo el protocolo" "$(printf '%s' "$AC" | grep -c '^PROTOCOLO')" "1"
+
+echo "3. con un aviso para la persona, systemMessage lleva el aviso y ningun pendiente"
+PA="$TMP/pa"; proyecto_con_aviso "$PA"
+correr "$PA" startup > "$TMP/oa"
+SMA=$(python3 "$TMP/leer.py" "$TMP/oa" systemMessage)
+check "systemMessage presente" "$(python3 "$TMP/leer.py" "$TMP/oa" claves)" "hookSpecificOutput,systemMessage"
+check "lleva el aviso" "$(printf '%s' "$SMA" | grep -c 'cuarentena')" "1"
+check "y ningun pendiente" "$(printf '%s' "$SMA" | grep -c 'pendientes abiertos\|Item de')" "0"
+
+echo "3b. BACKFILL PENDIENTE llega a los dos canales (antes solo al agente)"
+# HOME falso: el contador lee $HOME/.claude/projects/<cwd codificado>/*.jsonl. Dos sesiones sin
+# procesar y ningun progreso = 2. Sin payload de transcript_path no se descuenta la actual.
+FH="$TMP/fakehome"; PB="$TMP/pb"; nuevo_proyecto "$PB"
+ENC=$(echo "$PB" | sed 's/[^A-Za-z0-9]/-/g')
+mkdir -p "$FH/.claude/projects/$ENC"
+: > "$FH/.claude/projects/$ENC/s1.jsonl"; : > "$FH/.claude/projects/$ENC/s2.jsonl"
+printf '%s' "{\"cwd\":\"$PB\",\"source\":\"startup\",\"hook_event_name\":\"SessionStart\"}" \
+  | HOME="$FH" CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$BIN/session-start.sh" 2>/dev/null > "$TMP/ob"
+check "la persona ve el backfill con su comando" \
+  "$(python3 "$TMP/leer.py" "$TMP/ob" systemMessage | grep -c 'BACKFILL PENDIENTE: 2 sesiones.*/backfill-3t')" "1"
+check "el agente tambien" \
+  "$(python3 "$TMP/leer.py" "$TMP/ob" additionalContext | grep -c 'BACKFILL PENDIENTE: 2')" "1"
 
 echo "4. source=clear: la persona no recibe nada, el AGENTE SI (regresion del matcher)"
-correr "$P" clear > "$TMP/o2"
+correr "$PA" clear > "$TMP/o2"
 check "sin systemMessage" "$(python3 "$TMP/leer.py" "$TMP/o2" claves)" "hookSpecificOutput"
 check "con additionalContext" \
-  "$(python3 "$TMP/leer.py" "$TMP/o2" additionalContext | grep -c 'PENDIENTES ABIERTOS (3)')" "1"
+  "$(python3 "$TMP/leer.py" "$TMP/o2" additionalContext | grep -c '^PROTOCOLO')" "1"
 
 echo "5. source=resume si habla con la persona"
-correr "$P" resume > "$TMP/o3"
+correr "$PA" resume > "$TMP/o3"
 check "systemMessage presente" "$(python3 "$TMP/leer.py" "$TMP/o3" claves)" "hookSpecificOutput,systemMessage"
 
 echo "6. si falla SOLO la serializacion, el bloque del agente sale INTACTO en texto plano"
 # El stub falla unicamente en la llamada que construye el JSON (la reconoce por
 # `hookSpecificOutput`) y deja pasar todas las demas. Un stub que tumbe python3 entero
-# tampoco construye el bloque de pendientes: probaria que sobrevive el PROTOCOLO, no que
-# sobrevive lo que el fallback existe para salvar. (Hallazgo del adversario, 2026-09-11.)
+# tampoco construye los bloques que salen de python. (Hallazgo del adversario, 2026-09-11.)
 REAL_PY="$(command -v python3)"
 STUB="$TMP/stub"; mkdir -p "$STUB"
 cat > "$STUB/python3" <<'STUBEOF'
@@ -175,9 +161,8 @@ REAL_PYTHON3="$REAL_PY" PATH="$STUB:$PATH" CLAUDE_PROJECT_DIR="$P" CLAUDE_PLUGIN
   bash "$BIN/session-start.sh" </dev/null > "$TMP/o4" 2>/dev/null
 check "exit 0" "$?" "0"
 check "NO es JSON" "$(python3 -c "import json,sys;json.load(open(sys.argv[1]));print('si')" "$TMP/o4" 2>/dev/null || echo no)" "no"
-check "los pendientes siguen ahi" "$(grep -c 'PENDIENTES ABIERTOS (3)' "$TMP/o4")" "1"
-check "la ALTA sigue inline" "$(grep -c 'Item de alta que lleva abierto' "$TMP/o4")" "1"
-check "y el protocolo tambien" "$(grep -c 'PROTOCOLO' "$TMP/o4")" "1"
+check "el bloque del agente sigue ahi" "$(grep -c 'PROTOCOLO' "$TMP/o4")" "1"
+check "y tampoco aqui salen pendientes" "$(grep -c 'PENDIENTES ABIERTOS\|Item de alta' "$TMP/o4")" "0"
 
 echo "6b. sin python3 en absoluto tampoco se emite JSON roto"
 STUB2="$TMP/stub2"; mkdir -p "$STUB2"; printf '#!/bin/sh\nexit 1\n' > "$STUB2/python3"; chmod +x "$STUB2/python3"
@@ -205,31 +190,8 @@ check "no deja basura en stdout" \
   "$([ ! -s "$TMP/o6" ] && echo vacio || (python3 -c "import json,sys;json.load(open(sys.argv[1]))" "$TMP/o6" 2>/dev/null && echo json || echo basura))" \
   "vacio"
 
-echo "9. un pendiente con la vieja sentinela en su texto no contamina el canal de la persona"
-# La primera version separaba los dos bloques con `---3T-HUMANO---` dentro de la misma
-# salida: un pendiente que la llevara en el texto partia el mensaje por ahi. Ahora el
-# resumen de la persona se escribe en otro fichero, asi que la cadena es texto y ya esta.
-P4="$TMP/p4"; nuevo_proyecto "$P4"
-# Va bajo Alta prioridad, no al final del fichero: despues de `## Related` el parser lo
-# saltaria por seccion cerrada y la prueba no probaria nada.
-python3 - "$P4/memory/_pendientes.md" <<'INYEOF'
-import sys
-p = sys.argv[1]
-s = open(p, encoding="utf-8").read()
-item = "- [ ] Item con ---3T-HUMANO--- dentro del texto — _origen: [[sessions/x]]_ — _creado: 2026-02-01_\n"
-s = s.replace("## Alta prioridad\n\n", "## Alta prioridad\n\n" + item, 1)
-open(p, "w", encoding="utf-8").write(s)
-INYEOF
-correr "$P4" startup > "$TMP/o7"
-check "sigue siendo JSON valido" "$(python3 -c "import json,sys;json.load(open(sys.argv[1]));print('si')" "$TMP/o7" 2>/dev/null)" "si"
-check "el item con la cadena SI se parseo" \
-  "$(python3 "$TMP/leer.py" "$TMP/o7" additionalContext | grep -c 'PENDIENTES ABIERTOS (4)')" "1"
-check "y aparece entero en el bloque del agente" \
-  "$(python3 "$TMP/leer.py" "$TMP/o7" additionalContext | grep -c 'Item con ---3T-HUMANO--- dentro del texto')" "1"
-check "el mensaje de la persona empieza donde debe" \
-  "$(python3 "$TMP/leer.py" "$TMP/o7" systemMessage | head -1 | grep -c '^MEMORIA 3T —')" "1"
-check "el texto del pendiente no se cuela en el canal de la persona" \
-  "$(python3 "$TMP/leer.py" "$TMP/o7" systemMessage | grep -c 'dentro del texto —$')" "0"
+# (El caso 9, la sentinela ---3T-HUMANO--- en el texto de un pendiente, se fue con el resumen de
+# pendientes de la persona en 2.63.0: ningun texto de pendiente llega ya a ningun canal.)
 
 echo "10. un agente de Paperclip no recibe systemMessage aunque haya avisos"
 P5="$TMP/p5"; nuevo_proyecto "$P5"
@@ -246,15 +208,15 @@ echo "11. una corrida no interactiva no recibe systemMessage"
 # Medido el 2026-09-11 con un hook de registro: `claude -p` deja
 # CLAUDE_CODE_SESSION_ATTENDED=0 y CLAUDE_CODE_ENTRYPOINT=sdk-cli; la sesion interactiva
 # deja 1 y cli. El canal se apaga solo con el "0" explicito.
-OUT6=$(printf '%s' "{\"cwd\":\"$P\",\"source\":\"startup\",\"hook_event_name\":\"SessionStart\"}" \
+OUT6=$(printf '%s' "{\"cwd\":\"$PA\",\"source\":\"startup\",\"hook_event_name\":\"SessionStart\"}" \
   | CLAUDE_CODE_SESSION_ATTENDED=0 CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$BIN/session-start.sh" 2>/dev/null)
 printf '%s' "$OUT6" > "$TMP/o9"
 check "sin systemMessage" "$(python3 "$TMP/leer.py" "$TMP/o9" claves)" "hookSpecificOutput"
 check "el agente si recibe lo suyo" \
-  "$(python3 "$TMP/leer.py" "$TMP/o9" additionalContext | grep -c 'PENDIENTES ABIERTOS (3)')" "1"
+  "$(python3 "$TMP/leer.py" "$TMP/o9" additionalContext | grep -c 'cuarentena')" "1"
 
 echo "11b. sin la variable (CLI viejo) el canal sigue abierto"
-OUT7=$(printf '%s' "{\"cwd\":\"$P\",\"source\":\"startup\",\"hook_event_name\":\"SessionStart\"}" \
+OUT7=$(printf '%s' "{\"cwd\":\"$PA\",\"source\":\"startup\",\"hook_event_name\":\"SessionStart\"}" \
   | env -u CLAUDE_CODE_SESSION_ATTENDED CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$BIN/session-start.sh" 2>/dev/null)
 printf '%s' "$OUT7" > "$TMP/o10"
 check "systemMessage presente" "$(python3 "$TMP/leer.py" "$TMP/o10" claves)" "hookSpecificOutput,systemMessage"
