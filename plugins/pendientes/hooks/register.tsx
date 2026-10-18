@@ -263,7 +263,10 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const a = await read($, ahora)
     const items = a?.ok ? (a.items ?? []) : []
-    if (e.props.hasSurvey || (await read($, abierto)) || items.length === 0) return next(e)
+    // Con pendientes sin `_id` la tarjeta sale aunque no haya nada que mostrar: en un proyecto
+    // donde ninguno tiene id es el unico sitio donde la persona se entera sin abrir el panel.
+    const sinIdBanda = a?.ok ? (a.resumen?.sin_id ?? 0) : 0
+    if (e.props.hasSurvey || (await read($, abierto)) || (items.length === 0 && sinIdBanda === 0)) return next(e)
 
     const { Box, Text, Button } = $.ui.resolve(e)
     const r = a?.resumen
@@ -399,7 +402,7 @@ export const register: Register = on => {
           ? <Text>{sinId > 0 ? 'Nada que mostrar de los pendientes con id.' : 'Nada urgente en este proyecto.'}</Text>
           : bloques}
         {sinId > 0
-          ? <Text color="warning">{corta(`● ${sinId} pendientes sin id: no salen aquí (/enrich-3t)`, ancho)}</Text>
+          ? <Text color="warning">{corta(`● ${sinId} sin id: /enrich-3t (no salen aquí)`, ancho)}</Text>
           : null}
         <Box flexDirection="row" justifyContent="space-between" width={ancho}>
           <Box flexDirection="row">
