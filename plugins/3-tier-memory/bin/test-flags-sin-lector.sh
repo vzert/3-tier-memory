@@ -9,8 +9,8 @@
 # proposito separado de FLAGS_DE: si las dos tablas no dicen lo mismo, cae un aserto.
 #
 # Para cada tipo x flag de fuera de LEE: sale con error, el mensaje nombra el flag y no deja evento.
-# Para cada flag de LEE (control): el rechazo generico no lo toca (su rama puede rechazarlo por otra
-# razon, p. ej. --quickref-prefix sin --supersedes en learning.add; eso no es este rechazo).
+# Para cada flag de LEE (control): pasa y deja su evento, con los compañeros que su rama pide (CONTROL);
+# los dos que su propia rama rechaza con su mensaje van aparte (RAMA).
 # Corre en un solo proceso (importa el emisor y llama a main): ~1000 corridas por subproceso tardaban
 # minutos, y en Git Bash mas.
 set -e
@@ -124,7 +124,7 @@ def fixture():
         "| Fecha | Sesion | Status | Resumen | Commit |\n|---|---|---|---|---|\n"
         "| 2026-10-17 | [[sessions/2026-10-17-demo]] | done | demo | N/A |\n")
     open(os.path.join(M, "learnings", "uno.md"), "w", encoding="utf-8").write(
-        "# uno\n\n## Reglas\n\n1. **Regla vieja** — texto viejo\n")
+        "# uno\n\n## Reglas\n\n1. **Regla vieja** — texto viejo\n2. **Regla dos** — otra leccion\n")
 
 def eventos():
     p = os.path.join(M, ".journal", "pending")
@@ -158,7 +158,8 @@ def con(flag):
 print("== 1. cada tipo con su comando base pasa (control de todo lo demas) ==")
 for t in tipos:
     rc, msg = emit(["--type", t] + BASE[t])
-    chk(f"{t} base pasa", rc == 0, msg[-200:])
+    n = eventos()
+    chk(f"{t} base pasa con su evento", rc == 0 and n == 1, f"rc={rc} eventos={n} {msg[-200:]!r}")
 
 print("== 2. cada flag que el tipo no lee: error, lo nombra y no deja evento ==")
 for t in tipos:
@@ -172,13 +173,54 @@ for t in tipos:
         chk(f"{t} {f} rechaza", rc == 1 and nombra and n == 0,
             f"rc={rc} eventos={n} {msg[-160:]!r}")
 
-print("== 3. cada flag que el tipo lee: el rechazo generico no lo toca ==")
+# Un flag que el tipo lee puede necesitar un compañero para que el evento valga (p. ej.
+# learning.update --text pide --match-prefix): el control lleva el comando entero.
+RV = "**Regla vieja**"
+DISP = VAL["--disparadores"]
+CONTROL = {
+    ("pendiente.block", "--desbloquear"): ["--id", "p-1111111111", "--desbloquear"],
+    ("pendiente.relate", "--sin-relacion"): ["--id", "p-1111111111", "--sin-relacion"],
+    ("learning.add", "--nota"): BASE["learning.add"] + ["--supersedes", "1", "--nota", "nota"],
+    ("learning.add", "--quickref-prefix"): BASE["learning.add"] + ["--supersedes", "1",
+                                                                   "--quickref-prefix", "qp"],
+    ("learning.update", "--text"): ["--topic", "uno", "--match-prefix", RV,
+                                    "--text", RV + " — texto nuevo"],
+    ("learning.update", "--match-prefix"): ["--topic", "uno", "--match-prefix", RV,
+                                            "--text", RV + " — texto nuevo"],
+    ("learning.update", "--disparadores"): ["--topic", "uno", "--match-prefix", RV,
+                                            "--disparadores", DISP],
+    ("learning.update", "--sin-disparadores"): ["--topic", "uno", "--match-prefix", RV,
+                                                "--sin-disparadores"],
+    ("learning.update", "--quickref"): ["--topic", "uno", "--quickref", "q", "--quickref-prefix", "qp"],
+    ("learning.update", "--quickref-prefix"): ["--topic", "uno", "--quickref", "q",
+                                               "--quickref-prefix", "qp"],
+    ("learning.update", "--quickref-regla"): ["--topic", "uno", "--quickref-prefix", "qp",
+                                              "--quickref-regla", "ninguna"],
+    ("learning.retire", "--por"): ["--topic", "uno", "--match-prefix", RV, "--motivo", "duplicada",
+                                   "--por", "2"],
+}
+# Flags del tipo que su propia rama rechaza, con su mensaje: el flag es del tipo, el uso no.
+RAMA = {
+    ("pendiente.update", "--nota"): "pendiente.update no guarda --nota",
+    ("learning.add", "--sin-disparadores"): "--sin-disparadores es de learning.update",
+}
+
+print("== 3. cada flag que el tipo lee pasa y deja su evento (o lo rechaza su rama) ==")
 for t in tipos:
     for f in sorted(LEE[t]):
-        if f in BASE[t]:
+        if f in BASE[t] and (t, f) not in CONTROL:
             continue
-        rc, msg = emit(["--type", t] + BASE[t] + con(f))
-        chk(f"{t} {f} no lo rechaza el generico", not nombrados(msg), msg[-160:])
+        args = CONTROL.get((t, f), BASE[t] + con(f))
+        rc, msg = emit(["--type", t] + args)
+        n = eventos()
+        if (t, f) in RAMA:
+            chk(f"{t} {f} lo rechaza su rama, no el generico",
+                rc == 1 and not nombrados(msg) and RAMA[(t, f)] in msg and n == 0, msg[-160:])
+        else:
+            # --solo-vecinos lista los vecinos y no escribe nada: es su conducta.
+            espera = 0 if f == "--solo-vecinos" else 1
+            chk(f"{t} {f} pasa con su evento", rc == 0 and n == espera and not nombrados(msg),
+                f"rc={rc} eventos={n} {msg[-160:]!r}")
 
 print("== 4. formas que sys.argv a mano no ve ==")
 rc, msg = emit(["--type", "pendiente.add"] + BASE["pendiente.add"] + ["--motiv", "m"])

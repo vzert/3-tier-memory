@@ -25,6 +25,10 @@ M = {
     "argv-sin-igual": [
         ("        return set(vars(ap.parse_args(argv)))",
          "        return {x[2:].replace(\"-\", \"_\") for x in (argv or sys.argv[1:]) if x.startswith(\"--\") and \"=\" not in x} & {act.dest for act, _ in viejos}")],
+    # La rama rechaza un flag que su tipo si lee: el control tiene que exigir rc=0 y evento, no solo
+    # que el rechazo generico no aparezca (adversario externo, ronda 1).
+    "rama-rechaza": [
+        ("        if bool(relacionado) == bool(a.sin_relacion):", "        if True:")],
     "por-valor": [
         ("    pasados = flags_pasados(ap)",
          "    pasados = {k for k, v in vars(ap.parse_args()).items() if v and str(v).strip()}")],

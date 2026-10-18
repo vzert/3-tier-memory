@@ -14,14 +14,15 @@ cada rama leia los suyos y nadie miraba el resto.
   su valor (`--x ""` tambien se rechaza), y se detecta con el propio parser, asi que tambien la
   forma abreviada (`--motiv`) y `--flag=valor`. Un flag nuevo del parser que no este en ninguna
   fila sale con error en todos los tipos.
-- El rechazo de `--nota` de 2.62.10 pasa a ser este (sale `NOTA_LECTORES`); su mensaje sigue
+- El rechazo de `--nota` de 2.62.10 pasa a ser este y se elimina la tupla `NOTA_LECTORES`; su mensaje sigue
   diciendo donde va la nota. `pendiente.update` conserva el suyo de 2.62.4 y `learning.add` sin
   `--supersedes` el suyo de 2.62.10.
 - `test-flags-sin-lector.sh` nuevo: saca los tipos y los flags del `--help` del emisor y, con su
   propia tabla de lo que lee cada tipo (separada de `FLAGS_DE` a proposito), prueba cada tipo x
-  flag de fuera (error, lo nombra, ningun evento) y cada flag de dentro (el rechazo no lo toca),
+  flag de fuera (error, lo nombra, ningun evento) y cada flag de dentro (pasa y deja su evento, con
+  los compañeros que su rama pide; los dos que su propia rama rechaza, con su mensaje),
   mas la forma abreviada, `--flag=valor` y el valor vacio. 1033 asertos; 931 fallan contra
-  2.62.10. Siete casos nuevos en `tools/mutation-check.sh` (`m_flags_sin_lector.py`), y los tres de
+  2.62.10. Ocho casos nuevos en `tools/mutation-check.sh` (`m_flags_sin_lector.py`), y los tres de
   `m_nota_sin_lector.py` que apuntaban a `NOTA_LECTORES` apuntan ahora al rechazo generico.
 - Llamadores del repo fuera de las pruebas (plantillas, commands, `bin/`, hooks): ninguno pasa un
   flag que su tipo no lee, incluidos los que arman la llamada en Python con el tipo fijo
