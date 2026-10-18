@@ -30,7 +30,9 @@ igual que dos suites.
   (medido: 29 s de un `sleep 30`).
 - `mutation-check.sh`: 7 mutaciones nuevas (`m_mutation_check.py` y `sin-con-candado`);
   `caso_tools` acepta la variable que apunta a la copia (7o argumento). Medido con el mutation-check
-  real lanzado solo, que tomo el candado real: 299 de 299 discriminan, 46 procesos como maximo.
+  real lanzado solo, que tomo el candado real: 299 de 299 discriminan, 46 procesos como maximo. Tras
+  el merge con 2.63.0, `run-tests.sh` completo bajo el candado (espero a otra corrida y luego lo
+  tomo): verde, con mutation-check dentro en 311 de 311.
 
 ### Known
 - Sigue abierto p-7c1fa85c1e: un candado cuyo pid lo reusa otro proceso vivo hace esperar sin fin.
