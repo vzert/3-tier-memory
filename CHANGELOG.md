@@ -41,6 +41,218 @@ igual que dos suites.
   no pasa: la variable solo la exporta run-tests, y el pid de un antecesor solo acaba en el candado
   si un pid se reusa (p-7c1fa85c1e).
 
+## [2.63.0] - 2026-10-16
+Origen: Victor noto que la lista de pendientes que veia al abrir cada sesion no le servia, y pidio
+medir si al agente si. Se midio sobre las 40 sesiones mas recientes de 7 proyectos con el bloque en
+contexto, leyendo cada sesion entera: el agente uso un item de su lista en 1 de 40 (en 383cd006
+reconocio a media sesion el pendiente ALTA del arnes de mutacion, sin haberlo visto en otra parte, y
+lo llevo al checkpoint, donde se cerro). De 46 pendientes cerrados en esas sesiones con el id escrito
+en el comando, ese fue el unico que salio de la lista (no cuenta `p-0123456789`, un id de prueba). La lista costaba de media ~3.6 KB y 29 lineas por sesion. Una primera medicion
+que solo miraba los 3 primeros turnos dio 0/40 y 43 cerrados; el adversario externo la rompio.
+Decisiones de Victor via el supervisor (d70-d72, d104, d107: seguir con 1 de 40).
+
+### Changed
+- **SessionStart ya no imprime pendientes, por ningun canal.** Se van la lista del agente
+  (`PENDIENTES ABIERTOS (N)`, ALTA y sin clasificar, hasta 25, con `⚠ posible stale`) y el resumen
+  de la persona (`MEMORIA 3T — N pendientes abiertos`, ALTA viejos, los mas antiguos, `/triage-3t`),
+  junto con el parser de `_pendientes.md` que los alimentaba. Los pendientes siguen llegando por
+  donde si se usan: `recall.sh` (UserPromptSubmit) los cruza contra cada peticion, el sidebar de
+  pendientes, y el Como retomar y los recordatorios del cierre del checkpoint.
+- **La persona ve solo lo que le toca correr.** `systemMessage` sale solo si hay algo: consolidar,
+  migrar learnings, backfill, comandos desincronizados, cuarentena del journal, secretos, deriva de
+  indices. Sin nada de eso no hay mensaje.
+- **`BACKFILL PENDIENTE` llega tambien a la persona** (antes solo al agente), como CONSOLIDAR y
+  MIGRAR: correr `/backfill-3t` lo decide ella.
+- **`MIGRADO` ya no rompe el JSON del arranque** (fallo previo, de 2.62.6 o antes): `$old_cmd→`
+  hacia que bash tomara el primer byte de la flecha como parte del nombre de la variable y dejaba
+  UTF-8 invalido en la salida; el JSON no parseaba y el hook caia a texto plano. Ahora `${old_cmd}→`.
+- **Los cambios de comandos llegan tambien a la persona:** `INSTALADO`, `ACTUALIZADO` y `MIGRADO`
+  (comandos `-3t` instalados, actualizados o renombrados por el arranque) tienen su linea en
+  `systemMessage`. Es el "update" que Victor pidio ver al abrir sesion.
+- **El aviso `HOOK DUPLICADO` pasa a `HOOK DE PENDIENTES`.** Un hook propio del proyecto que vuelca
+  `_pendientes.md` ya no duplica nada del plugin. El aviso da su tamano y la medicion, y dice que
+  `/migrate` ofrece quitarlo sin borrarlo por defecto.
+- **`/migrate` 2e:** el volcado se rotula `[PENDIENTES]` (antes `[PARTIAL]`, "solapado con el
+  plugin") y ya no se mide con la linea `PENDIENTES ABIERTOS`, que no existe. Opcion 1 (por defecto):
+  quitar solo lo `[DUPLICATE]` y conservar el volcado; opcion 2: quitar tambien el volcado; opcion 3:
+  borrar el script, solo si nada es `[CUSTOM]`.
+- README: "Two readers, two channels" y la linea de Hooks describen el arranque nuevo; las senales
+  de pendientes de mas de 30 dias quedan en `/status-3t` y `/audit-3t`.
+- Learning 3tier-memory-system#43 (y la linea 20 del Quick Reference), "Inyecta contenido, no
+  contadores" de v2.7.0, reescrita con la medicion por `learning.update`. Las reglas #45 (`_creado:`
+  "habilita ordenar en SessionStart"), #46 ("SessionStart sigue inyectando pendientes"), #51
+  (`⚠ posible stale` en SessionStart) y #220 ("ese backlog lo reporta el hook de inicio") se
+  reescriben; #91 (el orden del bloque de pendientes) se retira como obsoleta. La linea del formato
+  en `commands/setup-memory.md`, "Hooks not firing" del README y la cabecera de `session-start.sh`
+  dejan de decir que el arranque usa los pendientes.
+- `templates/checkpoint-3t-step8.md`: las tres razones de "no repitas el backlog Alta en el cierre"
+  decian que ya lo reporta el hook de inicio de sesion; ahora nombran el sidebar y el recall. La
+  regla de no repetirlo no cambia.
+
+### Tests
+- `test-session-start-json.sh`: sin avisos no hay `systemMessage`; ningun texto de pendiente en
+  ningun canal (tampoco en el respaldo de texto plano); con cuarentena, `systemMessage` lleva el
+  aviso y ningun pendiente; `BACKFILL PENDIENTE: 2` en los dos canales con un HOME falso. Se fue el
+  caso 9 (sentinela en el texto de un pendiente): ya no llega texto de pendientes a ningun canal.
+  Caso 0 nuevo: el primer arranque avisa a la persona de los comandos instalados, y uno local
+  distinto del plugin se avisa como actualizado. Contra el session-start.sh de 2.62.6: 10 asertos
+  rojos.
+- `test-parser.sh`: salen los 8 casos del parser que se fue; el detector comprueba el marcador
+  nuevo y un caso nuevo (el aviso no dice "duplic", da el tamano, la medicion y que /migrate no
+  borra por defecto). Contra 2.62.6: 11 rojos.
+- `test-migrate-volcado-pendientes.sh` (nuevo): el texto de la seccion 2e que lee el modelo. Contra
+  el migrate.md de 2.62.6: 8 de 8 rojos.
+- `test-memory-home.sh`: la senal de que el arranque en un worktree lee la memoria del principal
+  pasa de un pendiente a `REGLAS CRITICAS: 1` de su `_learnings.md` (no es una prueba nueva: pasa
+  tambien con 2.62.6, que ya imprimia esa linea).
+- A mano: `recall.sh` con una peticion parecida a un pendiente ALTA lo sigue mostrando
+  (`[pendiente] Migrar el arnes de mutacion…`).
+
+### Known
+- El aviso del hook propio y `/migrate` citan la medicion de la lista del plugin (ALTA y sin
+  clasificar, cortada a ~120 caracteres). Un volcado que imprime cada item entero no se midio; por
+  eso quitarlo es opcion explicita y no la de por defecto.
+- Ya nada comprueba la estructura de `_pendientes.md` al arrancar (el aviso `ESTRUCTURA` iba con el
+  parser). `build-recall-index.py` y el sidebar tienen sus propios parsers; no se revisaron aqui.
+
+## [2.62.11] - 2026-10-16
+Origen: un cierre real de claude-vzert (2026-10-16, ficha `2026-10-16-canal-agentes-entre-maquinas`).
+El pendiente de la Fase 0 de un plan (`p-341fdf5e59`) nacio con `--bloqueado-por "decisiones de
+Victor"`. El bloqueo lo saco de `Proximo paso`, el snippet salio `Ninguno` y las decisiones
+quedaron escondidas. Victor: "si no me muestras las decisiones pendientes o un snippet para
+revisarlas en la siguiente sesion, ¿como se supone que las tome?". La regla de Step 3b ponia "una
+decision de otra persona" como bloqueo valido, y el aviso `snippet.marco` de 2.60.0 marcaba
+`decidir con <alguien>` como espera ajena y pedia bloquear el pendiente.
+
+### Fixed
+- **Una decision del usuario ya no es un bloqueo.** Step 3a, Step 3b (`--bloqueado-por`), Step 8 (la
+  escalera, el caso 5 y el punto 5 del marco del paso, que mandaba bloquear una espera de Victor), la
+  recomendacion de Step 3b (ya no sugiere descartar una decision que el usuario toma con el agente), la
+  cabecera de uso de `journal-emit.py` y su `--help` de `--bloqueado-por` lo dicen: el usuario la toma en la sesion siguiente, con el
+  agente al lado, y el snippet la pone delante con `Proximo paso: decidir con el usuario <que> (p-…)`.
+  El caso 5 (`Ninguno`) no aplica mientras quede una decision del usuario abierta.
+- **`decidir con el usuario` ya no es senal de `snippet.marco`.** Es la forma que Step 8 pide para el
+  paso arreglado, y el aviso le pedia al agente que lo bloqueara. `decidir con <otro>` (un nombre, un
+  proveedor) sigue avisando, porque puede ser un tercero, igual que un `usuario` con apellido
+  (`usuario externo`, `usuario final`, `usuario-final`, `usuario del cliente`). El aviso ahora dice
+  que una decision del usuario no es espera.
+
+### Added
+- **`checkpoint-audit.py` `snippet.ninguno_bloqueo`** (POR-DISEÑO, fichas desde 2026-10-16): el
+  snippet dice `ninguno` y `## Pendientes` de la ficha lista un pendiente `_bloqueado`, sea cual sea
+  su `_origen` (el del caso real nacio en un research). `checkpoint-close-guard.sh` lo pone en la
+  revision del cierre, que bloquea una vez, con la pregunta: ¿el bloqueo espera a alguien que no es
+  el usuario? Si es una decision del usuario, el agente lo desbloquea y rehace el snippet; si espera
+  a alguien de fuera, lo dice en la ultima linea de la revision.
+- `bin/test-ninguno-bloqueo.sh` (23 comprobaciones en 6 escenarios, 17 rojas contra 2.62.5) y una
+  seccion en `test-checkpoint-close-guard.sh` (5 comprobaciones, 2 rojas contra 2.62.5). Seis
+  mutaciones nuevas en `tools/mutaciones/m_hilo.py` (aviso del audit, origen en research, el marco
+  deja `decidir con el usuario`, un tercero sigue avisando, un `usuario externo` sigue avisando, el
+  hook pregunta).
+
+### Known
+- Quien espera un bloqueo es texto libre y no se clasifica (regla 216). El aviso sale tambien para un
+  bloqueo externo legitimo; el agente lo contesta en la revision y el cierre sigue.
+- No atrapa un pendiente que el agente nunca registro, ni uno bloqueado que no lista en
+  `## Pendientes` de la ficha.
+- La excepcion de `decidir con el usuario` en `snippet.marco` es una red de formato (POR-DISEÑO,
+  avisa y no bloquea): reconoce los apellidos listados arriba y no otras formas de nombrar a un
+  tercero que se llame "usuario".
+
+
+## [2.62.10] - 2026-10-16
+Origen: el Known de 2.62.4 (p-3bf672997c). `pendiente.update` ya rechazaba `--nota`, pero los
+demas tipos que no la leen salian con rc=0, escribian el evento y la descartaban sin avisar.
+
+### Changed
+- **`journal-emit` rechaza `--nota` en todo tipo que no la guarda** (cualquiera que se pase, aun
+  vacia o de solo espacios: se compara con `None`): sale con error y no escribe evento. La guardan
+  solo `pendiente.resolve`, `learning.retire` y `learning.add` con `--supersedes N` (o
+  `--decision reemplaza:N`); `learning.add` sin eso tambien la rechaza. `pendiente.update` sigue
+  con su mensaje de 2.62.4. Ningun llamador del repo (plantillas, commands, bin/, hooks/, tools/,
+  pruebas) pasa `--nota` a un tipo que no la lee, salvo las pruebas negativas que esperan el
+  rechazo (`test-nota-sin-lector.sh` y el caso 14b de `test-pendiente-update.sh`).
+- `test-nota-sin-lector.sh` nuevo: rechazo en `pendiente.add`, `expire`, `reopen`, `window`,
+  `session.add`, `plan.upsert`, `learning.update` y `learning.add` sin `--supersedes`, con nota
+  de texto, vacia y de espacios; cada uno con su control sin `--nota`, y los tres lectores como
+  control. 64 de sus 77 asertos fallan contra 2.62.4. Cuatro casos nuevos en
+  `tools/mutation-check.sh` (`m_nota_sin_lector.py`).
+
+### Known
+- La prueba cubre una muestra de los tipos, no los 19: el rechazo es una sola condicion antes de
+  cualquier rama por tipo, asi que los demas pasan por el mismo `if`.
+
+## [2.62.9] - 2026-10-17
+Origen: p-c103c7df05, ultimo paso de la Fase 3 de la familia de correccion y reversa del journal.
+Los residuos de muerte del proceso que declararon 2.40.0 y 2.60.1 se deciden uno por uno: uno se
+arregla y tres quedan en Known con su salida a mano.
+
+### Fixed
+- **Un `pendiente.reopen` que murio entre sacar la linea del archivo y limpiar la fila mensual se
+  termina en el reintento.** Antes iba a la cuarentena `mensual-cerrada` y la fila se limpiaba a
+  mano. Si `.journal/reabiertos.log` tiene la clave `reopen-<id>` con el ts de ESTE reopen (la
+  escribio su propia pasada antes de tocar nada), el reintento vacia las celdas Resuelto y Sesion
+  resolucion. Sin esa clave (la pasada la hizo un compactador anterior a 2.60.1) sigue la
+  cuarentena con el mismo motivo. Vale para un cierre por resolve y por expire.
+- `test-resolve-reopen.sh` casos 25-27: contra 2.62.2 fallan 4 asertos (casos 25 y 27). Mutaciones
+  `tools/mutaciones/m_reopen_mensual.py` (sin-terminar, sin-pedir-registro) en mutation-check.
+
+### Known
+Residuos de muerte del proceso que se aceptan. Ya estaban en versiones anteriores; cerrarlos pediria
+decidir con el estado del indice, que no distingue "aplicado" de "anotado y no escrito".
+- **Muerte entre anotar y escribir el indice en `plan.reopen`, `research.rename` y
+  `session.amend`** (desde 2.37.0, 2.38.0 y 2.40.0). Un kill no lanza excepcion, asi que
+  `escribir_anotado` no anula la anotacion; el reintento ve su propio ts anotado y archiva el evento
+  como replay sin aplicarlo. Salida a mano: emitir otra vez el mismo evento. Lleva un ts nuevo, sin
+  anotar, y se aplica.
+- **Falla la anulacion y tambien mover el evento a `quarantine/`** (desde 2.40.0). Pide dos fallos
+  de escritura a la vez; el compactador sale con error y la anotacion queda viva. Salida a mano:
+  agregar a `.journal/reabiertos.log` la linea `<clave><TAB>-<ts><TAB><fecha>` que anula la
+  anotacion y dejar el evento en `pending/`, o emitirlo otra vez.
+- **`pendiente.reopen` muerto despues de escribir el indice, con un cierre NUEVO aplicado antes del
+  reintento** (desde 2.58.0). Quedan dos entradas archivadas y el reintento lee la primera, asi que
+  reabre y deshace ese cierre. `pending/` se procesa en orden de nombre y el nombre empieza por el ts
+  en nanosegundos, asi que el reintento corre antes que un cierre emitido despues: solo pasa con el
+  reloj de otra maquina por detras o con un evento devuelto a `pending/` a mano. Salida a mano:
+  emitir otro `pendiente.resolve` del pendiente.
+
+## [2.62.8] - 2026-10-16
+Origen: pedido de Victor (via `/goalspec:interview`, decisiones d65-d68 por el supervisor lookout).
+El snippet `Retomamos:` de Step 8 se copia y se pega a mano: si el pane se cierra o se olvida, el
+paso queda enterrado. El mod `pendientes` solo veia el `Proximo paso` de la ULTIMA ficha, y el
+cierre de otra sesion lo desplazaba.
+
+### Added
+- **Step 8a2: `marcar-retomar.py`** pone `_retomar: HOY sessions/<slug>_` en cada `p-…` abierto que
+  cita el `Proximo paso:` del snippet (no lo que va tras "ver tambien"), por un evento nuevo,
+  `pendiente.retomar --id --retomar FECHA --ficha sessions/<slug>`, y compacta. Con `_revisar`
+  futuro no marca y avisa con `⚠` (el paso no debe ser trabajo de fecha futura). Un paso sin `p-…`
+  (un plan, `ninguno — …`) no marca nada. Nunca crea un pendiente.
+- Es un campo APARTE de `_revisar` (d68): con `_revisar` = hoy, el 🔔 de 8e de cualquier otro cierre
+  del dia sacaba el paso de otra sesion, y `hacible()` lo sacaba del hilo de la sesion que lo retoma
+  ese mismo dia. `_retomar` solo lo lee el mod; 8e, el hilo y el calendario no cambian.
+- `retomar` en las 7 expresiones que despojan metadatos y en `META_START_RE` (test 16 de
+  `test-pendiente-update.sh` sigue contando 7 iguales).
+- Mod `pendientes` 0.2.3: un `_retomar` de hoy o pasado sale en VENCEN (`↻ hoy`, luego `↻ N d`;
+  motivo `retomar hoy` / `retomar desde FECHA`) hasta que el pendiente se cierre, salvo con
+  `_revisar` futuro. El clic pega el snippet entero de la ficha de la marca (`retomar_snippet`, el
+  bloque `## Como retomar` sin fence); sin marca, lo de antes.
+- El compactador cuarentena un `pendiente.retomar` escrito a mano con la ficha o la fecha mal
+  formadas (`sessions/x` con salto de linea, `20261016`, `2026-W42-5`): `fullmatch` y forma
+  AAAA-MM-DD, no solo `fromisoformat`. El emisor tambien exige AAAA-MM-DD en `--retomar` (antes
+  `fromisoformat` dejaba pasar `20261016` y `2026-W42-5`, que el compactador cuarentenaba y la marca
+  se perdia), y `marcar-retomar.py --hoy` normaliza la fecha a esa forma.
+- Pruebas: `test-marcar-retomar.sh` (48; incluye que 8e y `hacible()` dan lo mismo con la marca, el
+  control de que con `_revisar` = hoy no, y la cuarentena de eventos malos), 13 comprobaciones nuevas
+  en `test_pendientes_ahora.py` (9 fallan con el script de 2.62.1; las otras 4 confirman lo que no
+  debe salir y ya no salia) y un caso en `pane.test.tsx` (falla con el `register.tsx` de 0.2.2).
+
+### Known
+- La marca se pone en el checkpoint. Un snippet rehecho despues sin volver a correr 8a2 deja la
+  marca con la ficha anterior (el texto de 8a2 lo dice).
+- Si el paso cita un pendiente, se marca ese; si el paso es un plan, no hay marca (d65 pedia el
+  pendiente citado; no se crea uno).
+
 ## [2.62.7] - 2026-10-16
 Origen: p-524e2a5bf7. Varios agentes que esperaban a las suites ajenas lanzaban `tools/run-tests.sh`
 completo a la vez al terminar, y el Mac se quedaba sin memoria (2026-10-15/16, 4 o mas en cola).
@@ -81,6 +293,7 @@ completo a la vez al terminar, y el Mac se quedaba sin memoria (2026-10-15/16, 4
 - `tools/mutation-check.sh` lanzado solo es tan pesado como la suite y no toma el candado.
 - Coste: `test-run-tests.sh` pasa de ~11 s a ~25 s (medido en el Mac); mutation-check lo corre en
   cada una de sus mutaciones de run-tests, asi que el job de ubuntu tarda unos minutos mas.
+
 ## [2.62.6] - 2026-10-16
 Origen: el adversario de 2.62.0 (PR #27) midio con una fecha forzada que `test-hilo-pendientes.sh`
 caia en main desde el 2026-10-21: `retomar()` usa la fecha real y un pendiente de la prueba tenia

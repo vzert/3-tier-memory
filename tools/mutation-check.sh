@@ -222,6 +222,9 @@ caso "poda sin comillas"   journal-compact.py m_plan_poda.py test-plan-reopen.sh
 caso "poda solo completed" journal-compact.py m_plan_poda.py test-plan-reopen.sh "abandoned en el frontmatter tambien frena" solo-completed
 caso "poda sin registro"   journal-compact.py m_plan_poda.py test-plan-reopen.sh "el replay active NO reinserta la fila" sin-registro-poda
 caso "poda sin pedir registro" journal-compact.py m_plan_poda.py test-plan-reopen.sh "conserva fase y fecha de creacion" sin-condicion-registro
+# Reopen muerto entre el archivo y la fila mensual (p-c103c7df05): la clave reopen-<id> termina la pasada.
+caso "reopen termina la mensual" journal-compact.py m_reopen_mensual.py test-resolve-reopen.sh "la fila mensual vuelve identica" sin-terminar
+caso "reopen mensual sin registro" journal-compact.py m_reopen_mensual.py test-resolve-reopen.sh "motivo mensual-cerrada" sin-pedir-registro
 T=test-hilo-pendientes.sh
 caso "hilo: liga al nacer" journal-emit.py m_hilo.py $T "el evento trae _relacionado al paso recibido, campo en 2 lineas" liga-sin-auto
 caso "hilo: liga no hereda en backfill" journal-emit.py m_hilo.py $T "ficha de otra fecha, backfill: no hereda el snippet de la sesion en curso" liga-sin-guardia
@@ -264,6 +267,12 @@ caso "extras: filtrados van a quedan" pendientes_afines.py m_hilo.py $T "las sie
 caso "hilo: Bash con barras invertidas" pendientes_afines.py m_hilo.py $T "Bash con barras invertidas escribe la ficha" bash-sin-barras
 caso "hilo: message no-objeto" pendientes_afines.py m_hilo.py $T "message no-objeto: stamp-hilo sella sin traceback" message-no-dict
 caso "hilo: audit del caso 5 colapsado" checkpoint-audit.py m_hilo.py $T "colapsado con un heredado hacible: SALTADO snippet.hilo" audit-colapsado-sin-hilo
+caso "decision del usuario: aviso del audit" checkpoint-audit.py m_hilo.py test-ninguno-bloqueo.sh "POR-DISEÑO snippet.ninguno_bloqueo" audit-sin-ninguno-bloqueo
+caso "decision del usuario: origen en research" checkpoint-audit.py m_hilo.py test-ninguno-bloqueo.sh "POR-DISEÑO snippet.ninguno_bloqueo" ninguno-bloqueo-solo-sesion
+caso "decision del usuario: el marco la deja" pendientes_afines.py m_hilo.py test-ninguno-bloqueo.sh "decidir con el usuario no es espera ajena" marco-decidir-con-usuario
+caso "decision del usuario: un tercero avisa" pendientes_afines.py m_hilo.py test-ninguno-bloqueo.sh "y decidir con un tercero" marco-sin-decidir-con
+caso "decision del usuario: usuario externo avisa" pendientes_afines.py m_hilo.py test-ninguno-bloqueo.sh "un usuario con apellido es un tercero" usuario-sin-apellido
+caso "decision del usuario: el hook pregunta" checkpoint-close-guard.sh m_hilo.py test-checkpoint-close-guard.sh "la revision pregunta si el bloqueo espera" guard-sin-bloqueo
 
 echo "Contrato de check-project-dir-fallback.py (2.41.4): cada pieza, rota, tumba su aserto"
 caso "verde respaldo" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " respaldo: exit 0" r1-sin-quitar-forma
@@ -321,6 +330,11 @@ echo "Dedup al emitir de learning.add (2.47.0): vecinos, bloqueo, forma y learni
 caso "vecinos por stdout"      journal-emit.py m_learning_dedup.py test-learning-dedup.sh "stdout tiene una sola linea" vecinos-por-stdout
 caso "sin bloqueo"             journal-emit.py m_learning_dedup.py test-learning-dedup.sh "casi igual sin --decision: rc 1" sin-bloqueo
 caso "solo-vecinos escribe"    journal-emit.py m_learning_dedup.py test-learning-dedup.sh "solo-vecinos: ningun evento" solo-vecinos-escribe
+T=test-nota-sin-lector.sh
+caso "--nota sin lector"        journal-emit.py m_nota_sin_lector.py $T "pendiente.expire con nota texto sale con error" sin-rechazo
+caso "--nota en learning.add"   journal-emit.py m_nota_sin_lector.py $T "learning.add sin --supersedes con nota texto sale con error" add-sin-rechazo
+caso "--nota por verdad"        journal-emit.py m_nota_sin_lector.py $T "pendiente.add con nota vacia sale con error" nota-por-verdad
+caso "--nota lector de mas"     journal-emit.py m_nota_sin_lector.py $T "pendiente.add con nota texto sale con error" lector-de-mas
 caso "sin identidad"           journal-emit.py m_learning_dedup.py test-learning-dedup.sh "mismo texto sin --decision: rc 0" sin-identidad
 caso "decision fuera"          journal-emit.py m_learning_dedup.py test-learning-dedup.sh "la decision viaja en el payload" decision-fuera-del-payload
 caso "reemplaza sin supersedes" journal-emit.py m_learning_dedup.py test-learning-dedup.sh "reemplaza:2 lleva supersedes 2" reemplaza-sin-supersedes
