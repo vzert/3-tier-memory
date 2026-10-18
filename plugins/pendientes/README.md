@@ -117,6 +117,13 @@ If a user asks you to install this mod, follow these steps:
 
 The pane fills the height it has; `+N más` expands the rest.
 
+**Items without `_id` do not show.** The mod picks items by id, so an open `- [ ]` line without
+`_id: p-…_` cannot appear in any group, and the open count leaves it out. The pane says how many
+there are (`● N pendientes sin id: no salen aquí (/enrich-3t)`), and so does the card
+(`● N sin id`). `/enrich-3t` in 3-tier-memory gives them an id. (Measured 2026-10-18: 1395 of
+2987 open items in 39 local projects had no id, and in 18 projects the pane showed `0 abiertos`
+with nothing else.)
+
 ## Costs and privacy
 
 - **Model calls:** short titles are written by Haiku (`$.model.complete`), in batches of 12, and
