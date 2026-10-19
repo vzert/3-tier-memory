@@ -241,6 +241,12 @@ if [ -n "$hora" ]; then
   chk "un pid vivo con su misma hora de arranque es el dueno: espera" "1" "$(termina "$i" 4; echo $?)"
   chk "y no corre su suite con el dueno vivo" "" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
   rm -rf "$CAND"
+  # La corrida que toma el candado guarda su propia hora: sin eso, lo de arriba no se activa nunca.
+  : > "$T/registro"; completa "$T/j"; j=$LANZADO
+  n=0; while [ ! -s "$T/registro" ] && [ "$n" -lt 100 ]; do sleep 0.1; n=$(( n + 1 )); done
+  chk "la corrida que toma el candado guarda su hora de arranque" "$(LC_ALL=C ps -o lstart= -p "$j" 2>/dev/null | sed 's/^  *//; s/  *$//')" \
+    "$(cat "$CAND/arranque" 2>/dev/null)"
+  termina "$j" 30 >/dev/null
 else
   echo "  (sin probar aqui: ps -o lstart= no da la hora de arranque; no cuenta) pid reusado"
 fi

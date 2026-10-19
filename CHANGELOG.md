@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.63.6] - 2026-10-18
+Origen: p-7c1fa85c1e. Un candado de `tools/run-tests.sh` cuya corrida murio (kill -9) y cuyo pid
+reuso otro proceso vivo hacia esperar sin fin a la corrida siguiente: `kill -0` decia vivo.
+
+### Fixed
+- **El candado guarda la hora de arranque de su dueno** (`$CANDADO/arranque`, escrita antes que el
+  pid; `LC_ALL=C ps -o lstart= -p`). Si el pid del candado vive con otra hora, no es el dueno: el
+  candado se quita con aviso ("otro proceso reuso su pid"), bajo el sub-candado y releyendo el pid y
+  la hora. Sin hora guardada (un candado de 2.63.1 o anterior) o sin poder leer la de ahora (Git
+  Bash, donde `ps` no tiene `-o`), se espera como antes: falla hacia esperar, nunca hacia robar.
+
+### Added
+- `test-run-tests.sh`: 7 asertos (88 → 95). Escritos antes del arreglo y medidos en rojo (2 fallas:
+  la corrida agotaba el tope esperando al pid reusado). Un pid vivo con otra hora se quita y la
+  suite corre; con su misma hora espera; un candado sin hora espera; la corrida que toma el candado
+  guarda su hora. Donde `ps -o lstart=` no da la hora, los de la hora dicen "sin probar aqui".
+- `mutation-check.sh`: 4 mutaciones nuevas en `m_run_tests.py`. Las 31 mutaciones del candado
+  (`m_run_tests.py` y `m_mutation_check.py`) pasaron por la prueba nueva con un candado de runner
+  tomado y un vigilante de procesos: las 31 caen, 9 procesos como maximo.
+
+### Known
+- `lstart` tiene resolucion de un segundo: un pid reusado en el mismo segundo de su arranque da la
+  misma hora y se espera, como antes del arreglo.
+- En Git Bash no se compara la hora (sin fuente medida), asi que ahi un pid reusado sigue esperando.
+
 ## [2.63.1] - 2026-10-17
 Origen: p-4be2b6ea23. `tools/mutation-check.sh` lanzado solo es tan pesado como la suite completa y
 no tomaba el candado de 2.62.7: dos a la vez, o uno junto a un `run-tests.sh`, cargaban la maquina
