@@ -4158,6 +4158,12 @@ def validate(ev):
     p = ev.get("payload")
     if not isinstance(p, dict):
         raise Quarantine("malformed: payload ausente")
+    # La `fecha` del marcador va en el payload de casi todos los tipos (resolve, expire, reopen,
+    # update, window, retomar, adopt, learning.add/retire) y el compactador la escribe tal cual en la
+    # fila mensual y en las marcas `_resuelto:`/`_caducado:`. Se valida aqui, para todos: con solo
+    # learning.add/retire, un resolve con `fecha` 20261016 escrito a mano llegaba a la celda Resuelto
+    # y a una marca que MARCA_RESUELTO_RE no quita (revisor, ciclo 2, ronda 1 de 2.63.7).
+    validar_fecha_evento(p, t)
     # Un ts que int() no acepta rompia compact() al archivar el evento (time.gmtime(int(ts))),
     # despues de aplicarlo: el evento se quedaba en pending/ y la pasada moria con traceback, para
     # cualquier tipo de evento (visto en la ronda 2 de adversario de bd440b2). Sin ts sigue valido

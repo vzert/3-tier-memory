@@ -11,6 +11,10 @@ M = {
     # journal-emit.py y journal-compact.py: la misma linea, cada mutacion sobre su fichero.
     "sin-regex": [
         ("    if not (isinstance(v, str) and FECHA_ISO_RE.fullmatch(v)):", "    if False:")],
+    # journal-compact.py: la fecha del marcador de cualquier tipo (antes solo learning.add/retire).
+    # Esta discrimina tambien en 3.9: sin la llamada, la fecha de un resolve no la mira nadie.
+    "sin-fecha-generica": [
+        ("    validar_fecha_evento(p, t)", "    pass")],
 }
 
 p, nombre = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""

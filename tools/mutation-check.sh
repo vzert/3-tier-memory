@@ -351,6 +351,7 @@ caso "--hoy guiones sueltos"    marcar-retomar.py m_marcar_retomar.py $T "marcar
 T=test-fecha-iso.sh
 caso "emisor sin regex de fecha" journal-emit.py m_fecha_iso.py $T "pendiente.add --creado 20261016: error" sin-regex
 caso "compactador sin regex"    journal-compact.py m_fecha_iso.py $T "creado ancho: el malo va a cuarentena" sin-regex
+caso "fecha solo en learning"   journal-compact.py m_fecha_iso.py $T "resolve con fecha ancha: va a cuarentena" sin-fecha-generica
 caso "sin identidad"           journal-emit.py m_learning_dedup.py test-learning-dedup.sh "mismo texto sin --decision: rc 0" sin-identidad
 caso "decision fuera"          journal-emit.py m_learning_dedup.py test-learning-dedup.sh "la decision viaja en el payload" decision-fuera-del-payload
 caso "reemplaza sin supersedes" journal-emit.py m_learning_dedup.py test-learning-dedup.sh "reemplaza:2 lleva supersedes 2" reemplaza-sin-supersedes

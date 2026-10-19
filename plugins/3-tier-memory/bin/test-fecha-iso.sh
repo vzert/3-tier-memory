@@ -76,6 +76,44 @@ PY
   chk "$campo ancho: la pasada siguiente tampoco revienta" "0" "$RC"
 done
 
+echo "== 3. la fecha del marcador de CUALQUIER evento: con forma ancha va a cuarentena =="
+# El emisor siempre pone la fecha de hoy; esto cubre un evento escrito o editado a mano. Antes solo
+# learning.add/retire la validaban, y un resolve con fecha 20261016 llegaba a la celda Resuelto y a
+# `_resuelto: 20261016_`, que MARCA_RESUELTO_RE no quita al reabrir (revisor, ciclo 2).
+ancha() {  # cambia la fecha del ultimo evento de pending/ por 20261016
+  python3 -I - "$M/.journal/pending" <<'PY'
+import json, os, sys
+d = sys.argv[1]
+f = sorted(os.listdir(d))[-1]
+ev = json.load(open(os.path.join(d, f)))
+ev["payload"]["fecha"] = "20261016"
+json.dump(ev, open(os.path.join(d, f), "w"))
+PY
+}
+for tipo in resolve expire reopen update window retomar; do
+  fixture
+  A=$(emit --type pendiente.add --text "el de $tipo" --prioridad Baja --origen "$ORI" --creado 2026-10-01)
+  if [ "$tipo" = reopen ]; then
+    emit --type pendiente.resolve --id "$A" --estado resolved --sesion "$ORI" >/dev/null
+  fi
+  compact --quiet >/dev/null
+  case "$tipo" in
+    resolve) emit --type pendiente.resolve --id "$A" --estado resolved --sesion "$ORI" ;;
+    expire)  emit --type pendiente.expire --id "$A" --dias 30 ;;
+    reopen)  emit --type pendiente.reopen --id "$A" ;;
+    update)  emit --type pendiente.update --id "$A" --prioridad Media ;;
+    window)  emit --type pendiente.window --id "$A" --revisar 2026-11-01 ;;
+    retomar) emit --type pendiente.retomar --id "$A" --retomar 2026-10-19 --ficha sessions/2026-10-01-origen ;;
+  esac >/dev/null
+  ancha
+  emit --type pendiente.add --text "bueno tras $tipo" --prioridad Baja --origen "$ORI" >/dev/null
+  RC=0; OUT=$(compact 2>&1) || RC=$?
+  chk "$tipo con fecha ancha: sale 0 sin traceback" "0:0" "$RC:$(printf '%s' "$OUT" | grep -c Traceback)"
+  chk "$tipo con fecha ancha: va a cuarentena" "1" "$(cuar)"
+  chk "$tipo con fecha ancha: el bueno de detras se aplica" "1" "$(grep -c "bueno tras $tipo" "$M/_pendientes.md")"
+  chk "$tipo con fecha ancha: 20261016 no llega a la memoria" "0" "$(grep -rl 20261016 "$M" --exclude-dir=.journal | wc -l | tr -d ' ')"
+done
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

@@ -27,6 +27,11 @@ Medido en una memoria temporal con 3.14.3; ninguna memoria real de esta maquina 
   `pendiente.update`, `revisar` de `pendiente.window` y `creado_nuevo` de `pendiente.adopt`) pasan
   primero una regex con `fullmatch`. Un evento con fecha ancha que ya este en `pending/` va a
   cuarentena y la pasada sigue con los demas; la linea mala no llega a `_pendientes.md`.
+- **El compactador valida la `fecha` del marcador de todo evento**, no solo la de `learning.add` y
+  `learning.retire`. La de `pendiente.resolve`, `expire`, `reopen`, `window` y `retomar` no la miraba
+  nadie, en ningun Python: un resolve con `fecha` 20261016 escrito a mano llegaba a la celda Resuelto
+  de la fila mensual y a `_resuelto: 20261016_`, una marca que `MARCA_RESUELTO_RE` no quita al reabrir.
+  Lo encontro el revisor independiente; ya pasaba antes de este cambio.
 - Dos comentarios daban la forma ancha por valida sin decir que es solo desde 3.11
   (`journal-emit.py`, `pendiente.retomar`; `journal-compact.py`, `validate` de `pendiente.retomar`). Su
   codigo ya validaba con regex y no cambia.
@@ -39,9 +44,11 @@ Medido en una memoria temporal con 3.14.3; ninguna memoria real de esta maquina 
 - `test-fecha-iso.sh` nuevo: el emisor rechaza `20261016`, `2026-W42-5`, `2026W425` y `2026-10-16x`
   en `pendiente.add --creado`/`--revisar` y `pendiente.window --revisar`, con su control; y un evento
   con `creado` o `revisar` ancho escrito a mano en `pending/` va a cuarentena sin traceback, el evento
-  bueno de detras se aplica y la pasada siguiente tampoco revienta. 29 asertos; con 3.14 y el codigo
-  de 2.63.2 fallan 19. Dos casos nuevos en `tools/mutation-check.sh` (`m_fecha_iso.py`, uno por
-  fichero), que discriminan con 3.11+.
+  bueno de detras se aplica y la pasada siguiente tampoco revienta; y un `resolve`, `expire`,
+  `reopen`, `update`, `window` o `retomar` con la `fecha` del marcador ancha va a cuarentena sin dejar
+  esa fecha en la memoria. 53 asertos; con el codigo de 2.63.2 fallan 27 con 3.14 y 7 con 3.9. Tres
+  casos nuevos en `tools/mutation-check.sh` (`m_fecha_iso.py`): los dos de la regex discriminan con
+  3.11+ y el de la fecha del marcador tambien con 3.9.
 
 ### Known
 - El compactador sigue parando ante una excepcion que no sea de validacion (no `Quarantine`): este
