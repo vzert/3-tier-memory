@@ -259,6 +259,11 @@ if [ -n "$hora" ]; then
 else
   echo "  (sin probar aqui: run-tests no sabe leer la hora de arranque; no cuenta) pid reusado"
 fi
+# Git Bash no lee la hora: su /proc se mueve si cambia el reloj, y robaria un candado vivo
+# (adversario, ronda 2). Este aserto solo corre ahi; si alguien quita la guarda de Linux, cae.
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*)
+  chk "en Git Bash la hora de arranque sale vacia: se espera como antes" "" "$hora" ;;
+esac
 mkdir "$CAND"; echo "$reusado" > "$CAND/pid"; : > "$T/registro"
 completa "$T/k"; k=$LANZADO
 chk "un candado sin hora de arranque (de antes de 2.63.6) con su pid vivo: espera" "1" "$(termina "$k" 4; echo $?)"

@@ -16,7 +16,8 @@ reuso otro proceso vivo hacia esperar sin fin a la corrida siguiente: `kill -0` 
   espera como antes. `run-tests.sh --hora-candado <pid>` imprime la hora con la misma funcion.
 
 ### Added
-- `test-run-tests.sh`: 8 asertos (88 → 96). Los del pid reusado se escribieron antes del arreglo y
+- `test-run-tests.sh`: 8 asertos (88 → 96), y uno mas solo en Git Bash: ahi la hora sale vacia (si
+  alguien quita la guarda de Linux, el CI de Windows cae). Los del pid reusado se escribieron antes del arreglo y
   se midieron en rojo (2 fallas: la corrida agotaba el tope esperando al pid reusado). Un pid vivo
   con otra hora se quita y la suite corre; con su misma hora espera; un lector con otro TZ que el
   dueno espera; un candado sin hora espera; la corrida que toma el candado guarda su hora. Donde
@@ -24,7 +25,8 @@ reuso otro proceso vivo hacia esperar sin fin a la corrida siguiente: `kill -0` 
   sale de /proc, el del TZ lo dice con una linea `SKIP` que mutation-check lee.
 - `mutation-check.sh`: `caso_tools` lee la linea `SKIP ... <aserto>` como `caso` (en mayusculas y al
   inicio de la linea). Faltaba: en ubuntu la mutacion del TZ habria salido como aserto vacuo y el CI
-  en rojo (adversario, ronda 2).
+  en rojo (adversario, ronda 2). Si el aserto cayo (FALLA con su texto), cuenta como caido aunque
+  haya SKIP: un SKIP no tapa un fallo real (adversario externo, ronda 3).
 - `mutation-check.sh`: 5 mutaciones nuevas en `m_run_tests.py`. Las mutaciones del candado
   (`m_run_tests.py` y `m_mutation_check.py`) pasaron por la prueba nueva con un candado de runner
   tomado y un vigilante de procesos: todas caen. La relectura de "vivo y con su hora" bajo el
@@ -36,7 +38,9 @@ reuso otro proceso vivo hacia esperar sin fin a la corrida siguiente: `kill -0` 
 - Git Bash no compara la hora: su `/proc/<pid>/stat` resta la hora de arranque de Windows a la de
   creacion del proceso, y las dos se mueven si alguien cambia el reloj (msys2 `process.cc`; adversario,
   ronda 2), y su `ps` no tiene `-o`. La hora sale vacia y un pid reusado sigue esperando, como antes.
-- El camino de Linux (/proc) lo mide solo el CI de ubuntu; en macOS no hay /proc.
+- El camino de Linux (/proc) lo mide solo el CI de ubuntu; en macOS no hay /proc. Medido en el run
+  39211792674 (platforms sobre 9fe4f4f): ubuntu 96/96, macOS 96/96, Windows 84/84 (salta los 12 de
+  chmod, pid ajeno y la hora).
 
 ## [2.63.1] - 2026-10-17
 Origen: p-4be2b6ea23. `tools/mutation-check.sh` lanzado solo es tan pesado como la suite completa y

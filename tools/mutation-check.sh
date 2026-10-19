@@ -160,8 +160,11 @@ caso_tools() {  # etiqueta | fichero de tools/ | mutador | suite de tools/ | ase
   local out rc; out=$(env "$var=$D/$f" bash "tools/$suite" 2>&1); rc=$?
   # Como en caso(): una linea `SKIP ... <aserto>` dice que ese aserto no se evalua aqui. Faltaba, y en
   # ubuntu la mutacion del TZ (la hora sale de /proc) salia como aserto vacuo (adversario, 2.63.6).
-  # Mayusculas y al inicio de la linea: un "skip" dentro de otro aserto no cuenta.
-  if printf '%s\n' "$out" | grep -qE "^ *SKIP .*${espera}"; then
+  # Mayusculas y al inicio de la linea: un "skip" dentro de otro aserto no cuenta. Y si el aserto
+  # cayo (FALLA con su texto), cuenta como caido aunque haya SKIP: un SKIP no tapa un fallo real
+  # (adversario externo, ronda 3).
+  if printf '%s\n' "$out" | grep -qE "^ *SKIP .*${espera}" \
+     && ! printf '%s' "$out" | grep -qiE "(FAIL|FALLA).*${espera}"; then
     printf '  -- %-30s no evaluable aqui: %s\n' "$et" \
       "$(printf '%s\n' "$out" | grep -E "^ *SKIP .*${espera}" | head -1 | sed 's/^ *//')"
     rm -rf "$D"; return
