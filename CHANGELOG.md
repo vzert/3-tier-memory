@@ -27,8 +27,8 @@ mismo defecto bloqueo un turno real de la sesion que lo arreglaba.
 - Mutaciones `mencion-cuenta` y `python-no-cuenta` (`tools/mutaciones/m_invocacion_retomar.py`).
 - Medido sobre 1.527 comandos de Bash de los transcripts locales que nombran el script (2026-10-19):
   170 que la busqueda vieja contaba ya no cuentan, y ninguno que antes no contaba cuenta ahora. Los
-  170 son prosa en mensajes de commit, listas de un `for`, codigo Python que busca el nombre, el
-  `--text` de un `journal-emit.py`, `scp`, y las invocaciones remotas por `ssh`. Una invocacion sin
+  170 son menciones (prosa de commits, listas de un `for`, `git`, `grep`, `wc`, `scp`, codigo Python
+  que busca el nombre, el `--text` de un `journal-emit.py`) e invocaciones remotas por `ssh`. Una invocacion sin
   argumento no cuenta: el script exige la ficha, y asi el nombre entre comillas invertidas en la
   prosa de un commit no abre un segmento falso.
 
