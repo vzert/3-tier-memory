@@ -18,6 +18,104 @@ tercero.
 - `tools/mutation-check.sh`: mutacion `articulo-tercero` (quita el articulo opcional) tumba ese
   aserto; las cuatro mutaciones del marco que ya habia llevan la cadena nueva.
 
+## [2.63.7] - 2026-10-19
+Origen: p-0ccd79fe36 (decisiones d182 y d183 de Victor). Con el python3 de macOS (3.9.6),
+`test-marcar-retomar.sh` salia con rc=2 en el caso 9b: `marcar-retomar.py --hoy 20261016` respondia
+`uso: --hoy no es una fecha`. 2.62.8 normalizaba `--hoy` con `date.fromisoformat`, que solo acepta
+`20261016` y `2026-W42-5` desde Python 3.11. Medido sobre f7444ab con 3.9.6: 58 de las 59 suites de
+`bin/` salian con rc=0, y esa suite cortaba en 9b, asi que sus casos de despues no corrian.
+
+**El alcance crecio** (decision del supervisor de lookout, reversible y de la misma causa): al revisar
+los usos de `fromisoformat` salio el problema al reves, con Python 3.11 o mas (el CI y casi todos).
+`journal-emit` validaba `--creado` y `--revisar` con `fromisoformat`, asi que aceptaba
+`pendiente.add --creado 20261016`. El compactador escribia la linea de `_pendientes.md`, reventaba al
+crear la fila mensual (`ValueError` en `ensure_monthly`) y el evento se quedaba en `pending/`. Cada
+compactacion siguiente reventaba igual y ningun evento nuevo se aplicaba: la memoria se atascaba.
+Con `--revisar 2026W425` no reventaba, pero escribia `_revisar: 2026W425_`, que nadie lee bien.
+Medido en una memoria temporal con 3.14.3; ninguna memoria real de esta maquina tiene esas formas.
+
+### Fixed
+- **`marcar-retomar.py` normaliza `--hoy` con su propio parser**, igual en cualquier Python 3:
+  `2026-10-16`, `20261016` y `2026-W42-5` (o `2026W425`) dan `2026-10-16`. Con guiones a medias
+  (`2026-1016`, `2026-W425`) o una fecha imposible, sale con error de uso y no marca nada. Es lo que
+  hace `fromisoformat` de 3.11+ con esas formas, pero sin depender de la version.
+- **El emisor y el compactador exigen AAAA-MM-DD en todas las fechas de eventos**, en cualquier
+  Python: `fecha_real` de `journal-emit.py` y el nuevo `fecha_iso` de `journal-compact.py` (en
+  `validate`: `fecha` del marcador, `creado` y `revisar` de `pendiente.add`, `fecha` de
+  `pendiente.update`, `revisar` de `pendiente.window` y `creado_nuevo` de `pendiente.adopt`) pasan
+  primero una regex con `fullmatch`. Un evento con fecha ancha que ya este en `pending/` va a
+  cuarentena y la pasada sigue con los demas; la linea mala no llega a `_pendientes.md`.
+- **El compactador valida la `fecha` del marcador de todo evento**, no solo la de `learning.add` y
+  `learning.retire`. La de `pendiente.resolve`, `expire`, `reopen`, `window` y `retomar` no la miraba
+  nadie, en ningun Python: un resolve con `fecha` 20261016 escrito a mano llegaba a la celda Resuelto
+  de la fila mensual y a `_resuelto: 20261016_`, una marca que `MARCA_RESUELTO_RE` no quita al reabrir.
+  Lo encontro el revisor independiente; ya pasaba antes de este cambio.
+- Dos comentarios daban la forma ancha por valida sin decir que es solo desde 3.11
+  (`journal-emit.py`, `pendiente.retomar`; `journal-compact.py`, `validate` de `pendiente.retomar`). Su
+  codigo ya validaba con regex y no cambia.
+
+### Changed
+- `test-marcar-retomar.sh`, caso 9b: las tres formas, cada una con su codigo de salida (antes un rc=2
+  abortaba la suite con `set -e`), y cinco fechas que salen con error de uso sin marcar nada.
+  Con 3.9 y el codigo de 2.63.2 caen 4 asertos; con 3.9 y con 3.14 sobre HEAD, 65/0. Tres casos nuevos
+  en `tools/mutation-check.sh` (`m_marcar_retomar.py`), que caen con 3.9 y con 3.14.
+- `test-fecha-iso.sh` nuevo: el emisor rechaza `20261016`, `2026-W42-5`, `2026W425` y `2026-10-16x`
+  en `pendiente.add --creado`/`--revisar` y `pendiente.window --revisar`, con su control; y un evento
+  con `creado` o `revisar` ancho escrito a mano en `pending/` va a cuarentena sin traceback, el evento
+  bueno de detras se aplica y la pasada siguiente tampoco revienta; y un `resolve`, `expire`,
+  `reopen`, `update`, `window` o `retomar` con la `fecha` del marcador ancha va a cuarentena sin dejar
+  esa fecha en la memoria. 53 asertos; con el codigo de 2.63.2 fallan 27 con 3.14 y 7 con 3.9. Tres
+  casos nuevos en `tools/mutation-check.sh` (`m_fecha_iso.py`): los dos de la regex discriminan con
+  3.11+ y el de la fecha del marcador tambien con 3.9.
+
+### Known
+- El compactador sigue parando ante una excepcion que no sea de validacion (no `Quarantine`): este
+  cambio cierra la de las fechas, no todas las posibles.
+- Volver a `date.fromisoformat` no lo ve un CI con Python 3.11 o mas, que acepta las tres formas: solo
+  una corrida con 3.9 lo atrapa. El CI usa el `python3` de cada runner.
+
+## [2.63.6] - 2026-10-18
+Origen: p-7c1fa85c1e. Un candado de `tools/run-tests.sh` cuya corrida murio (kill -9) y cuyo pid
+reuso otro proceso vivo hacia esperar sin fin a la corrida siguiente: `kill -0` decia vivo.
+
+### Fixed
+- **El candado guarda la hora de arranque de su dueno** (`$CANDADO/arranque`, escrita antes que el
+  pid). En Linux es el campo 22 de `/proc/<pid>/stat`, tics desde el arranque de la maquina; en
+  macOS, `ps -o lstart=` con `TZ=UTC0` y `LC_ALL=C`. Asi sale igual para quien
+  la escribe y para quien la lee: con `lstart` en hora local, un lector con otro TZ veia otra hora y
+  robaba un candado vivo, dos suites a la vez (adversario, ronda 1). Si el pid del candado vive con
+  otra hora, no es el dueno: el
+  candado se quita con aviso ("otro proceso reuso su pid"), bajo el sub-candado y releyendo el pid y
+  la hora. Sin hora guardada (un candado de 2.63.1 o anterior) o sin poder leer la de ahora, se
+  espera como antes. `run-tests.sh --hora-candado <pid>` imprime la hora con la misma funcion.
+
+### Added
+- `test-run-tests.sh`: 8 asertos (88 → 96), y uno mas solo en Git Bash: ahi la hora sale vacia (si
+  alguien quita la guarda de Linux, el CI de Windows cae). Los del pid reusado se escribieron antes del arreglo y
+  se midieron en rojo (2 fallas: la corrida agotaba el tope esperando al pid reusado). Un pid vivo
+  con otra hora se quita y la suite corre; con su misma hora espera; un lector con otro TZ que el
+  dueno espera; un candado sin hora espera; la corrida que toma el candado guarda su hora. Donde
+  run-tests no sabe leer la hora, los de la hora dicen "sin probar aqui"; en Linux, donde la hora
+  sale de /proc, el del TZ lo dice con una linea `SKIP` que mutation-check lee.
+- `mutation-check.sh`: `caso_tools` lee la linea `SKIP ... <aserto>` como `caso` (en mayusculas y al
+  inicio de la linea). Faltaba: en ubuntu la mutacion del TZ habria salido como aserto vacuo y el CI
+  en rojo (adversario, ronda 2). Si el aserto cayo (FALLA con su texto), cuenta como caido aunque
+  haya SKIP: un SKIP no tapa un fallo real (adversario externo, ronda 3).
+- `mutation-check.sh`: 5 mutaciones nuevas en `m_run_tests.py`. Las mutaciones del candado
+  (`m_run_tests.py` y `m_mutation_check.py`) pasaron por la prueba nueva con un candado de runner
+  tomado y un vigilante de procesos: todas caen. La relectura de "vivo y con su hora" bajo el
+  sub-candado no tiene una mutacion que la haga caer: la carrera que cubre no se reproduce a voluntad.
+
+### Known
+- En macOS `lstart` tiene resolucion de un segundo: un pid reusado en el mismo segundo de su arranque
+  da la misma hora y se espera, como antes del arreglo.
+- Git Bash no compara la hora: su `/proc/<pid>/stat` resta la hora de arranque de Windows a la de
+  creacion del proceso, y las dos se mueven si alguien cambia el reloj (msys2 `process.cc`; adversario,
+  ronda 2), y su `ps` no tiene `-o`. La hora sale vacia y un pid reusado sigue esperando, como antes.
+- El camino de Linux (/proc) lo mide solo el CI de ubuntu; en macOS no hay /proc. Medido en el run
+  39211792674 (platforms sobre 9fe4f4f): ubuntu 96/96, macOS 96/96, Windows 84/84 (salta los 12 de
+  chmod, pid ajeno y la hora).
+
 ## [2.63.4] - 2026-10-17
 Origen: `p-c501ad10c6`, abierto al cerrar 2.62.11. La excepcion del usuario de `snippet.marco` trataba
 como tercero a cualquier `usuario` seguido de `de`/`del` o de una palabra que empieza por `final`.
