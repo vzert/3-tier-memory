@@ -10,6 +10,7 @@
 # sella-huellas: no (trabaja en un temporal propio)
 set -u
 RT="${RUN_TESTS:-$(cd "$(dirname "$0")" && pwd)/run-tests.sh}"
+MC="${MUTATION_CHECK:-$(cd "$(dirname "$0")" && pwd)/mutation-check.sh}"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 # Candado propio para toda llamada a run-tests.sh de esta prueba. Dentro de una corrida completa el
 # candado real lo tiene el runner que lanzo esta prueba: si un `--una` lo pidiera (la mutacion
@@ -143,14 +144,17 @@ termina() {
   done
   wait "$1" 2>/dev/null; TERMINA_RC=$?; return 0   # rc del proceso, si es hijo de esta prueba
 }
-# completa <salida>: una corrida completa de la copia, en segundo plano; deja su pid en LANZADO.
+# completa <salida> [script]: una corrida completa de la copia (o de [script] de la copia, p. ej.
+# mutation-check.sh), en segundo plano; deja su pid en LANZADO. MUTA=1 corre mutation-check dentro,
+# TOPE pone RUN_TESTS_CANDADO_TOPE y DUENO el RUN_TESTS_CANDADO_DUENO heredado (vacio = ninguno).
 # Desacoplada de esta prueba (doble fork, la adopta init). Medido: con las corridas como hijas de esta
 # prueba, quitar la relectura del pid no tumbaba el caso de la carrera (0 de 3); desacopladas, 3 de 3.
 # La causa no esta medida (no son zombis: bash recoge a sus hijas). `exec` conserva el pid anotado.
 completa() {
   rm -f "$1.pid"
-  ( RUN_TESTS_CANDADO="$CAND" RUN_TESTS_CANDADO_ESPERA=0.2 RUN_TESTS_CANDADO_PAUSA="${PAUSA:-}" RUN_MUTATION=0 \
-      PATH="$T/bin:$PATH" bash -c 'echo $$ > "$0.pid"; exec bash "$1" >"$0.out" 2>"$0.err"' "$1" "$R/tools/run-tests.sh" & )
+  ( RUN_TESTS_CANDADO="$CAND" RUN_TESTS_CANDADO_ESPERA=0.2 RUN_TESTS_CANDADO_PAUSA="${PAUSA:-}" RUN_MUTATION="${MUTA:-0}" \
+      RUN_TESTS_CANDADO_TOPE="${TOPE:-}" RUN_TESTS_CANDADO_DUENO="${DUENO:-}" \
+      PATH="$T/bin:$PATH" bash -c 'echo $$ > "$0.pid"; exec bash "$1" >"$0.out" 2>"$0.err"' "$1" "$R/tools/${2:-run-tests.sh}" & )
   local i=0; while [ ! -s "$1.pid" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$(( i + 1 )); done
   LANZADO=$(cat "$1.pid" 2>/dev/null)
 }
@@ -228,6 +232,68 @@ mkdir "$CAND"; echo "$$" > "$CAND/pid"
 RUN_TESTS_CANDADO="$CAND" bash "$R/tools/run-tests.sh" --una prueba bash "$T/skip.sh" >/dev/null 2>&1 & u=$!
 chk "--una no toma el candado: no espera a la corrida que lo tiene" "0" "$(termina "$u" 10; echo $?)"
 rm -rf "$CAND"
+
+# p-4be2b6ea23: mutation-check.sh lanzado solo toma el mismo candado. Su copia es el mutation-check
+# real hasta la marca del candado, y despues un cuerpo que anota mc-ini/mc-fin en el registro (los
+# 236 casos de verdad tardan minutos). Todo lo que pueda esperar va con tope (TOPE): una copia rota
+# que espera a la corrida que la lanzo no se muere con kill, porque bash espera a su hijo.
+echo "== candado: mutation-check.sh lanzado solo (p-4be2b6ea23) =="
+sed -n '1,/^# --- hasta aqui el candado/p' "$MC" > "$R/tools/mutation-check.sh"
+printf 'echo mc-ini >> "%s"; sleep 1; echo mc-fin >> "%s"; echo "LAS EVALUABLES DISCRIMINAN (de 1)"\n' \
+  "$T/registro" "$T/registro" >> "$R/tools/mutation-check.sh"
+chk "mutation-check.sh tiene la marca donde se corta su copia" "1" "$(grep -c '^# --- hasta aqui el candado' "$MC")"
+chk "la copia lleva el candado de mutation-check" "1" "$(grep -c '^  exec bash tools/run-tests.sh --con-candado' "$R/tools/mutation-check.sh")"
+# Tres sueltos y una completa a la vez, no dos (regla: con dos no se ve la carrera de la liberacion).
+: > "$T/registro"; pids=""; TOPE=40
+for i in 1 2 3; do completa "$T/m$i" mutation-check.sh; pids="$pids $LANZADO"; done
+completa "$T/mr"; pids="$pids $LANZADO"; TOPE=
+rcs=""; for p in $pids; do termina "$p" 90; rcs="$rcs$?"; done
+chk "tres mutation-check sueltos y una corrida completa a la vez terminan" "0000" "$rcs"
+chk "tres mutation-check sueltos y una corrida completa: una tras otra" \
+  "ini fin ini fin ini fin ini fin" "$(sed 's/^mc-//' "$T/registro" | tr '\n' ' ' | sed 's/ $//')"
+chk "los tres mutation-check corren su cuerpo, no la suite completa" "3" "$(grep -c '^mc-ini$' "$T/registro")"
+chk "los tres que esperaron lo dicen en stderr" "3" "$(cat "$T"/m[123].err "$T/mr.err" | grep -c 'espero a que termine')"
+chk "y sueltan el candado" "no" "$([ -e "$CAND" ] && echo si || echo no)"
+
+# Dentro de una corrida completa, mutation-check no pide el candado que ya tiene su runner.
+: > "$T/registro"; MUTA=1; TOPE=10; completa "$T/n"; n=$LANZADO; MUTA=; TOPE=
+chk "dentro de una corrida completa no se espera a si mismo: termina" "0" "$(termina "$n" 40; echo $?)"
+chk "dentro de una corrida completa no se espera a si mismo: mutation-check sale ok" "1" \
+  "$(grep -c '^  ok   mutation-check' "$T/n.out")"
+chk "y corre las dos, una tras otra" "mc-ini mc-fin ini fin" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
+
+# Un RUN_TESTS_CANDADO_DUENO heredado que no es el pid del candado no lo salta: espera.
+mkdir "$CAND"; echo "$$" > "$CAND/pid"; : > "$T/registro"
+DUENO=1; completa "$T/o" mutation-check.sh; o=$LANZADO; DUENO=
+chk "una variable heredada que no casa con el candado no lo salta: espera" "1" "$(termina "$o" 4; echo $?)"
+chk "y no corre su cuerpo" "" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
+rm -rf "$CAND"
+
+# Un candado abandonado con el pid de una corrida muerta, y ese mismo pid heredado: no es de nadie.
+bash -c 'exit 0' & muerto=$!; wait "$muerto"
+mkdir "$CAND"; echo "$muerto" > "$CAND/pid"; : > "$T/registro"
+DUENO=$muerto; completa "$T/q" mutation-check.sh; q=$LANZADO; DUENO=
+chk "un dueno heredado que ya murio no vale: toma el candado" "0" "$(termina "$q" 30; echo $?)"
+chk "un dueno heredado que ya murio no vale: quita el abandonado y corre" "1 mc-ini mc-fin" \
+  "$(grep -c 'ya no existe' "$T/q.err") $(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
+
+# Un candado con el pid de un proceso vivo ajeno, y ese pid en la variable: no es un antecesor de
+# mutation-check, asi que espera en vez de saltarse el candado (adversario externo, ronda 2).
+sleep 60 & ajeno=$!
+mkdir "$CAND"; echo "$ajeno" > "$CAND/pid"; : > "$T/registro"
+DUENO=$ajeno; completa "$T/v" mutation-check.sh; v=$LANZADO; DUENO=
+chk "un candado falsificado con un pid vivo ajeno como dueno no lo salta: espera" "1" "$(termina "$v" 4; echo $?)"
+chk "y no corre su cuerpo con el falsificado" "" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
+kill "$ajeno" 2>/dev/null; wait "$ajeno" 2>/dev/null; rm -rf "$CAND"
+
+# Relanzado una vez y sin ver aun el candado: sale con error, no se relanza sin fin. Se simula con
+# MUT_RELANZADO igual al pid de esta prueba, que es su padre.
+: > "$T/registro"
+( cd "$T" && MUT_RELANZADO=$$ RUN_TESTS_CANDADO="$CAND" RUN_TESTS_CANDADO_DUENO= RUN_TESTS_CANDADO_TOPE=10 \
+    exec bash "$R/tools/mutation-check.sh" >"$T/s.out" 2>"$T/s.err" ) & s=$!
+TERMINA_RC=; termina "$s" 20
+chk "un relanzado que no ve el candado no se relanza sin fin: sale con rc 2" "0 2" "$? $TERMINA_RC"
+chk "y lo dice" "1" "$(grep -c 'no me relanzo otra vez' "$T/s.err")"
 
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
