@@ -21,6 +21,41 @@
 # sella-huellas: no (trabaja sobre copias en temporales)
 set -u
 cd "$(cd "$(dirname "$0")/.." && pwd)" || exit 2
+# Una corrida por maquina, con el mismo candado que tools/run-tests.sh (p-4be2b6ea23): lanzado solo,
+# junto a otro o junto a una corrida completa, cargaba la maquina igual que dos suites a la vez.
+# Solo, se relanza dentro de `run-tests.sh --con-candado`. Dentro de una corrida que ya lo tiene
+# (run-tests, o una tanda de abajo) no lo pide: se esperaria a si mismo. Dentro = el pid que exporto
+# quien lo tomo es el del candado, y es un antecesor de este proceso. Una variable heredada sola no
+# basta: test-run-tests corre copias con su propio candado DENTRO del runner real, y la del runner no
+# casa con el de la prueba; un candado abandonado (kill -9) con el pid de una corrida muerta no es de
+# nadie; y un candado con el pid de un proceso vivo ajeno, con ese pid en la variable, tampoco
+# (adversario externo, ronda 2). Un pid 0 o no numerico no vale (`kill -0 0` sale 0).
+# 0 si el pid $1 es un antecesor de este proceso. ppid: /proc/<pid>/ppid en Git Bash (MSYS), donde
+# ps no tiene -o; `ps -o ppid=` en macOS y Linux. Si no se puede leer, no es antecesor: se relanza.
+es_antecesor() {
+  local p=$$ i=0
+  while [ "$i" -lt 64 ] && [ "$p" -gt 1 ] 2>/dev/null; do
+    [ "$p" = "$1" ] && return 0
+    if [ -r "/proc/$p/ppid" ]; then p=$(cat "/proc/$p/ppid" 2>/dev/null)
+    else p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' '); fi
+    i=$(( i + 1 ))
+  done
+  return 1
+}
+if [ "$(cat "$(bash tools/run-tests.sh --ruta-candado)/pid" 2>/dev/null)" != "${RUN_TESTS_CANDADO_DUENO:-ninguno}" ] \
+   || ! [ "${RUN_TESTS_CANDADO_DUENO:-0}" -gt 0 ] 2>/dev/null \
+   || ! es_antecesor "${RUN_TESTS_CANDADO_DUENO:-}"; then
+  # Relanzado una vez (su padre es el run-tests al que se paso) y aun no lo ve: run-tests no lo tomo.
+  # Relanzarse otra vez era una cadena sin fin de procesos: con la mutacion sin-candado de run-tests,
+  # 1752 en 25 s (adversario, 2.63.1). Sale con error.
+  if [ "${MUT_RELANZADO:-}" = "$PPID" ]; then
+    echo "ERROR mutation-check: relanzado por run-tests.sh --con-candado y no veo su candado; no me relanzo otra vez." >&2
+    exit 2
+  fi
+  export MUT_RELANZADO=$$
+  exec bash tools/run-tests.sh --con-candado bash tools/mutation-check.sh "$@"
+fi
+# --- hasta aqui el candado: test-run-tests.sh corta aqui su copia de este script ---
 # Cada caso copia bin/ en un mktemp: matar el arnes a mitad dejaba esas copias en el temporal del
 # sistema (p-292d06c4c0). Dentro de run-tests ya va anidado y no hace nada.
 [ -f tools/tmp-propio.sh ] && . tools/tmp-propio.sh && tmp_propio_avisos
@@ -111,10 +146,10 @@ caso() {  # etiqueta | fichero a mutar | mutador | suite | aserto que DEBE caer 
 }
 
 # Igual que caso(), pero para un script de tools/ (no de bin/): muta una copia de tools/<f> y corre
-# la suite de tools/ con RUN_TESTS apuntando a la copia.
-caso_tools() {  # etiqueta | fichero de tools/ | mutador | suite de tools/ | aserto | arg
+# la suite de tools/ con RUN_TESTS (u otra variable, la 7a) apuntando a la copia.
+caso_tools() {  # etiqueta | fichero de tools/ | mutador | suite de tools/ | aserto | arg | [variable]
   mio || return 0
-  local et="$1" f="$2" m="$3" suite="$4" espera="$5" arg="${6:-}"
+  local et="$1" f="$2" m="$3" suite="$4" espera="$5" arg="${6:-}" var="${7:-RUN_TESTS}"
   local D; D=$(mktemp -d); cp "tools/$f" "$D/$f"
   TOTAL=$(( TOTAL + 1 ))
   local n; n=$(python3 "$MUT/$m" "$D/$f" ${arg:+"$arg"} 2>&1)
@@ -122,7 +157,7 @@ caso_tools() {  # etiqueta | fichero de tools/ | mutador | suite de tools/ | ase
     0\ *) printf '  ?? %-30s LA MUTACION NO SE APLICO (%s) -> SIN PROBAR\n' "$et" "$n"
           PEND=$(( PEND + 1 )); rm -rf "$D"; return ;;
   esac
-  local out rc; out=$(RUN_TESTS="$D/$f" bash "tools/$suite" 2>&1); rc=$?
+  local out rc; out=$(env "$var=$D/$f" bash "tools/$suite" 2>&1); rc=$?
   if [ "$rc" -eq 0 ]; then
     printf '  NO %-30s la suite NO cae (%s) -> el aserto es vacuo\n' "$et" "$n"; PEND=$(( PEND + 1 ))
   elif printf '%s' "$out" | grep -qiE "(FAIL|FALLA).*${espera}"; then
@@ -491,6 +526,15 @@ caso_tools "candado en TMPDIR"     run-tests.sh m_run_tests.py test-run-tests.sh
 caso_tools "candado no creable cuelga" run-tests.sh m_run_tests.py test-run-tests.sh "un candado que no se puede crear no cuelga" no-crea-espera
 caso_tools "sin candado corre igual" run-tests.sh m_run_tests.py test-run-tests.sh "y no corre la suite sin candado" no-crea-corre
 caso_tools "pid 0 por vivo"        run-tests.sh m_run_tests.py test-run-tests.sh "un candado con pid 0 cuenta como abandonado" pid-cero-vivo
+caso_tools "sin --con-candado"     run-tests.sh m_run_tests.py test-run-tests.sh "los tres mutation-check corren su cuerpo" sin-con-candado
+# p-4be2b6ea23: mutation-check.sh lanzado solo toma el mismo candado.
+caso_tools "mutation-check sin candado" mutation-check.sh m_mutation_check.py test-run-tests.sh "tres mutation-check sueltos y una corrida completa" sin-candado MUTATION_CHECK
+caso_tools "se espera a si mismo"  mutation-check.sh m_mutation_check.py test-run-tests.sh "dentro de una corrida completa no se espera a si mismo" siempre-pide MUTATION_CHECK
+caso_tools "dueno sin mirar el pid" mutation-check.sh m_mutation_check.py test-run-tests.sh "una variable heredada que no casa con el candado no lo salta" solo-la-variable MUTATION_CHECK
+caso_tools "dueno muerto vale"     mutation-check.sh m_mutation_check.py test-run-tests.sh "un dueno heredado que ya murio no vale: quita el abandonado" dueno-muerto-vale MUTATION_CHECK
+caso_tools "falsificado con pid ajeno" mutation-check.sh m_mutation_check.py test-run-tests.sh "un candado falsificado con un pid vivo ajeno como dueno no lo salta" dueno-muerto-vale MUTATION_CHECK
+caso_tools "cualquiera es antecesor" mutation-check.sh m_mutation_check.py test-run-tests.sh "un candado falsificado con un pid vivo ajeno como dueno no lo salta" ascendencia-cualquiera MUTATION_CHECK
+caso_tools "se relanza sin fin"    mutation-check.sh m_mutation_check.py test-run-tests.sh "un relanzado que no ve el candado no se relanza sin fin" relanza-sin-fin MUTATION_CHECK
 
 echo
 if [ "$PEND" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $TOTAL)"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi

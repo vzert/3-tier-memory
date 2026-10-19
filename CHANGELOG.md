@@ -35,6 +35,50 @@ cada rama leia los suyos y nadie miraba el resto.
   `--text-prefix`; `session.amend` ignora `--fecha-vieja` sin `--date` y `--sesion-vieja` sin
   `--alias`. El flag es del tipo; solo sobra en esa combinacion.
 
+## [2.63.1] - 2026-10-17
+Origen: p-4be2b6ea23. `tools/mutation-check.sh` lanzado solo es tan pesado como la suite completa y
+no tomaba el candado de 2.62.7: dos a la vez, o uno junto a un `run-tests.sh`, cargaban la maquina
+igual que dos suites.
+
+### Added
+- **`tools/mutation-check.sh` lanzado solo toma el mismo candado que `tools/run-tests.sh`.** Se
+  relanza dentro de `run-tests.sh --con-candado <comando...>`, un modo nuevo que toma el candado,
+  corre el comando y sale con su rc. Quien tiene el candado exporta `RUN_TESTS_CANDADO_DUENO` con su
+  pid. mutation-check no lo pide si ese pid es el del candado y es un antecesor suyo (sube por los
+  ppid: `/proc/<pid>/ppid` en Git Bash, `ps -o ppid=` en macOS y Linux): dentro de una corrida
+  completa, o en sus tandas de `MUT_JOBS`, se esperaria a si mismo. La variable sola no basta: una
+  heredada que no casa con el candado (las copias de `test-run-tests.sh` corren con su propio candado
+  dentro del runner real) no lo salta; la de una corrida muerta con su candado abandonado tampoco, ni
+  un candado con el pid de un proceso vivo ajeno y ese pid en la variable (adversario externo,
+  rondas 1 y 2). Un pid 0 o no numerico no vale. Relanzado una vez y sin ver aun el candado, sale con rc 2 en vez de
+  relanzarse otra vez: con la mutacion `sin-candado` de run-tests eso era una cadena sin fin de
+  procesos (1752 en 25 s; adversario). `--con-candado` imprime los avisos de restos viejos de
+  tmp-propio antes del comando: el mutation-check de dentro va anidado y ya no los juntaba.
+- `test-run-tests.sh`: 18 asertos (70 → 88) con una copia de mutation-check cortada tras su candado
+  y un cuerpo que anota en el registro: tres mutation-check sueltos y una corrida completa lanzados a
+  la vez corren uno tras otro y los tres corren su cuerpo; dentro de una corrida completa
+  mutation-check sale ok sin esperarse; un `RUN_TESTS_CANDADO_DUENO` que no casa espera; uno de un
+  pid muerto no vale; uno falsificado con un pid vivo ajeno espera; un relanzado que no ve el
+  candado sale con rc 2; la marca de corte existe.
+  `RUN_TESTS_CANDADO_TOPE` (solo pruebas) pone tope a la espera: una copia rota que espera a la
+  corrida que la lanzo no muere con kill, porque bash espera a su hijo antes de correr el trap
+  (medido: 29 s de un `sleep 30`).
+- `mutation-check.sh`: 7 mutaciones nuevas (`m_mutation_check.py` y `sin-con-candado`);
+  `caso_tools` acepta la variable que apunta a la copia (7o argumento). Medido con el mutation-check
+  real lanzado solo, que tomo el candado real: 299 de 299 discriminan, 46 procesos como maximo. Tras
+  el merge con 2.63.0, `run-tests.sh` completo bajo el candado (espero a otra corrida y luego lo
+  tomo): VERDE CON SALTOS, 66 sin fallos; solo sin correr oraculo-rewrite-rule (sin markdown-it-py
+  en esta maquina; tampoco corre en main sin el). mutation-check dentro, 311 de 311.
+
+### Known
+- Sigue abierto p-7c1fa85c1e: un candado cuyo pid lo reusa otro proceso vivo hace esperar sin fin.
+- Un candado escrito a mano con el pid de un ANTECESOR de mutation-check (la shell que lo lanza) y ese
+  mismo pid en `RUN_TESTS_CANDADO_DUENO` lo salta (adversario externo, ronda 3). Se queda asi
+  (Victor, d119): quien escribe a mano el candado y la variable, con su mismo usuario, tambien puede
+  borrar el candado, y una ficha o una comprobacion del comando se falsifican igual. Por accidente
+  no pasa: la variable solo la exporta run-tests, y el pid de un antecesor solo acaba en el candado
+  si un pid se reusa (p-7c1fa85c1e).
+
 ## [2.63.0] - 2026-10-16
 Origen: Victor noto que la lista de pendientes que veia al abrir cada sesion no le servia, y pidio
 medir si al agente si. Se midio sobre las 40 sesiones mas recientes de 7 proyectos con el bloque en
