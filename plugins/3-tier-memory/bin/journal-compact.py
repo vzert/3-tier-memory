@@ -4239,7 +4239,8 @@ def validate(ev):
     elif t == "pendiente.retomar":
         if not p.get("id"):
             raise Quarantine("malformed: pendiente.retomar sin 'id'")
-        # fromisoformat solo no basta: acepta `20261016` y `2026-W42-5`, que el mod no lee.
+        # fromisoformat solo no basta: desde Python 3.11 acepta `20261016` y `2026-W42-5`, que el mod
+        # no lee (en 3.9 no los acepta; el regex hace igual las dos versiones).
         # fullmatch y no match: con `$`, `sessions/x\n` pasaba y partia la linea de Tier 2.
         ret = str(p.get("retomar", ""))
         try:

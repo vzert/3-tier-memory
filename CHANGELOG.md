@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.63.7] - 2026-10-19
+Origen: p-0ccd79fe36 (decisiones d182 y d183 de Victor). Con el python3 de macOS (3.9.6),
+`test-marcar-retomar.sh` salia con rc=2 en el caso 9b: `marcar-retomar.py --hoy 20261016` respondia
+`uso: --hoy no es una fecha`. 2.62.8 normalizaba `--hoy` con `date.fromisoformat`, que solo acepta
+`20261016` y `2026-W42-5` desde Python 3.11. Medido sobre f7444ab con 3.9.6: 58 de las 59 suites de
+`bin/` salian con rc=0, y esa suite cortaba en 9b, asi que sus casos de despues no corrian.
+
+### Fixed
+- **`marcar-retomar.py` normaliza `--hoy` con su propio parser**, igual en cualquier Python 3:
+  `2026-10-16`, `20261016` y `2026-W42-5` (o `2026W425`) dan `2026-10-16`. Con guiones a medias
+  (`2026-1016`, `2026-W425`) o una fecha imposible, sale con error de uso y no marca nada. Es lo que
+  hace `fromisoformat` de 3.11+ con esas formas, pero sin depender de la version.
+- Dos comentarios daban la forma ancha por valida sin decir que es solo desde 3.11
+  (`journal-emit.py`, `pendiente.retomar`; `journal-compact.py`, `validate` de `pendiente.retomar`). Su
+  codigo ya validaba con regex y no cambia.
+
+### Changed
+- `test-marcar-retomar.sh`, caso 9b: las tres formas, cada una con su codigo de salida (antes un rc=2
+  abortaba la suite con `set -e`), y cinco fechas que salen con error de uso sin marcar nada.
+  Con 3.9 y el codigo de 2.63.2 caen 4 asertos; con 3.9 y con 3.14 sobre HEAD, 65/0. Tres casos nuevos
+  en `tools/mutation-check.sh` (`m_marcar_retomar.py`), que caen con 3.9 y con 3.14.
+
+### Known
+- Volver a `date.fromisoformat` no lo ve un CI con Python 3.11 o mas, que acepta las tres formas: solo
+  una corrida con 3.9 lo atrapa. El CI usa el `python3` de cada runner.
+
 ## [2.63.2] - 2026-10-17
 Origen: p-7ae84c8ef2 (decision d133 de Victor, opcion A). 2.62.10 cerro `--nota`, pero
 `journal-emit` seguia aceptando con rc=0 cualquier otro flag que el tipo no lee: medido con el
