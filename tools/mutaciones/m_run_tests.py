@@ -67,6 +67,8 @@ M = {
         ('  [ -n "$ahora" ] && [ "$ahora" != "$guardada" ]', '  true')],
     "sin-hora-es-reusado": [
         ('  [ -n "$guardada" ] || return 1', '  [ -n "$guardada" ] || return 0')],
+    "hora-con-tz-local": [
+        ('    TZ=UTC0 LC_ALL=C ps -o lstart= -p "$1"', '    LC_ALL=C ps -o lstart= -p "$1"')],
     "sin-escribir-hora": [
         ('      candado_hora "$$" > "$CANDADO/arranque" 2>/dev/null', '      :')],
 }

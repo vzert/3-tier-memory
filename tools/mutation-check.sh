@@ -520,6 +520,7 @@ caso_tools "pid 0 por vivo"        run-tests.sh m_run_tests.py test-run-tests.sh
 caso_tools "pid reusado espera"     run-tests.sh m_run_tests.py test-run-tests.sh "con el pid reusado, quita el candado y corre su suite" sin-comparar-hora
 caso_tools "roba al dueno vivo"     run-tests.sh m_run_tests.py test-run-tests.sh "un pid vivo con su misma hora de arranque es el dueno" hora-siempre-distinta
 caso_tools "sin hora es reusado"    run-tests.sh m_run_tests.py test-run-tests.sh "un candado sin hora de arranque" sin-hora-es-reusado
+caso_tools "hora en el TZ del lector" run-tests.sh m_run_tests.py test-run-tests.sh "un lector con otro TZ que el dueno no le roba el candado" hora-con-tz-local
 caso_tools "no guarda la hora"      run-tests.sh m_run_tests.py test-run-tests.sh "la corrida que toma el candado guarda su hora" sin-escribir-hora
 caso_tools "sin --con-candado"     run-tests.sh m_run_tests.py test-run-tests.sh "los tres mutation-check corren su cuerpo" sin-con-candado
 # p-4be2b6ea23: mutation-check.sh lanzado solo toma el mismo candado.

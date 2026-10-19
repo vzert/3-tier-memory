@@ -6,24 +6,32 @@ reuso otro proceso vivo hacia esperar sin fin a la corrida siguiente: `kill -0` 
 
 ### Fixed
 - **El candado guarda la hora de arranque de su dueno** (`$CANDADO/arranque`, escrita antes que el
-  pid; `LC_ALL=C ps -o lstart= -p`). Si el pid del candado vive con otra hora, no es el dueno: el
+  pid). Con /proc (Linux, Git Bash) es el campo 22 de `/proc/<pid>/stat`, tics desde el arranque de
+  la maquina; sin /proc (macOS), `ps -o lstart=` con `TZ=UTC0` y `LC_ALL=C`. Asi sale igual para quien
+  la escribe y para quien la lee: con `lstart` en hora local, un lector con otro TZ veia otra hora y
+  robaba un candado vivo, dos suites a la vez (adversario, ronda 1). Si el pid del candado vive con
+  otra hora, no es el dueno: el
   candado se quita con aviso ("otro proceso reuso su pid"), bajo el sub-candado y releyendo el pid y
-  la hora. Sin hora guardada (un candado de 2.63.1 o anterior) o sin poder leer la de ahora (Git
-  Bash, donde `ps` no tiene `-o`), se espera como antes: falla hacia esperar, nunca hacia robar.
+  la hora. Sin hora guardada (un candado de 2.63.1 o anterior) o sin poder leer la de ahora, se
+  espera como antes. `run-tests.sh --hora-candado <pid>` imprime la hora con la misma funcion.
 
 ### Added
-- `test-run-tests.sh`: 7 asertos (88 → 95). Escritos antes del arreglo y medidos en rojo (2 fallas:
-  la corrida agotaba el tope esperando al pid reusado). Un pid vivo con otra hora se quita y la
-  suite corre; con su misma hora espera; un candado sin hora espera; la corrida que toma el candado
-  guarda su hora. Donde `ps -o lstart=` no da la hora, los de la hora dicen "sin probar aqui".
-- `mutation-check.sh`: 4 mutaciones nuevas en `m_run_tests.py`. Las 31 mutaciones del candado
+- `test-run-tests.sh`: 8 asertos (88 → 96). Los del pid reusado se escribieron antes del arreglo y
+  se midieron en rojo (2 fallas: la corrida agotaba el tope esperando al pid reusado). Un pid vivo
+  con otra hora se quita y la suite corre; con su misma hora espera; un lector con otro TZ que el
+  dueno espera; un candado sin hora espera; la corrida que toma el candado guarda su hora. Donde
+  run-tests no sabe leer la hora, los de la hora dicen "sin probar aqui"; donde la hora sale de
+  /proc, el del TZ lo dice con un SKIP para mutation-check (ahi no depende del TZ).
+- `mutation-check.sh`: 5 mutaciones nuevas en `m_run_tests.py`. Las mutaciones del candado
   (`m_run_tests.py` y `m_mutation_check.py`) pasaron por la prueba nueva con un candado de runner
-  tomado y un vigilante de procesos: las 31 caen, 9 procesos como maximo.
+  tomado y un vigilante de procesos: todas caen. La relectura de "vivo y con su hora" bajo el
+  sub-candado no tiene una mutacion que la haga caer: la carrera que cubre no se reproduce a voluntad.
 
 ### Known
-- `lstart` tiene resolucion de un segundo: un pid reusado en el mismo segundo de su arranque da la
-  misma hora y se espera, como antes del arreglo.
-- En Git Bash no se compara la hora (sin fuente medida), asi que ahi un pid reusado sigue esperando.
+- En macOS `lstart` tiene resolucion de un segundo: un pid reusado en el mismo segundo de su arranque
+  da la misma hora y se espera, como antes del arreglo.
+- Git Bash: sin medir si su /proc/<pid>/stat trae el campo 22. Si no lo trae, la hora sale vacia y un
+  pid reusado sigue esperando, como antes; el CI de Windows lo dice (caso "sin probar aqui").
 
 ## [2.63.1] - 2026-10-17
 Origen: p-4be2b6ea23. `tools/mutation-check.sh` lanzado solo es tan pesado como la suite completa y

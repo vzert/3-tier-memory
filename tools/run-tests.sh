@@ -58,9 +58,21 @@ candado_vivo() {
   case "$err" in *ermitted*) return 0 ;; esac
   return 1
 }
-# Hora de arranque del pid $1, o nada si no se puede saber. `ps -o lstart=` en macOS y Linux, con
-# LC_ALL=C (el nombre del dia y del mes se traducen); en Git Bash `ps` no tiene -o y sale vacio.
-candado_hora() { LC_ALL=C ps -o lstart= -p "$1" 2>/dev/null | sed 's/^  *//; s/  *$//'; }
+# Hora de arranque del pid $1, o nada si no se puede saber. Tiene que salir igual para quien la
+# escribe y para quien la lee, sea cual sea su entorno: un lector con otro TZ leia otra `lstart` y
+# robaba un candado vivo, dos suites a la vez (adversario, ronda 1). Con /proc (Linux, Git Bash): el
+# campo 22 de /proc/<pid>/stat, tics desde el arranque de la maquina, que no dependen del TZ ni de
+# un salto del reloj (la `lstart` de procps si). Sin /proc (macOS): `ps -o lstart=` con TZ=UTC0 y
+# LC_ALL=C (el dia y el mes se traducen). El comm del campo 2 puede llevar espacios y parentesis:
+# se corta hasta el ultimo ") ".
+candado_hora() {
+  if [ -r "/proc/$1/stat" ]; then
+    sed 's/.*) //' "/proc/$1/stat" 2>/dev/null | awk '$20 != "" {print "tics " $20}'
+  else
+    TZ=UTC0 LC_ALL=C ps -o lstart= -p "$1" 2>/dev/null | sed 's/^  *//; s/  *$//'
+  fi
+}
+[ "${1:-}" = "--hora-candado" ] && { candado_hora "${2:-}"; exit 0; }   # para test-run-tests.sh
 # El pid $1 vive, pero no es el dueno: el candado guardo otra hora de arranque (p-7c1fa85c1e). La
 # corrida duena murio (kill -9) y otro proceso reuso su pid; sin esto se esperaba sin fin. Sin hora
 # guardada (un candado de antes de 2.63.6) o sin poder leer la de ahora, no se sabe: vivo, como antes.
