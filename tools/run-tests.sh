@@ -58,6 +58,33 @@ candado_vivo() {
   case "$err" in *ermitted*) return 0 ;; esac
   return 1
 }
+# Hora de arranque del pid $1, o nada si no se puede saber. Tiene que salir igual para quien la
+# escribe y para quien la lee, sea cual sea su entorno: un lector con otro TZ leia otra `lstart` y
+# robaba un candado vivo, dos suites a la vez (adversario, ronda 1). En Linux: el campo 22 de
+# /proc/<pid>/stat, tics desde el arranque de la maquina, que no dependen del TZ ni de un salto del
+# reloj (la `lstart` de procps si). En macOS: `ps -o lstart=` con TZ=UTC0 y LC_ALL=C (el dia y el mes
+# se traducen). El comm del campo 2 puede llevar espacios y parentesis: se corta hasta el ultimo ") ".
+# Git Bash no: su /proc/<pid>/stat resta la hora de arranque de Windows a la de creacion, y las dos
+# se mueven si alguien cambia el reloj (msys2 process.cc; adversario, ronda 2). Ahi sale vacio (su
+# `ps` no tiene -o): se espera como antes, el lado seguro.
+candado_hora() {
+  if [ "$(uname -s)" = Linux ] && [ -r "/proc/$1/stat" ]; then
+    sed 's/.*) //' "/proc/$1/stat" 2>/dev/null | awk '$20 != "" {print "tics " $20}'
+  else
+    TZ=UTC0 LC_ALL=C ps -o lstart= -p "$1" 2>/dev/null | sed 's/^  *//; s/  *$//'
+  fi
+}
+[ "${1:-}" = "--hora-candado" ] && { candado_hora "${2:-}"; exit 0; }   # para test-run-tests.sh
+# El pid $1 vive, pero no es el dueno: el candado guardo otra hora de arranque (p-7c1fa85c1e). La
+# corrida duena murio (kill -9) y otro proceso reuso su pid; sin esto se esperaba sin fin. Sin hora
+# guardada (un candado de antes de 2.63.6) o sin poder leer la de ahora, no se sabe: vivo, como antes.
+candado_reusado() {
+  local guardada ahora
+  guardada=$(cat "$CANDADO/arranque" 2>/dev/null)
+  [ -n "$guardada" ] || return 1
+  ahora=$(candado_hora "$1")
+  [ -n "$ahora" ] && [ "$ahora" != "$guardada" ]
+}
 # El candado que se vio con el pid $1 parece abandonado. Entre leer ese pid y decidir, su dueno pudo
 # soltarlo y otra corrida tomar uno nuevo en la misma ruta: borrarlo a ciegas dejaba dos suites a la
 # vez en cada liberacion con tres o mas en cola (adversario, ronda 3). Asi que se borra solo bajo un
@@ -77,6 +104,10 @@ candado_abandonado() {  # <pid visto, vacio si no habia> <motivo>
   if [ "$(cat "$CANDADO/pid" 2>/dev/null)" != "$1" ]; then
     rmdir "$CANDADO/quitando" 2>/dev/null; return 0   # ya es otro candado: no se toca
   fi
+  # Mismo pid, pero tiene que seguir sin dueno: vivo y con su hora, ya no se quita (p-7c1fa85c1e).
+  if [ -n "$1" ] && candado_vivo "$1" && ! candado_reusado "$1"; then
+    rmdir "$CANDADO/quitando" 2>/dev/null; return 0
+  fi
   echo "AVISO run-tests: quito el candado de una corrida que ya no existe ($2): $CANDADO" >&2
   candado_quita "$2"
 }
@@ -84,6 +115,8 @@ candado_toma() {
   local quien vacio=0 avisado=0 atascado=0 nocrea=0 ini; ini=$(date +%s)
   while :; do
     if mkdir "$CANDADO" 2>/dev/null; then
+      # La hora de arranque va ANTES que el pid: quien lee el pid ya la encuentra (p-7c1fa85c1e).
+      candado_hora "$$" > "$CANDADO/arranque" 2>/dev/null
       # Si se lo quitaron entre el mkdir y escribir el pid, no es suyo: vuelve a la cola.
       echo "$$" > "$CANDADO/pid" 2>/dev/null && [ "$(cat "$CANDADO/pid" 2>/dev/null)" = "$$" ] && break
     fi
@@ -111,6 +144,8 @@ candado_toma() {
       if [ "$vacio" -ge 10 ]; then candado_abandonado "" "sin pid tras 10 vueltas"; vacio=0; fi
     elif ! candado_vivo "$quien"; then
       vacio=0; candado_abandonado "$quien" "pid $quien"
+    elif candado_reusado "$quien"; then
+      vacio=0; candado_abandonado "$quien" "otro proceso reuso su pid $quien"
     else
       vacio=0
       # Solo pruebas: una espera con tope. Una copia rota que espera sin fin a la corrida que la lanzo
