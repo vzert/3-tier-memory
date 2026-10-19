@@ -1555,6 +1555,10 @@ invocaciones=(
   "true; $PR $F"
   "OUT=\$(python3 \"$PR\" \"$F\" 2>/dev/null); echo \"\$OUT\""
   "for x in 1; do python3 $PR $F; done"
+  "uv run --python 3.12 python3 $PR $F"
+  "env -i PATH=/usr/bin python3 $PR $F"
+  "echo x | xargs -n1 python3 $PR $F"
+  "timeout 30 python3 $PR $F"
 )
 for c in "${invocaciones[@]}"; do
   txcmd "$T/m.jsonl" "$c"

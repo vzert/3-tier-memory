@@ -119,7 +119,11 @@ _RE_PYTHON = re.compile(r"^python(?:3(?:\.\d+)?)?(?:\.exe)?$")
 _RE_ASIGNA = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # Palabras de shell que pueden ir delante del programa de un segmento (`for …; do python3 …`).
 _PREFIJOS = {"do", "then", "else", "elif", "if", "while", "until", "!", "time", "exec", "command",
-             "nohup", "env", "{"}
+             "nohup", "{"}
+# Programas que lanzan a otro (adversario de 2.63.8: `uv run`, `env -i` y `xargs` callaban el guard).
+_ENVOLTORIOS = {"env", "xargs", "sudo", "nice", "timeout", "nohup"}
+_OPC_CON_VALOR = {"-u", "-I", "-n", "-P", "-L", "-d", "-E", "-s", "--with", "--python", "-p",
+                  "--project", "--directory"}
 
 
 def invocaciones_retomar(cmd):
@@ -148,8 +152,20 @@ def invocaciones_retomar(cmd):
     i = 0
     while i < len(toks):
         j = i
-        while j < len(toks) and (_RE_ASIGNA.match(toks[j]) or toks[j] in _PREFIJOS):
-            j += 1
+        while j < len(toks) and not sep(toks[j]):
+            t = toks[j]
+            if _RE_ASIGNA.match(t) or t in _PREFIJOS:
+                j += 1
+            elif t in _ENVOLTORIOS or (t == "uv" and j + 1 < len(toks) and toks[j + 1] == "run"):
+                # `env -i …`, `uv run --opt …`, `xargs -n1 …`, `timeout 30 …`: se salta el
+                # envoltorio, sus opciones (y el valor de las que lo llevan) y sigue con el programa.
+                j += 2 if t == "uv" else 1
+                if t == "timeout" and j < len(toks) and re.match(r"^\d", toks[j]):
+                    j += 1
+                while j < len(toks) and toks[j].startswith("-") and not sep(toks[j]):
+                    j += 2 if toks[j] in _OPC_CON_VALOR else 1
+            else:
+                break
         if j < len(toks) and not sep(toks[j]):
             prog = toks[j]
             k = None

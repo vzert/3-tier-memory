@@ -12,8 +12,8 @@ mismo defecto bloqueo un turno real de la sesion que lo arreglaba.
 - **El guard solo dispara con la invocacion real de `print-como-retomar.py`** (`invocaciones_retomar`).
   Cuenta cuando el script es el programa de un segmento de shell (tras el inicio, `;`, `&&`, `||`,
   `|`, `&`, `(`, `$(`, una comilla invertida o un salto de linea), directo o como argumento de
-  python/python3 con sus opciones, con asignaciones `VAR=…` o palabras de shell (`do`, `then`, `if`…)
-  delante. Una mencion (`git diff`, `grep`, `sed -i`, `cat`, un `echo "python3 …"`, el texto de un
+  python/python3 con sus opciones, con asignaciones `VAR=…`, palabras de shell (`do`, `then`, `if`…)
+  o envoltorios (`env -i`, `uv run`, `xargs`, `sudo`, `nice`, `timeout`) delante. Una mencion (`git diff`, `grep`, `sed -i`, `cat`, un `echo "python3 …"`, el texto de un
   `--text`) ya no dispara. Lo usan los dos sitios que antes buscaban la mencion: el disparo del turno
   y las fichas impresas que cuentan para el cambio de estado. Un comando que shlex no puede partir
   vuelve a la busqueda por mencion. Una invocacion dentro de `ssh host '…'` ya no dispara: corre en
@@ -21,9 +21,10 @@ mismo defecto bloqueo un turno real de la sesion que lo arreglaba.
 
 ### Added
 - Casos en `test-checkpoint-close-guard.sh`: cinco menciones con una ficha real detras, en silencio
-  (cuatro caen con el guard de 2.63.4; el `cat … | grep …` ya pasaba), y siete invocaciones reales que
+  (cuatro caen con el guard de 2.63.4; el `cat … | grep …` ya pasaba), y once invocaciones reales que
   siguen disparando (`python3 "<ruta>"`, `cd … && python3 … | head`, `python3 -I "$JBIN/…"`, el script
-  directo, `OUT=$(python3 …)`, `for …; do python3 …; done`).
+  directo, `OUT=$(python3 …)`, `for …; do python3 …; done`, `uv run`, `env -i`, `xargs -n1`,
+  `timeout 30`).
 - Mutaciones `mencion-cuenta` y `python-no-cuenta` (`tools/mutaciones/m_invocacion_retomar.py`).
 - La mutacion `ficha-cualquiera` de 2.63.3 apunta a un caso nuevo: una invocacion real sobre un `.py`
   con un `break` en la sesion, en silencio. El caso del `sed` de 2.63.3 ya no pasa por el filtro
