@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.63.9] - 2026-10-19
+Origen: `p-c0e7c422cb`, la nota del revisor de 2.63.4. La excepcion del usuario de `snippet.marco`
+solo miraba la palabra justo detras de `de`/`del`, asi que un articulo entre medias escondia al
+tercero.
+
+### Fixed
+- **Un tercero escrito con articulo vuelve a avisar en `snippet.marco`.** `decidir con el usuario
+  de la otra empresa`, `de los clientes` o `de las otras areas` daban 0 avisos desde 2.63.4 (antes de
+  2.63.4 daban 1). Ahora se admite un articulo (`la`, `el`, `los`, `las`) entre `de`/`del` y
+  cliente, proveedor, tercero u otr(o/a). `de la tienda`, `del equipo` y `finalmente` siguen sin
+  aviso. Es formato, no juicio: `de la otra vez` tambien avisa, y el aviso no bloquea.
+
+### Tests
+- `test-ninguno-bloqueo.sh`: aserto nuevo (tres terceros con articulo dan 1; la tienda, el equipo y
+  finalmente dan 0). Contra 2.63.4 da `0 0 0 0 0 0`.
+- `tools/mutation-check.sh`: mutacion `articulo-tercero` (quita el articulo opcional) tumba ese
+  aserto; las cuatro mutaciones del marco que ya habia llevan la cadena nueva.
+
 ## [2.63.4] - 2026-10-17
 Origen: `p-c501ad10c6`, abierto al cerrar 2.62.11. La excepcion del usuario de `snippet.marco` trataba
 como tercero a cualquier `usuario` seguido de `de`/`del` o de una palabra que empieza por `final`.
