@@ -19,6 +19,109 @@ como tercero a cualquier `usuario` seguido de `de`/`del` o de una palabra que em
 - `tools/mutation-check.sh`: mutacion `usuario-complemento-tercero` (vuelve a la excepcion de
   2.62.11) tumba ese aserto.
 
+## [2.63.3] - 2026-10-17
+Origen: la sesion 4237bac9 de este repo (ficha `2026-10-16-hilo-un-salto-snippet-ajeno`), antes de
+cualquier /checkpoint-3t y sin ficha propia, recibio dos veces el aviso `bugs.veredicto_break`: nombrar
+en `## Bugs fixed` el hallazgo del adversario. Medido pasando su transcript por el guard: lo disparo
+un `sed -i '' … plugins/3-tier-memory/bin/print-como-retomar.py plugins/3-tier-memory/bin/pendientes_afines.py`.
+El guard tomo `pendientes_afines.py` como ficha y le corrio `checkpoint-audit.py` con el `break` de la
+sesion.
+
+### Fixed
+- **`checkpoint-close-guard.sh` solo toma como ficha un argumento `sessions/*.md` de
+  `print-como-retomar.py`** (p-bea9639b92). Un comando que edita o lee el fuente del script y nombra
+  otro archivo despues ya no le pide al agente nombrar el veredicto del adversario en un archivo que
+  no es una ficha. Es una mitad del arreglo de p-1fe14aa592, que sigue abierto con la otra: disparar
+  solo con la invocacion real del script, no con cualquier mencion. Una ruta con variables (`"$SF"`,
+  p-e1799cd04c) sigue igual.
+  El filtro es `sessions/*.md` (`FICHA_RE`), no `memory/sessions/*.md` (`SESION_RE`): con este
+  ultimo caen 24 asertos existentes cuya memoria de prueba no vive en `memory/`. Acepta tambien `\`,
+  porque en Windows `resolver()` (normpath) deja la ruta con barras invertidas.
+
+### Added
+- Caso en `test-checkpoint-close-guard.sh` con la forma real del `sed` y un `break` en la sesion:
+  silencio en la vuelta normal y en la reentrante (cae 2 de 2 con el guard de 2.62.11).
+- Mutacion `ficha-cualquiera` (`tools/mutaciones/m_ficha_sesion.py`): quita el filtro y el caso cae.
+
+## [2.63.2] - 2026-10-17
+Origen: p-7ae84c8ef2 (decision d133 de Victor, opcion A). 2.62.10 cerro `--nota`, pero
+`journal-emit` seguia aceptando con rc=0 cualquier otro flag que el tipo no lee: medido con el
+emisor de 2.62.10, 926 combinaciones tipo x flag salian 0 sin cambiar el evento
+(`memory/research/flags-sin-lector-journal-emit.md`). Un solo argparse con 55 flags para 19 tipos;
+cada rama leia los suyos y nadie miraba el resto.
+
+### Changed
+- **`journal-emit` rechaza todo flag que su tipo no lee**: sale con error, nombra los flags que
+  sobran y lista los que el tipo lee, y no escribe evento. La tabla es `FLAGS_DE` (un conjunto por
+  tipo, mas `--type`, `--memory-dir` y `--session`, que valen en todos). Cuenta haberlo pasado, no
+  su valor (`--x ""` tambien se rechaza), y se detecta con el propio parser, asi que tambien la
+  forma abreviada (`--motiv`) y `--flag=valor`. Un flag nuevo del parser que no este en ninguna
+  fila sale con error en todos los tipos.
+- El rechazo de `--nota` de 2.62.10 pasa a ser este y se elimina la tupla `NOTA_LECTORES`; su mensaje sigue
+  diciendo donde va la nota. `pendiente.update` conserva el suyo de 2.62.4 y `learning.add` sin
+  `--supersedes` el suyo de 2.62.10.
+- `test-flags-sin-lector.sh` nuevo: saca los tipos y los flags del `--help` del emisor y, con su
+  propia tabla de lo que lee cada tipo (separada de `FLAGS_DE` a proposito), prueba cada tipo x
+  flag de fuera (error, lo nombra, ningun evento) y cada flag de dentro (pasa y deja su evento, con
+  los compañeros que su rama pide; los dos que su propia rama rechaza, con su mensaje),
+  mas la forma abreviada, `--flag=valor` y el valor vacio. 1033 asertos; 931 fallan contra
+  2.62.10. Ocho casos nuevos en `tools/mutation-check.sh` (`m_flags_sin_lector.py`), y los tres de
+  `m_nota_sin_lector.py` que apuntaban a `NOTA_LECTORES` apuntan ahora al rechazo generico.
+- Llamadores del repo fuera de las pruebas (plantillas, commands, `bin/`, hooks): ninguno pasa un
+  flag que su tipo no lee, incluidos los que arman la llamada en Python con el tipo fijo
+  (`expire-pendientes.py`, `marcar-retomar.py`, `learnings-migracion.py`) y los comandos que
+  imprimen `checkpoint-audit.py` y `repair-dualwrite.py`. Las pruebas negativas que pasan flags de
+  mas a proposito esperan el rechazo.
+
+### Known
+- Siguen igual tres lecturas condicionales: `pendiente.adopt --todas` ignora `--line`, `--id` y
+  `--text-prefix`; `session.amend` ignora `--fecha-vieja` sin `--date` y `--sesion-vieja` sin
+  `--alias`. El flag es del tipo; solo sobra en esa combinacion.
+
+## [2.63.1] - 2026-10-17
+Origen: p-4be2b6ea23. `tools/mutation-check.sh` lanzado solo es tan pesado como la suite completa y
+no tomaba el candado de 2.62.7: dos a la vez, o uno junto a un `run-tests.sh`, cargaban la maquina
+igual que dos suites.
+
+### Added
+- **`tools/mutation-check.sh` lanzado solo toma el mismo candado que `tools/run-tests.sh`.** Se
+  relanza dentro de `run-tests.sh --con-candado <comando...>`, un modo nuevo que toma el candado,
+  corre el comando y sale con su rc. Quien tiene el candado exporta `RUN_TESTS_CANDADO_DUENO` con su
+  pid. mutation-check no lo pide si ese pid es el del candado y es un antecesor suyo (sube por los
+  ppid: `/proc/<pid>/ppid` en Git Bash, `ps -o ppid=` en macOS y Linux): dentro de una corrida
+  completa, o en sus tandas de `MUT_JOBS`, se esperaria a si mismo. La variable sola no basta: una
+  heredada que no casa con el candado (las copias de `test-run-tests.sh` corren con su propio candado
+  dentro del runner real) no lo salta; la de una corrida muerta con su candado abandonado tampoco, ni
+  un candado con el pid de un proceso vivo ajeno y ese pid en la variable (adversario externo,
+  rondas 1 y 2). Un pid 0 o no numerico no vale. Relanzado una vez y sin ver aun el candado, sale con rc 2 en vez de
+  relanzarse otra vez: con la mutacion `sin-candado` de run-tests eso era una cadena sin fin de
+  procesos (1752 en 25 s; adversario). `--con-candado` imprime los avisos de restos viejos de
+  tmp-propio antes del comando: el mutation-check de dentro va anidado y ya no los juntaba.
+- `test-run-tests.sh`: 18 asertos (70 → 88) con una copia de mutation-check cortada tras su candado
+  y un cuerpo que anota en el registro: tres mutation-check sueltos y una corrida completa lanzados a
+  la vez corren uno tras otro y los tres corren su cuerpo; dentro de una corrida completa
+  mutation-check sale ok sin esperarse; un `RUN_TESTS_CANDADO_DUENO` que no casa espera; uno de un
+  pid muerto no vale; uno falsificado con un pid vivo ajeno espera; un relanzado que no ve el
+  candado sale con rc 2; la marca de corte existe.
+  `RUN_TESTS_CANDADO_TOPE` (solo pruebas) pone tope a la espera: una copia rota que espera a la
+  corrida que la lanzo no muere con kill, porque bash espera a su hijo antes de correr el trap
+  (medido: 29 s de un `sleep 30`).
+- `mutation-check.sh`: 7 mutaciones nuevas (`m_mutation_check.py` y `sin-con-candado`);
+  `caso_tools` acepta la variable que apunta a la copia (7o argumento). Medido con el mutation-check
+  real lanzado solo, que tomo el candado real: 299 de 299 discriminan, 46 procesos como maximo. Tras
+  el merge con 2.63.0, `run-tests.sh` completo bajo el candado (espero a otra corrida y luego lo
+  tomo): VERDE CON SALTOS, 66 sin fallos; solo sin correr oraculo-rewrite-rule (sin markdown-it-py
+  en esta maquina; tampoco corre en main sin el). mutation-check dentro, 311 de 311.
+
+### Known
+- Sigue abierto p-7c1fa85c1e: un candado cuyo pid lo reusa otro proceso vivo hace esperar sin fin.
+- Un candado escrito a mano con el pid de un ANTECESOR de mutation-check (la shell que lo lanza) y ese
+  mismo pid en `RUN_TESTS_CANDADO_DUENO` lo salta (adversario externo, ronda 3). Se queda asi
+  (Victor, d119): quien escribe a mano el candado y la variable, con su mismo usuario, tambien puede
+  borrar el candado, y una ficha o una comprobacion del comando se falsifican igual. Por accidente
+  no pasa: la variable solo la exporta run-tests, y el pid de un antecesor solo acaba en el candado
+  si un pid se reusa (p-7c1fa85c1e).
+
 ## [2.63.0] - 2026-10-16
 Origen: Victor noto que la lista de pendientes que veia al abrir cada sesion no le servia, y pidio
 medir si al agente si. Se midio sobre las 40 sesiones mas recientes de 7 proyectos con el bloque en
