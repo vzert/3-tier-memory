@@ -223,6 +223,33 @@ chk "un candado con pid 0 cuenta como abandonado: no espera sin fin" "0" "$(term
 chk "y corre su suite" "ini fin" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
 rm -rf "$CAND"
 
+# p-7c1fa85c1e: el pid de una corrida muerta lo reusa otro proceso vivo. El candado guarda la hora de
+# arranque de su dueno (`arranque`); si el pid vive con otra hora, no es el dueno: se quita. Sin hora
+# guardada (candado de antes de 2.63.6) se espera como siempre. Solo donde `ps -o lstart=` da la hora.
+sleep 60 & reusado=$!
+hora=$(LC_ALL=C ps -o lstart= -p "$reusado" 2>/dev/null | sed 's/  *$//')
+if [ -n "$hora" ]; then
+  mkdir "$CAND"; echo "$reusado" > "$CAND/pid"; echo "Thu Jan  1 00:00:00 1970" > "$CAND/arranque"
+  : > "$T/registro"; TOPE=10; completa "$T/h"; h=$LANZADO; TOPE=
+  chk "un pid reusado por otro proceso vivo (otra hora de arranque) no hace esperar sin fin" "0" "$(termina "$h" 30; echo $?)"
+  chk "con el pid reusado, quita el candado y corre su suite" "ini fin" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
+  chk "con el pid reusado, no se agota esperando y avisa que lo quita" "0 1" \
+    "$(grep -c 'RUN_TESTS_CANDADO_TOPE' "$T/h.err") $(grep -c 'otro proceso reuso su pid' "$T/h.err")"
+  rm -rf "$CAND"
+  mkdir "$CAND"; echo "$reusado" > "$CAND/pid"; echo "$hora" > "$CAND/arranque"; : > "$T/registro"
+  completa "$T/i"; i=$LANZADO
+  chk "un pid vivo con su misma hora de arranque es el dueno: espera" "1" "$(termina "$i" 4; echo $?)"
+  chk "y no corre su suite con el dueno vivo" "" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
+  rm -rf "$CAND"
+else
+  echo "  (sin probar aqui: ps -o lstart= no da la hora de arranque; no cuenta) pid reusado"
+fi
+mkdir "$CAND"; echo "$reusado" > "$CAND/pid"; : > "$T/registro"
+completa "$T/k"; k=$LANZADO
+chk "un candado sin hora de arranque (de antes de 2.63.6) con su pid vivo: espera" "1" "$(termina "$k" 4; echo $?)"
+rm -rf "$CAND"
+kill "$reusado" 2>/dev/null; wait "$reusado" 2>/dev/null
+
 # Ruta fija, no del TMPDIR: procesos de la misma maquina con otro TMPDIR no compartian el candado.
 chk "el candado no depende de TMPDIR" "/tmp/3tm-run-tests.candado" \
   "$(env -u RUN_TESTS_CANDADO TMPDIR="$T/otro" bash "$R/tools/run-tests.sh" --ruta-candado)"
