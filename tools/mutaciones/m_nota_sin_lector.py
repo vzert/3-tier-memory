@@ -7,17 +7,18 @@ import io, sys
 # Patrones de una sola linea, sin "\n": el checkout de Windows trae CRLF (regla 322).
 # Cada sustitucion tiene que calzar EXACTAMENTE una vez; si no, imprime 0 -> SIN PROBAR.
 M = {
-    # journal-emit.py
+    # journal-emit.py. Desde 2.63.2 el rechazo de --nota es el generico de FLAGS_DE (p-7ae84c8ef2):
+    # NOTA_LECTORES ya no existe y las mutaciones apuntan a las piezas que lo sustituyen.
     "sin-rechazo": [
-        ("    if a.nota is not None and a.type not in NOTA_LECTORES:", "    if False:")],
+        ("    if sobran:", "    if False:")],
     "add-sin-rechazo": [
         ("        if a.nota is not None and not sup:", "        if False:")],
+    # Mirar el valor en vez de si se paso: --nota "" y "   " volverian a perderse.
     "nota-por-verdad": [
-        ("    if a.nota is not None and a.type not in NOTA_LECTORES:",
-         "    if (a.nota or \"\").strip() and a.type not in NOTA_LECTORES:")],
+        ("    pasados = flags_pasados(ap)",
+         "    pasados = {k for k, v in vars(ap.parse_args()).items() if v and str(v).strip()}")],
     "lector-de-mas": [
-        ('NOTA_LECTORES = ("pendiente.resolve", "pendiente.update", "learning.retire", "learning.add")',
-         'NOTA_LECTORES = ("pendiente.resolve", "pendiente.update", "learning.retire", "learning.add", "pendiente.add")')],
+        ('    "pendiente.add": {"text", ', '    "pendiente.add": {"nota", "text", ')],
 }
 
 p, nombre = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""

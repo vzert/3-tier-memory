@@ -346,6 +346,15 @@ caso "--nota sin lector"        journal-emit.py m_nota_sin_lector.py $T "pendien
 caso "--nota en learning.add"   journal-emit.py m_nota_sin_lector.py $T "learning.add sin --supersedes con nota texto sale con error" add-sin-rechazo
 caso "--nota por verdad"        journal-emit.py m_nota_sin_lector.py $T "pendiente.add con nota vacia sale con error" nota-por-verdad
 caso "--nota lector de mas"     journal-emit.py m_nota_sin_lector.py $T "pendiente.add con nota texto sale con error" lector-de-mas
+T=test-flags-sin-lector.sh
+caso "flag sin lector"          journal-emit.py m_flags_sin_lector.py $T "pendiente.add --dias rechaza" sin-rechazo
+caso "fila con flag de mas"     journal-emit.py m_flags_sin_lector.py $T "pendiente.add --dias rechaza" fila-de-mas
+caso "fila con flag de menos"   journal-emit.py m_flags_sin_lector.py $T "pendiente.expire --line pasa con su evento" fila-de-menos
+caso "flag comun de mas"        journal-emit.py m_flags_sin_lector.py $T "pendiente.reopen --text rechaza" comunes-de-mas
+caso "argv sin abreviaturas"    journal-emit.py m_flags_sin_lector.py $T "abreviado --motiv rechaza" argv-sin-abreviar
+caso "argv sin --flag=valor"    journal-emit.py m_flags_sin_lector.py $T "con igual --text=hola rechaza" argv-sin-igual
+caso "flag por su valor"        journal-emit.py m_flags_sin_lector.py $T "valor vacio en --prioridad tambien rechaza" por-valor
+caso "rama rechaza flag leido"  journal-emit.py m_flags_sin_lector.py $T "pendiente.relate --sin-relacion pasa con su evento" rama-rechaza
 caso "sin identidad"           journal-emit.py m_learning_dedup.py test-learning-dedup.sh "mismo texto sin --decision: rc 0" sin-identidad
 caso "decision fuera"          journal-emit.py m_learning_dedup.py test-learning-dedup.sh "la decision viaja en el payload" decision-fuera-del-payload
 caso "reemplaza sin supersedes" journal-emit.py m_learning_dedup.py test-learning-dedup.sh "reemplaza:2 lleva supersedes 2" reemplaza-sin-supersedes
