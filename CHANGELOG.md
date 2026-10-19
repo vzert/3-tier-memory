@@ -1,5 +1,40 @@
 # Changelog
 
+## [2.63.2] - 2026-10-17
+Origen: p-7ae84c8ef2 (decision d133 de Victor, opcion A). 2.62.10 cerro `--nota`, pero
+`journal-emit` seguia aceptando con rc=0 cualquier otro flag que el tipo no lee: medido con el
+emisor de 2.62.10, 926 combinaciones tipo x flag salian 0 sin cambiar el evento
+(`memory/research/flags-sin-lector-journal-emit.md`). Un solo argparse con 55 flags para 19 tipos;
+cada rama leia los suyos y nadie miraba el resto.
+
+### Changed
+- **`journal-emit` rechaza todo flag que su tipo no lee**: sale con error, nombra los flags que
+  sobran y lista los que el tipo lee, y no escribe evento. La tabla es `FLAGS_DE` (un conjunto por
+  tipo, mas `--type`, `--memory-dir` y `--session`, que valen en todos). Cuenta haberlo pasado, no
+  su valor (`--x ""` tambien se rechaza), y se detecta con el propio parser, asi que tambien la
+  forma abreviada (`--motiv`) y `--flag=valor`. Un flag nuevo del parser que no este en ninguna
+  fila sale con error en todos los tipos.
+- El rechazo de `--nota` de 2.62.10 pasa a ser este y se elimina la tupla `NOTA_LECTORES`; su mensaje sigue
+  diciendo donde va la nota. `pendiente.update` conserva el suyo de 2.62.4 y `learning.add` sin
+  `--supersedes` el suyo de 2.62.10.
+- `test-flags-sin-lector.sh` nuevo: saca los tipos y los flags del `--help` del emisor y, con su
+  propia tabla de lo que lee cada tipo (separada de `FLAGS_DE` a proposito), prueba cada tipo x
+  flag de fuera (error, lo nombra, ningun evento) y cada flag de dentro (pasa y deja su evento, con
+  los compañeros que su rama pide; los dos que su propia rama rechaza, con su mensaje),
+  mas la forma abreviada, `--flag=valor` y el valor vacio. 1033 asertos; 931 fallan contra
+  2.62.10. Ocho casos nuevos en `tools/mutation-check.sh` (`m_flags_sin_lector.py`), y los tres de
+  `m_nota_sin_lector.py` que apuntaban a `NOTA_LECTORES` apuntan ahora al rechazo generico.
+- Llamadores del repo fuera de las pruebas (plantillas, commands, `bin/`, hooks): ninguno pasa un
+  flag que su tipo no lee, incluidos los que arman la llamada en Python con el tipo fijo
+  (`expire-pendientes.py`, `marcar-retomar.py`, `learnings-migracion.py`) y los comandos que
+  imprimen `checkpoint-audit.py` y `repair-dualwrite.py`. Las pruebas negativas que pasan flags de
+  mas a proposito esperan el rechazo.
+
+### Known
+- Siguen igual tres lecturas condicionales: `pendiente.adopt --todas` ignora `--line`, `--id` y
+  `--text-prefix`; `session.amend` ignora `--fecha-vieja` sin `--date` y `--sesion-vieja` sin
+  `--alias`. El flag es del tipo; solo sobra en esa combinacion.
+
 ## [2.63.1] - 2026-10-17
 Origen: p-4be2b6ea23. `tools/mutation-check.sh` lanzado solo es tan pesado como la suite completa y
 no tomaba el candado de 2.62.7: dos a la vez, o uno junto a un `run-tests.sh`, cargaban la maquina
