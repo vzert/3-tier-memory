@@ -158,6 +158,17 @@ caso_tools() {  # etiqueta | fichero de tools/ | mutador | suite de tools/ | ase
           PEND=$(( PEND + 1 )); rm -rf "$D"; return ;;
   esac
   local out rc; out=$(env "$var=$D/$f" bash "tools/$suite" 2>&1); rc=$?
+  # Como en caso(): una linea `SKIP ... <aserto>` dice que ese aserto no se evalua aqui. Faltaba, y en
+  # ubuntu la mutacion del TZ (la hora sale de /proc) salia como aserto vacuo (adversario, 2.63.6).
+  # Mayusculas y al inicio de la linea: un "skip" dentro de otro aserto no cuenta. Y si el aserto
+  # cayo (FALLA con su texto), cuenta como caido aunque haya SKIP: un SKIP no tapa un fallo real
+  # (adversario externo, ronda 3).
+  if printf '%s\n' "$out" | grep -qE "^ *SKIP .*${espera}" \
+     && ! printf '%s' "$out" | grep -qiE "(FAIL|FALLA).*${espera}"; then
+    printf '  -- %-30s no evaluable aqui: %s\n' "$et" \
+      "$(printf '%s\n' "$out" | grep -E "^ *SKIP .*${espera}" | head -1 | sed 's/^ *//')"
+    rm -rf "$D"; return
+  fi
   if [ "$rc" -eq 0 ]; then
     printf '  NO %-30s la suite NO cae (%s) -> el aserto es vacuo\n' "$et" "$n"; PEND=$(( PEND + 1 ))
   elif printf '%s' "$out" | grep -qiE "(FAIL|FALLA).*${espera}"; then
@@ -536,6 +547,11 @@ caso_tools "candado en TMPDIR"     run-tests.sh m_run_tests.py test-run-tests.sh
 caso_tools "candado no creable cuelga" run-tests.sh m_run_tests.py test-run-tests.sh "un candado que no se puede crear no cuelga" no-crea-espera
 caso_tools "sin candado corre igual" run-tests.sh m_run_tests.py test-run-tests.sh "y no corre la suite sin candado" no-crea-corre
 caso_tools "pid 0 por vivo"        run-tests.sh m_run_tests.py test-run-tests.sh "un candado con pid 0 cuenta como abandonado" pid-cero-vivo
+caso_tools "pid reusado espera"     run-tests.sh m_run_tests.py test-run-tests.sh "con el pid reusado, quita el candado y corre su suite" sin-comparar-hora
+caso_tools "roba al dueno vivo"     run-tests.sh m_run_tests.py test-run-tests.sh "un pid vivo con su misma hora de arranque es el dueno" hora-siempre-distinta
+caso_tools "sin hora es reusado"    run-tests.sh m_run_tests.py test-run-tests.sh "un candado sin hora de arranque" sin-hora-es-reusado
+caso_tools "hora en el TZ del lector" run-tests.sh m_run_tests.py test-run-tests.sh "un lector con otro TZ que el dueno no le roba el candado" hora-con-tz-local
+caso_tools "no guarda la hora"      run-tests.sh m_run_tests.py test-run-tests.sh "la corrida que toma el candado guarda su hora" sin-escribir-hora
 caso_tools "sin --con-candado"     run-tests.sh m_run_tests.py test-run-tests.sh "los tres mutation-check corren su cuerpo" sin-con-candado
 # p-4be2b6ea23: mutation-check.sh lanzado solo toma el mismo candado.
 caso_tools "mutation-check sin candado" mutation-check.sh m_mutation_check.py test-run-tests.sh "tres mutation-check sueltos y una corrida completa" sin-candado MUTATION_CHECK

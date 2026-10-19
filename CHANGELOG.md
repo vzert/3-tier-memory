@@ -56,6 +56,48 @@ Medido en una memoria temporal con 3.14.3; ninguna memoria real de esta maquina 
 - Volver a `date.fromisoformat` no lo ve un CI con Python 3.11 o mas, que acepta las tres formas: solo
   una corrida con 3.9 lo atrapa. El CI usa el `python3` de cada runner.
 
+## [2.63.6] - 2026-10-18
+Origen: p-7c1fa85c1e. Un candado de `tools/run-tests.sh` cuya corrida murio (kill -9) y cuyo pid
+reuso otro proceso vivo hacia esperar sin fin a la corrida siguiente: `kill -0` decia vivo.
+
+### Fixed
+- **El candado guarda la hora de arranque de su dueno** (`$CANDADO/arranque`, escrita antes que el
+  pid). En Linux es el campo 22 de `/proc/<pid>/stat`, tics desde el arranque de la maquina; en
+  macOS, `ps -o lstart=` con `TZ=UTC0` y `LC_ALL=C`. Asi sale igual para quien
+  la escribe y para quien la lee: con `lstart` en hora local, un lector con otro TZ veia otra hora y
+  robaba un candado vivo, dos suites a la vez (adversario, ronda 1). Si el pid del candado vive con
+  otra hora, no es el dueno: el
+  candado se quita con aviso ("otro proceso reuso su pid"), bajo el sub-candado y releyendo el pid y
+  la hora. Sin hora guardada (un candado de 2.63.1 o anterior) o sin poder leer la de ahora, se
+  espera como antes. `run-tests.sh --hora-candado <pid>` imprime la hora con la misma funcion.
+
+### Added
+- `test-run-tests.sh`: 8 asertos (88 → 96), y uno mas solo en Git Bash: ahi la hora sale vacia (si
+  alguien quita la guarda de Linux, el CI de Windows cae). Los del pid reusado se escribieron antes del arreglo y
+  se midieron en rojo (2 fallas: la corrida agotaba el tope esperando al pid reusado). Un pid vivo
+  con otra hora se quita y la suite corre; con su misma hora espera; un lector con otro TZ que el
+  dueno espera; un candado sin hora espera; la corrida que toma el candado guarda su hora. Donde
+  run-tests no sabe leer la hora, los de la hora dicen "sin probar aqui"; en Linux, donde la hora
+  sale de /proc, el del TZ lo dice con una linea `SKIP` que mutation-check lee.
+- `mutation-check.sh`: `caso_tools` lee la linea `SKIP ... <aserto>` como `caso` (en mayusculas y al
+  inicio de la linea). Faltaba: en ubuntu la mutacion del TZ habria salido como aserto vacuo y el CI
+  en rojo (adversario, ronda 2). Si el aserto cayo (FALLA con su texto), cuenta como caido aunque
+  haya SKIP: un SKIP no tapa un fallo real (adversario externo, ronda 3).
+- `mutation-check.sh`: 5 mutaciones nuevas en `m_run_tests.py`. Las mutaciones del candado
+  (`m_run_tests.py` y `m_mutation_check.py`) pasaron por la prueba nueva con un candado de runner
+  tomado y un vigilante de procesos: todas caen. La relectura de "vivo y con su hora" bajo el
+  sub-candado no tiene una mutacion que la haga caer: la carrera que cubre no se reproduce a voluntad.
+
+### Known
+- En macOS `lstart` tiene resolucion de un segundo: un pid reusado en el mismo segundo de su arranque
+  da la misma hora y se espera, como antes del arreglo.
+- Git Bash no compara la hora: su `/proc/<pid>/stat` resta la hora de arranque de Windows a la de
+  creacion del proceso, y las dos se mueven si alguien cambia el reloj (msys2 `process.cc`; adversario,
+  ronda 2), y su `ps` no tiene `-o`. La hora sale vacia y un pid reusado sigue esperando, como antes.
+- El camino de Linux (/proc) lo mide solo el CI de ubuntu; en macOS no hay /proc. Medido en el run
+  39211792674 (platforms sobre 9fe4f4f): ubuntu 96/96, macOS 96/96, Windows 84/84 (salta los 12 de
+  chmod, pid ajeno y la hora).
+
 ## [2.63.4] - 2026-10-17
 Origen: `p-c501ad10c6`, abierto al cerrar 2.62.11. La excepcion del usuario de `snippet.marco` trataba
 como tercero a cualquier `usuario` seguido de `de`/`del` o de una palabra que empieza por `final`.
