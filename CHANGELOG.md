@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.63.10] - 2026-10-19
+Origen: p-984862c40d. `caso()` de `tools/mutation-check.sh` daba un caso por "no evaluable aqui" con
+cualquier linea SKIP del aserto, aunque la misma suite lo tumbara con FALLA: una mutacion que si cae no se
+contaba. `caso_tools()` ya lo arreglo en 2.63.6.
+
+### Fixed
+- **En `caso()`, un FALLA del aserto gana a un SKIP**, como en `caso_tools()`. La forma del SKIP de `caso()`
+  no cambia (sin distinguir mayusculas y en cualquier parte de la linea): las suites de `bin/` lo imprimen
+  asi y Git Bash depende de eso.
+
+### Added
+- `tools/test-mutation-filtro.sh` (10 asertos, entra en `tools/run-tests.sh`): saca `caso()` y
+  `caso_tools()` del `mutation-check.sh` real y los corre contra suites falsas. SKIP solo no se evalua,
+  SKIP y FALLA cae, FALLA solo cae, ni uno ni otro es vacuo, y un "skip" en minusculas no cuenta en
+  `caso_tools`. Escrita antes del arreglo y medida en rojo: 1 falla, la de SKIP y FALLA en `caso()`.
+- `mutation-check.sh`: 2 mutaciones nuevas (`skip-tapa-falla-caso`, `skip-tapa-falla-tools`); la de
+  `caso_tools` cubre el arreglo de 2.63.6, que no tenia mutacion.
+
 ## [2.63.6] - 2026-10-18
 Origen: p-7c1fa85c1e. Un candado de `tools/run-tests.sh` cuya corrida murio (kill -9) y cuyo pid
 reuso otro proceso vivo hacia esperar sin fin a la corrida siguiente: `kill -0` decia vivo.
