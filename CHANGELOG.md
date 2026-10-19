@@ -7,11 +7,26 @@ Origen: p-0ccd79fe36 (decisiones d182 y d183 de Victor). Con el python3 de macOS
 `20261016` y `2026-W42-5` desde Python 3.11. Medido sobre f7444ab con 3.9.6: 58 de las 59 suites de
 `bin/` salian con rc=0, y esa suite cortaba en 9b, asi que sus casos de despues no corrian.
 
+**El alcance crecio** (decision del supervisor de lookout, reversible y de la misma causa): al revisar
+los usos de `fromisoformat` salio el problema al reves, con Python 3.11 o mas (el CI y casi todos).
+`journal-emit` validaba `--creado` y `--revisar` con `fromisoformat`, asi que aceptaba
+`pendiente.add --creado 20261016`. El compactador escribia la linea de `_pendientes.md`, reventaba al
+crear la fila mensual (`ValueError` en `ensure_monthly`) y el evento se quedaba en `pending/`. Cada
+compactacion siguiente reventaba igual y ningun evento nuevo se aplicaba: la memoria se atascaba.
+Con `--revisar 2026W425` no reventaba, pero escribia `_revisar: 2026W425_`, que nadie lee bien.
+Medido en una memoria temporal con 3.14.3; ninguna memoria real de esta maquina tiene esas formas.
+
 ### Fixed
 - **`marcar-retomar.py` normaliza `--hoy` con su propio parser**, igual en cualquier Python 3:
   `2026-10-16`, `20261016` y `2026-W42-5` (o `2026W425`) dan `2026-10-16`. Con guiones a medias
   (`2026-1016`, `2026-W425`) o una fecha imposible, sale con error de uso y no marca nada. Es lo que
   hace `fromisoformat` de 3.11+ con esas formas, pero sin depender de la version.
+- **El emisor y el compactador exigen AAAA-MM-DD en todas las fechas de eventos**, en cualquier
+  Python: `fecha_real` de `journal-emit.py` y el nuevo `fecha_iso` de `journal-compact.py` (en
+  `validate`: `fecha` del marcador, `creado` y `revisar` de `pendiente.add`, `fecha` de
+  `pendiente.update`, `revisar` de `pendiente.window` y `creado_nuevo` de `pendiente.adopt`) pasan
+  primero una regex con `fullmatch`. Un evento con fecha ancha que ya este en `pending/` va a
+  cuarentena y la pasada sigue con los demas; la linea mala no llega a `_pendientes.md`.
 - Dos comentarios daban la forma ancha por valida sin decir que es solo desde 3.11
   (`journal-emit.py`, `pendiente.retomar`; `journal-compact.py`, `validate` de `pendiente.retomar`). Su
   codigo ya validaba con regex y no cambia.
@@ -21,8 +36,16 @@ Origen: p-0ccd79fe36 (decisiones d182 y d183 de Victor). Con el python3 de macOS
   abortaba la suite con `set -e`), y cinco fechas que salen con error de uso sin marcar nada.
   Con 3.9 y el codigo de 2.63.2 caen 4 asertos; con 3.9 y con 3.14 sobre HEAD, 65/0. Tres casos nuevos
   en `tools/mutation-check.sh` (`m_marcar_retomar.py`), que caen con 3.9 y con 3.14.
+- `test-fecha-iso.sh` nuevo: el emisor rechaza `20261016`, `2026-W42-5`, `2026W425` y `2026-10-16x`
+  en `pendiente.add --creado`/`--revisar` y `pendiente.window --revisar`, con su control; y un evento
+  con `creado` o `revisar` ancho escrito a mano en `pending/` va a cuarentena sin traceback, el evento
+  bueno de detras se aplica y la pasada siguiente tampoco revienta. 29 asertos; con 3.14 y el codigo
+  de 2.63.2 fallan 19. Dos casos nuevos en `tools/mutation-check.sh` (`m_fecha_iso.py`, uno por
+  fichero), que discriminan con 3.11+.
 
 ### Known
+- El compactador sigue parando ante una excepcion que no sea de validacion (no `Quarantine`): este
+  cambio cierra la de las fechas, no todas las posibles.
 - Volver a `date.fromisoformat` no lo ve un CI con Python 3.11 o mas, que acepta las tres formas: solo
   una corrida con 3.9 lo atrapa. El CI usa el `python3` de cada runner.
 
