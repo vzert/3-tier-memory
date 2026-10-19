@@ -1520,11 +1520,15 @@ echo "== 2.63.8: una mencion de print-como-retomar.py seguida de una ficha REAL 
 # memory/sessions/ bloqueaba el turno revisando esa ficha ("falta 4 problema(s)"). Desde 2.63.8 solo
 # cuenta la invocacion: el script como programa del segmento de shell, o como argumento de python.
 # txcmd TRANSCRIPT COMANDO: un turno sin checkpoint con ese comando de Bash y la respuesta "Visto.".
-txcmd() {
-  python3 - "$1" "$2" <<'PYM'
+txcmd() {   # $3 opcional: un veredicto del adversario que el turno trae antes del comando
+  python3 - "$1" "$2" "${3:-}" <<'PYM'
 import json, sys
-out, cmd = sys.argv[1:3]
-R = [{"type": "user", "message": {"role": "user", "content": "mira esto"}},
+out, cmd, brk = sys.argv[1:4]
+R = [{"type": "user", "message": {"role": "user", "content": "mira esto"}}]
+if brk:
+    R += [{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "adv", "name": "Agent", "input": {"subagent_type": "goalspec:goal-adversary"}}]}},
+          {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "adv", "content": [{"type": "text", "text": "- hallazgo\n" + brk}]}]}}]
+R += [
      {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "b1", "name": "Bash", "input": {"command": cmd}}]}},
      {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "b1", "content": "(salida)"}]}},
      {"type": "assistant", "message": {"content": [{"type": "text", "text": "Visto."}]}}]
@@ -1556,6 +1560,10 @@ for c in "${invocaciones[@]}"; do
   txcmd "$T/m.jsonl" "$c"
   chk "invocacion real sigue disparando: ${c:0:24}" "1" "$(bloquea "$(corre "$T/m.jsonl" false -)")"
 done
+# El filtro sessions/*.md de 2.63.3 sigue haciendo falta con una invocacion REAL sobre un archivo que
+# no es ficha: sin el, el guard corria checkpoint-audit.py sobre el .py (mutacion ficha-cualquiera).
+txcmd "$T/m.jsonl" "python3 $PR $RS/plugins/3-tier-memory/bin/pendientes_afines.py" "$BRK"
+chk "invocacion real sobre un archivo que no es ficha: silencio" "" "$(corre "$T/m.jsonl" false -)"
 
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

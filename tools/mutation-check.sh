@@ -257,7 +257,7 @@ caso "marco: campo entero" checkpoint-audit.py m_hilo.py $T "dos pendientes, el 
 caso "marco: aviso, no falta" checkpoint-audit.py m_hilo.py $T "y no lo vuelve SALTADO" marco-saltado
 caso "marco: caso 5 fuera" checkpoint-audit.py m_hilo.py $T "caso 5 \(ninguno\): el marco no aplica" marco-con-ninguno
 caso "marco: el hook lo pone en la revision" checkpoint-close-guard.sh m_hilo.py test-checkpoint-close-guard.sh "el archivo de la revision trae el bloque de avisos del marco" guard-sin-marco
-caso "ficha: solo sessions/*.md"   checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "el .py no es una ficha" ficha-cualquiera
+caso "ficha: solo sessions/*.md"   checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "invocacion real sobre un archivo que no es ficha" ficha-cualquiera
 caso "retomar: mencion no dispara"  checkpoint-close-guard.sh m_invocacion_retomar.py test-checkpoint-close-guard.sh "mencion en silencio: git" mencion-cuenta
 caso "retomar: python3 cuenta"       checkpoint-close-guard.sh m_invocacion_retomar.py test-checkpoint-close-guard.sh "invocacion real sigue disparando: python3" python-no-cuenta
 caso "extras: citado en Terminas" pendientes_afines.py m_hilo.py $T "el citado en Terminas cuando no va de extra" extras-sin-citados

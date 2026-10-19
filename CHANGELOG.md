@@ -25,6 +25,9 @@ mismo defecto bloqueo un turno real de la sesion que lo arreglaba.
   siguen disparando (`python3 "<ruta>"`, `cd … && python3 … | head`, `python3 -I "$JBIN/…"`, el script
   directo, `OUT=$(python3 …)`, `for …; do python3 …; done`).
 - Mutaciones `mencion-cuenta` y `python-no-cuenta` (`tools/mutaciones/m_invocacion_retomar.py`).
+- La mutacion `ficha-cualquiera` de 2.63.3 apunta a un caso nuevo: una invocacion real sobre un `.py`
+  con un `break` en la sesion, en silencio. El caso del `sed` de 2.63.3 ya no pasa por el filtro
+  `sessions/*.md` (el `sed` no es una invocacion), y la mutacion sobrevivia en mutation-check.
 - Medido sobre 1.527 comandos de Bash de los transcripts locales que nombran el script (2026-10-19):
   170 que la busqueda vieja contaba ya no cuentan, y ninguno que antes no contaba cuenta ahora. Los
   170 son menciones (prosa de commits, listas de un `for`, `git`, `grep`, `wc`, `scp`, codigo Python
