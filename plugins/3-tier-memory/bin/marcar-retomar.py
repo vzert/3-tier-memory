@@ -77,6 +77,23 @@ def abiertos(pend_path):
     return out
 
 
+# Las tres formas que acepta --hoy. Con regex propio y no con date.fromisoformat: este solo acepta
+# 20261016 y 2026-W42-5 desde Python 3.11, y el python3 de macOS es 3.9 (p-0ccd79fe36).
+HOY_DIA = re.compile(r"(\d{4})-?(\d{2})-?(\d{2})")      # 2026-10-16 o 20261016 (no 2026-1016)
+HOY_SEMANA = re.compile(r"(\d{4})-?W(\d{2})-?(\d)")     # 2026-W42-5 o 2026W425
+
+
+def fecha_hoy(valor):
+    """AAAA-MM-DD de `valor` en una de las tres formas, o ValueError."""
+    m = HOY_DIA.fullmatch(valor)
+    if m and valor.count("-") in (0, 2):              # todos los guiones o ninguno
+        return datetime.date(*map(int, m.groups())).isoformat()
+    m = HOY_SEMANA.fullmatch(valor)
+    if m and valor.count("-") in (0, 2):
+        return datetime.date.fromisocalendar(*map(int, m.groups())).isoformat()
+    raise ValueError(valor)
+
+
 def main(argv):
     args, hoy, memory_dir = [], None, None
     i = 0
@@ -100,9 +117,9 @@ def main(argv):
         return 2
     path = args[0]
     try:
-        # .isoformat() normaliza `20261016` o `2026-W42-5` a AAAA-MM-DD; lo que llega al emisor
-        # siempre tiene esa forma.
-        hoy = datetime.date.fromisoformat(hoy).isoformat() if hoy else datetime.date.today().isoformat()
+        # Normaliza `20261016` o `2026-W42-5` a AAAA-MM-DD; lo que llega al emisor siempre tiene esa
+        # forma.
+        hoy = fecha_hoy(hoy) if hoy else datetime.date.today().isoformat()
     except ValueError:
         print(f"uso: --hoy no es una fecha: {hoy}", file=sys.stderr)
         return 2

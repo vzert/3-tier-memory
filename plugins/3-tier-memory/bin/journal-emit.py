@@ -215,6 +215,7 @@ ID_RE = re.compile(r"^p-[0-9a-f]{10}$")
 FICHA_RETOMAR_RE = re.compile(r"^sessions/[A-Za-z0-9][A-Za-z0-9._-]*(?<!_)$")
 SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+FECHA_ISO_RE = re.compile(r"\d{4}-\d{2}-\d{2}")   # con fullmatch: sin el `\n` final que `$` deja pasar
 RESEARCH_STATUS = ("active", "completed")
 MAX_EXCL_RETRIES = 5
 
@@ -460,13 +461,16 @@ def find_session_cells(memory_dir, slug):
 
 
 def fecha_real(v):
-    """True solo si `v` es una fecha del calendario. `re` valida la FORMA: `2026-99-99` la pasa,
-    y los consumidores (`triage-scan.py`, `expire-pendientes.py`) revientan al parsearla.
-    (Hallazgo del adversario, ronda 2, 2026-09-11.)"""
+    """True solo si `v` es AAAA-MM-DD y una fecha del calendario. `re` valida la FORMA: `2026-99-99`
+    la pasa, y los consumidores (`triage-scan.py`, `expire-pendientes.py`) revientan al parsearla
+    (adversario, ronda 2, 2026-09-11). Y fromisoformat solo no basta: desde Python 3.11 acepta
+    `20261016` y `2026-W42-5`, y un `--creado 20261016` atascaba el compactador (2.63.7)."""
+    if not (isinstance(v, str) and FECHA_ISO_RE.fullmatch(v)):
+        return False
     try:
-        date.fromisoformat(str(v))
+        date.fromisoformat(v)
         return True
-    except (ValueError, TypeError):
+    except ValueError:
         return False
 
 
@@ -1451,8 +1455,8 @@ def main():
         if not ID_RE.match(pid):
             sys.exit("journal-emit: --id debe tener la forma p-<10 hex>")
         ret = (a.retomar or "").strip()
-        # fecha_real (fromisoformat) acepta `20261016` y `2026-W42-5`: el compactador los cuarentena
-        # y el mod no los lee. Aqui solo AAAA-MM-DD.
+        # fecha_real (fromisoformat) acepta `20261016` y `2026-W42-5` desde Python 3.11 (en 3.9 no):
+        # el compactador los cuarentena y el mod no los lee. Aqui solo AAAA-MM-DD, en cualquier version.
         if not (re.fullmatch(r"\d{4}-\d{2}-\d{2}", ret) and fecha_real(ret)):
             sys.exit("journal-emit: pendiente.retomar necesita --retomar AAAA-MM-DD con una fecha real")
         ficha = (a.ficha or "").strip()

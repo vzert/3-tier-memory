@@ -357,6 +357,14 @@ caso "argv sin abreviaturas"    journal-emit.py m_flags_sin_lector.py $T "abrevi
 caso "argv sin --flag=valor"    journal-emit.py m_flags_sin_lector.py $T "con igual --text=hola rechaza" argv-sin-igual
 caso "flag por su valor"        journal-emit.py m_flags_sin_lector.py $T "valor vacio en --prioridad tambien rechaza" por-valor
 caso "rama rechaza flag leido"  journal-emit.py m_flags_sin_lector.py $T "pendiente.relate --sin-relacion pasa con su evento" rama-rechaza
+T=test-marcar-retomar.sh
+caso "--hoy sin forma ancha"    marcar-retomar.py m_marcar_retomar.py $T "marcar-retomar --hoy 20261016 sale 0" sin-forma-ancha
+caso "--hoy sin semana ISO"     marcar-retomar.py m_marcar_retomar.py $T "marcar-retomar --hoy 2026-W42-5 sale 0" sin-semana
+caso "--hoy guiones sueltos"    marcar-retomar.py m_marcar_retomar.py $T "marcar-retomar --hoy 2026-1016 sale 2" guiones-sueltos
+T=test-fecha-iso.sh
+caso "emisor sin regex de fecha" journal-emit.py m_fecha_iso.py $T "pendiente.add --creado 20261016: error" sin-regex
+caso "compactador sin regex"    journal-compact.py m_fecha_iso.py $T "creado ancho: el malo va a cuarentena" sin-regex
+caso "fecha solo en learning"   journal-compact.py m_fecha_iso.py $T "resolve con fecha ancha: va a cuarentena" sin-fecha-generica
 caso "sin identidad"           journal-emit.py m_learning_dedup.py test-learning-dedup.sh "mismo texto sin --decision: rc 0" sin-identidad
 caso "decision fuera"          journal-emit.py m_learning_dedup.py test-learning-dedup.sh "la decision viaja en el payload" decision-fuera-del-payload
 caso "reemplaza sin supersedes" journal-emit.py m_learning_dedup.py test-learning-dedup.sh "reemplaza:2 lleva supersedes 2" reemplaza-sin-supersedes

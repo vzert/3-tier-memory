@@ -137,6 +137,16 @@ ACTUALIZADO_RE = re.compile(r"\s*—\s*_actualizado: \d{4}-\d{2}-\d{2}_")
 META_START_RE = re.compile(r"\s*—\s*_(?:origen|creado|id|revisar|actualizado|bloqueado|relacionado|retomar):")
 SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$")   # tambien guarda contra '../'
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+FECHA_ISO_RE = re.compile(r"\d{4}-\d{2}-\d{2}")   # con fullmatch: sin el `\n` final que `$` deja pasar
+
+
+def fecha_iso(v):
+    """La fecha AAAA-MM-DD de un evento, o ValueError. fromisoformat solo no basta: desde Python
+    3.11 acepta `20261016` y `2026-W42-5`, y un `creado` asi reventaba en ensure_monthly DESPUES de
+    escribir la linea de Tier 2, con el evento atascado en pending/ (2.63.7). En 3.9 los rechazaba."""
+    if not (isinstance(v, str) and FECHA_ISO_RE.fullmatch(v)):
+        raise ValueError(f"no es AAAA-MM-DD: {v!r}")
+    return date.fromisoformat(v)
 CELL_SPLIT = re.compile(r"(?<!\\)\|")   # un `\|` dentro de una celda (alias de wikilink) no separa
 MAX_SESSIONS = 10
 MAX_PLANS_DONE = 5
@@ -4136,7 +4146,7 @@ def validar_fecha_evento(p, tipo):
     if not f:
         return
     try:
-        date.fromisoformat(str(f))
+        fecha_iso(str(f))
     except (TypeError, ValueError):
         raise Quarantine(f"malformed: {tipo} con fecha {f!r} invalida")
 
@@ -4148,6 +4158,12 @@ def validate(ev):
     p = ev.get("payload")
     if not isinstance(p, dict):
         raise Quarantine("malformed: payload ausente")
+    # La `fecha` del marcador va en el payload de casi todos los tipos (resolve, expire, reopen,
+    # update, window, retomar, adopt, learning.add/retire) y el compactador la escribe tal cual en la
+    # fila mensual y en las marcas `_resuelto:`/`_caducado:`. Se valida aqui, para todos: con solo
+    # learning.add/retire, un resolve con `fecha` 20261016 escrito a mano llegaba a la celda Resuelto
+    # y a una marca que MARCA_RESUELTO_RE no quita (revisor, ciclo 2, ronda 1 de 2.63.7).
+    validar_fecha_evento(p, t)
     # Un ts que int() no acepta rompia compact() al archivar el evento (time.gmtime(int(ts))),
     # despues de aplicarlo: el evento se quedaba en pending/ y la pasada moria con traceback, para
     # cualquier tipo de evento (visto en la ronda 2 de adversario de bd440b2). Sin ts sigue valido
@@ -4174,7 +4190,7 @@ def validate(ev):
             if not v:
                 continue
             try:
-                date.fromisoformat(str(v))
+                fecha_iso(str(v))
             except (ValueError, TypeError):
                 raise Quarantine(f"malformed: pendiente.add con '{campo}' irreal: {v!r}")
         if "—" in str(p.get("bloqueado", "")) or "\n" in str(p.get("bloqueado", "")):
@@ -4206,7 +4222,7 @@ def validate(ev):
         # producia una marca que `ACTUALIZADO_RE` no reconoce y que el replay duplicaba.
         # (Adversario externo, ronda 1.)
         try:
-            date.fromisoformat(str(p.get("fecha", "")))
+            fecha_iso(str(p.get("fecha", "")))
         except (ValueError, TypeError):
             raise Quarantine("malformed: pendiente.update sin 'fecha' con una fecha real")
     elif t == "pendiente.expire":
@@ -4233,13 +4249,14 @@ def validate(ev):
             raise Quarantine("malformed: pendiente.window sin 'id'")
         # DATE_RE solo valida la forma: `2026-99-99` la pasa y luego revienta a los consumidores.
         try:
-            date.fromisoformat(str(p.get("revisar", "")))
+            fecha_iso(str(p.get("revisar", "")))
         except (ValueError, TypeError):
             raise Quarantine("malformed: pendiente.window sin 'revisar' con fecha real")
     elif t == "pendiente.retomar":
         if not p.get("id"):
             raise Quarantine("malformed: pendiente.retomar sin 'id'")
-        # fromisoformat solo no basta: acepta `20261016` y `2026-W42-5`, que el mod no lee.
+        # fromisoformat solo no basta: desde Python 3.11 acepta `20261016` y `2026-W42-5`, que el mod
+        # no lee (en 3.9 no los acepta; el regex hace igual las dos versiones).
         # fullmatch y no match: con `$`, `sessions/x\n` pasaba y partia la linea de Tier 2.
         ret = str(p.get("retomar", ""))
         try:
@@ -4276,7 +4293,7 @@ def validate(ev):
             c = it.get("creado_nuevo") or ""
             if c:
                 try:
-                    date.fromisoformat(str(c))
+                    fecha_iso(str(c))
                 except (TypeError, ValueError):
                     raise Quarantine(f"malformed: pendiente.adopt con creado_nuevo {c!r} irreal")
         return t, p
