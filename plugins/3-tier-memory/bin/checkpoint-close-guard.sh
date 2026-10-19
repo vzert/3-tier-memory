@@ -128,7 +128,7 @@ def invocaciones_retomar(cmd):
     `||`, `|`, `&`, `(` o un salto de linea), directo o como argumento de python/python3, con
     asignaciones `VAR=…` delante. Una mencion (`git diff … print-como-retomar.py <ficha>`, un grep,
     un `sed -i`, un `echo "python3 …"`) no cuenta: bloqueaba el turno revisando la ficha que venia
-    detras. Devuelve una lista con el argumento que sigue al script ("" si no lleva). Un comando que
+    detras. Devuelve una lista con el argumento que sigue al script (sin argumento no cuenta). Un comando que
     shlex no puede partir (comillas sin cerrar) vuelve a la busqueda por mencion: un aviso de mas,
     nunca uno de menos."""
     if SCRIPT_RETOMAR not in cmd:
@@ -161,8 +161,10 @@ def invocaciones_retomar(cmd):
                     s += 1
                 if s < len(toks) and os.path.basename(toks[s].replace("\\", "/")) == SCRIPT_RETOMAR:
                     k = s + 1
-            if k is not None:
-                out.append(toks[k] if k < len(toks) and not sep(toks[k]) else "")
+            # Sin argumento no es una invocacion: el script exige la ficha. Asi `print-como-retomar.py`
+            # entre comillas invertidas en la prosa de un commit no abre un segmento falso.
+            if k is not None and k < len(toks) and not sep(toks[k]):
+                out.append(toks[k])
         while i < len(toks) and not sep(toks[i]):
             i += 1
         while i < len(toks) and sep(toks[i]):

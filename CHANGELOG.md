@@ -25,11 +25,12 @@ mismo defecto bloqueo un turno real de la sesion que lo arreglaba.
   siguen disparando (`python3 "<ruta>"`, `cd … && python3 … | head`, `python3 -I "$JBIN/…"`, el script
   directo, `OUT=$(python3 …)`, `for …; do python3 …; done`).
 - Mutaciones `mencion-cuenta` y `python-no-cuenta` (`tools/mutaciones/m_invocacion_retomar.py`).
-- Medido sobre 1.523 comandos de Bash de los transcripts locales que nombran el script: 166 que la
-  busqueda vieja contaba ya no cuentan. Son prosa en mensajes de commit, listas de un `for`, codigo
-  Python que busca el nombre, el `--text` de un `journal-emit.py`, `scp`, y las invocaciones remotas
-  por `ssh`. Y 4 que no contaban ahora si, porque la busqueda vieja no veia un script seguido de
-  `|` o de nada.
+- Medido sobre 1.527 comandos de Bash de los transcripts locales que nombran el script (2026-10-19):
+  170 que la busqueda vieja contaba ya no cuentan, y ninguno que antes no contaba cuenta ahora. Los
+  170 son prosa en mensajes de commit, listas de un `for`, codigo Python que busca el nombre, el
+  `--text` de un `journal-emit.py`, `scp`, y las invocaciones remotas por `ssh`. Una invocacion sin
+  argumento no cuenta: el script exige la ficha, y asi el nombre entre comillas invertidas en la
+  prosa de un commit no abre un segmento falso.
 
 ## [2.63.4] - 2026-10-17
 Origen: `p-c501ad10c6`, abierto al cerrar 2.62.11. La excepcion del usuario de `snippet.marco` trataba
