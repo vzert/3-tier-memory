@@ -6,8 +6,8 @@ reuso otro proceso vivo hacia esperar sin fin a la corrida siguiente: `kill -0` 
 
 ### Fixed
 - **El candado guarda la hora de arranque de su dueno** (`$CANDADO/arranque`, escrita antes que el
-  pid). Con /proc (Linux, Git Bash) es el campo 22 de `/proc/<pid>/stat`, tics desde el arranque de
-  la maquina; sin /proc (macOS), `ps -o lstart=` con `TZ=UTC0` y `LC_ALL=C`. Asi sale igual para quien
+  pid). En Linux es el campo 22 de `/proc/<pid>/stat`, tics desde el arranque de la maquina; en
+  macOS, `ps -o lstart=` con `TZ=UTC0` y `LC_ALL=C`. Asi sale igual para quien
   la escribe y para quien la lee: con `lstart` en hora local, un lector con otro TZ veia otra hora y
   robaba un candado vivo, dos suites a la vez (adversario, ronda 1). Si el pid del candado vive con
   otra hora, no es el dueno: el
@@ -20,8 +20,11 @@ reuso otro proceso vivo hacia esperar sin fin a la corrida siguiente: `kill -0` 
   se midieron en rojo (2 fallas: la corrida agotaba el tope esperando al pid reusado). Un pid vivo
   con otra hora se quita y la suite corre; con su misma hora espera; un lector con otro TZ que el
   dueno espera; un candado sin hora espera; la corrida que toma el candado guarda su hora. Donde
-  run-tests no sabe leer la hora, los de la hora dicen "sin probar aqui"; donde la hora sale de
-  /proc, el del TZ lo dice con un SKIP para mutation-check (ahi no depende del TZ).
+  run-tests no sabe leer la hora, los de la hora dicen "sin probar aqui"; en Linux, donde la hora
+  sale de /proc, el del TZ lo dice con una linea `SKIP` que mutation-check lee.
+- `mutation-check.sh`: `caso_tools` lee la linea `SKIP ... <aserto>` como `caso` (en mayusculas y al
+  inicio de la linea). Faltaba: en ubuntu la mutacion del TZ habria salido como aserto vacuo y el CI
+  en rojo (adversario, ronda 2).
 - `mutation-check.sh`: 5 mutaciones nuevas en `m_run_tests.py`. Las mutaciones del candado
   (`m_run_tests.py` y `m_mutation_check.py`) pasaron por la prueba nueva con un candado de runner
   tomado y un vigilante de procesos: todas caen. La relectura de "vivo y con su hora" bajo el
@@ -30,8 +33,10 @@ reuso otro proceso vivo hacia esperar sin fin a la corrida siguiente: `kill -0` 
 ### Known
 - En macOS `lstart` tiene resolucion de un segundo: un pid reusado en el mismo segundo de su arranque
   da la misma hora y se espera, como antes del arreglo.
-- Git Bash: sin medir si su /proc/<pid>/stat trae el campo 22. Si no lo trae, la hora sale vacia y un
-  pid reusado sigue esperando, como antes; el CI de Windows lo dice (caso "sin probar aqui").
+- Git Bash no compara la hora: su `/proc/<pid>/stat` resta la hora de arranque de Windows a la de
+  creacion del proceso, y las dos se mueven si alguien cambia el reloj (msys2 `process.cc`; adversario,
+  ronda 2), y su `ps` no tiene `-o`. La hora sale vacia y un pid reusado sigue esperando, como antes.
+- El camino de Linux (/proc) lo mide solo el CI de ubuntu; en macOS no hay /proc.
 
 ## [2.63.1] - 2026-10-17
 Origen: p-4be2b6ea23. `tools/mutation-check.sh` lanzado solo es tan pesado como la suite completa y

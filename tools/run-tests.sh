@@ -60,13 +60,15 @@ candado_vivo() {
 }
 # Hora de arranque del pid $1, o nada si no se puede saber. Tiene que salir igual para quien la
 # escribe y para quien la lee, sea cual sea su entorno: un lector con otro TZ leia otra `lstart` y
-# robaba un candado vivo, dos suites a la vez (adversario, ronda 1). Con /proc (Linux, Git Bash): el
-# campo 22 de /proc/<pid>/stat, tics desde el arranque de la maquina, que no dependen del TZ ni de
-# un salto del reloj (la `lstart` de procps si). Sin /proc (macOS): `ps -o lstart=` con TZ=UTC0 y
-# LC_ALL=C (el dia y el mes se traducen). El comm del campo 2 puede llevar espacios y parentesis:
-# se corta hasta el ultimo ") ".
+# robaba un candado vivo, dos suites a la vez (adversario, ronda 1). En Linux: el campo 22 de
+# /proc/<pid>/stat, tics desde el arranque de la maquina, que no dependen del TZ ni de un salto del
+# reloj (la `lstart` de procps si). En macOS: `ps -o lstart=` con TZ=UTC0 y LC_ALL=C (el dia y el mes
+# se traducen). El comm del campo 2 puede llevar espacios y parentesis: se corta hasta el ultimo ") ".
+# Git Bash no: su /proc/<pid>/stat resta la hora de arranque de Windows a la de creacion, y las dos
+# se mueven si alguien cambia el reloj (msys2 process.cc; adversario, ronda 2). Ahi sale vacio (su
+# `ps` no tiene -o): se espera como antes, el lado seguro.
 candado_hora() {
-  if [ -r "/proc/$1/stat" ]; then
+  if [ "$(uname -s)" = Linux ] && [ -r "/proc/$1/stat" ]; then
     sed 's/.*) //' "/proc/$1/stat" 2>/dev/null | awk '$20 != "" {print "tics " $20}'
   else
     TZ=UTC0 LC_ALL=C ps -o lstart= -p "$1" 2>/dev/null | sed 's/^  *//; s/  *$//'

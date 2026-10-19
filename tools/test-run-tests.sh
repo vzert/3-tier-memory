@@ -254,7 +254,7 @@ if [ -n "$hora" ]; then
   TZ=Pacific/Kiritimati bash "$R/tools/run-tests.sh" --hora-candado "$reusado" > "$CAND/arranque"
   completa "$T/z"; z=$LANZADO
   chk "un lector con otro TZ que el dueno no le roba el candado: espera" "1" "$(termina "$z" 4; echo $?)"
-  [ -r "/proc/$reusado/stat" ] && echo "  SKIP aqui la hora sale de /proc, que no depende del TZ: un lector con otro TZ que el dueno no le roba el candado"
+  [ "$(uname -s)" = Linux ] && [ -r "/proc/$reusado/stat" ] && echo "  SKIP aqui la hora sale de /proc, que no depende del TZ: un lector con otro TZ que el dueno no le roba el candado"
   rm -rf "$CAND"
 else
   echo "  (sin probar aqui: run-tests no sabe leer la hora de arranque; no cuenta) pid reusado"
