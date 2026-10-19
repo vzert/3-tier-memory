@@ -301,7 +301,7 @@ if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/journal-compact.py" ] && [ -d "$MEMORY_DIR/.j
 fi
 
 # Cuarentena: eventos que no se pudieron aplicar de forma segura (ancla borrada a mano, colision
-# de id, JSON roto, fecha imposible). Nunca se borran solos; cada uno lleva un .reason al lado.
+# de id, JSON roto, fecha imposible, o `error-interno:` desde 2.63.11). Nunca se borran solos; cada uno lleva un .reason al lado.
 # Desde 2.22.0 un header de prioridad que falta NO llega aqui: el compactador lo crea y aplica el
 # evento. Lo que quede en cuarentena necesita de verdad a una persona, y por eso se le avisa.
 JOURNAL_Q="$MEMORY_DIR/.journal/quarantine"

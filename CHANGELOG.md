@@ -33,6 +33,9 @@ Origen: `p-ac5a4bb888`, el Known de 2.63.7. Version provisional: la 2.63.10 es d
 - `tools/mutaciones/m_error_interno.py` (3 mutaciones) y 4 casos en `tools/mutation-check.sh`: sin
   la red; con OSError a cuarentena (cae tambien el caso 27 de `test-session-amend.sh`); con
   UnicodeDecodeError a cuarentena.
+- `tools/mutation-check.sh`, caso "compactador sin regex" (2.63.7): sin la regex, el evento con
+  `creado` ancho ya no atasca la pasada (va a cuarentena como `error-interno: ValueError`), pero su
+  linea llega a `_pendientes.md` antes de fallar; el caso ahora espera ese aserto.
 
 ## [2.63.9] - 2026-10-19
 Origen: `p-c0e7c422cb`, la nota del revisor de 2.63.4. La excepcion del usuario de `snippet.marco`

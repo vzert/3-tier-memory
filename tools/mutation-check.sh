@@ -364,7 +364,7 @@ caso "--hoy sin semana ISO"     marcar-retomar.py m_marcar_retomar.py $T "marcar
 caso "--hoy guiones sueltos"    marcar-retomar.py m_marcar_retomar.py $T "marcar-retomar --hoy 2026-1016 sale 2" guiones-sueltos
 T=test-fecha-iso.sh
 caso "emisor sin regex de fecha" journal-emit.py m_fecha_iso.py $T "pendiente.add --creado 20261016: error" sin-regex
-caso "compactador sin regex"    journal-compact.py m_fecha_iso.py $T "creado ancho: el malo va a cuarentena" sin-regex
+caso "compactador sin regex"    journal-compact.py m_fecha_iso.py $T "creado ancho: la linea mala no llega a _pendientes.md" sin-regex
 caso "fecha solo en learning"   journal-compact.py m_fecha_iso.py $T "resolve con fecha ancha: va a cuarentena" sin-fecha-generica
 T=test-error-interno.sh
 caso "sin red de error-interno" journal-compact.py m_error_interno.py $T "text=1: el malo va a cuarentena" sin-captura

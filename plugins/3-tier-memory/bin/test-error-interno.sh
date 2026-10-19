@@ -107,5 +107,5 @@ python3 -I -c 'import sys; p=sys.argv[1]; b=open(p,"rb").read().replace(b"\xff\x
 compact --quiet >/dev/null 2>&1
 chk "UnicodeDecodeError: arreglado el indice, el evento se aplica" "1" "$(grep -c 'tras arreglo' "$M/_pendientes.md")"
 
-echo "error-interno: $pass ok, $fail fallas"
+echo "RESULTADO: $pass ok, $fail fallas"
 [ "$fail" -eq 0 ]
