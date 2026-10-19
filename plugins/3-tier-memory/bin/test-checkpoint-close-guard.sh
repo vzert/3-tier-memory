@@ -1333,7 +1333,7 @@ echo "== p-1d0f012aa9: sesion supervisada por lookout, la pregunta va por SendMe
 LK="$T/lookout"; mkdir -p "$LK/sessions"
 printf '{"project_id": "p", "supervisor": "supervisor-x", "address": "uds:/tmp/cc-socks/9.sock", "nombre": "a"}\n' > "$LK/sessions/sess-sup.json"
 # cwd propio por corrida, no /tmp: con /tmp las corridas paralelas de mutation-check compartian
-# `/tmp/.3t-revision-cierre-sess-sup.md` y un aserto leia el aviso de otra corrida (p-e376b39ea2).
+# el mismo archivo de aviso en la carpeta temporal y un aserto leia el de otra corrida (p-e376b39ea2).
 CWS="$T/cwd-sup"; mkdir -p "$CWS"
 corre_sup() {
   python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":False,"last_assistant_message":"","cwd":sys.argv[2],"session_id":"sess-sup"}))' "$1" "$CWS" \

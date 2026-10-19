@@ -10,7 +10,7 @@ con `MUT_JOBS=4`, y tumbaba mutation-check del PR #43 por una prueba que ese PR 
   al hook (el bloque del supervisor de lookout y el caso de la ficha con `session_id: sesion-actual`)
   pasaban `cwd=/tmp` con un `session_id` fijo. El hook escribe su aviso en
   `<cwd>/.3t-revision-cierre-<session_id>.md`, asi que las corridas paralelas de mutation-check
-  escribian y leian el mismo `/tmp/.3t-revision-cierre-sess-sup.md`, y un aserto podia leer el aviso
+  escribian y leian el mismo archivo de aviso en la carpeta temporal compartida, y un aserto podia leer el aviso
   de otra corrida. Ahora cada llamada usa una carpeta propia dentro del `mktemp -d` de la corrida. El
   hook no cambia.
 
