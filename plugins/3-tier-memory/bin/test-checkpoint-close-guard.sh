@@ -1515,9 +1515,9 @@ PYS
 chk "silencio (el .py no es una ficha)" "" "$(corre "$T/t.jsonl" false -)"
 chk "y en la vuelta reentrante tampoco avisa" "" "$(corre "$T/t.jsonl" true -)"
 
-echo "== 2.63.8: una mencion de print-como-retomar.py seguida de una ficha REAL no dispara; la invocacion si =="
+echo "== 2.63.13: una mencion de print-como-retomar.py seguida de una ficha REAL no dispara; la invocacion si =="
 # Forma real (p-1fe14aa592): un `git diff` de lectura que nombra el script y despues una ficha de
-# memory/sessions/ bloqueaba el turno revisando esa ficha ("falta 4 problema(s)"). Desde 2.63.8 solo
+# memory/sessions/ bloqueaba el turno revisando esa ficha ("falta 4 problema(s)"). Desde 2.63.13 solo
 # cuenta la invocacion: el script como programa del segmento de shell, o como argumento de python.
 # txcmd TRANSCRIPT COMANDO: un turno sin checkpoint con ese comando de Bash y la respuesta "Visto.".
 txcmd() {   # $3 opcional: un veredicto del adversario que el turno trae antes del comando

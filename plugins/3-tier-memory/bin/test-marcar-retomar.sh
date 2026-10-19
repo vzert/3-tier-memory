@@ -180,10 +180,25 @@ set -e
 chk "fecha 20261016 (sin guiones): error" "1" "$([ "$R5" -ne 0 ] && echo 1 || echo 0)"
 chk "fecha 2026-W42-5 (semana ISO): error" "1" "$([ "$R6" -ne 0 ] && echo 1 || echo 0)"
 chk "y no dejan evento" "0" "$(eventos)"
-ficha 2026-10-16-uno "hacer $A."
-python3 "$BIN/marcar-retomar.py" "$M/sessions/2026-10-16-uno.md" --hoy 20261016 >/dev/null
-chk "marcar-retomar --hoy 20261016 escribe 2026-10-16" "1" "$(linea "$A" | grep -c '_retomar: 2026-10-16 sessions/2026-10-16-uno_')"
-chk "sin cuarentena" "0" "$(cuarentena)"
+# Las tres formas en CUALQUIER Python 3: date.fromisoformat solo acepta las dos anchas desde 3.11, y
+# el python3 de macOS es 3.9 (p-0ccd79fe36). Se lee el codigo de salida: con `set -e` un rc=2 aqui
+# abortaba la suite y en 3.9 los casos de despues nunca corrian.
+for forma in 20261016 2026-W42-5 2026-10-16; do
+  fixture
+  ficha 2026-10-16-uno "hacer $A."
+  RC=0; python3 "$BIN/marcar-retomar.py" "$M/sessions/2026-10-16-uno.md" --hoy "$forma" >/dev/null 2>&1 || RC=$?
+  chk "marcar-retomar --hoy $forma sale 0" "0" "$RC"
+  chk "marcar-retomar --hoy $forma escribe 2026-10-16" "1" "$(linea "$A" | grep -c '_retomar: 2026-10-16 sessions/2026-10-16-uno_')"
+  chk "sin cuarentena con $forma" "0" "$(cuarentena)"
+done
+# Una fecha imposible en cualquiera de las formas sale con error de uso y no marca nada.
+for forma in 20261332 2026-W54-1 2026-02-30 2026-1016 hoy; do
+  fixture
+  ficha 2026-10-16-uno "hacer $A."
+  RC=0; python3 "$BIN/marcar-retomar.py" "$M/sessions/2026-10-16-uno.md" --hoy "$forma" >/dev/null 2>&1 || RC=$?
+  chk "marcar-retomar --hoy $forma sale 2" "2" "$RC"
+  chk "marcar-retomar --hoy $forma no marca" "0" "$(linea "$A" | grep -c '_retomar:' || true)"
+done
 
 echo "== 10. el compactador cuarentena un evento escrito a mano con ficha o fecha malas =="
 # El emisor tambien las rechaza (caso 9); esto cubre un evento que no paso por el (adversario,

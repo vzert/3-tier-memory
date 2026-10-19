@@ -223,6 +223,53 @@ chk "un candado con pid 0 cuenta como abandonado: no espera sin fin" "0" "$(term
 chk "y corre su suite" "ini fin" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
 rm -rf "$CAND"
 
+# p-7c1fa85c1e: el pid de una corrida muerta lo reusa otro proceso vivo. El candado guarda la hora de
+# arranque de su dueno (`arranque`); si el pid vive con otra hora, no es el dueno: se quita. Sin hora
+# guardada (candado de antes de 2.63.6) se espera como siempre. Solo donde run-tests sabe leer la
+# hora (`--hora-candado`, la misma funcion con que la escribe).
+sleep 60 & reusado=$!
+hora=$(bash "$R/tools/run-tests.sh" --hora-candado "$reusado")
+if [ -n "$hora" ]; then
+  mkdir "$CAND"; echo "$reusado" > "$CAND/pid"; echo "Thu Jan  1 00:00:00 1970" > "$CAND/arranque"
+  : > "$T/registro"; TOPE=10; completa "$T/h"; h=$LANZADO; TOPE=
+  chk "un pid reusado por otro proceso vivo (otra hora de arranque) no hace esperar sin fin" "0" "$(termina "$h" 30; echo $?)"
+  chk "con el pid reusado, quita el candado y corre su suite" "ini fin" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
+  chk "con el pid reusado, no se agota esperando y avisa que lo quita" "0 1" \
+    "$(grep -c 'RUN_TESTS_CANDADO_TOPE' "$T/h.err") $(grep -c 'otro proceso reuso su pid' "$T/h.err")"
+  rm -rf "$CAND"
+  mkdir "$CAND"; echo "$reusado" > "$CAND/pid"; echo "$hora" > "$CAND/arranque"; : > "$T/registro"
+  completa "$T/i"; i=$LANZADO
+  chk "un pid vivo con su misma hora de arranque es el dueno: espera" "1" "$(termina "$i" 4; echo $?)"
+  chk "y no corre su suite con el dueno vivo" "" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
+  rm -rf "$CAND"
+  # La corrida que toma el candado guarda su propia hora: sin eso, lo de arriba no se activa nunca.
+  : > "$T/registro"; completa "$T/j"; j=$LANZADO
+  n=0; while [ ! -s "$T/registro" ] && [ "$n" -lt 100 ]; do sleep 0.1; n=$(( n + 1 )); done
+  chk "la corrida que toma el candado guarda su hora de arranque" "$(bash "$R/tools/run-tests.sh" --hora-candado "$j")" \
+    "$(cat "$CAND/arranque" 2>/dev/null)"
+  termina "$j" 30 >/dev/null
+  # Quien escribe y quien lee pueden tener otro TZ: con `lstart` en hora local, un lector con otro TZ
+  # veia otra hora y robaba el candado de un dueno vivo (adversario, ronda 1).
+  mkdir "$CAND"; echo "$reusado" > "$CAND/pid"; : > "$T/registro"
+  TZ=Pacific/Kiritimati bash "$R/tools/run-tests.sh" --hora-candado "$reusado" > "$CAND/arranque"
+  completa "$T/z"; z=$LANZADO
+  chk "un lector con otro TZ que el dueno no le roba el candado: espera" "1" "$(termina "$z" 4; echo $?)"
+  [ "$(uname -s)" = Linux ] && [ -r "/proc/$reusado/stat" ] && echo "  SKIP aqui la hora sale de /proc, que no depende del TZ: un lector con otro TZ que el dueno no le roba el candado"
+  rm -rf "$CAND"
+else
+  echo "  (sin probar aqui: run-tests no sabe leer la hora de arranque; no cuenta) pid reusado"
+fi
+# Git Bash no lee la hora: su /proc se mueve si cambia el reloj, y robaria un candado vivo
+# (adversario, ronda 2). Este aserto solo corre ahi; si alguien quita la guarda de Linux, cae.
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*)
+  chk "en Git Bash la hora de arranque sale vacia: se espera como antes" "" "$hora" ;;
+esac
+mkdir "$CAND"; echo "$reusado" > "$CAND/pid"; : > "$T/registro"
+completa "$T/k"; k=$LANZADO
+chk "un candado sin hora de arranque (de antes de 2.63.6) con su pid vivo: espera" "1" "$(termina "$k" 4; echo $?)"
+rm -rf "$CAND"
+kill "$reusado" 2>/dev/null; wait "$reusado" 2>/dev/null
+
 # Ruta fija, no del TMPDIR: procesos de la misma maquina con otro TMPDIR no compartian el candado.
 chk "el candado no depende de TMPDIR" "/tmp/3tm-run-tests.candado" \
   "$(env -u RUN_TESTS_CANDADO TMPDIR="$T/otro" bash "$R/tools/run-tests.sh" --ruta-candado)"

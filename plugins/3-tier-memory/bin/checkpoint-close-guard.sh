@@ -120,14 +120,14 @@ _RE_ASIGNA = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 # Palabras de shell que pueden ir delante del programa de un segmento (`for …; do python3 …`).
 _PREFIJOS = {"do", "then", "else", "elif", "if", "while", "until", "!", "time", "exec", "command",
              "nohup", "{"}
-# Programas que lanzan a otro (adversario de 2.63.8: `uv run`, `env -i` y `xargs` callaban el guard).
+# Programas que lanzan a otro (adversario de 2.63.13: `uv run`, `env -i` y `xargs` callaban el guard).
 _ENVOLTORIOS = {"env", "xargs", "sudo", "nice", "timeout", "nohup"}
 _OPC_CON_VALOR = {"-u", "-I", "-n", "-P", "-L", "-d", "-E", "-s", "--with", "--python", "-p",
                   "--project", "--directory"}
 
 
 def invocaciones_retomar(cmd):
-    """Argumentos de cada invocacion REAL de print-como-retomar.py en un comando de Bash (2.63.8,
+    """Argumentos de cada invocacion REAL de print-como-retomar.py en un comando de Bash (2.63.13,
     p-1fe14aa592): el script es el programa de un segmento de shell (tras el inicio, `;`, `&&`,
     `||`, `|`, `&`, `(` o un salto de linea), directo o como argumento de python/python3, con
     asignaciones `VAR=…` delante. Una mencion (`git diff … print-como-retomar.py <ficha>`, un grep,
@@ -487,7 +487,7 @@ for r in turno:
             # una sola llamada Bash dejaban la segunda ficha sin revisar (adversario, ronda 2).
             # Solo una ruta sessions/*.md es una ficha (2.63.3, p-bea9639b92): un
             # `sed -i … print-como-retomar.py pendientes_afines.py` tomaba el .py como ficha y le
-            # pedia nombrar el `break` de la sesion en `## Bugs fixed`. Desde 2.63.8 solo cuenta la
+            # pedia nombrar el `break` de la sesion en `## Bugs fixed`. Desde 2.63.13 solo cuenta la
             # invocacion real del script, no una mencion (invocaciones_retomar, p-1fe14aa592).
             for a in args_retomar:
                 f = resolver(a, base) if a else None
