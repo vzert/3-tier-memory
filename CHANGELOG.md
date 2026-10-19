@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.63.3] - 2026-10-17
+Origen: la sesion 4237bac9 de este repo (ficha `2026-10-16-hilo-un-salto-snippet-ajeno`), antes de
+cualquier /checkpoint-3t y sin ficha propia, recibio dos veces el aviso `bugs.veredicto_break`: nombrar
+en `## Bugs fixed` el hallazgo del adversario. Medido pasando su transcript por el guard: lo disparo
+un `sed -i '' … plugins/3-tier-memory/bin/print-como-retomar.py plugins/3-tier-memory/bin/pendientes_afines.py`.
+El guard tomo `pendientes_afines.py` como ficha y le corrio `checkpoint-audit.py` con el `break` de la
+sesion.
+
+### Fixed
+- **`checkpoint-close-guard.sh` solo toma como ficha un argumento `sessions/*.md` de
+  `print-como-retomar.py`** (p-bea9639b92). Un comando que edita o lee el fuente del script y nombra
+  otro archivo despues ya no le pide al agente nombrar el veredicto del adversario en un archivo que
+  no es una ficha. Es una mitad del arreglo de p-1fe14aa592, que sigue abierto con la otra: disparar
+  solo con la invocacion real del script, no con cualquier mencion. Una ruta con variables (`"$SF"`,
+  p-e1799cd04c) sigue igual.
+  El filtro es `sessions/*.md` (`FICHA_RE`), no `memory/sessions/*.md` (`SESION_RE`): con este
+  ultimo caen 24 asertos existentes cuya memoria de prueba no vive en `memory/`. Acepta tambien `\`,
+  porque en Windows `resolver()` (normpath) deja la ruta con barras invertidas.
+
+### Added
+- Caso en `test-checkpoint-close-guard.sh` con la forma real del `sed` y un `break` en la sesion:
+  silencio en la vuelta normal y en la reentrante (cae 2 de 2 con el guard de 2.62.11).
+- Mutacion `ficha-cualquiera` (`tools/mutaciones/m_ficha_sesion.py`): quita el filtro y el caso cae.
+
 ## [2.63.2] - 2026-10-17
 Origen: p-7ae84c8ef2 (decision d133 de Victor, opcion A). 2.62.10 cerro `--nota`, pero
 `journal-emit` seguia aceptando con rc=0 cualquier otro flag que el tipo no lee: medido con el
