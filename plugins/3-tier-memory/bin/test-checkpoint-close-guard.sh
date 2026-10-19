@@ -1515,5 +1515,47 @@ PYS
 chk "silencio (el .py no es una ficha)" "" "$(corre "$T/t.jsonl" false -)"
 chk "y en la vuelta reentrante tampoco avisa" "" "$(corre "$T/t.jsonl" true -)"
 
+echo "== 2.63.8: una mencion de print-como-retomar.py seguida de una ficha REAL no dispara; la invocacion si =="
+# Forma real (p-1fe14aa592): un `git diff` de lectura que nombra el script y despues una ficha de
+# memory/sessions/ bloqueaba el turno revisando esa ficha ("falta 4 problema(s)"). Desde 2.63.8 solo
+# cuenta la invocacion: el script como programa del segmento de shell, o como argumento de python.
+# txcmd TRANSCRIPT COMANDO: un turno sin checkpoint con ese comando de Bash y la respuesta "Visto.".
+txcmd() {
+  python3 - "$1" "$2" <<'PYM'
+import json, sys
+out, cmd = sys.argv[1:3]
+R = [{"type": "user", "message": {"role": "user", "content": "mira esto"}},
+     {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "b1", "name": "Bash", "input": {"command": cmd}}]}},
+     {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "b1", "content": "(salida)"}]}},
+     {"type": "assistant", "message": {"content": [{"type": "text", "text": "Visto."}]}}]
+open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r) for r in R) + "\n")
+PYM
+}
+armar "$M" "$FX/snippet-2120.txt"; fecha30 "$F"
+PR="$BIN/print-como-retomar.py"
+menciones=(
+  "git diff HEAD~1 -- $PR $F"
+  "grep -n Retomamos $PR $F"
+  "sed -i.bak 's/a/b/' $PR $F"
+  "echo \"python3 $PR $F\""
+  "cat $PR | grep -c x $F"
+)
+for c in "${menciones[@]}"; do
+  txcmd "$T/m.jsonl" "$c"
+  chk "mencion en silencio: ${c%% *}" "" "$(corre "$T/m.jsonl" false -)"
+done
+invocaciones=(
+  "python3 \"$PR\" \"$F\""
+  "cd $T && python3 $PR $F 2>&1 | head -40"
+  "JBIN=$BIN; python3 -I \"\$JBIN/print-como-retomar.py\" $F"
+  "true; $PR $F"
+  "OUT=\$(python3 \"$PR\" \"$F\" 2>/dev/null); echo \"\$OUT\""
+  "for x in 1; do python3 $PR $F; done"
+)
+for c in "${invocaciones[@]}"; do
+  txcmd "$T/m.jsonl" "$c"
+  chk "invocacion real sigue disparando: ${c:0:24}" "1" "$(bloquea "$(corre "$T/m.jsonl" false -)")"
+done
+
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

@@ -1,5 +1,36 @@
 # Changelog
 
+## [2.63.8] - 2026-10-19
+Origen: p-1fe14aa592. `checkpoint-close-guard.sh` disparaba la revision del cierre con cualquier
+comando que nombrara `print-como-retomar.py` y tomaba como ficha la palabra siguiente. 2.63.3
+(p-bea9639b92) ya exigia que esa palabra fuera un `sessions/*.md`; quedaba la otra mitad. Medido en
+esta sesion: `git diff HEAD~1 -- plugins/3-tier-memory/bin/print-como-retomar.py
+memory/sessions/<ficha>.md`, de solo lectura, bloqueo el turno con "falta 4 problema(s)", y el
+mismo defecto bloqueo un turno real de la sesion que lo arreglaba.
+
+### Fixed
+- **El guard solo dispara con la invocacion real de `print-como-retomar.py`** (`invocaciones_retomar`).
+  Cuenta cuando el script es el programa de un segmento de shell (tras el inicio, `;`, `&&`, `||`,
+  `|`, `&`, `(`, `$(`, una comilla invertida o un salto de linea), directo o como argumento de
+  python/python3 con sus opciones, con asignaciones `VAR=…` o palabras de shell (`do`, `then`, `if`…)
+  delante. Una mencion (`git diff`, `grep`, `sed -i`, `cat`, un `echo "python3 …"`, el texto de un
+  `--text`) ya no dispara. Lo usan los dos sitios que antes buscaban la mencion: el disparo del turno
+  y las fichas impresas que cuentan para el cambio de estado. Un comando que shlex no puede partir
+  vuelve a la busqueda por mencion. Una invocacion dentro de `ssh host '…'` ya no dispara: corre en
+  otra maquina, y su ficha no existe aqui. `"$SF"` (p-e1799cd04c) sigue igual.
+
+### Added
+- Casos en `test-checkpoint-close-guard.sh`: cinco menciones con una ficha real detras, en silencio
+  (cuatro caen con el guard de 2.63.4; el `cat … | grep …` ya pasaba), y siete invocaciones reales que
+  siguen disparando (`python3 "<ruta>"`, `cd … && python3 … | head`, `python3 -I "$JBIN/…"`, el script
+  directo, `OUT=$(python3 …)`, `for …; do python3 …; done`).
+- Mutaciones `mencion-cuenta` y `python-no-cuenta` (`tools/mutaciones/m_invocacion_retomar.py`).
+- Medido sobre 1.523 comandos de Bash de los transcripts locales que nombran el script: 166 que la
+  busqueda vieja contaba ya no cuentan. Son prosa en mensajes de commit, listas de un `for`, codigo
+  Python que busca el nombre, el `--text` de un `journal-emit.py`, `scp`, y las invocaciones remotas
+  por `ssh`. Y 4 que no contaban ahora si, porque la busqueda vieja no veia un script seguido de
+  `|` o de nada.
+
 ## [2.63.4] - 2026-10-17
 Origen: `p-c501ad10c6`, abierto al cerrar 2.62.11. La excepcion del usuario de `snippet.marco` trataba
 como tercero a cualquier `usuario` seguido de `de`/`del` o de una palabra que empieza por `final`.

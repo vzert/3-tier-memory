@@ -113,6 +113,63 @@ def es_prompt_real(r):
     return not INYECTADO.match(txt)
 
 
+SCRIPT_RETOMAR = "print-como-retomar.py"
+_RE_MENCION = re.compile(r"print-como-retomar\.py[\"']?\s+(\"[^\"]+\"|'[^']+'|[^\s;&|]+)")
+_RE_PYTHON = re.compile(r"^python(?:3(?:\.\d+)?)?(?:\.exe)?$")
+_RE_ASIGNA = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+# Palabras de shell que pueden ir delante del programa de un segmento (`for …; do python3 …`).
+_PREFIJOS = {"do", "then", "else", "elif", "if", "while", "until", "!", "time", "exec", "command",
+             "nohup", "env", "{"}
+
+
+def invocaciones_retomar(cmd):
+    """Argumentos de cada invocacion REAL de print-como-retomar.py en un comando de Bash (2.63.8,
+    p-1fe14aa592): el script es el programa de un segmento de shell (tras el inicio, `;`, `&&`,
+    `||`, `|`, `&`, `(` o un salto de linea), directo o como argumento de python/python3, con
+    asignaciones `VAR=…` delante. Una mencion (`git diff … print-como-retomar.py <ficha>`, un grep,
+    un `sed -i`, un `echo "python3 …"`) no cuenta: bloqueaba el turno revisando la ficha que venia
+    detras. Devuelve una lista con el argumento que sigue al script ("" si no lleva). Un comando que
+    shlex no puede partir (comillas sin cerrar) vuelve a la busqueda por mencion: un aviso de mas,
+    nunca uno de menos."""
+    if SCRIPT_RETOMAR not in cmd:
+        return []
+    # `$(…)` y las comillas invertidas abren un segmento: `OUT=$(python3 …print-como-retomar.py "$f")`
+    # es una invocacion (medido en los transcripts locales, 2026-10-19).
+    texto = re.sub(r"\\\r?\n", " ", cmd).replace("$(", " ( ").replace("`", " ( ")
+    try:
+        lx = shlex.shlex(texto, posix=True, punctuation_chars=";&|()\n")
+        lx.whitespace = " \t\r"
+        lx.whitespace_split = True
+        toks = list(lx)
+    except ValueError:
+        return [m.group(1).strip("\"'") for m in _RE_MENCION.finditer(cmd)]
+    sep = lambda t: t != "" and set(t) <= set(";&|()\n")
+    out = []
+    i = 0
+    while i < len(toks):
+        j = i
+        while j < len(toks) and (_RE_ASIGNA.match(toks[j]) or toks[j] in _PREFIJOS):
+            j += 1
+        if j < len(toks) and not sep(toks[j]):
+            prog = toks[j]
+            k = None
+            if os.path.basename(prog.replace("\\", "/")) == SCRIPT_RETOMAR:
+                k = j + 1
+            elif _RE_PYTHON.match(os.path.basename(prog.replace("\\", "/"))):
+                s = j + 1
+                while s < len(toks) and toks[s].startswith("-") and not sep(toks[s]):
+                    s += 1
+                if s < len(toks) and os.path.basename(toks[s].replace("\\", "/")) == SCRIPT_RETOMAR:
+                    k = s + 1
+            if k is not None:
+                out.append(toks[k] if k < len(toks) and not sep(toks[k]) else "")
+        while i < len(toks) and not sep(toks[i]):
+            i += 1
+        while i < len(toks) and sep(toks[i]):
+            i += 1
+    return out
+
+
 # Fichas de ESTA sesion, vistas en cualquier turno (no solo en el actual): las que se ESCRIBIERON o
 # EDITARON. Una ficha solo impresa con print-como-retomar.py (por ejemplo al leer la de una sesion
 # vieja durante un triage) no es de esta sesion salvo que su frontmatter lleve `session_id:` igual al
@@ -134,9 +191,7 @@ for r in recs:
         if b.get("name") in ("Write", "Edit", "MultiEdit") and SESION_RE_G.search(ruta):
             fichas_sesion.append(ruta)
         elif b.get("name") == "Bash":
-            for m in re.finditer(r"print-como-retomar\.py[\"']?\s+(\"[^\"]+\"|'[^']+'|[^\s;&|]+)",
-                                 inp.get("command") or ""):
-                impresas.append(m.group(1).strip("\"'"))
+            impresas.extend(a for a in invocaciones_retomar(inp.get("command") or "") if a)
 
 # Ultimo veredicto del adversario de goalspec en TODA la sesion (2.34.0, p-272254efc5). Desde
 # 2.42.0 cuenta tambien el que llega en un tool_result (el subagente `goal-adversary` o
@@ -402,7 +457,8 @@ for r in turno:
                           if re.search(r"--apply\b", s) and "--revertir" not in s)
             if n_apply:
                 expiraciones.append((b.get("id"), n_apply))
-            if "print-como-retomar.py" not in cmd:
+            args_retomar = invocaciones_retomar(cmd)
+            if not args_retomar:
                 continue
             disparo = True
             base = cwd
@@ -413,10 +469,10 @@ for r in turno:
             # una sola llamada Bash dejaban la segunda ficha sin revisar (adversario, ronda 2).
             # Solo una ruta sessions/*.md es una ficha (2.63.3, p-bea9639b92): un
             # `sed -i … print-como-retomar.py pendientes_afines.py` tomaba el .py como ficha y le
-            # pedia nombrar el `break` de la sesion en `## Bugs fixed`. Que cualquier mencion
-            # dispare sigue abierto (p-1fe14aa592).
-            for m in re.finditer(r"print-como-retomar\.py[\"']?\s+(\"[^\"]+\"|'[^']+'|[^\s;&|]+)", cmd):
-                f = resolver(m.group(1).strip("\"'"), base)
+            # pedia nombrar el `break` de la sesion en `## Bugs fixed`. Desde 2.63.8 solo cuenta la
+            # invocacion real del script, no una mencion (invocaciones_retomar, p-1fe14aa592).
+            for a in args_retomar:
+                f = resolver(a, base) if a else None
                 if f and FICHA_RE.search(f):
                     fichas.append(f)
         elif nombre in ("Edit", "MultiEdit", "Write"):
