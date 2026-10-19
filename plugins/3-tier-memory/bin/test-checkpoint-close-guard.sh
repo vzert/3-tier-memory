@@ -406,7 +406,10 @@ python3 - "$F" <<'PYX'
 import sys; p=sys.argv[1]; t=open(p, encoding="utf-8").read()
 open(p, "w", encoding="utf-8").write(t.replace("date: 2026-09-22\n", "date: 2026-09-22\nsession_id: sesion-actual\n", 1))
 PYX
-O=$(python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":False,"session_id":"sesion-actual","cwd":"/tmp"}))' "$T/t.jsonl" | bash "$HOOK" 2>/dev/null | expande)
+# cwd propio, no /tmp: el aviso se escribe en `<cwd>/.3t-revision-cierre-<session_id>.md`, y con un
+# cwd comun dos corridas a la vez (mutation-check, MUT_JOBS=4) leian el aviso de la otra (p-e376b39ea2).
+CW="$T/cwd-actual"; mkdir -p "$CW"
+O=$(python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":False,"session_id":"sesion-actual","cwd":sys.argv[2]}))' "$T/t.jsonl" "$CW" | bash "$HOOK" 2>/dev/null | RAIZ_EXP="$CW" expande)
 chk "bloquea" "1" "$(bloquea "$O")"
 
 # ================================================================================================
@@ -1329,9 +1332,12 @@ echo "== p-1d0f012aa9: sesion supervisada por lookout, la pregunta va por SendMe
 # de lookout 0.13): solo cuenta un SendMessage a ese supervisor. $1 transcript, $2 LOOKOUT_STATE_DIR.
 LK="$T/lookout"; mkdir -p "$LK/sessions"
 printf '{"project_id": "p", "supervisor": "supervisor-x", "address": "uds:/tmp/cc-socks/9.sock", "nombre": "a"}\n' > "$LK/sessions/sess-sup.json"
+# cwd propio por corrida, no /tmp: con /tmp las corridas paralelas de mutation-check compartian
+# `/tmp/.3t-revision-cierre-sess-sup.md` y un aserto leia el aviso de otra corrida (p-e376b39ea2).
+CWS="$T/cwd-sup"; mkdir -p "$CWS"
 corre_sup() {
-  python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":False,"last_assistant_message":"","cwd":"/tmp","session_id":"sess-sup"}))' "$1" \
-    | LOOKOUT_STATE_DIR="$2" bash "$HOOK" 2>/dev/null | expande
+  python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":False,"last_assistant_message":"","cwd":sys.argv[2],"session_id":"sess-sup"}))' "$1" "$CWS" \
+    | LOOKOUT_STATE_DIR="$2" bash "$HOOK" 2>/dev/null | RAIZ_EXP="$CWS" expande
 }
 txc "$T/tc.jsonl" peer
 chk "SendMessage al supervisor y su respuesta: no lo reclama" "0" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
