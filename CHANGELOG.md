@@ -1,5 +1,39 @@
 # Changelog
 
+## [2.63.11] - 2026-10-19
+Origen: `p-ac5a4bb888`, el Known de 2.63.7. Version provisional: la 2.63.10 es de otro agente.
+
+### Fixed
+- **Una excepcion cualquiera de un evento ya no atasca el compactador.** `validate` deja pasar
+  eventos que `apply_event` no sabe aplicar: medido sobre 2.63.7, unas 30 combinaciones de tipo y
+  campo (un texto que no es cadena, como `session.add` con `status: 1` o `pendiente.add` con
+  `text: 1`; o un sustituto suelto `\ud800`, que utf-8 no codifica) lanzan `TypeError`,
+  `AttributeError` o `UnicodeEncodeError`. No eran `Quarantine`: la pasada salia con traceback y
+  exit 1, el evento se quedaba en `pending/` y, como se aplica por orden de nombre, ningun evento de
+  detras se aplicaba nunca. Si un evento bueno iba delante, se aplicaba pero `guardar_huellas` no
+  corria, y la pasada siguiente lo reportaba como escrito fuera del journal (`fuera-de-banda`).
+  Ahora ese evento va a `quarantine/` con el motivo `error-interno: <Tipo>: <mensaje>`, y la pasada
+  sigue. El prefijo no casa con `RESCATABLE_RE`: el rescate no lo devuelve a `pending/`. El motivo
+  avisa de que el evento pudo dejar escrito algun indice a medias (un `pendiente.resolve` escribe
+  `_pendientes.md` y `_resueltos.md` antes de la fila mensual), como ya pasaba con algun `Quarantine`.
+- `OSError` y `UnicodeDecodeError` siguen como antes, sin cuarentena: son fallos del disco, no del
+  evento. Un indice que no se pudo escribir espera al reintento (`escribir_anotado`, casos 27-28 de
+  `test-session-amend.sh`). Un `.md` con bytes que no son utf-8 mandaria a cuarentena todos los
+  eventos de ese indice; arreglado el fichero, la pasada siguiente aplica.
+
+### Known
+- `validate` sigue aceptando esos campos que no son cadena: el evento ya no atasca nada, pero se
+  pierde en cuarentena en vez de rechazarse al emitir. Endurecerlo tipo a tipo queda como pendiente.
+
+### Tests
+- `test-error-interno.sh` nuevo (27 asertos): text=1 y text con `\ud800` van a cuarentena con su
+  motivo y el bueno de detras se aplica; con el bueno delante, la pasada siguiente no reporta
+  deriva; un fallo de escritura y un indice que no es utf-8 dejan el evento en `pending/`. Contra
+  2.63.9 da 18 fallas.
+- `tools/mutaciones/m_error_interno.py` (3 mutaciones) y 4 casos en `tools/mutation-check.sh`: sin
+  la red; con OSError a cuarentena (cae tambien el caso 27 de `test-session-amend.sh`); con
+  UnicodeDecodeError a cuarentena.
+
 ## [2.63.9] - 2026-10-19
 Origen: `p-c0e7c422cb`, la nota del revisor de 2.63.4. La excepcion del usuario de `snippet.marco`
 solo miraba la palabra justo detras de `de`/`del`, asi que un articulo entre medias escondia al

@@ -15,7 +15,7 @@ porque en Windows un antivirus, el indexador u otro compactador pueden tener el 
 un instante; por la misma razon el lock se borra con rmtree_with_retry (medido: sin reintento
 el lock quedaba huerfano en 1 de 5 ensayos en Windows). Cada evento aplicado se mueve a
 applied/YYYY-MM/; un evento invalido o cuyo ancla no existe va a quarantine/ con un archivo
-.reason al lado. Nunca se pierde un evento en silencio. Excepcion deliberada (2.22.0): un ancla
+.reason al lado (y, desde 2.63.11, uno cuya aplicacion lanza otra excepcion: `error-interno:`). Nunca se pierde un evento en silencio. Excepcion deliberada (2.22.0): un ancla
 que el compactador sabe escribir sin mover nada se escribe — si falta el header de prioridad de
 un `pendiente.add` (o de un `pendiente.reopen`), se crea y el evento se aplica, porque eso es el
 estado normal de una instalacion anterior a 2.12.0 y mandarlo a cuarentena convertia una
@@ -5247,7 +5247,25 @@ def compact(mem, budget, quiet):
                 quarantined += 1
                 log(f"QUARANTINE {n} {q}")
                 continue
-            ym = time.strftime("%Y-%m", time.gmtime(int(ev.get("ts", 0)) / 1e9))
+            except (OSError, UnicodeDecodeError):
+                # El fallo es del disco, no del evento: un indice que no se pudo escribir (el
+                # reintento de escribir_anotado cuenta con que el evento siga en pending/) o un .md
+                # con bytes que no son utf-8, que mandaria a cuarentena cada evento de ese indice.
+                # Sigue reventando como antes; arreglado el fichero, la pasada siguiente aplica.
+                raise
+            except Exception as e:
+                # Cualquier otro fallo de apply_event es un evento que validate dejo pasar y que no
+                # se puede aplicar (p. ej. un campo de texto que no es cadena, o un sustituto suelto
+                # que utf-8 no codifica). Antes se quedaba en pending/ y, como se aplica por orden
+                # de nombre, ningun evento de detras se aplicaba nunca (p-ac5a4bb888). El prefijo
+                # `error-interno:` no casa con RESCATABLE_RE: nunca vuelve solo a pending/.
+                msg = f"{type(e).__name__}: {e}".encode("utf-8", "backslashreplace").decode("utf-8")
+                move_to(src, os.path.join(journal, "quarantine"),
+                        f"error-interno: {msg} (el evento pudo dejar escrito algun indice a medias)")
+                quarantined += 1
+                log(f"QUARANTINE {n} error-interno {type(e).__name__}")
+                continue
+            ym =time.strftime("%Y-%m", time.gmtime(int(ev.get("ts", 0)) / 1e9))
             move_to(src, os.path.join(journal, "applied", ym))
             if changed:
                 applied += 1

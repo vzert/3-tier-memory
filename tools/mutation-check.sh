@@ -366,6 +366,11 @@ T=test-fecha-iso.sh
 caso "emisor sin regex de fecha" journal-emit.py m_fecha_iso.py $T "pendiente.add --creado 20261016: error" sin-regex
 caso "compactador sin regex"    journal-compact.py m_fecha_iso.py $T "creado ancho: el malo va a cuarentena" sin-regex
 caso "fecha solo en learning"   journal-compact.py m_fecha_iso.py $T "resolve con fecha ancha: va a cuarentena" sin-fecha-generica
+T=test-error-interno.sh
+caso "sin red de error-interno" journal-compact.py m_error_interno.py $T "text=1: el malo va a cuarentena" sin-captura
+caso "OSError a cuarentena"     journal-compact.py m_error_interno.py $T "OSError: el evento sigue en pending" captura-oserror
+caso "OSError rompe amend"      journal-compact.py m_error_interno.py test-session-amend.sh "el evento sigue en pending" captura-oserror
+caso "decode a cuarentena"      journal-compact.py m_error_interno.py $T "UnicodeDecodeError: el evento sigue en pending" captura-decode
 caso "sin identidad"           journal-emit.py m_learning_dedup.py test-learning-dedup.sh "mismo texto sin --decision: rc 0" sin-identidad
 caso "decision fuera"          journal-emit.py m_learning_dedup.py test-learning-dedup.sh "la decision viaja en el payload" decision-fuera-del-payload
 caso "reemplaza sin supersedes" journal-emit.py m_learning_dedup.py test-learning-dedup.sh "reemplaza:2 lleva supersedes 2" reemplaza-sin-supersedes
