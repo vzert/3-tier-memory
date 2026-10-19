@@ -99,10 +99,12 @@ def fecha_futura(texto, hoy):
 # como el snippet salio `Ninguno` en claude-vzert (p-341fdf5e59). `decidir con <otro>` sigue siendo
 # senal: puede ser un tercero, y el aviso ya dice que una decision del usuario no es espera. Un
 # `usuario` con apellido (`usuario externo`, `usuario final`, `usuario-final`, `usuario del
-# cliente`) es un tercero y sigue avisando.
+# cliente`) es un tercero y sigue avisando. Un complemento que no nombra a otro (`usuario de la
+# tienda`, `del equipo`, `usuario finalmente`) no lo vuelve tercero (p-c501ad10c6): `de/del` solo
+# avisa seguido de cliente, proveedor, tercero u otr(o/a), y `final` solo como palabra entera.
 ESPERA_AJENA = re.compile(
     r"\bsi\s+(?:\S+\s+){1,2}(?:lo\s+|la\s+)?(?:decide|aprueba|autoriza|confirma|acepta|quiere|da el ok)\b"
-    r"|\bdecidir\s+con\s+(?!(?:el\s+)?usuario\b(?!\s*-|\s+(?:extern|final|ajen|client|del?\s)))\S+"
+    r"|\bdecidir\s+con\s+(?!(?:el\s+)?usuario\b(?!\s*-|\s+(?:extern|final\b|ajen|client|del?\s+(?:client|proveedor|tercer|otr))))\S+"
     r"|\b(?:pedir(?:le)?|solicitar)\s+(?:el\s+|su\s+)?(?:permiso|autorizacion|aprobacion|ok|visto bueno)\b"
     r"|\b(?:cuando|en cuanto|una vez que|hasta que|despues de que)\s+(?:\S+\s+){1,3}?"
     r"(?:responda|conteste|apruebe|decida|autorice|confirme|actualice|publique)\b"

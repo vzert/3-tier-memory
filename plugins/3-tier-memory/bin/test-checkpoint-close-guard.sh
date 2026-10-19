@@ -1491,5 +1491,29 @@ bloqueo_ficha '- [ ] otro sin bloqueo — `p-014255373e`'
 corre_en "$T/t.jsonl" false - "$RB" >/dev/null
 chk "Ninguno sin pendiente bloqueado en la ficha: no pregunta por el bloqueo" "1 0" "$([ -f "$AB" ] && echo 1 || echo 0) $(grep -c 'no es el usuario' "$AB" 2>/dev/null)"
 
+echo "== 2.63.3: un sed que edita print-como-retomar.py y otro .py, con un break en la sesion y sin ficha: silencio =="
+# Forma real (sesion 4237bac9, p-bea9639b92): `sed -i` sobre el fuente de print-como-retomar.py
+# seguido de pendientes_afines.py, sin /checkpoint-3t ni ficha. El guard tomaba el .py como ficha,
+# le corria checkpoint-audit.py con el `break` de la sesion y pedia nombrar el hallazgo en
+# `## Bugs fixed` de un archivo que no es una ficha. Solo cuenta una ruta memory/sessions/*.md.
+RS="$T/repo-sed"; mkdir -p "$RS/plugins/3-tier-memory/bin"
+echo 'print(1)' > "$RS/plugins/3-tier-memory/bin/print-como-retomar.py"
+echo 'x = 1' > "$RS/plugins/3-tier-memory/bin/pendientes_afines.py"
+python3 - "$T/t.jsonl" "$RS" "$BRK" <<'PYS'
+import json, sys
+out, rs, brk = sys.argv[1:4]
+cmd = (f"cd {rs} && sed -i '' 's/2\\.61\\.x/2.62.0/g' plugins/3-tier-memory/bin/print-como-retomar.py "
+       "plugins/3-tier-memory/bin/pendientes_afines.py")
+R = [{"type": "user", "message": {"role": "user", "content": "sigue con el arreglo"}},
+     {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "adv", "name": "Agent", "input": {"subagent_type": "goalspec:goal-adversary"}}]}},
+     {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "adv", "content": [{"type": "text", "text": "- grounding: mutaciones viejas\n" + brk}]}]}},
+     {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "sed", "name": "Bash", "input": {"command": cmd}}]}},
+     {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "sed", "content": ""}]}},
+     {"type": "assistant", "message": {"content": [{"type": "text", "text": "Cambie las versiones."}]}}]
+open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r) for r in R) + "\n")
+PYS
+chk "silencio (el .py no es una ficha)" "" "$(corre "$T/t.jsonl" false -)"
+chk "y en la vuelta reentrante tampoco avisa" "" "$(corre "$T/t.jsonl" true -)"
+
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

@@ -56,6 +56,49 @@ Medido en una memoria temporal con 3.14.3; ninguna memoria real de esta maquina 
 - Volver a `date.fromisoformat` no lo ve un CI con Python 3.11 o mas, que acepta las tres formas: solo
   una corrida con 3.9 lo atrapa. El CI usa el `python3` de cada runner.
 
+## [2.63.4] - 2026-10-17
+Origen: `p-c501ad10c6`, abierto al cerrar 2.62.11. La excepcion del usuario de `snippet.marco` trataba
+como tercero a cualquier `usuario` seguido de `de`/`del` o de una palabra que empieza por `final`.
+
+### Fixed
+- **Un complemento del usuario ya no lo vuelve tercero en `snippet.marco`.** `decidir con el usuario
+  de la tienda`, `decidir con el usuario del equipo` y `decidir con el usuario finalmente` daban el
+  aviso de espera ajena, que pide bloquear el pendiente: lo que 2.62.11 prohibe para una decision del
+  usuario. Ahora `de`/`del` solo avisa seguido de cliente, proveedor, tercero u otr(o/a), y `final`
+  solo como palabra entera. `usuario externo`, `usuario final`, `usuario-final`, `usuario del cliente`
+  y `proveedor externo` siguen avisando. Es formato, no juicio: un tercero escrito de otra forma
+  (`usuario de soporte`) no avisa.
+
+### Tests
+- `test-ninguno-bloqueo.sh`: dos asertos nuevos (los tres complementos dan 0; `de otra empresa`,
+  `del proveedor`, `de cliente` dan 1). Contra 2.62.11 cae el primero.
+- `tools/mutation-check.sh`: mutacion `usuario-complemento-tercero` (vuelve a la excepcion de
+  2.62.11) tumba ese aserto.
+
+## [2.63.3] - 2026-10-17
+Origen: la sesion 4237bac9 de este repo (ficha `2026-10-16-hilo-un-salto-snippet-ajeno`), antes de
+cualquier /checkpoint-3t y sin ficha propia, recibio dos veces el aviso `bugs.veredicto_break`: nombrar
+en `## Bugs fixed` el hallazgo del adversario. Medido pasando su transcript por el guard: lo disparo
+un `sed -i '' … plugins/3-tier-memory/bin/print-como-retomar.py plugins/3-tier-memory/bin/pendientes_afines.py`.
+El guard tomo `pendientes_afines.py` como ficha y le corrio `checkpoint-audit.py` con el `break` de la
+sesion.
+
+### Fixed
+- **`checkpoint-close-guard.sh` solo toma como ficha un argumento `sessions/*.md` de
+  `print-como-retomar.py`** (p-bea9639b92). Un comando que edita o lee el fuente del script y nombra
+  otro archivo despues ya no le pide al agente nombrar el veredicto del adversario en un archivo que
+  no es una ficha. Es una mitad del arreglo de p-1fe14aa592, que sigue abierto con la otra: disparar
+  solo con la invocacion real del script, no con cualquier mencion. Una ruta con variables (`"$SF"`,
+  p-e1799cd04c) sigue igual.
+  El filtro es `sessions/*.md` (`FICHA_RE`), no `memory/sessions/*.md` (`SESION_RE`): con este
+  ultimo caen 24 asertos existentes cuya memoria de prueba no vive en `memory/`. Acepta tambien `\`,
+  porque en Windows `resolver()` (normpath) deja la ruta con barras invertidas.
+
+### Added
+- Caso en `test-checkpoint-close-guard.sh` con la forma real del `sed` y un `break` en la sesion:
+  silencio en la vuelta normal y en la reentrante (cae 2 de 2 con el guard de 2.62.11).
+- Mutacion `ficha-cualquiera` (`tools/mutaciones/m_ficha_sesion.py`): quita el filtro y el caso cae.
+
 ## [2.63.2] - 2026-10-17
 Origen: p-7ae84c8ef2 (decision d133 de Victor, opcion A). 2.62.10 cerro `--nota`, pero
 `journal-emit` seguia aceptando con rc=0 cualquier otro flag que el tipo no lee: medido con el
