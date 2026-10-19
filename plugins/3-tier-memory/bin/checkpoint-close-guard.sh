@@ -201,6 +201,9 @@ con_error = set()      # tool_use_id cuyo tool_result vino con is_error
 # otro texto (InputValidationError, herramienta no disponible sin pantalla) no llego a nadie.
 RECHAZO_USUARIO = re.compile(r"The user doesn't want to proceed with this tool use")
 SESION_RE = re.compile(r"(?:^|/)memory/sessions/[^/]+\.md$")
+# Argumento de print-como-retomar.py. Acepta `\`: en Windows resolver() (normpath) deja la ruta con
+# barras invertidas.
+FICHA_RE = re.compile(r"(?:^|[/\\])sessions[/\\][^/\\]+\.md$")
 MARCAS_EDIT = ("## Como retomar", "Proximo paso:", "Próximo paso:", "## Recordatorios de calendario")
 
 
@@ -408,9 +411,13 @@ for r in turno:
                 base = resolver(m_cd.group(1).strip("\"'"), cwd) or cwd
             # TODAS las invocaciones del comando, no la primera: dos `print-como-retomar.py` en
             # una sola llamada Bash dejaban la segunda ficha sin revisar (adversario, ronda 2).
+            # Solo una ruta sessions/*.md es una ficha (2.63.3, p-bea9639b92): un
+            # `sed -i … print-como-retomar.py pendientes_afines.py` tomaba el .py como ficha y le
+            # pedia nombrar el `break` de la sesion en `## Bugs fixed`. Que cualquier mencion
+            # dispare sigue abierto (p-1fe14aa592).
             for m in re.finditer(r"print-como-retomar\.py[\"']?\s+(\"[^\"]+\"|'[^']+'|[^\s;&|]+)", cmd):
                 f = resolver(m.group(1).strip("\"'"), base)
-                if f:
+                if f and FICHA_RE.search(f):
                     fichas.append(f)
         elif nombre in ("Edit", "MultiEdit", "Write"):
             ruta = inp.get("file_path") or ""

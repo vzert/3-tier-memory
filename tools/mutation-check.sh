@@ -268,6 +268,7 @@ caso "marco: campo entero" checkpoint-audit.py m_hilo.py $T "dos pendientes, el 
 caso "marco: aviso, no falta" checkpoint-audit.py m_hilo.py $T "y no lo vuelve SALTADO" marco-saltado
 caso "marco: caso 5 fuera" checkpoint-audit.py m_hilo.py $T "caso 5 \(ninguno\): el marco no aplica" marco-con-ninguno
 caso "marco: el hook lo pone en la revision" checkpoint-close-guard.sh m_hilo.py test-checkpoint-close-guard.sh "el archivo de la revision trae el bloque de avisos del marco" guard-sin-marco
+caso "ficha: solo sessions/*.md"   checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "el .py no es una ficha" ficha-cualquiera
 caso "extras: citado en Terminas" pendientes_afines.py m_hilo.py $T "el citado en Terminas cuando no va de extra" extras-sin-citados
 caso "extras: citado en No repitas" pendientes_afines.py m_hilo.py $T "el citado en No repitas no va de extra" extras-sin-no-repitas
 caso "extras: prueba en vivo" pendientes_afines.py m_hilo.py $T "pruebas en vivo y esperas de OK fuera: el unico extra es la tarea de codigo" extras-sin-vivo
@@ -283,6 +284,7 @@ caso "decision del usuario: origen en research" checkpoint-audit.py m_hilo.py te
 caso "decision del usuario: el marco la deja" pendientes_afines.py m_hilo.py test-ninguno-bloqueo.sh "decidir con el usuario no es espera ajena" marco-decidir-con-usuario
 caso "decision del usuario: un tercero avisa" pendientes_afines.py m_hilo.py test-ninguno-bloqueo.sh "y decidir con un tercero" marco-sin-decidir-con
 caso "decision del usuario: usuario externo avisa" pendientes_afines.py m_hilo.py test-ninguno-bloqueo.sh "un usuario con apellido es un tercero" usuario-sin-apellido
+caso "decision del usuario: complemento no es tercero" pendientes_afines.py m_hilo.py test-ninguno-bloqueo.sh "un complemento del usuario no lo vuelve tercero" usuario-complemento-tercero
 caso "decision del usuario: el hook pregunta" checkpoint-close-guard.sh m_hilo.py test-checkpoint-close-guard.sh "la revision pregunta si el bloqueo espera" guard-sin-bloqueo
 
 echo "Contrato de check-project-dir-fallback.py (2.41.4): cada pieza, rota, tumba su aserto"
