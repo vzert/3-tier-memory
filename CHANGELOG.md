@@ -17,6 +17,22 @@ vencia y el 8e salia vacio.
 - `tools/mutation-check.sh`: caso nuevo "prueba con fecha fija" (`m_hoy_fijo.py sin-parche`): sin
   el parche cae "el fixture trae un 8e con contenido".
 
+## [2.63.18] - 2026-10-20
+Origen: el platforms de main sobre 5d9282c (2.63.16, PR #50) cayo en windows-latest (run
+39443101444): las 15 invocaciones reales de `test-checkpoint-close-guard.sh` salian en silencio. El
+arnes metia las rutas POSIX de la carpeta temporal y del checkout del runner DENTRO del texto del comando, y MSYS solo
+convierte las que van como argumento suelto; el guard, en el Python nativo de Windows, no encontraba
+la ficha. En Windows las menciones de 2.63.16 pasaban sin probar nada por la misma razon.
+
+### Fixed
+- **`txcmd` convierte con `cygpath -m` las rutas que mete en el comando** cuando hay `cygpath` (Git
+  Bash), como haria argv. Solo cambia el arnes; el guard no se toca.
+
+### Added
+- Aserto `arnes Git Bash: con las rutas dentro del comando, la invocacion dispara` y la mutacion
+  `sin-cygpath` (`tools/mutaciones/m_arnes_cygpath.py`), que quita la conversion. Fuera de Git Bash no
+  hay cygpath: la suite imprime su `SKIP` y mutation-check la marca no evaluable ahi.
+
 ## [2.63.17] - 2026-10-19
 Origen: `p-ac5a4bb888`, el Known de 2.63.7.
 

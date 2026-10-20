@@ -1544,8 +1544,17 @@ echo "== 2.63.16: una mencion de print-como-retomar.py seguida de una ficha REAL
 # memory/sessions/ bloqueaba el turno revisando esa ficha ("falta 4 problema(s)"). Desde 2.63.16 solo
 # cuenta la invocacion: el script como programa del segmento de shell, o como argumento de python.
 # txcmd TRANSCRIPT COMANDO: un turno sin checkpoint con ese comando de Bash y la respuesta "Visto.".
+# En Git Bash (2.63.18) las rutas van DENTRO del texto del comando, y MSYS solo convierte las que van
+# como argumento suelto: el guard, en el Python nativo de Windows, no resolvia las rutas POSIX de la
+# carpeta temporal ni del checkout del runner,
+# no encontraba la ficha y callaba. Las 15 invocaciones caian en windows-latest (run 39443101444) y
+# las menciones pasaban sin probar nada. Se pasan a la forma `C:/…` con cygpath, como haria argv.
 txcmd() {   # $3 opcional: un veredicto del adversario que el turno trae antes del comando
-  python3 - "$1" "$2" "${3:-}" <<'PYM'
+  local c="$2"
+  if command -v cygpath >/dev/null 2>&1; then
+    c="${c//$BIN/$(cygpath -m "$BIN")}"; c="${c//$T/$(cygpath -m "$T")}"
+  fi
+  python3 - "$1" "$c" "${3:-}" <<'PYM'
 import json, sys
 out, cmd, brk = sys.argv[1:4]
 R = [{"type": "user", "message": {"role": "user", "content": "mira esto"}}]
@@ -1561,6 +1570,10 @@ PYM
 }
 armar "$M" "$FX/snippet-2120.txt"; fecha30 "$F"
 PR="$BIN/print-como-retomar.py"
+# La mutacion `sin-cygpath` solo puede caer donde hay cygpath (Git Bash): fuera, este aserto no la mide.
+txcmd "$T/m.jsonl" "python3 \"$PR\" \"$F\""
+chk "arnes Git Bash: con las rutas dentro del comando, la invocacion dispara" "1" "$(bloquea "$(corre "$T/m.jsonl" false -)")"
+command -v cygpath >/dev/null 2>&1 || echo "  SKIP arnes Git Bash: sin cygpath, la conversion de rutas no aplica aqui"
 menciones=(
   "git diff HEAD~1 -- $PR $F"
   "grep -n Retomamos $PR $F"
