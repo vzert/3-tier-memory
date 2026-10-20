@@ -128,8 +128,10 @@ _ESCRITO = {}         # ruta absoluta -> sha256 de lo que atomic_write dejo en e
 # evento, o None si no existia; entrada previa de _ESCRITO). Con un error-interno se restaura todo
 # (deshacer_evento): el evento va a cuarentena sin dejar escrito ningun indice a medias. None
 # fuera de un evento. _ANOTADAS: las (clave, ts) que el evento anoto en reabiertos.log.
+# _DIRS_NUEVOS: los directorios que crear_dirs creo porque no existian, del mas alto al mas hondo.
 _DESHACER = None
 _ANOTADAS = None
+_DIRS_NUEVOS = None
 MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto",
          "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 ID_RE = re.compile(r"_id: (p-[0-9a-f]{10})_")
@@ -298,6 +300,24 @@ def atomic_write(path, lines):
     # disco, para que una escritura ajena entre la ultima escritura del compactador y su sellado
     # no se cuele en la linea base. Misma razon que el `estado` de --check-drift. (Ronda 7.)
     _ESCRITO[os.path.abspath(path)] = hashlib.sha256(datos.encode("utf-8")).hexdigest()
+
+
+def crear_dirs(d):
+    """os.makedirs que, dentro de un evento, apunta en _DIRS_NUEVOS los directorios que no
+    existian. deshacer_evento los borra si siguen vacios: sin esto, un error-interno dejaba en
+    memory/ el directorio vacio del fichero nuevo que se habia borrado (p-058a36018c)."""
+    nuevos = []
+    if _DIRS_NUEVOS is not None:
+        p = os.path.abspath(d)
+        while not os.path.isdir(p):
+            nuevos.append(p)
+            padre = os.path.dirname(p)
+            if padre == p:
+                break
+            p = padre
+    os.makedirs(d, exist_ok=True)
+    if _DIRS_NUEVOS is not None:
+        _DIRS_NUEVOS.extend(reversed(nuevos))
 
 
 def resolve_memory_dir(explicit):
@@ -793,7 +813,7 @@ def ensure_monthly(path, ym):
             log(f"WARN monthly: {os.path.basename(path)} — {problema}. Las filas nuevas se "
                 f"escriben con las 7 columnas canonicas; revisa la cabecera a mano.")
         return lines
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    crear_dirs(os.path.dirname(path))
     y, m = ym.split("-")
     mes = MESES[int(m) - 1] if 1 <= int(m) <= 12 else m
     return [
@@ -1115,8 +1135,9 @@ def desanotar(mem, entradas):
 def deshacer_evento(mem):
     """Devuelve memory/ a como estaba antes del evento en curso: restaura los bytes de cada fichero
     que atomic_write toco (o lo borra si no existia), su entrada de _ESCRITO (el sellado de huellas
-    no debe ver deriva) y anula en reabiertos.log lo que el evento anoto. Devuelve la lista de lo
-    que NO se pudo deshacer ([] = todo). Los registros de copia (adds-descartados, adopt-colapsados)
+    no debe ver deriva), anula en reabiertos.log lo que el evento anoto y borra los directorios que
+    el evento creo (crear_dirs), del mas hondo al mas alto, solo si quedaron vacios: os.rmdir, nunca
+    un borrado recursivo. Devuelve la lista de lo que NO se pudo deshacer ([] = todo). Los registros de copia (adds-descartados, adopt-colapsados)
     no se tocan: guardan copias, y una de mas no cambia ningun indice."""
     fallos = []
     for ap, (antes, escrito) in (_DESHACER or {}).items():
@@ -1145,6 +1166,13 @@ def deshacer_evento(mem):
             _ESCRITO[ap] = escrito
     for clave, ts in desanotar(mem, list(_ANOTADAS or [])):
         fallos.append(f".journal/{REABIERTOS_LOG} {clave} {ts}")
+    for d in reversed(_DIRS_NUEVOS or []):
+        try:
+            os.rmdir(d)
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            fallos.append(f"{os.path.relpath(d, mem)}/ ({e})")
     return fallos
 
 
@@ -1260,7 +1288,7 @@ def archivar_linea(path, head, verbatim, pid, marca, ev):
     """
     alines, hits = entradas_archivadas(path, pid)
     if not alines:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        crear_dirs(os.path.dirname(path))
         alines = list(head)
     if any(f"_ev: {ev}_" in alines[k] for k in hits):
         return
@@ -2595,7 +2623,7 @@ def apply_learning_add(mem, p):
         raise Quarantine(f"no-anchor: learnings/{topic}.md no existe — --supersedes "
                          f"#{p['supersedes']} necesita la regla vieja en ese topic")
     if not os.path.isfile(tpath):
-        os.makedirs(os.path.dirname(tpath), exist_ok=True)
+        crear_dirs(os.path.dirname(tpath))
         fm = ["---", "type: learnings", f"topic: {topic}", f"created: {today}",
               f"updated: {today}", "status: active"]
         if p.get("importance"):
@@ -5241,7 +5269,7 @@ def rescatar_cuarentena(journal):
 
 
 def compact(mem, budget, quiet):
-    global _DESHACER, _ANOTADAS
+    global _DESHACER, _ANOTADAS, _DIRS_NUEVOS
     journal = os.path.join(mem, ".journal")
     pending = os.path.join(journal, "pending")
     if not os.path.isdir(pending):
@@ -5306,7 +5334,7 @@ def compact(mem, budget, quiet):
                 quarantined += 1
                 log(f"QUARANTINE {n} malformed")
                 continue
-            _DESHACER, _ANOTADAS = {}, []   # deshacer_evento, solo para un error-interno
+            _DESHACER, _ANOTADAS, _DIRS_NUEVOS = {}, [], []   # deshacer_evento, solo para un error-interno
             try:
                 changed = apply_event(mem, ev)
             except Quarantine as q:
@@ -5343,10 +5371,10 @@ def compact(mem, budget, quiet):
                 noop += 1  # replay de un evento ya aplicado: se archiva, no cuenta como cambio
                 log(f"NOOP {n}")
             lock.refresh()
-        _DESHACER = _ANOTADAS = None
+        _DESHACER = _ANOTADAS = _DIRS_NUEVOS = None
         guardar_huellas(mem, journal)   # nueva linea base: lo que deja ESTE compactador
     finally:
-        _DESHACER = _ANOTADAS = None
+        _DESHACER = _ANOTADAS = _DIRS_NUEVOS = None
         lock.release()
     left = len([n for n in os.listdir(pending) if n.endswith(".json")]) \
         if os.path.isdir(pending) else 0
