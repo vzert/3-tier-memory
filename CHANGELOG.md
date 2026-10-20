@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.63.19] - 2026-10-20
+## [2.63.23] - 2026-10-20
 Origen: una corrida de mutation-check que cruzo la medianoche UTC tumbo los asertos del bloque 8e
 de `test-checkpoint-close-guard.sh` (run 39342960137, intento 1; `p-091714b9cf`). La prueba leia
 la fecha una vez al arrancar, y `print-pendiente-opcional.py` (llamado por la prueba y por el hook)

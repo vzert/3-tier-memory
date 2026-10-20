@@ -1,6 +1,6 @@
 import io, sys
 # test-checkpoint-close-guard.sh fija una fecha para la prueba, el hook y los scripts que lanza con un
-# sitecustomize en su mktemp (2.63.19, p-091714b9cf). La mutacion quita el parche: el hook y
+# sitecustomize en su mktemp (2.63.23, p-091714b9cf). La mutacion quita el parche: el hook y
 # print-pendiente-opcional.py vuelven a leer el dia real, el Alta que vence en HOY (2031-03-15) ya no
 # vence hoy y el 8e del fixture sale vacio. Si el aserto no cae, la prueba depende otra vez de la hora.
 #
