@@ -257,6 +257,7 @@ disparo = False
 por_checkpoint = False # el turno corrio /checkpoint-3t (no solo reimprimio un snippet)
 fichas = []            # fichas que el turno CERRO: argumento de print-como-retomar.py o Edit con marca
 escritas = []          # fichas escritas con Write (Step 2 del checkpoint, o /backfill-3t)
+con_variable = False   # print-como-retomar.py recibio la ficha en una variable ("$SESSION_FILE")
 preguntas = []         # tool_use_id de cada AskUserQuestion del turno (Step 3b, 2.53.0; 2.54.1: y de los checkpoints anteriores)
 n_preg = {}            # tool_use_id -> cuantas preguntas lleva ese modal (2.54.0)
 encab = {}             # tool_use_id -> encabezados de sus preguntas (2.54.0)
@@ -485,6 +486,8 @@ for r in turno:
                 f = resolver(a, base) if a else None
                 if f and FICHA_RE.search(f):
                     fichas.append(f)
+                elif a and "$" in a:
+                    con_variable = True
         elif nombre in ("Edit", "MultiEdit", "Write"):
             ruta = inp.get("file_path") or ""
             if not SESION_RE.search(ruta):
@@ -555,6 +558,17 @@ if ids_cambiados or ids_a_ciegas:
             disparo = True
             fichas.append(f)
 fichas = [f for f in fichas if f and os.path.isfile(f)]
+# Step 8b real (p-e1799cd04c): `python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"`. resolver() no
+# expande la variable y, si la ficha se escribio en un turno anterior (Step 2 antes de una respuesta
+# del usuario), el turno de Step 8b quedaba sin ficha y el guard entero callaba: 9 turnos reales y la
+# sesion 8ef6459e ("$SF"). Vale la ULTIMA ficha que esta sesion escribio o edito, en cualquier turno,
+# y solo si su frontmatter lleva el session_id de esta sesion (lo sella Step 5c-bis antes de Step 8):
+# un /backfill-3t escribe fichas de otras sesiones. Limite declarado: una ficha sin sellar no se toma.
+if con_variable:
+    for f in reversed([resolver(r, cwd) for r in fichas_sesion]):
+        if f and os.path.isfile(f) and de_esta_sesion(f):
+            fichas.append(f)
+            break
 if not fichas:
     fichas = [f for f in escritas[-1:] if f and os.path.isfile(f)]
 if not disparo or not fichas:
