@@ -7,9 +7,12 @@ sumo uno de dos, segun la capa que toque (2.44.0, reglas de Victor del 2026-10-0
      Retomamos, sea cual sea el snippet, para que no pase desapercibido. Si vencen varios, sale
      uno cada vez: el de mayor prioridad y, dentro de ella, la fila mas arriba.
   ➕ opcional — solo si el snippet es el caso 5 (`Ninguno — …`, nada que retomar) y no vence
-     ninguno hoy. Elige como antes de 2.44.0: hasta 2 vencidos (`_revisar` < hoy), el mas viejo
-     primero; si no hay, el Alta abierto mas reciente (`_creado`; a igual fecha, la fila mas
-     arriba bajo `## Alta prioridad`, que es la ultima insertada).
+     ninguno hoy. Hasta 2 vencidos (`_revisar` < hoy), el mas viejo primero; si no hay ninguno
+     vencido, no sale nada. Hasta 2.63.17 salia entonces el Alta abierto mas reciente; se quito en
+     2.63.22 (decision de Victor, d265-d266): sin relacion con la sesion, el mismo Alta salia en
+     cada cierre hasta que alguien lo cerraba (medido: uno de otro agente salio 14 veces en 10
+     sesiones de otro proyecto, sin que nadie lo tomara). El backlog ya lo muestran el sidebar de
+     pendientes y el recall por peticion.
 
 Por que capas: hasta 2.43.0 el prompt opcional salia en cada cierre y los mismos dos vencidos se
 repetian sesion tras sesion. Las dos capas nunca coinciden (la opcional exige que no venza
@@ -124,13 +127,7 @@ def main():
             return 0
         cabecera = CABECERA_OPCIONAL
         vencidos = sorted([p for p in vivos if p[4] and p[4] < hoy], key=lambda p: (p[4], p[7]))
-        if vencidos:
-            elegidos = vencidos[:2]
-        else:
-            alta = [p for p in vivos if p[2] == "Alta" and not (p[4] and p[4] > hoy)]
-            # _creado mas reciente primero; a igual fecha, la fila mas arriba (la ultima insertada).
-            alta.sort(key=lambda p: (-int(p[3].replace("-", "") or 0), p[7]))
-            elegidos = alta[:1]
+        elegidos = vencidos[:2]
     if not elegidos:
         return 0
 
@@ -144,7 +141,7 @@ def main():
         if origen and os.path.exists(os.path.join(memory_dir, origen + ".md")):
             print(f"Contexto: memory/{origen}.md")
         if cabecera == CABECERA_OPCIONAL:
-            print(f"Motivo: vencido desde {rev}" if rev else f"Motivo: {prio} abierto desde {creado}")
+            print(f"Motivo: vencido desde {rev}")
         print("Si ya no aplica, cierralo con /checkpoint-3t en vez de dejarlo abierto.")
     return 0
 

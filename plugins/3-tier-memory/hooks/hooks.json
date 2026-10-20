@@ -35,6 +35,11 @@
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/bin/rule-reinject-nudge.sh\"",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/bin/snippet-vigente.sh\"",
+            "timeout": 10
           }
         ]
       }
