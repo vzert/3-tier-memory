@@ -263,13 +263,17 @@ export const register: Register = on => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const a = await read($, ahora)
     const items = a?.ok ? (a.items ?? []) : []
-    if (e.props.hasSurvey || (await read($, abierto)) || items.length === 0) return next(e)
+    // Con pendientes sin `_id` la tarjeta sale aunque no haya nada que mostrar: en un proyecto
+    // donde ninguno tiene id es el unico sitio donde la persona se entera sin abrir el panel.
+    const sinIdBanda = a?.ok ? (a.resumen?.sin_id ?? 0) : 0
+    if (e.props.hasSurvey || (await read($, abierto)) || (items.length === 0 && sinIdBanda === 0)) return next(e)
 
     const { Box, Text, Button } = $.ui.resolve(e)
     const r = a?.resumen
     const avisos: { texto: string; color: 'warning' | 'error' }[] = []
     if (r && r.hoy > 0) avisos.push({ texto: `● ${r.hoy} hoy`, color: 'warning' })
     if (r && r.vencidos > 0) avisos.push({ texto: `● ${r.vencidos} vencidos`, color: 'error' })
+    if (r && (r.sin_id ?? 0) > 0) avisos.push({ texto: `● ${r.sin_id} sin id`, color: 'warning' })
     // Tarjeta compacta pegada a la derecha: marco redondeado tenue que se ilumina al pasar el
     // raton. Arriba el nombre y los abiertos; abajo los avisos y "abrir".
     const ancho = Math.min(BANDA_ANCHO, Math.max(24, e.props.bodyColumns))
@@ -329,7 +333,10 @@ export const register: Register = on => {
 
     // Llena el alto del panel: todos los candidatos que quepan, en el orden del reparto.
     const candidatos = [...(a.items ?? []), ...(a.resto ?? [])]
-    const filas = e.props.scroll?.bodyRows ?? 24
+    // Pendientes sin `_id`: el script no los puede devolver (resumen.sin_id). Se dicen en una fila
+    // propia sobre el pie, que se descuenta del alto.
+    const sinId = a.resumen?.sin_id ?? 0
+    const filas = (e.props.scroll?.bodyRows ?? 24) - (sinId > 0 ? 1 : 0)
     const elegidos = verTodo ? candidatos : queCabe(candidatos, filas)
     const ids = new Set(elegidos.map(p => p.id))
     // Los grupos se pintan en su orden aunque el relleno venga del resto.
@@ -391,7 +398,12 @@ export const register: Register = on => {
     const plegable = verTodo || fuera > 0
     return (
       <Box flexDirection="column" paddingX={1}>
-        {items.length === 0 ? <Text>Nada urgente en este proyecto.</Text> : bloques}
+        {items.length === 0
+          ? <Text>{sinId > 0 ? 'Nada que mostrar de los pendientes con id.' : 'Nada urgente en este proyecto.'}</Text>
+          : bloques}
+        {sinId > 0
+          ? <Text color="warning">{corta(`● ${sinId} sin id: /enrich-3t (no salen aquí)`, ancho)}</Text>
+          : null}
         <Box flexDirection="row" justifyContent="space-between" width={ancho}>
           <Box flexDirection="row">
             {plegable ? (

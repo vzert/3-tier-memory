@@ -146,7 +146,7 @@ def main():
               == "commands/migrate.md 5c emite algo")
         check("titulo <= 61", all(len(i["titulo_auto"]) <= 61 for i in d["items"]))
         check("resumen", d["resumen"] == {"abiertos": 13, "vencidos": 3, "hoy": 1, "alta": 8,
-                                          "bloqueados": 1})
+                                          "bloqueados": 1, "sin_id": 0})
 
         # Con tope 3: el cupo del hilo (3) no deja sitio, pero el hilo sigue primero.
         d3 = correr(mem, lib, "--max", "3")
@@ -284,6 +284,22 @@ def main():
         dh = correr(mem, lib, "--hoy", "2026-10-12")
         rh = {i["id"]: i for i in dh["items"] + dh["resto"]}.get("p-1212121212", {})
         check("retomar: el mismo dia dice retomar hoy", (rh.get("motivo"), rh.get("dias")) == ("retomar hoy", 0))
+
+        # Sin `_id` la libreria no devuelve el item y el panel no puede mostrarlo. Medido 2026-10-18
+        # en 39 proyectos: 1395 de 2987 abiertos sin id, y en 18 el panel decia "0 abiertos" sin
+        # avisar. `sin_id` cuenta las lineas `- [ ]` que el panel no ve; el pane lo pinta.
+        mem_s = os.path.join(tmp, "sin-id", "memory")
+        os.makedirs(mem_s)
+        with open(os.path.join(mem_s, "_pendientes.md"), "w", encoding="utf-8") as fh:
+            fh.write("# Pendientes\n\n## Alta prioridad\n\n"
+                     "- [ ] Alta sin id — _creado: 2026-10-01_\n"
+                     "- [ ] Alta con id — _creado: 2026-10-01_ — _id: p-abababab01_\n"
+                     "- [x] Cerrado sin id — _creado: 2026-10-01_\n\n"
+                     "## Media prioridad\n\n  - [ ] Media sin id, indentada\n")
+        ds = correr(mem_s, lib)
+        check("sin id: abiertos cuenta solo lo que el panel ve", ds["resumen"]["abiertos"] == 1)
+        check("sin id: resumen dice cuantos no ve", ds["resumen"].get("sin_id") == 2)
+        check("sin id: con todos con id da 0", d["resumen"].get("sin_id") == 0)
 
     for f in fallos:
         print("FALLA:", f)

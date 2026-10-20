@@ -38,7 +38,7 @@ export type Ahora = {
   quedan?: number
   candidatos?: number
   totales?: { hilo: number; vence: number; alta: number }
-  resumen?: { abiertos: number; vencidos: number; hoy: number; alta: number; bloqueados: number }
+  resumen?: { abiertos: number; vencidos: number; hoy: number; alta: number; bloqueados: number; sin_id?: number }
 }
 
 // Titulos cortos que resumio el modelo, por id; `h` es la huella del texto que resumio.
