@@ -14,6 +14,11 @@ M = {
     "solo-la-variable": [(SI, 'if [ -z "${RUN_TESTS_CANDADO_DUENO:-}" ] \\'), (VIVO, '   ; then')],
     "dueno-muerto-vale": [(VIVO, '   ; then')],
     "ascendencia-cualquiera": [('    [ "$p" = "$1" ] && return 0', '    return 0')],
+    # p-984862c40d: un SKIP no tapa un FALLA del mismo aserto, en caso() y en caso_tools().
+    "skip-tapa-falla-caso": [
+        ('     && ! printf \'%s\\n\' "$out" | grep -qiE "(FAIL|FALLA).*${espera}"; then', '     ; then')],
+    "skip-tapa-falla-tools": [
+        ('     && ! printf \'%s\' "$out" | grep -qiE "(FAIL|FALLA).*${espera}"; then', '     ; then')],
     "relanza-sin-fin": [('  if [ "${MUT_RELANZADO:-}" = "$PPID" ]; then', '  if false; then')],
 }
 p, nombre = sys.argv[1], sys.argv[2]
