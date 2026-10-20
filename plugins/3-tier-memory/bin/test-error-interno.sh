@@ -243,5 +243,61 @@ chk "restauracion rota: sale 0" "0" "$RC"
 chk "restauracion rota: el motivo nombra el fichero" "1" "$(razon | grep -c 'NO se pudo restaurar, queda a medias: _pendientes.md')"
 chk "restauracion rota: sin temporales sueltos" "0" "$(find "$M" -name '*.tmp' | wc -l | tr -d ' ')"
 
+echo "== 10. los directorios que creo el evento tambien se borran; los que ya estaban, no =="
+# ensure_monthly, archivar_linea y apply_learning_add crean el directorio de su fichero. Deshacer
+# borraba el fichero nuevo pero dejaba el directorio vacio en memory/ (p-058a36018c).
+vacios() {  # directorios vacios de memory/ fuera de .journal
+  (cd "$M" && find . -path ./.journal -prune -o -type d -empty -print | LC_ALL=C sort | tr '\n' ' ')
+}
+fixture; rmdir "$M/pendientes"
+emit --type pendiente.add --text "malo" --prioridad Baja --origen "$ORI" --creado 2026-10-01 >/dev/null
+estropear text '["x"]'
+RC=0; compact >/dev/null 2>&1 || RC=$?
+chk "pendientes/ nuevo: sale 0" "0" "$RC"
+chk "pendientes/ nuevo: va a cuarentena como error-interno" "1" "$(razon | grep -c '^error-interno: ')"
+chk "pendientes/ nuevo: el directorio que creo el evento no queda" "no" "$([ -e "$M/pendientes" ] && echo si || echo no)"
+chk "pendientes/ nuevo: ningun directorio vacio en memory/" "" "$(vacios)"
+emit --type pendiente.add --text "bueno despues" --prioridad Baja --origen "$ORI" --creado 2026-10-01 >/dev/null
+RC=0; OUT=$(compact 2>&1) || RC=$?
+chk "pendientes/ nuevo: la pasada siguiente lo crea y aplica" "1" "$(grep -c 'bueno despues' "$M"/pendientes/2026-10.md 2>/dev/null)"
+chk "pendientes/ nuevo: y no reporta deriva" "0" "$(printf '%s' "$OUT" | grep -c 'fuera-de-banda')"
+
+fixture   # pendientes/ ya existe y esta vacio: el evento no lo creo y no se toca
+emit --type pendiente.add --text "malo" --prioridad Baja --origen "$ORI" --creado 2026-10-01 >/dev/null
+estropear text '["x"]'
+compact >/dev/null 2>&1
+chk "pendientes/ previo: va a cuarentena como error-interno" "1" "$(razon | grep -c '^error-interno: ')"
+chk "pendientes/ previo: el directorio que ya estaba sigue" "si" "$([ -d "$M/pendientes" ] && echo si || echo no)"
+
+anidado() {  # $1: directorios que se crean antes. El evento escribe a/b/c/2026-10.md y revienta.
+  fixture; for d in $1; do mkdir -p "$M/$d"; done
+  V0=$(vacios)
+  emit --type pendiente.add --text "anidado" --prioridad Baja --origen "$ORI" --creado 2026-10-01 >/dev/null
+  RC=0; python3 -I - "$BIN/journal-compact.py" "$M" <<'PY' >/dev/null 2>&1 || RC=$?
+import importlib.util, os, sys
+spec = importlib.util.spec_from_file_location("jc", sys.argv[1])
+jc = importlib.util.module_from_spec(spec)
+mem = sys.argv[2]
+sys.argv = [sys.argv[1]]
+spec.loader.exec_module(jc)
+def falla(mem, ev):
+    path = os.path.join(mem, "a", "b", "c", "2026-10.md")
+    jc.atomic_write(path, jc.ensure_monthly(path, "2026-10"))
+    raise TypeError("anidado forzado")
+jc.apply_event = falla
+sys.exit(jc.compact(mem, 5.0, True))
+PY
+}
+anidado ""
+chk "a/b/c nuevos: sale 0" "0" "$RC"
+chk "a/b/c nuevos: va a cuarentena como error-interno" "1" "$(razon | grep -c '^error-interno: TypeError: anidado forzado')"
+chk "a/b/c nuevos: no queda ninguno" "no" "$([ -e "$M/a" ] && echo si || echo no)"
+chk "a/b/c nuevos: los directorios vacios son los de antes" "$V0" "$(vacios)"
+anidado "a"
+chk "a previo, b/c nuevos: a sigue" "si" "$([ -d "$M/a" ] && echo si || echo no)"
+chk "a previo, b/c nuevos: b no queda" "no" "$([ -e "$M/a/b" ] && echo si || echo no)"
+anidado "a/b/c"
+chk "a/b/c previos: c sigue y el fichero nuevo no" "si:no" "$([ -d "$M/a/b/c" ] && echo si || echo no):$([ -e "$M/a/b/c/2026-10.md" ] && echo si || echo no)"
+
 echo "RESULTADO: $pass ok, $fail fallas"
 [ "$fail" -eq 0 ]

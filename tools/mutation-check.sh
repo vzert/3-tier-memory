@@ -383,6 +383,9 @@ caso "deshacer sin desanotar"   journal-compact.py m_error_interno.py $T "reopen
 caso "deshacer sin huella"      journal-compact.py m_error_interno.py $T "resolve nota lista: y no reporta deriva" sin-huella
 caso "temporal sin borrar"      journal-compact.py m_error_interno.py $T "atomic_write con sustituto: sin temporales sueltos" sin-borrar-tmp
 caso "restaurar deja temporal"  journal-compact.py m_error_interno.py $T "restauracion rota: sin temporales sueltos" restaura-deja-tmp
+caso "deshacer sin rmdir"       journal-compact.py m_error_interno.py $T "pendientes/ nuevo: el directorio que creo el evento no queda" sin-borrar-dirs
+caso "dirs sin apuntar"         journal-compact.py m_error_interno.py $T "a/b/c nuevos: no queda ninguno" sin-apuntar-dirs
+caso "apunta dirs previos"      journal-compact.py m_error_interno.py $T "a previo, b/c nuevos: a sigue" apunta-previos
 caso "sin identidad"           journal-emit.py m_learning_dedup.py test-learning-dedup.sh "mismo texto sin --decision: rc 0" sin-identidad
 caso "decision fuera"          journal-emit.py m_learning_dedup.py test-learning-dedup.sh "la decision viaja en el payload" decision-fuera-del-payload
 caso "reemplaza sin supersedes" journal-emit.py m_learning_dedup.py test-learning-dedup.sh "reemplaza:2 lleva supersedes 2" reemplaza-sin-supersedes
