@@ -50,6 +50,30 @@ Origen: `p-ac5a4bb888`, el Known de 2.63.7.
   escrito se deshace, asi que solo el motivo lo distingue del rechazo por la fecha. Aserto nuevo
   («la cuarentena es por la fecha, no error-interno») y el caso ahora espera ese.
 
+## [2.63.15] - 2026-10-19
+Origen: desde 2.63.0 el arranque ya no avisa de errores de estructura de `_pendientes.md`, y quedo
+por ver si los otros dos lectores descartan items sin decirlo (`p-c87fde0912`). Medido el
+2026-10-18 en los 39 `_pendientes.md` locales, sin escribir en ellos: `build-recall-index.py` indexa
+2987 de 2987 lineas `- [ ]` (preambulo, secciones fuera de Alta/Media/Baja y encabezados repetidos
+entran todos) y no cambia. El panel del mod `pendientes` veia 1592: los 1395 que faltaban son lineas
+sin `_id`, y en 18 proyectos decia `0 abiertos` sin mas. Este bump no cambia nada de 3-tier-memory;
+acompana al mod para que la version publicada avance con el arbol.
+
+### Fixed
+- **Mod `pendientes` 0.2.4: el panel dice cuantos pendientes no puede mostrar.** `pendientes-ahora.py`
+  anade `resumen.sin_id` (lineas `- [ ]` que `pendientes_afines.pendientes()` no devuelve, contadas
+  aparte sin tocar la libreria). El panel lo pinta en una fila propia (`● N sin id: /enrich-3t (no
+  salen aquí)`) y la tarjeta sobre el prompt como `● N sin id`; la tarjeta sale aunque no haya nada
+  mas que mostrar, para que un proyecto donde ningun pendiente tiene id tambien lo vea.
+- Pruebas: 3 comprobaciones en `tests/test_pendientes_ahora.py` (2 rojas antes del cambio) y 3 casos
+  en `tests/pane.test.tsx` (los 2 de sin id rojos con el `register.tsx` anterior).
+
+### Known
+- Una linea `- [ ]` dentro de un bloque de codigo cuenta en `sin_id` (0 casos en los datos medidos).
+- `/enrich-3t` no da id a un sub-item indentado: en cloudflare-expert quedan 2, y el aviso sigue ahi.
+- Dar id a los 1395 de los otros proyectos no se hizo: son datos fuera de este repositorio
+  (`p-cddd176cd7`).
+
 ## [2.63.14] - 2026-10-19
 Origen: p-984862c40d. `caso()` de `tools/mutation-check.sh` daba un caso por "no evaluable aqui" con
 cualquier linea SKIP del aserto, aunque la misma suite lo tumbara con FALLA: una mutacion que si cae no se
