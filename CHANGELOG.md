@@ -9,7 +9,7 @@ memory/sessions/<ficha>.md`, de solo lectura, bloqueo el turno con "falta 4 prob
 mismo defecto bloqueo un turno real de la sesion que lo arreglaba.
 
 ### Fixed
-- **El guard solo dispara con la invocacion real de `print-como-retomar.py`** (`invocaciones_retomar`).
+- **El guard dispara con la invocacion de `print-como-retomar.py`, no con una mencion** (`invocaciones_retomar`).
   Cuenta cuando el script abre un segmento de shell (tras el inicio, `;`, `&&`, `||`, `|`, `&`, `(`,
   `$(`, una comilla invertida o un salto de linea) y delante de el, dentro del segmento, solo hay
   asignaciones `VAR=…`, palabras de shell (`do`, `then`, `if`…), lanzadores (`env`, `sudo`, `xargs`,
@@ -22,6 +22,10 @@ mismo defecto bloqueo un turno real de la sesion que lo arreglaba.
   estado. Un comando que shlex no puede partir vuelve a la busqueda por mencion. Una invocacion dentro
   de `ssh host '…'` ya no dispara: corre en otra maquina, y su ficha no existe aqui. `"$SF"`
   (p-e1799cd04c) sigue igual. Limite: `bash -c '…'`, `eval` y `py -3` quedan fuera.
+  Limite en el otro sentido (adversario externo, ronda 12): como vale cualquier palabra tras una
+  opcion, unas pocas formas raras cuentan sin correr el script (`python3 -c 'pass' <script> <ficha>`,
+  `python3 --help <script> <ficha>`, `xargs -n1 echo <script> <ficha>`). El error va hacia avisar de
+  mas, como antes con cualquier mencion, y no aparecio ninguna en los transcripts locales.
 
 ### Added
 - Casos en `test-checkpoint-close-guard.sh`: siete menciones con una ficha real detras, en silencio
