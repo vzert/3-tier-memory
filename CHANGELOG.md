@@ -1,5 +1,48 @@
 # Changelog
 
+## [2.63.22] - 2026-10-20
+Origen: auditoria de los hilos y el snippet de retomar pedida por Victor (via `/goalspec:interview`,
+d262-d269), sobre las sesiones del 2026-10-10 al 2026-10-20 de este repo y de otros tres proyectos
+del usuario (276 sesiones; 127 con 2.62.0 o mas).
+
+### Added
+- **Un snippet de retomar pegado que ya quedo viejo se avisa antes de actuar.** Nuevo hook
+  UserPromptSubmit `bin/snippet-vigente.sh` (logica en `bin/snippet-vigente.py`). Si el prompt
+  empieza por `Retomamos:`, `Proximo paso:` o `p-…:` (la tarjeta del mod pendientes), mira
+  `memory/` y le dice al agente, una linea por id: (A) que el `p-…` del paso ya esta cerrado (fecha
+  y nota de su fila mensual) o no existe; (B) que sigue abierto pero una ficha mas nueva que la
+  citada ya lo retoma (en su `## Como retomar`, en su sello `hilo_paso`, o en la marca `_retomar`
+  del pendiente), y cual. Solo avisa: no bloquea y no decide si el trabajo sigue haciendo falta.
+  Medido: de 5 pegados que el agente llamo "viejos" en la ventana, 4 lo eran (3 con el paso ya
+  cerrado, 1 de un plan de varias noches con una ficha mas nueva); A y B cubren los 4 y no disparan
+  en el quinto, que era vigente. En los 4 el agente lo descubrio por su cuenta, leyendo la memoria
+  en su primer turno (15-42 s), y en otras sesiones el usuario llego a escribir a mano "revisa si tu
+  snippet sigue vigente". Una tercera señal al pegar ("otra sesion viva arranco con el mismo paso")
+  no cubria ningun caso que A y B no cubrieran, y no se construyo. Lee ids, fechas y nombres de
+  archivo, nunca juzga la prosa (regla 216); 0,02-0,04 s sobre las memorias reales. Prueba:
+  `bin/test-snippet-vigente.sh`.
+- **Al cerrar, aviso si otra ficha del mismo dia ya deja el mismo `Proximo paso`.** Nuevo chequeo
+  `snippet.paso_compartido` en `checkpoint-audit.py`, POR-DISEÑO: `checkpoint-close-guard.sh` lo
+  pone en la revision del cierre, que ya bloquea una vez, y no suma un rechazo (decision de Victor,
+  d267). Solo compara los `p-…` del campo `Proximo paso` (no la linea de extras ni lo que va tras
+  "ver tambien"); un `ninguno` no es un paso. Caso real en otro proyecto, 2026-10-20: dos
+  cierres con 23 s de diferencia dejaron el mismo `p-…` como paso. El fixture
+  `bin/fixtures/paso-compartido/` tiene dos cierres con esa forma y texto inventado. Prueba:
+  `bin/test-paso-compartido.sh` y un caso nuevo en `test-checkpoint-close-guard.sh`.
+
+### Changed
+- **El bloque ➕ de Step 8e ya no ofrece el Alta abierto mas reciente cuando no hay vencidos**
+  (decision de Victor, d265-d266). Ofrece hasta 2 vencidos, o nada. Sin relacion con la sesion, el
+  mismo Alta salia en cada cierre hasta que alguien lo cerraba: uno que era trabajo de otro agente
+  salio 14 veces en 10 sesiones de otro proyecto sin que nadie lo tomara. El backlog ya lo
+  muestran el sidebar de pendientes y el recall por peticion. Template, README y las dos pruebas
+  que esperaban el Alta, al dia.
+
+### Pruebas
+- `tools/mutaciones/m_paso_vigente.py`: 9 mutaciones nuevas en `tools/mutation-check.sh` (cada
+  detector del aviso al pegar, el chequeo del audit y su corte por dia, el bloque del hook de
+  cierre y el respaldo del Alta). Cada una tumba su aserto.
+
 ## [2.63.18] - 2026-10-20
 Origen: el platforms de main sobre 5d9282c (2.63.16, PR #50) cayo en windows-latest (run
 39443101444): las 15 invocaciones reales de `test-checkpoint-close-guard.sh` salian en silencio. El
