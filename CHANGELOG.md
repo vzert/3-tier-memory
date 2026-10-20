@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.63.26] - 2026-10-20
+Origen: `p-274c87b575` (reportado por cloudflare-expert en `/consolidate-3t`).
+
+### Fixed
+- **Una valla dentro de codigo en linea ya no bloquea `learning.update`.** La guarda `codigo-antes`
+  de `regla_reescribible` busca ```` ``` ````, `~~~` o un `<` al inicio de linea en todo lo que hay
+  antes de la regla. En el fichero reportado la unica coincidencia era `~~~~` dentro de codigo en
+  linea (`` `OpenSSH.Server~~~~0.0.1.0` ``, regla 1); no un `<`, como decia el reporte. Con ella
+  ninguna regla posterior se podia editar. Medido con una copia de ese fichero: 2.63.20 manda la
+  regla 23 a cuarentena con `codigo-antes` y esta version la reescribe. Ahora cada tramo de codigo
+  en linea de la linea (CommonMark 6.1: una tira de n comillas invertidas cerrada por la siguiente
+  de exactamente n) se cambia por una letra antes de buscar. Una tira sin pareja, o de otro largo,
+  no se toca y sigue negando. Seccion 24 de `test-learning-update.sh`, tres mutaciones nuevas
+  (`m_codigo_en_linea.py`) y cinco lineas con codigo en linea en el oraculo CommonMark.
+
 ## [2.63.20] - 2026-10-20
 Origen: `p-058a36018c`, hallazgo de 2.63.17.
 

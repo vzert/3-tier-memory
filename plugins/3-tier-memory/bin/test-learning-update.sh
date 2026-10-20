@@ -398,6 +398,26 @@ emit --type learning.update --topic gate-review --last-verified 2026-10-06 >/dev
 chk "23g sin frontmatter: cuarentena, no lo inventa" "1" "$(cuar)"
 has "23g motivo" "$(motivo)" "no tiene frontmatter"
 
+echo "== 24. una valla dentro de codigo en linea no es codigo-antes (p-274c87b575) =="
+# Caso real: `OpenSSH.Server~~~~0.0.1.0` en una regla anterior bloqueaba toda regla posterior.
+caso24() {  # $1 etiqueta, $2 cuerpo de ## Rules (printf); la regla Vieja se reescribe
+  fixture
+  printf -- "---\ntype: learnings\ntopic: c24\n---\n# C\n\n## Rules\n\n$2\n\n## Related\n" > "$M/learnings/c24.md"
+  emit --type learning.update --topic c24 --match-prefix "Vieja" --text "**Nueva** - texto" >/dev/null
+  compact --quiet >/dev/null 2>&1 || true
+  chk "$1: sin cuarentena" "0" "$(cuar)"
+  chk "$1: reescrita" "1" "$(grep -c '^- \*\*Nueva\*\* - texto$' "$M/learnings/c24.md")"
+}
+caso24 "tildes en codigo en linea" '- **A** - usa `Name OpenSSH.Server~~~~0.0.1.0`\n- **Vieja** - regla'
+caso24 "comillas triples en codigo de dos" '- **A** - la valla `` ``` `` abre codigo\n- **Vieja** - regla'
+caso24 "dos tramos en la misma linea" '- **A** - `~~~` y `x` y ```` ``` ````\n- **Vieja** - regla'
+caso24 "codigo al inicio y luego <" '`x` <b>no es bloque</b>\n\n- **Vieja** - regla'
+# Lo que no es codigo en linea sigue negandose.
+caso22 "tira sin pareja" '- **A** - usa `x ~~~ y\n- **Vieja** - regla' "codigo-antes"
+caso22 "tiras de distinto largo" '- **A** - ``x ~~~ y`\n- **Vieja** - regla' "codigo-antes"
+caso22 "valla de tildes con codigo detras" '~~~ `x`\n- **Vieja** - dentro\n\n~~~' "codigo-antes"
+caso22 "valla tras codigo en linea" '- **A** - `x`\n\n```\n- **Vieja** - dentro\n\n```' "codigo-antes"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" = 0 ]
