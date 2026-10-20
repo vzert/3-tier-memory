@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.63.10] - 2026-10-19
+## [2.63.14] - 2026-10-19
 Origen: p-984862c40d. `caso()` de `tools/mutation-check.sh` daba un caso por "no evaluable aqui" con
 cualquier linea SKIP del aserto, aunque la misma suite lo tumbara con FALLA: una mutacion que si cae no se
 contaba. `caso_tools()` ya lo arreglo en 2.63.6.
