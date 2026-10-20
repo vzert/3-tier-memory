@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.63.24] - 2026-10-20
+## [2.63.28] - 2026-10-20
 Origen: `p-e1799cd04c`. El Step 8b real imprime el snippet con
 `python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"`, y `resolver()` descarta toda ruta con `$`.
 Si la ficha se escribio en un turno anterior (Step 2 antes de una respuesta del usuario), el turno de

@@ -506,7 +506,7 @@ for r in turno:
             # expande antes: el estado del shell no pasa de una llamada Bash a otra, asi que la
             # ficha impresa suele estar escrita ahi. Solo si queda sin resolver, o no existe, vale la
             # ficha de la sesion (abajo): con la ficha de OTRA sesion, un triage revisaba la propia
-            # (adversario externo de 2.63.24).
+            # (adversario externo de 2.63.28).
             asigna = asignaciones(cmd)
             for a in args_retomar:
                 e = expandir(a, asigna) if a else a
