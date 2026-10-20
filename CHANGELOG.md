@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.63.13] - 2026-10-19
+## [2.63.15] - 2026-10-19
 Origen: desde 2.63.0 el arranque ya no avisa de errores de estructura de `_pendientes.md`, y quedo
 por ver si los otros dos lectores descartan items sin decirlo (`p-c87fde0912`). Medido el
 2026-10-18 en los 39 `_pendientes.md` locales, sin escribir en ellos: `build-recall-index.py` indexa
@@ -23,6 +23,24 @@ acompana al mod para que la version publicada avance con el arbol.
 - `/enrich-3t` no da id a un sub-item indentado: en cloudflare-expert quedan 2, y el aviso sigue ahi.
 - Dar id a los 1395 de los otros proyectos no se hizo: son datos fuera de este repositorio
   (`p-cddd176cd7`).
+
+## [2.63.14] - 2026-10-19
+Origen: p-984862c40d. `caso()` de `tools/mutation-check.sh` daba un caso por "no evaluable aqui" con
+cualquier linea SKIP del aserto, aunque la misma suite lo tumbara con FALLA: una mutacion que si cae no se
+contaba. `caso_tools()` ya lo arreglo en 2.63.6.
+
+### Fixed
+- **En `caso()`, un FALLA del aserto gana a un SKIP**, como en `caso_tools()`. La forma del SKIP de `caso()`
+  no cambia (sin distinguir mayusculas y en cualquier parte de la linea): las suites de `bin/` lo imprimen
+  asi y Git Bash depende de eso.
+
+### Added
+- `tools/test-mutation-filtro.sh` (10 asertos, entra en `tools/run-tests.sh`): saca `caso()` y
+  `caso_tools()` del `mutation-check.sh` real y los corre contra suites falsas. SKIP solo no se evalua,
+  SKIP y FALLA cae, FALLA solo cae, ni uno ni otro es vacuo, y un "skip" en minusculas no cuenta en
+  `caso_tools`. Escrita antes del arreglo y medida en rojo: 1 falla, la de SKIP y FALLA en `caso()`.
+- `mutation-check.sh`: 2 mutaciones nuevas (`skip-tapa-falla-caso`, `skip-tapa-falla-tools`); la de
+  `caso_tools` cubre el arreglo de 2.63.6, que no tenia mutacion.
 
 ## [2.63.12] - 2026-10-19
 Origen: `p-e376b39ea2`. El aserto «supervisor nombrado como `nombre [ref]`» de
