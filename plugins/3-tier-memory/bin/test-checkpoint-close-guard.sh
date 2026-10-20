@@ -1527,7 +1527,8 @@ echo "== 2.63.16: una mencion de print-como-retomar.py seguida de una ficha REAL
 # cuenta la invocacion: el script como programa del segmento de shell, o como argumento de python.
 # txcmd TRANSCRIPT COMANDO: un turno sin checkpoint con ese comando de Bash y la respuesta "Visto.".
 # En Git Bash (2.63.18) las rutas van DENTRO del texto del comando, y MSYS solo convierte las que van
-# como argumento suelto: el guard, en el Python nativo de Windows, no resolvia `/tmp/…` ni `/d/a/…`,
+# como argumento suelto: el guard, en el Python nativo de Windows, no resolvia las rutas POSIX de la
+# carpeta temporal ni del checkout del runner,
 # no encontraba la ficha y callaba. Las 15 invocaciones caian en windows-latest (run 39443101444) y
 # las menciones pasaban sin probar nada. Se pasan a la forma `C:/…` con cygpath, como haria argv.
 txcmd() {   # $3 opcional: un veredicto del adversario que el turno trae antes del comando

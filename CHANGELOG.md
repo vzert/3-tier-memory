@@ -3,7 +3,7 @@
 ## [2.63.18] - 2026-10-20
 Origen: el platforms de main sobre 5d9282c (2.63.16, PR #50) cayo en windows-latest (run
 39443101444): las 15 invocaciones reales de `test-checkpoint-close-guard.sh` salian en silencio. El
-arnes metia las rutas de Git Bash (`/tmp/…`, `/d/a/…`) DENTRO del texto del comando, y MSYS solo
+arnes metia las rutas POSIX de la carpeta temporal y del checkout del runner DENTRO del texto del comando, y MSYS solo
 convierte las que van como argumento suelto; el guard, en el Python nativo de Windows, no encontraba
 la ficha. En Windows las menciones de 2.63.16 pasaban sin probar nada por la misma razon.
 
