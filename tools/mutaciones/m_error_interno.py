@@ -17,6 +17,21 @@ M = {
     # Un indice con bytes que no son utf-8 mandaria a cuarentena el evento.
     "captura-decode": [
         ("            except (OSError, UnicodeDecodeError):", "            except OSError:")],
+    # Sin deshacer: un resolve que falla en la fila mensual deja el pendiente cerrado en el indice.
+    "sin-deshacer": [
+        ("                fallos = deshacer_evento(mem)", "                fallos = []")],
+    # Sin la foto de antes: no hay nada que restaurar.
+    "sin-foto": [
+        ("        _DESHACER[ap] = (antes, _ESCRITO.get(ap))", "        pass")],
+    # Sin anular lo anotado: el reopen bueno de despues ve el cierre como ya revertido.
+    "sin-desanotar": [
+        ("    for clave, ts in desanotar(mem, list(_ANOTADAS or [])):", "    for clave, ts in []:")],
+    # Sin devolver la huella: la pasada siguiente ve el indice restaurado como escrito a mano.
+    "sin-huella": [
+        ("            _ESCRITO.pop(ap, None)", "            pass")],
+    # Sin borrar el temporal: un sustituto suelto deja `<indice>.<pid>.tmp` en memory/.
+    "sin-borrar-tmp": [
+        ("            os.remove(tmp)", "            pass")],
 }
 
 p, nombre = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""

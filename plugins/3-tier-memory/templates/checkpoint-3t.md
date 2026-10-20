@@ -783,8 +783,8 @@ It must print `JOURNAL applied=N quarantined=0 pending_left=0`. A `rescued=N` in
 news, not a problem: N events that an older version of the plugin quarantined for a missing anchor
 were returned to `pending/` and applied in this same pass. If `quarantined>0`, open each
 `memory/.journal/quarantine/*.reason` (a hand-edited anchor, an id collision, a broken JSON, an
-impossible date, or `error-interno:` — an event the compactor failed to apply, since 2.63.11; it may
-have left an index half-written), apply that change by hand, delete the `.json`/`.reason` pair, and report it in
+impossible date, or `error-interno:` — an event the compactor failed to apply, since 2.63.11; the compactor
+restored the indexes it had touched, and the reason says so or names what it could not restore), apply that change by hand, delete the `.json`/`.reason` pair, and report it in
 Step 7. Since 2.22.0 a **missing priority header is not one of those cases** — the compactor creates
 the header and applies the event — so a quarantined event really does need a person: do not report it
 as "something the new version does the first time". If it prints `JOURNAL busy`, another agent holds

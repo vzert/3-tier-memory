@@ -13,9 +13,17 @@ Origen: `p-ac5a4bb888`, el Known de 2.63.7. Version provisional: la 2.63.10 es d
   detras se aplicaba nunca. Si un evento bueno iba delante, se aplicaba pero `guardar_huellas` no
   corria, y la pasada siguiente lo reportaba como escrito fuera del journal (`fuera-de-banda`).
   Ahora ese evento va a `quarantine/` con el motivo `error-interno: <Tipo>: <mensaje>`, y la pasada
-  sigue. El prefijo no casa con `RESCATABLE_RE`: el rescate no lo devuelve a `pending/`. El motivo
-  avisa de que el evento pudo dejar escrito algun indice a medias (un `pendiente.resolve` escribe
-  `_pendientes.md` y `_resueltos.md` antes de la fila mensual), como ya pasaba con algun `Quarantine`.
+  sigue. El prefijo no casa con `RESCATABLE_RE`: el rescate no lo devuelve a `pending/`.
+- **Y no deja nada escrito a medias.** Un evento puede fallar despues de escribir: un
+  `pendiente.resolve` con `nota`, `sesion` o `estado` en forma de lista quitaba la linea de
+  `_pendientes.md` y la archivaba en `_resueltos.md`, y reventaba en la fila mensual (revisor externo,
+  ronda 3; antes de este cambio tambien quedaba asi, ademas atascado). Ahora `atomic_write` guarda los
+  bytes de cada fichero antes de su primera escritura en el evento y, con un `error-interno`,
+  `deshacer_evento` los restaura (o borra el fichero si no existia), devuelve su huella para que la
+  pasada siguiente no vea deriva, y anula en `reabiertos.log` lo que el evento anoto. El motivo dice
+  `(los indices que toco se restauraron)`, o nombra lo que no se pudo restaurar. Las cuarentenas
+  `Quarantine` de siempre no cambian. `atomic_write` borra ademas su temporal si la escritura falla:
+  un sustituto suelto dejaba un `<indice>.<pid>.tmp` vacio en `memory/`.
 - `OSError` y `UnicodeDecodeError` siguen como antes, sin cuarentena: son fallos del disco, no del
   evento. Un indice que no se pudo escribir espera al reintento (`escribir_anotado`, casos 27-28 de
   `test-session-amend.sh`). Un `.md` con bytes que no son utf-8 mandaria a cuarentena todos los
@@ -26,13 +34,16 @@ Origen: `p-ac5a4bb888`, el Known de 2.63.7. Version provisional: la 2.63.10 es d
   pierde en cuarentena en vez de rechazarse al emitir. Endurecerlo tipo a tipo queda como pendiente.
 
 ### Tests
-- `test-error-interno.sh` nuevo (27 asertos): text=1 y text con `\ud800` van a cuarentena con su
+- `test-error-interno.sh` nuevo (57 asertos): text=1 y text con `\ud800` van a cuarentena con su
   motivo y el bueno de detras se aplica; con el bueno delante, la pasada siguiente no reporta
-  deriva; un fallo de escritura y un indice que no es utf-8 dejan el evento en `pending/`. Contra
-  2.63.9 da 18 fallas.
-- `tools/mutaciones/m_error_interno.py` (3 mutaciones) y 4 casos en `tools/mutation-check.sh`: sin
+  deriva; un fallo de escritura y un indice que no es utf-8 dejan el evento en `pending/`; un
+  resolve con nota, sesion o estado en lista deja los indices byte a byte como estaban; un reopen
+  que falla despues de anotar (forzado) no deja la anotacion viva; y no quedan temporales. Contra
+  2.63.9 da 15 ok y 42 fallas.
+- `tools/mutaciones/m_error_interno.py` (8 mutaciones) y 9 casos en `tools/mutation-check.sh`: sin
   la red; con OSError a cuarentena (cae tambien el caso 27 de `test-session-amend.sh`); con
-  UnicodeDecodeError a cuarentena.
+  UnicodeDecodeError a cuarentena; sin deshacer, sin la foto, sin anular lo anotado, sin devolver la
+  huella y sin borrar el temporal.
 - `tools/mutation-check.sh`, caso "compactador sin regex" (2.63.7): sin la regex, el evento con
   `creado` ancho ya no atasca la pasada (va a cuarentena como `error-interno: ValueError`), pero su
   linea llega a `_pendientes.md` antes de fallar; el caso ahora espera ese aserto.

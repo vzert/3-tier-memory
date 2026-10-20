@@ -107,5 +107,109 @@ python3 -I -c 'import sys; p=sys.argv[1]; b=open(p,"rb").read().replace(b"\xff\x
 compact --quiet >/dev/null 2>&1
 chk "UnicodeDecodeError: arreglado el indice, el evento se aplica" "1" "$(grep -c 'tras arreglo' "$M/_pendientes.md")"
 
+echo "== 5. un evento que falla a MEDIAS no deja escrito nada: los indices vuelven a como estaban =="
+# pendiente.resolve escribe _pendientes.md (quita la linea) y _resueltos.md (la archiva) y despues
+# revienta en la fila mensual con una nota que no es cadena (revisor externo, ronda 3). Sin deshacer,
+# el evento iba a cuarentena con el pendiente ya cerrado en el indice y abierto en el mensual.
+huella() {  # hash de cada .md de memory/ fuera de .journal, con su ruta
+  (cd "$M" && find . -path ./.journal -prune -o -type f -name '*.md' -print | LC_ALL=C sort | while read -r f; do
+    printf '%s %s\n' "$f" "$(python3 -I -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$f")"
+  done)
+}
+for campo in nota sesion estado; do
+  fixture
+  A=$(emit --type pendiente.add --text "a cerrar con $campo" --prioridad Baja --origen "$ORI" --creado 2026-10-01)
+  compact --quiet >/dev/null
+  ANTES=$(huella)
+  emit --type pendiente.resolve --id "$A" --estado resolved --sesion "$ORI" >/dev/null
+  estropear "$campo" '["x"]'
+  RC=0; OUT=$(compact 2>&1) || RC=$?
+  chk "resolve $campo lista: sale 0" "0" "$RC"
+  chk "resolve $campo lista: va a cuarentena como error-interno" "1" "$(razon | grep -c '^error-interno: ')"
+  chk "resolve $campo lista: los indices quedan como estaban" "$ANTES" "$(huella)"
+  chk "resolve $campo lista: el pendiente sigue abierto" "1" "$(grep -c "a cerrar con $campo" "$M/_pendientes.md")"
+  chk "resolve $campo lista: sin temporales sueltos" "0" "$(find "$M" -name '*.tmp' | wc -l | tr -d ' ')"
+  emit --type pendiente.add --text "despues de $campo" --prioridad Baja --origen "$ORI" --creado 2026-10-01 >/dev/null
+  RC=0; OUT=$(compact 2>&1) || RC=$?
+  chk "resolve $campo lista: la pasada siguiente aplica" "1" "$(grep -c "despues de $campo" "$M/_pendientes.md")"
+  chk "resolve $campo lista: y no reporta deriva" "0" "$(printf '%s' "$OUT" | grep -c 'fuera-de-banda')"
+done
+
+echo "== 6. un sustituto suelto no deja el temporal de atomic_write =="
+fixture
+emit --type pendiente.add --text "base" --prioridad Baja --origen "$ORI" --creado 2026-10-01 >/dev/null
+compact --quiet >/dev/null
+ANTES=$(huella)
+emit --type pendiente.add --text "sust" --prioridad Baja --origen "$ORI" --creado 2026-10-01 >/dev/null
+estropear text '"x \ud800 y"'
+compact --quiet >/dev/null 2>&1
+chk "sustituto: sin temporales sueltos" "0" "$(find "$M" -name '*.tmp' | wc -l | tr -d ' ')"
+chk "sustituto: los indices quedan como estaban" "$ANTES" "$(huella)"
+
+echo "== 7. lo que el evento anoto en reabiertos.log tambien se anula =="
+# pendiente.reopen anota el cierre que revierte ANTES de tocar el indice y escribe _pendientes.md
+# antes de limpiar la fila mensual. Ningun campo del evento hace fallar esa limpieza (por eso se
+# fuerza: el compactador se importa y limpiar_mensual_reabierto lanza TypeError). Sin anular la
+# anotacion, el reopen bueno de despues veria ese cierre como ya revertido y no reabriria.
+fixture
+A=$(emit --type pendiente.add --text "a reabrir" --prioridad Baja --origen "$ORI" --creado 2026-10-01)
+emit --type pendiente.resolve --id "$A" --estado resolved --sesion "$ORI" >/dev/null
+compact --quiet >/dev/null
+ANTES=$(huella)
+emit --type pendiente.reopen --id "$A" >/dev/null
+RC=0; python3 -I - "$BIN/journal-compact.py" "$M" <<'PY' >/dev/null 2>&1 || RC=$?
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("jc", sys.argv[1])
+jc = importlib.util.module_from_spec(spec)
+mem = sys.argv[2]
+sys.argv = [sys.argv[1]]
+spec.loader.exec_module(jc)
+def falla(*a, **k):
+    raise TypeError("limpieza forzada")
+jc.limpiar_mensual_reabierto = falla
+sys.exit(jc.compact(mem, 5.0, True))
+PY
+chk "reopen forzado: sale 0" "0" "$RC"
+chk "reopen forzado: va a cuarentena como error-interno" "1" "$(razon | grep -c '^error-interno: TypeError: limpieza forzada')"
+chk "reopen forzado: los indices quedan como estaban" "$ANTES" "$(huella)"
+vivas() {  # anotaciones de $1 en reabiertos.log sin su anulacion
+  python3 -I - "$M/.journal/reabiertos.log" "$1" <<'PY'
+import sys, collections
+c = collections.Counter()
+try:
+    for l in open(sys.argv[1], encoding="utf-8"):
+        k, ts = l.split("\t")[:2]
+        if k == sys.argv[2]:
+            c[ts.lstrip("-")] += -1 if ts.startswith("-") else 1
+except FileNotFoundError:
+    pass
+print(sum(v for v in c.values() if v > 0))
+PY
+}
+chk "reopen forzado: ninguna anotacion queda viva" "0" "$(vivas "$A")"
+emit --type pendiente.reopen --id "$A" >/dev/null
+compact --quiet >/dev/null 2>&1
+chk "reopen bueno despues: el pendiente vuelve a estar abierto" "1" "$(grep -c 'a reabrir' "$M/_pendientes.md")"
+
+echo "== 8. atomic_write que falla fuera de un evento tampoco deja su temporal =="
+# Dentro de un evento, deshacer_evento restaura con el mismo nombre de temporal y se lo lleva; fuera
+# (o cuando el fallo sube como OSError y no hay deshacer) solo lo borra atomic_write.
+fixture
+RC=0; python3 -I - "$BIN/journal-compact.py" "$M/_pendientes.md" <<'PY' >/dev/null 2>&1 || RC=$?
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("jc", sys.argv[1])
+jc = importlib.util.module_from_spec(spec)
+path = sys.argv[2]
+sys.argv = [sys.argv[1]]
+spec.loader.exec_module(jc)
+try:
+    jc.atomic_write(path, ["x \ud800 y", ""])
+except UnicodeEncodeError:
+    sys.exit(0)
+sys.exit(3)
+PY
+chk "atomic_write con sustituto: lanza UnicodeEncodeError" "0" "$RC"
+chk "atomic_write con sustituto: sin temporales sueltos" "0" "$(find "$M" -name '*.tmp' | wc -l | tr -d ' ')"
+
 echo "RESULTADO: $pass ok, $fail fallas"
 [ "$fail" -eq 0 ]

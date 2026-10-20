@@ -371,6 +371,11 @@ caso "sin red de error-interno" journal-compact.py m_error_interno.py $T "text=1
 caso "OSError a cuarentena"     journal-compact.py m_error_interno.py $T "OSError: el evento sigue en pending" captura-oserror
 caso "OSError rompe amend"      journal-compact.py m_error_interno.py test-session-amend.sh "el evento sigue en pending" captura-oserror
 caso "decode a cuarentena"      journal-compact.py m_error_interno.py $T "UnicodeDecodeError: el evento sigue en pending" captura-decode
+caso "error-interno sin deshacer" journal-compact.py m_error_interno.py $T "resolve nota lista: los indices quedan como estaban" sin-deshacer
+caso "deshacer sin foto"        journal-compact.py m_error_interno.py $T "resolve nota lista: los indices quedan como estaban" sin-foto
+caso "deshacer sin desanotar"   journal-compact.py m_error_interno.py $T "reopen forzado: ninguna anotacion queda viva" sin-desanotar
+caso "deshacer sin huella"      journal-compact.py m_error_interno.py $T "resolve nota lista: y no reporta deriva" sin-huella
+caso "temporal sin borrar"      journal-compact.py m_error_interno.py $T "atomic_write con sustituto: sin temporales sueltos" sin-borrar-tmp
 caso "sin identidad"           journal-emit.py m_learning_dedup.py test-learning-dedup.sh "mismo texto sin --decision: rc 0" sin-identidad
 caso "decision fuera"          journal-emit.py m_learning_dedup.py test-learning-dedup.sh "la decision viaja en el payload" decision-fuera-del-payload
 caso "reemplaza sin supersedes" journal-emit.py m_learning_dedup.py test-learning-dedup.sh "reemplaza:2 lleva supersedes 2" reemplaza-sin-supersedes
