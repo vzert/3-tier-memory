@@ -258,7 +258,7 @@ exists in the project index is a no-op.
    A missing priority header in the project index is NOT a quarantine case since 2.22.0: the compactor
    creates the header and applies the event, and a `rescued=N` in that line means events an older version
    had quarantined for that reason were applied now. If an event IS still quarantined (an anchor deleted by
-   hand, an id collision, a broken JSON, an impossible date), read `memory/.journal/quarantine/*.reason`,
+   hand, an id collision, a broken JSON, an impossible date, or `error-interno:` since 2.63.17), read `memory/.journal/quarantine/*.reason`,
    apply that change by hand, delete the `.json`/`.reason` pair, and report it. For a plan row:
    `inline-con-archivo` → re-emit without `--inline` (or with `--promote` if the `(inline)` row is
    this plan's); `titulo-ambiguo` → fix the project row's Plan cell as its `.reason` says, or re-emit

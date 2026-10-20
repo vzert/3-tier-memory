@@ -15,7 +15,8 @@ porque en Windows un antivirus, el indexador u otro compactador pueden tener el 
 un instante; por la misma razon el lock se borra con rmtree_with_retry (medido: sin reintento
 el lock quedaba huerfano en 1 de 5 ensayos en Windows). Cada evento aplicado se mueve a
 applied/YYYY-MM/; un evento invalido o cuyo ancla no existe va a quarantine/ con un archivo
-.reason al lado. Nunca se pierde un evento en silencio. Excepcion deliberada (2.22.0): un ancla
+.reason al lado (y, desde 2.63.17, uno cuya aplicacion lanza otra excepcion: `error-interno:`, con
+los indices que toco restaurados a como estaban antes del evento; ver deshacer_evento). Nunca se pierde un evento en silencio. Excepcion deliberada (2.22.0): un ancla
 que el compactador sabe escribir sin mover nada se escribe — si falta el header de prioridad de
 un `pendiente.add` (o de un `pendiente.reopen`), se crea y el evento se aplica, porque eso es el
 estado normal de una instalacion anterior a 2.12.0 y mandarlo a cuarentena convertia una
@@ -123,6 +124,12 @@ POLL_SECONDS = 0.05
 REPLACE_RETRIES = 5  # Windows: antivirus/indexador pueden tener el .md abierto un instante
 EOL_DEFAULT = "\n"   # fichero nuevo o sin CRLF: LF, en cualquier sistema operativo
 _ESCRITO = {}         # ruta absoluta -> sha256 de lo que atomic_write dejo en ella
+# Mientras compact() aplica UN evento: ruta absoluta -> (bytes antes de su primera escritura en el
+# evento, o None si no existia; entrada previa de _ESCRITO). Con un error-interno se restaura todo
+# (deshacer_evento): el evento va a cuarentena sin dejar escrito ningun indice a medias. None
+# fuera de un evento. _ANOTADAS: las (clave, ts) que el evento anoto en reabiertos.log.
+_DESHACER = None
+_ANOTADAS = None
 MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto",
          "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 ID_RE = re.compile(r"_id: (p-[0-9a-f]{10})_")
@@ -267,9 +274,26 @@ def atomic_write(path, lines):
     eol = detect_eol(path)
     tmp = f"{path}.{os.getpid()}.tmp"
     datos = eol.join(lines)
-    with open(tmp, "w", encoding="utf-8", newline="") as fh:
-        fh.write(datos)
-    replace_with_retry(tmp, path)
+    ap = os.path.abspath(path)
+    if _DESHACER is not None and ap not in _DESHACER:
+        try:
+            with open(ap, "rb") as fh:
+                antes = fh.read()
+        except FileNotFoundError:
+            antes = None
+        _DESHACER[ap] = (antes, _ESCRITO.get(ap))
+    try:
+        with open(tmp, "w", encoding="utf-8", newline="") as fh:
+            fh.write(datos)
+        replace_with_retry(tmp, path)
+    except BaseException:
+        # Un sustituto suelto revienta en fh.write con el temporal ya creado: sin esto quedaba un
+        # `<indice>.<pid>.tmp` vacio en memory/ por cada pasada que fallaba.
+        try:
+            os.remove(tmp)   # el temporal de atomic_write
+        except OSError:
+            pass
+        raise
     # Se apunta el hash de lo que ACABAMOS de escribir. El sellado usa esto en vez de releer el
     # disco, para que una escritura ajena entre la ultima escritura del compactador y su sellado
     # no se cuele en la linea base. Misma razon que el `estado` de --check-drift. (Ronda 7.)
@@ -1040,6 +1064,8 @@ def anotar_reabierto(mem, pid, ev, que="la reapertura"):
         with open(os.path.join(d, REABIERTOS_LOG), "a",
                   encoding="utf-8", newline="\n") as fh:
             fh.write(f"{campo_log(pid)}\t{campo_log(str(ev))}\t{date.today().isoformat()}\n")
+        if _ANOTADAS is not None:
+            _ANOTADAS.append((pid, ev))
     except OSError as e:
         # Se CUARENTENA, no se avisa y se sigue. Una version anterior de esto restauraba la linea
         # igual y solo dejaba un WARN: el reopen quedaba hecho pero SIN proteccion, asi que un
@@ -1080,7 +1106,46 @@ def desanotar(mem, entradas):
                 fh.write(f"{campo_log(clave)}\t-{campo_log(str(ts))}\t{date.today().isoformat()}\n")
         except OSError:
             fallidas.append((clave, ts))
+            continue
+        if _ANOTADAS is not None and (clave, ts) in _ANOTADAS:
+            _ANOTADAS.remove((clave, ts))   # ya anulada aqui: deshacer_evento no la anula dos veces
     return fallidas
+
+
+def deshacer_evento(mem):
+    """Devuelve memory/ a como estaba antes del evento en curso: restaura los bytes de cada fichero
+    que atomic_write toco (o lo borra si no existia), su entrada de _ESCRITO (el sellado de huellas
+    no debe ver deriva) y anula en reabiertos.log lo que el evento anoto. Devuelve la lista de lo
+    que NO se pudo deshacer ([] = todo). Los registros de copia (adds-descartados, adopt-colapsados)
+    no se tocan: guardan copias, y una de mas no cambia ningun indice."""
+    fallos = []
+    for ap, (antes, escrito) in (_DESHACER or {}).items():
+        try:
+            if antes is None:
+                if os.path.exists(ap):
+                    os.remove(ap)
+            else:
+                tmp = f"{ap}.{os.getpid()}.tmp"
+                try:
+                    with open(tmp, "wb") as fh:
+                        fh.write(antes)
+                    replace_with_retry(tmp, ap)
+                except OSError:
+                    try:
+                        os.remove(tmp)   # una restauracion que falla tampoco deja su temporal
+                    except OSError:
+                        pass
+                    raise
+        except OSError as e:
+            fallos.append(f"{os.path.relpath(ap, mem)} ({e})")
+            continue
+        if escrito is None:
+            _ESCRITO.pop(ap, None)
+        else:
+            _ESCRITO[ap] = escrito
+    for clave, ts in desanotar(mem, list(_ANOTADAS or [])):
+        fallos.append(f".journal/{REABIERTOS_LOG} {clave} {ts}")
+    return fallos
 
 
 def escribir_anotado(mem, anotaciones, path, lines):
@@ -5176,6 +5241,7 @@ def rescatar_cuarentena(journal):
 
 
 def compact(mem, budget, quiet):
+    global _DESHACER, _ANOTADAS
     journal = os.path.join(mem, ".journal")
     pending = os.path.join(journal, "pending")
     if not os.path.isdir(pending):
@@ -5240,6 +5306,7 @@ def compact(mem, budget, quiet):
                 quarantined += 1
                 log(f"QUARANTINE {n} malformed")
                 continue
+            _DESHACER, _ANOTADAS = {}, []   # deshacer_evento, solo para un error-interno
             try:
                 changed = apply_event(mem, ev)
             except Quarantine as q:
@@ -5247,7 +5314,27 @@ def compact(mem, budget, quiet):
                 quarantined += 1
                 log(f"QUARANTINE {n} {q}")
                 continue
-            ym = time.strftime("%Y-%m", time.gmtime(int(ev.get("ts", 0)) / 1e9))
+            except (OSError, UnicodeDecodeError):
+                # El fallo es del disco, no del evento: un indice que no se pudo escribir (el
+                # reintento de escribir_anotado cuenta con que el evento siga en pending/) o un .md
+                # con bytes que no son utf-8, que mandaria a cuarentena cada evento de ese indice.
+                # Sigue reventando como antes; arreglado el fichero, la pasada siguiente aplica.
+                raise
+            except Exception as e:
+                # Cualquier otro fallo de apply_event es un evento que validate dejo pasar y que no
+                # se puede aplicar (p. ej. un campo de texto que no es cadena, o un sustituto suelto
+                # que utf-8 no codifica). Antes se quedaba en pending/ y, como se aplica por orden
+                # de nombre, ningun evento de detras se aplicaba nunca (p-ac5a4bb888). El prefijo
+                # `error-interno:` no casa con RESCATABLE_RE: nunca vuelve solo a pending/.
+                msg = f"{type(e).__name__}: {e}".encode("utf-8", "backslashreplace").decode("utf-8")
+                fallos = deshacer_evento(mem)
+                nota = (" (los indices que toco se restauraron)" if not fallos else
+                        " (NO se pudo restaurar, queda a medias: " + "; ".join(fallos) + ")")
+                move_to(src, os.path.join(journal, "quarantine"), f"error-interno: {msg}{nota}")
+                quarantined += 1
+                log(f"QUARANTINE {n} error-interno {type(e).__name__}")
+                continue
+            ym =time.strftime("%Y-%m", time.gmtime(int(ev.get("ts", 0)) / 1e9))
             move_to(src, os.path.join(journal, "applied", ym))
             if changed:
                 applied += 1
@@ -5256,8 +5343,10 @@ def compact(mem, budget, quiet):
                 noop += 1  # replay de un evento ya aplicado: se archiva, no cuenta como cambio
                 log(f"NOOP {n}")
             lock.refresh()
+        _DESHACER = _ANOTADAS = None
         guardar_huellas(mem, journal)   # nueva linea base: lo que deja ESTE compactador
     finally:
+        _DESHACER = _ANOTADAS = None
         lock.release()
     left = len([n for n in os.listdir(pending) if n.endswith(".json")]) \
         if os.path.isdir(pending) else 0

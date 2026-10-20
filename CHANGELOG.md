@@ -16,6 +16,101 @@ vencia y el 8e salia vacio.
   Con el arreglo pasa entera con `2031-03-15`, con ayer y con el dia real.
 - `tools/mutation-check.sh`: caso nuevo "prueba con fecha fija" (`m_hoy_fijo.py sin-parche`): sin
   el parche cae "el fixture trae un 8e con contenido".
+## [2.63.17] - 2026-10-19
+Origen: `p-ac5a4bb888`, el Known de 2.63.7.
+
+### Fixed
+- **Una excepcion cualquiera de un evento ya no atasca el compactador.** `validate` deja pasar
+  eventos que `apply_event` no sabe aplicar: medido sobre 2.63.7, unas 30 combinaciones de tipo y
+  campo (un texto que no es cadena, como `session.add` con `status: 1` o `pendiente.add` con
+  `text: 1`; o un sustituto suelto `\ud800`, que utf-8 no codifica) lanzan `TypeError`,
+  `AttributeError` o `UnicodeEncodeError`. No eran `Quarantine`: la pasada salia con traceback y
+  exit 1, el evento se quedaba en `pending/` y, como se aplica por orden de nombre, ningun evento de
+  detras se aplicaba nunca. Si un evento bueno iba delante, se aplicaba pero `guardar_huellas` no
+  corria, y la pasada siguiente lo reportaba como escrito fuera del journal (`fuera-de-banda`).
+  Ahora ese evento va a `quarantine/` con el motivo `error-interno: <Tipo>: <mensaje>`, y la pasada
+  sigue. El prefijo no casa con `RESCATABLE_RE`: el rescate no lo devuelve a `pending/`.
+- **Y no deja nada escrito a medias.** Un evento puede fallar despues de escribir: un
+  `pendiente.resolve` con `nota`, `sesion` o `estado` en forma de lista quitaba la linea de
+  `_pendientes.md` y la archivaba en `_resueltos.md`, y reventaba en la fila mensual (revisor externo,
+  ronda 3; antes de este cambio tambien quedaba asi, ademas atascado). Ahora `atomic_write` guarda los
+  bytes de cada fichero antes de su primera escritura en el evento y, con un `error-interno`,
+  `deshacer_evento` los restaura (o borra el fichero si no existia), devuelve su huella para que la
+  pasada siguiente no vea deriva, y anula en `reabiertos.log` lo que el evento anoto. El motivo dice
+  `(los indices que toco se restauraron)`, o nombra lo que no se pudo restaurar. Las cuarentenas
+  `Quarantine` de siempre no cambian. `atomic_write` borra ademas su temporal si la escritura falla
+  (un sustituto suelto dejaba un `<indice>.<pid>.tmp` vacio en `memory/`), y una restauracion que
+  falla tampoco deja el suyo.
+- `OSError` y `UnicodeDecodeError` siguen como antes, sin cuarentena: son fallos del disco, no del
+  evento. Un indice que no se pudo escribir espera al reintento (`escribir_anotado`, casos 27-28 de
+  `test-session-amend.sh`). Un `.md` con bytes que no son utf-8 mandaria a cuarentena todos los
+  eventos de ese indice; arreglado el fichero, la pasada siguiente aplica.
+
+### Known
+- `validate` sigue aceptando esos campos que no son cadena: el evento ya no atasca nada, pero se
+  pierde en cuarentena en vez de rechazarse al emitir. Endurecerlo tipo a tipo queda como pendiente.
+
+### Tests
+- `test-error-interno.sh` nuevo (60 asertos): text=1 y text con `\ud800` van a cuarentena con su
+  motivo y el bueno de detras se aplica; con el bueno delante, la pasada siguiente no reporta
+  deriva; un fallo de escritura y un indice que no es utf-8 dejan el evento en `pending/`; un
+  resolve con nota, sesion o estado en lista deja los indices byte a byte como estaban; un reopen
+  que falla despues de anotar (forzado) no deja la anotacion viva; una restauracion que falla
+  (forzada) se nombra en el motivo; y no quedan temporales. Contra 2.63.9 da 16 ok y 44 fallas.
+- `tools/mutaciones/m_error_interno.py` (9 mutaciones) y 10 casos en `tools/mutation-check.sh`: sin
+  la red; con OSError a cuarentena (cae tambien el caso 27 de `test-session-amend.sh`); con
+  UnicodeDecodeError a cuarentena; sin deshacer, sin la foto, sin anular lo anotado, sin devolver la
+  huella, sin borrar el temporal de `atomic_write` y sin borrar el de la restauracion.
+- `test-fecha-iso.sh` y su caso "compactador sin regex" (2.63.7): sin la regex, el evento con
+  `creado` ancho ya no atasca la pasada; va a cuarentena como `error-interno: ValueError` y lo
+  escrito se deshace, asi que solo el motivo lo distingue del rechazo por la fecha. Aserto nuevo
+  («la cuarentena es por la fecha, no error-interno») y el caso ahora espera ese.
+
+## [2.63.16] - 2026-10-19
+Origen: p-1fe14aa592. `checkpoint-close-guard.sh` disparaba la revision del cierre con cualquier
+comando que nombrara `print-como-retomar.py` y tomaba como ficha la palabra siguiente. 2.63.3
+(p-bea9639b92) ya exigia que esa palabra fuera un `sessions/*.md`; quedaba la otra mitad. Medido en
+esta sesion: `git diff HEAD~1 -- plugins/3-tier-memory/bin/print-como-retomar.py
+memory/sessions/<ficha>.md`, de solo lectura, bloqueo el turno con "falta 4 problema(s)", y el
+mismo defecto bloqueo un turno real de la sesion que lo arreglaba.
+
+### Fixed
+- **El guard dispara con la invocacion de `print-como-retomar.py`, no con una mencion** (`invocaciones_retomar`).
+  Cuenta cuando el script abre un segmento de shell (tras el inicio, `;`, `&&`, `||`, `|`, `&`, `(`,
+  `$(`, una comilla invertida o un salto de linea) y delante de el, dentro del segmento, solo hay
+  asignaciones `VAR=…`, palabras de shell (`do`, `then`, `if`…), lanzadores (`env`, `sudo`, `xargs`,
+  `nice`, `timeout`, `nohup`, `uv run`), python/python3, opciones (`-x`, `--y=z`) y el valor que sigue
+  a una opcion (`-u nobody`, `-W ignore`), o la duracion de `timeout`. No hay listas de opciones por
+  programa: en tres rondas el adversario externo encontro una opcion con valor que faltaba en ellas.
+  Un programa cualquiera delante (`git diff`, `grep`, `sed -i`, `cat`, `sudo cat`) es una mencion y
+  ya no dispara; tampoco un `echo "python3 …"` ni el texto de un `--text`. Lo usan los dos sitios que
+  antes buscaban la mencion: el disparo del turno y las fichas impresas que cuentan para el cambio de
+  estado. Un comando que shlex no puede partir vuelve a la busqueda por mencion. Una invocacion dentro
+  de `ssh host '…'` ya no dispara: corre en otra maquina, y su ficha no existe aqui. `"$SF"`
+  (p-e1799cd04c) sigue igual. Limite: `bash -c '…'`, `eval` y `py -3` quedan fuera.
+  Limite en el otro sentido (adversario externo, ronda 12): como vale cualquier palabra tras una
+  opcion, unas pocas formas raras cuentan sin correr el script (`python3 -c 'pass' <script> <ficha>`,
+  `python3 --help <script> <ficha>`, `xargs -n1 echo <script> <ficha>`). El error va hacia avisar de
+  mas, como antes con cualquier mencion, y no aparecio ninguna en los transcripts locales.
+
+### Added
+- Casos en `test-checkpoint-close-guard.sh`: siete menciones con una ficha real detras, en silencio
+  (con el guard de 2.63.4 caen seis; el `cat … | grep …` ya pasaba), y quince invocaciones
+  reales que siguen disparando (`python3 "<ruta>"`, `cd … && python3 … | head`, `python3 -I "$JBIN/…"`,
+  el script directo, `OUT=$(python3 …)`, `for …; do python3 …; done`, `uv run --python 3.12`,
+  `uv run --from foo`, `env -i`, `xargs -n1`, `timeout 30`, `timeout -k 5 30`, `sudo -E -u nobody`,
+  `sudo --user nobody`, `python3 -W ignore`).
+- Mutaciones `mencion-cuenta`, `python-no-cuenta` y `opcion-sin-valor`
+  (`tools/mutaciones/m_invocacion_retomar.py`).
+- La mutacion `ficha-cualquiera` de 2.63.3 apunta a un caso nuevo: una invocacion real sobre un `.py`
+  con un `break` en la sesion, en silencio. El caso del `sed` de 2.63.3 ya no pasa por el filtro
+  `sessions/*.md` (el `sed` no es una invocacion), y la mutacion sobrevivia en mutation-check.
+- Medido sobre los comandos de Bash de los transcripts locales que nombran el script (2026-10-19, la
+  ultima vez 1.593): ninguno que antes no contaba cuenta ahora, y los que dejan de contar (186 en la
+  ultima medicion) son menciones (prosa de commits, listas de un `for`, `git`, `grep`, `wc`, `scp`,
+  codigo Python que busca el nombre, el `--text` de un `journal-emit.py`) e invocaciones remotas por
+  `ssh`. Una invocacion sin argumento no cuenta: el script exige la ficha, y asi el nombre entre
+  comillas invertidas en la prosa de un commit no abre un segmento falso.
 
 ## [2.63.15] - 2026-10-19
 Origen: desde 2.63.0 el arranque ya no avisa de errores de estructura de `_pendientes.md`, y quedo

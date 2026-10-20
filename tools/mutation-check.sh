@@ -274,7 +274,10 @@ caso "marco: campo entero" checkpoint-audit.py m_hilo.py $T "dos pendientes, el 
 caso "marco: aviso, no falta" checkpoint-audit.py m_hilo.py $T "y no lo vuelve SALTADO" marco-saltado
 caso "marco: caso 5 fuera" checkpoint-audit.py m_hilo.py $T "caso 5 \(ninguno\): el marco no aplica" marco-con-ninguno
 caso "marco: el hook lo pone en la revision" checkpoint-close-guard.sh m_hilo.py test-checkpoint-close-guard.sh "el archivo de la revision trae el bloque de avisos del marco" guard-sin-marco
-caso "ficha: solo sessions/*.md"   checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "el .py no es una ficha" ficha-cualquiera
+caso "ficha: solo sessions/*.md"   checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "invocacion real sobre un archivo que no es ficha" ficha-cualquiera
+caso "retomar: mencion no dispara"  checkpoint-close-guard.sh m_invocacion_retomar.py test-checkpoint-close-guard.sh "mencion en silencio: git" mencion-cuenta
+caso "retomar: python3 cuenta"       checkpoint-close-guard.sh m_invocacion_retomar.py test-checkpoint-close-guard.sh "invocacion real sigue disparando: python3" python-no-cuenta
+caso "retomar: valor tras opcion"   checkpoint-close-guard.sh m_invocacion_retomar.py test-checkpoint-close-guard.sh "invocacion real sigue disparando: python3 -W ignore" opcion-sin-valor
 caso "extras: citado en Terminas" pendientes_afines.py m_hilo.py $T "el citado en Terminas cuando no va de extra" extras-sin-citados
 caso "extras: citado en No repitas" pendientes_afines.py m_hilo.py $T "el citado en No repitas no va de extra" extras-sin-no-repitas
 caso "extras: prueba en vivo" pendientes_afines.py m_hilo.py $T "pruebas en vivo y esperas de OK fuera: el unico extra es la tarea de codigo" extras-sin-vivo
@@ -370,8 +373,19 @@ caso "--hoy sin semana ISO"     marcar-retomar.py m_marcar_retomar.py $T "marcar
 caso "--hoy guiones sueltos"    marcar-retomar.py m_marcar_retomar.py $T "marcar-retomar --hoy 2026-1016 sale 2" guiones-sueltos
 T=test-fecha-iso.sh
 caso "emisor sin regex de fecha" journal-emit.py m_fecha_iso.py $T "pendiente.add --creado 20261016: error" sin-regex
-caso "compactador sin regex"    journal-compact.py m_fecha_iso.py $T "creado ancho: el malo va a cuarentena" sin-regex
+caso "compactador sin regex"    journal-compact.py m_fecha_iso.py $T "creado ancho: la cuarentena es por la fecha, no error-interno" sin-regex
 caso "fecha solo en learning"   journal-compact.py m_fecha_iso.py $T "resolve con fecha ancha: va a cuarentena" sin-fecha-generica
+T=test-error-interno.sh
+caso "sin red de error-interno" journal-compact.py m_error_interno.py $T "text=1: el malo va a cuarentena" sin-captura
+caso "OSError a cuarentena"     journal-compact.py m_error_interno.py $T "OSError: el evento sigue en pending" captura-oserror
+caso "OSError rompe amend"      journal-compact.py m_error_interno.py test-session-amend.sh "el evento sigue en pending" captura-oserror
+caso "decode a cuarentena"      journal-compact.py m_error_interno.py $T "UnicodeDecodeError: el evento sigue en pending" captura-decode
+caso "error-interno sin deshacer" journal-compact.py m_error_interno.py $T "resolve nota lista: los indices quedan como estaban" sin-deshacer
+caso "deshacer sin foto"        journal-compact.py m_error_interno.py $T "resolve nota lista: los indices quedan como estaban" sin-foto
+caso "deshacer sin desanotar"   journal-compact.py m_error_interno.py $T "reopen forzado: ninguna anotacion queda viva" sin-desanotar
+caso "deshacer sin huella"      journal-compact.py m_error_interno.py $T "resolve nota lista: y no reporta deriva" sin-huella
+caso "temporal sin borrar"      journal-compact.py m_error_interno.py $T "atomic_write con sustituto: sin temporales sueltos" sin-borrar-tmp
+caso "restaurar deja temporal"  journal-compact.py m_error_interno.py $T "restauracion rota: sin temporales sueltos" restaura-deja-tmp
 caso "sin identidad"           journal-emit.py m_learning_dedup.py test-learning-dedup.sh "mismo texto sin --decision: rc 0" sin-identidad
 caso "decision fuera"          journal-emit.py m_learning_dedup.py test-learning-dedup.sh "la decision viaja en el payload" decision-fuera-del-payload
 caso "reemplaza sin supersedes" journal-emit.py m_learning_dedup.py test-learning-dedup.sh "reemplaza:2 lleva supersedes 2" reemplaza-sin-supersedes
