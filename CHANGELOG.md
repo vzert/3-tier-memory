@@ -15,7 +15,7 @@ Origen: `p-274c87b575` (reportado por cloudflare-expert en `/consolidate-3t`).
   no se toca y sigue negando. Un tramo que cruza lineas tampoco se empareja: la linea que sigue
   puede abrir una valla de verdad (`` `texto `` y luego `~~~ texto` aqui.`), asi que se sigue negando
   aunque a veces no haya bloque. Seccion 24 de `test-learning-update.sh`, tres mutaciones nuevas
-  (`m_codigo_en_linea.py`) y cinco lineas con codigo en linea en el oraculo CommonMark.
+  (`m_codigo_en_linea.py`) y siete lineas con codigo en linea en el oraculo CommonMark.
 
 ## [2.63.20] - 2026-10-20
 Origen: `p-058a36018c`, hallazgo de 2.63.17.
