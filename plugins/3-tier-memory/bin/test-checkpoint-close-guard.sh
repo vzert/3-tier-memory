@@ -12,6 +12,23 @@ BIN="$(cd "$(dirname "$0")" && pwd)"
 HOOK="${HOOK:-$BIN/checkpoint-close-guard.sh}"
 FX="$BIN/fixtures/cierre-5790b9f2"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+# 2.63.18 (p-091714b9cf): una sola fecha para la prueba, el hook y los scripts que lanza. Antes HOY se
+# leia al arrancar y print-pendiente-opcional.py (aqui y desde el hook) la volvia a leer al correr: una
+# corrida que cruzaba la medianoche dejaba el 8e vacio. El sitecustomize del mktemp hace que
+# datetime.date.today() devuelva HOY en todo python hijo; HOY_PRUEBA cambia la fecha (fuera del dia real).
+HOY="${HOY_PRUEBA:-2031-03-15}"
+mkdir -p "$T/py-hoy"
+cat > "$T/py-hoy/sitecustomize.py" <<'PYS'
+import datetime, os
+_hoy = os.environ.get("TEST_CCG_HOY")
+if _hoy:
+    class _Hoy(datetime.date):
+        @classmethod
+        def today(cls):
+            return cls.fromisoformat(_hoy)
+    datetime.date = _Hoy
+PYS
+export TEST_CCG_HOY="$HOY" PYTHONPATH="$T/py-hoy${PYTHONPATH:+:$PYTHONPATH}"
 pass=0; fail=0
 chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: esperaba '$2', salio '$3'"; fi; }
 
@@ -589,8 +606,9 @@ chk "silencio" "" "$(corre "$T/t.jsonl" false -)"
 # ================================================================================================
 # 2.35.0 — Step 8e: en una ficha desde el 2026-09-23 el hook exige tambien el bloque de pendiente que
 # print-pendiente-opcional.py imprime EN VIVO desde _pendientes.md. Desde 2.44.0 el candidato vence
-# HOY: con el snippet completo de la ficha, un Alta suelto ya no sale (solo en el caso 5).
-HOY=$(python3 -c 'import datetime; print(datetime.date.today().isoformat())')
+# HOY: con el snippet completo de la ficha, un Alta suelto ya no sale (solo en el caso 5). HOY es la
+# fecha fija de arriba, la misma que ven el hook y print-pendiente-opcional.py.
+chk "python hijo ve la fecha fija" "$HOY" "$(python3 -c 'import datetime; print(datetime.date.today().isoformat())')"
 opcional() {   # arma la ficha 2120 con fecha 2026-09-23 y un Alta candidato
   armar "$M" "$FX/snippet-2120.txt" "$FX/calendario-2129.txt"
   sed -i.bak 's/^date: 2026-09-22$/date: 2026-09-23/' "$F" && rm -f "$F.bak"
