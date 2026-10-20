@@ -1,5 +1,5 @@
 import io, sys
-# checkpoint-close-guard.sh solo dispara con la invocacion REAL de print-como-retomar.py (2.63.13,
+# checkpoint-close-guard.sh solo dispara con la invocacion REAL de print-como-retomar.py (2.63.16,
 # p-1fe14aa592). Cada mutacion apaga una pieza y su aserto de test-checkpoint-close-guard.sh tiene que
 # caer: `mencion-cuenta` vuelve a la busqueda por mencion (el git diff con una ficha real dispara);
 # `python-no-cuenta` deja de reconocer el script como argumento de python3.

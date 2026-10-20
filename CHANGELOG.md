@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.63.13] - 2026-10-19
+## [2.63.16] - 2026-10-19
 Origen: p-1fe14aa592. `checkpoint-close-guard.sh` disparaba la revision del cierre con cualquier
 comando que nombrara `print-como-retomar.py` y tomaba como ficha la palabra siguiente. 2.63.3
 (p-bea9639b92) ya exigia que esa palabra fuera un `sessions/*.md`; quedaba la otra mitad. Medido en
