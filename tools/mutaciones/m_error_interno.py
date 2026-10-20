@@ -31,7 +31,11 @@ M = {
         ("            _ESCRITO.pop(ap, None)", "            pass")],
     # Sin borrar el temporal: un sustituto suelto deja `<indice>.<pid>.tmp` en memory/.
     "sin-borrar-tmp": [
-        ("            os.remove(tmp)", "            pass")],
+        ("            os.remove(tmp)   # el temporal de atomic_write", "            pass")],
+    # Una restauracion que falla deja `<indice>.<pid>.tmp` (revisor externo, ronda 6).
+    "restaura-deja-tmp": [
+        ("                        os.remove(tmp)   # una restauracion que falla tampoco deja su temporal",
+         "                        pass")],
 }
 
 p, nombre = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""

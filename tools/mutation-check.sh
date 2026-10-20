@@ -364,7 +364,7 @@ caso "--hoy sin semana ISO"     marcar-retomar.py m_marcar_retomar.py $T "marcar
 caso "--hoy guiones sueltos"    marcar-retomar.py m_marcar_retomar.py $T "marcar-retomar --hoy 2026-1016 sale 2" guiones-sueltos
 T=test-fecha-iso.sh
 caso "emisor sin regex de fecha" journal-emit.py m_fecha_iso.py $T "pendiente.add --creado 20261016: error" sin-regex
-caso "compactador sin regex"    journal-compact.py m_fecha_iso.py $T "creado ancho: la linea mala no llega a _pendientes.md" sin-regex
+caso "compactador sin regex"    journal-compact.py m_fecha_iso.py $T "creado ancho: la cuarentena es por la fecha, no error-interno" sin-regex
 caso "fecha solo en learning"   journal-compact.py m_fecha_iso.py $T "resolve con fecha ancha: va a cuarentena" sin-fecha-generica
 T=test-error-interno.sh
 caso "sin red de error-interno" journal-compact.py m_error_interno.py $T "text=1: el malo va a cuarentena" sin-captura
@@ -376,6 +376,7 @@ caso "deshacer sin foto"        journal-compact.py m_error_interno.py $T "resolv
 caso "deshacer sin desanotar"   journal-compact.py m_error_interno.py $T "reopen forzado: ninguna anotacion queda viva" sin-desanotar
 caso "deshacer sin huella"      journal-compact.py m_error_interno.py $T "resolve nota lista: y no reporta deriva" sin-huella
 caso "temporal sin borrar"      journal-compact.py m_error_interno.py $T "atomic_write con sustituto: sin temporales sueltos" sin-borrar-tmp
+caso "restaurar deja temporal"  journal-compact.py m_error_interno.py $T "restauracion rota: sin temporales sueltos" restaura-deja-tmp
 caso "sin identidad"           journal-emit.py m_learning_dedup.py test-learning-dedup.sh "mismo texto sin --decision: rc 0" sin-identidad
 caso "decision fuera"          journal-emit.py m_learning_dedup.py test-learning-dedup.sh "la decision viaja en el payload" decision-fuera-del-payload
 caso "reemplaza sin supersedes" journal-emit.py m_learning_dedup.py test-learning-dedup.sh "reemplaza:2 lleva supersedes 2" reemplaza-sin-supersedes

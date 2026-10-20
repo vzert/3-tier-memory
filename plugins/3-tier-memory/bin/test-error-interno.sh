@@ -211,5 +211,37 @@ PY
 chk "atomic_write con sustituto: lanza UnicodeEncodeError" "0" "$RC"
 chk "atomic_write con sustituto: sin temporales sueltos" "0" "$(find "$M" -name '*.tmp' | wc -l | tr -d ' ')"
 
+echo "== 9. una restauracion que falla se nombra en el motivo y no deja temporal =="
+# Forzado: tras escribir _pendientes.md, el resolve revienta y el os.replace de la restauracion de
+# ese fichero da PermissionError (revisor externo, ronda 6: ahi quedaba el temporal).
+fixture
+A=$(emit --type pendiente.add --text "restauracion rota" --prioridad Baja --origen "$ORI" --creado 2026-10-01)
+compact --quiet >/dev/null
+emit --type pendiente.resolve --id "$A" --estado resolved --sesion "$ORI" >/dev/null
+RC=0; python3 -I - "$BIN/journal-compact.py" "$M" <<'PY' >/dev/null 2>&1 || RC=$?
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("jc", sys.argv[1])
+jc = importlib.util.module_from_spec(spec)
+mem = sys.argv[2]
+sys.argv = [sys.argv[1]]
+spec.loader.exec_module(jc)
+real = jc.replace_with_retry
+def falla(*a, **k):
+    def rota(src, dst):   # solo la restauracion: la escritura del resolve ya ocurrio
+        if dst.endswith("_pendientes.md"):
+            jc.replace_with_retry = real
+            raise PermissionError(13, "denegado")
+        return real(src, dst)
+    jc.replace_with_retry = rota
+    jc.apply_resolve_monthly = orig
+    raise TypeError("resolve forzado")
+orig = jc.apply_resolve_monthly
+jc.apply_resolve_monthly = falla
+sys.exit(jc.compact(mem, 5.0, True))
+PY
+chk "restauracion rota: sale 0" "0" "$RC"
+chk "restauracion rota: el motivo nombra el fichero" "1" "$(razon | grep -c 'NO se pudo restaurar, queda a medias: _pendientes.md')"
+chk "restauracion rota: sin temporales sueltos" "0" "$(find "$M" -name '*.tmp' | wc -l | tr -d ' ')"
+
 echo "RESULTADO: $pass ok, $fail fallas"
 [ "$fail" -eq 0 ]

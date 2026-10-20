@@ -22,8 +22,9 @@ Origen: `p-ac5a4bb888`, el Known de 2.63.7. Version provisional: la 2.63.10 es d
   `deshacer_evento` los restaura (o borra el fichero si no existia), devuelve su huella para que la
   pasada siguiente no vea deriva, y anula en `reabiertos.log` lo que el evento anoto. El motivo dice
   `(los indices que toco se restauraron)`, o nombra lo que no se pudo restaurar. Las cuarentenas
-  `Quarantine` de siempre no cambian. `atomic_write` borra ademas su temporal si la escritura falla:
-  un sustituto suelto dejaba un `<indice>.<pid>.tmp` vacio en `memory/`.
+  `Quarantine` de siempre no cambian. `atomic_write` borra ademas su temporal si la escritura falla
+  (un sustituto suelto dejaba un `<indice>.<pid>.tmp` vacio en `memory/`), y una restauracion que
+  falla tampoco deja el suyo.
 - `OSError` y `UnicodeDecodeError` siguen como antes, sin cuarentena: son fallos del disco, no del
   evento. Un indice que no se pudo escribir espera al reintento (`escribir_anotado`, casos 27-28 de
   `test-session-amend.sh`). Un `.md` con bytes que no son utf-8 mandaria a cuarentena todos los
@@ -34,19 +35,20 @@ Origen: `p-ac5a4bb888`, el Known de 2.63.7. Version provisional: la 2.63.10 es d
   pierde en cuarentena en vez de rechazarse al emitir. Endurecerlo tipo a tipo queda como pendiente.
 
 ### Tests
-- `test-error-interno.sh` nuevo (57 asertos): text=1 y text con `\ud800` van a cuarentena con su
+- `test-error-interno.sh` nuevo (60 asertos): text=1 y text con `\ud800` van a cuarentena con su
   motivo y el bueno de detras se aplica; con el bueno delante, la pasada siguiente no reporta
   deriva; un fallo de escritura y un indice que no es utf-8 dejan el evento en `pending/`; un
   resolve con nota, sesion o estado en lista deja los indices byte a byte como estaban; un reopen
-  que falla despues de anotar (forzado) no deja la anotacion viva; y no quedan temporales. Contra
-  2.63.9 da 15 ok y 42 fallas.
-- `tools/mutaciones/m_error_interno.py` (8 mutaciones) y 9 casos en `tools/mutation-check.sh`: sin
+  que falla despues de anotar (forzado) no deja la anotacion viva; una restauracion que falla
+  (forzada) se nombra en el motivo; y no quedan temporales. Contra 2.63.9 da 16 ok y 44 fallas.
+- `tools/mutaciones/m_error_interno.py` (9 mutaciones) y 10 casos en `tools/mutation-check.sh`: sin
   la red; con OSError a cuarentena (cae tambien el caso 27 de `test-session-amend.sh`); con
   UnicodeDecodeError a cuarentena; sin deshacer, sin la foto, sin anular lo anotado, sin devolver la
-  huella y sin borrar el temporal.
-- `tools/mutation-check.sh`, caso "compactador sin regex" (2.63.7): sin la regex, el evento con
-  `creado` ancho ya no atasca la pasada (va a cuarentena como `error-interno: ValueError`), pero su
-  linea llega a `_pendientes.md` antes de fallar; el caso ahora espera ese aserto.
+  huella, sin borrar el temporal de `atomic_write` y sin borrar el de la restauracion.
+- `test-fecha-iso.sh` y su caso "compactador sin regex" (2.63.7): sin la regex, el evento con
+  `creado` ancho ya no atasca la pasada; va a cuarentena como `error-interno: ValueError` y lo
+  escrito se deshace, asi que solo el motivo lo distingue del rechazo por la fecha. Aserto nuevo
+  («la cuarentena es por la fecha, no error-interno») y el caso ahora espera ese.
 
 ## [2.63.9] - 2026-10-19
 Origen: `p-c0e7c422cb`, la nota del revisor de 2.63.4. La excepcion del usuario de `snippet.marco`

@@ -290,7 +290,7 @@ def atomic_write(path, lines):
         # Un sustituto suelto revienta en fh.write con el temporal ya creado: sin esto quedaba un
         # `<indice>.<pid>.tmp` vacio en memory/ por cada pasada que fallaba.
         try:
-            os.remove(tmp)
+            os.remove(tmp)   # el temporal de atomic_write
         except OSError:
             pass
         raise
@@ -1126,9 +1126,16 @@ def deshacer_evento(mem):
                     os.remove(ap)
             else:
                 tmp = f"{ap}.{os.getpid()}.tmp"
-                with open(tmp, "wb") as fh:
-                    fh.write(antes)
-                replace_with_retry(tmp, ap)
+                try:
+                    with open(tmp, "wb") as fh:
+                        fh.write(antes)
+                    replace_with_retry(tmp, ap)
+                except OSError:
+                    try:
+                        os.remove(tmp)   # una restauracion que falla tampoco deja su temporal
+                    except OSError:
+                        pass
+                    raise
         except OSError as e:
             fallos.append(f"{os.path.relpath(ap, mem)} ({e})")
             continue
