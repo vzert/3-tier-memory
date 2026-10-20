@@ -595,6 +595,10 @@ avisos_marco = []
 # Mismo camino que snippet.marco: viajan en la revision, que bloquea una vez, con la pregunta de si
 # el bloqueo espera a alguien que no es el usuario (caso real: claude-vzert, p-341fdf5e59).
 avisos_bloqueo = []
+# Avisos `snippet.paso_compartido` (2.63.22): otra ficha de hoy ya deja el mismo `Proximo paso`.
+# Mismo camino: viajan en la revision y no suman un rechazo (decision de Victor, d267; caso real:
+# otro proyecto, 2026-10-20, dos cierres con 23 s de diferencia sobre el mismo `p-…`).
+avisos_compartido = []
 presentes = []      # (orden, lineas, texto) de cada bloque del cierre, para medir orden y cola
 # Texto tolerado DESPUES del ultimo bloque del cierre: los separadores `───` que imprimen los
 # scripts y una linea corta. Mas que eso ya empuja el cierre hacia arriba (adversario de 2.43.0:
@@ -864,6 +868,8 @@ def revisar(ficha):
                 avisos_marco.extend(pref + l for l in (x.get("lineas") or [x.get("detalle", "")]))
             elif x.get("clave") == "snippet.ninguno_bloqueo" and x.get("estado") != "HECHO":
                 avisos_bloqueo.extend(pref + l for l in (x.get("lineas") or [x.get("detalle", "")]))
+            elif x.get("clave") == "snippet.paso_compartido" and x.get("estado") != "HECHO":
+                avisos_compartido.extend(pref + l for l in (x.get("lineas") or [x.get("detalle", "")]))
     except Exception:
         pass
 
@@ -1141,6 +1147,14 @@ else:
                 "decidir con el usuario <que> (p-…)`. Si espera a alguien de fuera, di a quien en la "
                 "linea " + str(len(REVISION_ITEMS)) + " de la revision:\n"
                 + "\n".join(f"- {a}" for a in avisos_bloqueo))
+        if avisos_compartido:
+            partes.append(
+                "Otra sesion de hoy ya deja el mismo `Proximo paso` (checkpoint-audit.py "
+                "snippet.paso_compartido; no bloquea). El usuario recibiria dos snippets para un solo "
+                "trabajo. Pregunta a esa sesion por SendMessage (ListAgents) si sigue con el paso: si "
+                "lo lleva ella, rehaz tu snippet con otro paso o `ninguno — lo lleva <ficha>`; si lo "
+                "tomas tu, dilo en la linea " + str(len(REVISION_ITEMS)) + " de la revision:\n"
+                + "\n".join(f"- {a}" for a in avisos_compartido))
         if cierre_final:
             # Al final y una sola vez: se generan DESPUES de la revision, asi que ya reflejan lo que
             # corregiste en ella, y quedan como lo ultimo que ve el usuario.

@@ -320,7 +320,11 @@ Reglas para llenar los slots:
   escritas> (p-…)`, una pregunta por decision con su recomendacion. Nunca lleva `_bloqueado:` y
   nunca colapsa el snippet al caso 5: un `Ninguno` que esconde decisiones del usuario le quita la
   unica forma de verlas (caso real, claude-vzert 2026-10-16, `p-341fdf5e59`). El audit lo avisa en
-  `snippet.ninguno_bloqueo` y el hook de cierre lo pregunta en la revision. **Desde 2.33.0 esta pregunta tiene respaldo mecanico, pero solo si el pendiente
+  `snippet.ninguno_bloqueo` y el hook de cierre lo pregunta en la revision. Desde 2.63.22 el audit
+  avisa tambien (`snippet.paso_compartido`, POR-DISEÑO, no suma un rechazo) si otra ficha del mismo
+  dia ya deja tu mismo `p-…` como `Proximo paso`: pregunta a esa sesion por SendMessage si lo
+  lleva; si lo lleva, rehaz tu paso o usa `ninguno — lo lleva <ficha>` (caso real de otro proyecto,
+  2026-10-20, dos cierres con 23 s de diferencia). **Desde 2.33.0 esta pregunta tiene respaldo mecanico, pero solo si el pendiente
   lleva el campo**: nace con `--bloqueado-por "<que espera>"` (Step 3b) o se lo pone
   `pendiente.block` (Step 3a), y entonces el audit rechaza citarlo en `Proximo paso`. El juicio de
   "esto espera a un tercero" se hace al CREAR el pendiente, no al leer su texto aqui (regla 216:
@@ -351,7 +355,7 @@ Reglas para llenar los slots:
   el agente que recibe el snippet solo actua sobre `Proximo paso`, y al humano una lista de ids no
   le da nada que hacer. Los pendientes propios siguen en `## Pendientes` de la ficha, que la linea
   `Lee …` manda leer. Lo que se podia hacer ya con esa lista lo cubre ahora el prompt opcional de
-  **Step 8e**: un prompt completo para otra sesion, sobre un pendiente que vence hoy o un Alta.
+  **Step 8e**: un prompt completo para otra sesion, sobre un pendiente que vence hoy o uno vencido.
   La medicion que la sostenia (2026-09-11: los pendientes mencionados en el snippet cerraban el 35%
   frente al 19%) no separaba el efecto de la linea del hecho de que el agente elige para el snippet
   lo que ya ve mas accionable; `p-cd965754ec` se redefinio para medir el prompt opcional.
@@ -714,8 +718,10 @@ venza ninguno hoy:
   snippet, para que no pase desapercibido. Si vencen varios, uno cada vez: el de mayor prioridad y,
   dentro de ella, la fila mas arriba.
 - **➕ Opcional.** Solo si el snippet es el caso 5 (`🔁 Como retomar: Ninguno — …`) y no vence
-  ninguno hoy. Elige como antes de 2.44.0: hasta 2 vencidos (`_revisar` anterior a hoy), el mas
-  viejo primero; si no hay, el Alta con `_creado` mas reciente (a igual fecha, la fila mas arriba).
+  ninguno hoy. Hasta 2 vencidos (`_revisar` anterior a hoy), el mas viejo primero; si no hay
+  ninguno vencido, no sale nada. Hasta 2.63.17 salia entonces el Alta con `_creado` mas reciente;
+  desde 2.63.22 no (Victor, d265-d266): sin relacion con la sesion, el mismo Alta salia en cada
+  cierre hasta que alguien lo cerraba (uno de otro agente, 14 veces en 10 sesiones de otro proyecto).
 
 Por que capas: hasta 2.43.0 el prompt opcional salia en cada cierre, y los mismos dos vencidos se
 repetian durante varias sesiones. Ahora solo sale cuando la sesion no deja nada que retomar.
