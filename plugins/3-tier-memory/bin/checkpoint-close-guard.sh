@@ -560,8 +560,8 @@ if ids_cambiados or ids_a_ciegas:
 fichas = [f for f in fichas if f and os.path.isfile(f)]
 # Step 8b real (p-e1799cd04c): `python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"`. resolver() no
 # expande la variable y, si la ficha se escribio en un turno anterior (Step 2 antes de una respuesta
-# del usuario), el turno de Step 8b quedaba sin ficha y el guard entero callaba: 9 turnos reales y la
-# sesion 8ef6459e ("$SF"). Vale la ULTIMA ficha que esta sesion escribio o edito, en cualquier turno,
+# del usuario), el turno de Step 8b quedaba sin ficha y el guard entero callaba (el pendiente cita 9
+# turnos reales del 2026-09-28 y la sesion 8ef6459e del 2026-09-29, con "$SF"). Vale la ULTIMA ficha que esta sesion escribio o edito, en cualquier turno,
 # y solo si su frontmatter lleva el session_id de esta sesion (lo sella Step 5c-bis antes de Step 8):
 # un /backfill-3t escribe fichas de otras sesiones. Limite declarado: una ficha sin sellar no se toma.
 if con_variable:

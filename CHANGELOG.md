@@ -5,14 +5,15 @@ Origen: `p-e1799cd04c`. El Step 8b real imprime el snippet con
 `python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"`, y `resolver()` descarta toda ruta con `$`.
 Si la ficha se escribio en un turno anterior (Step 2 antes de una respuesta del usuario), el turno de
 Step 8b quedaba sin ficha y `checkpoint-close-guard.sh` callaba entero: snippet, calendario, 8e y el
-chequeo de 7a. Medido en 9 turnos reales y en la sesion 8ef6459e (`"$SF"`).
+chequeo de 7a. El pendiente cita 9 turnos reales (medidos el 2026-09-28,
+[[sessions/2026-09-28-aviso-7a-al-cierre-del-turno]]) y la sesion 8ef6459e del 2026-09-29 (`"$SF"`);
+esta version no los re-midio.
 
 ### Fixed
 - **El guard toma la ficha de la sesion cuando `print-como-retomar.py` recibe una variable.** Vale
   la ultima ficha que esta sesion escribio o edito, en cualquier turno, y solo si su frontmatter
   lleva el `session_id` de esta sesion (lo sella Step 5c-bis antes de Step 8): un `/backfill-3t`
-  escribe fichas de otras sesiones. Un revisor repitio el ultimo turno de 40 transcripts reales con
-  la forma de variable: 3 pasaron de silencio a aviso.
+  escribe fichas de otras sesiones.
 
 ### Added
 - Caso `p-e1799cd04c` en `test-checkpoint-close-guard.sh` con la forma de Step 8b (`"$SESSION_FILE"`

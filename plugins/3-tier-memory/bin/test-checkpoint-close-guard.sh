@@ -1598,8 +1598,8 @@ chk "invocacion real sobre un archivo que no es ficha: silencio" "" "$(corre "$T
 echo "== p-e1799cd04c: Step 8b real, print-como-retomar.py recibe la ficha en una variable =="
 # Forma de la plantilla: `python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"`. resolver() no
 # expande `$`, y si la ficha se escribio en un turno anterior (Step 2 antes de una respuesta del
-# usuario) el turno de Step 8b no tenia ficha: el guard entero callaba. Medido en 9 turnos reales y
-# en la sesion 8ef6459e ("$SF"). Ahora vale la ultima ficha que esta sesion escribio o edito y
+# usuario) el turno de Step 8b no tenia ficha: el guard entero callaba (el pendiente cita 9 turnos
+# reales del 2026-09-28 y la sesion 8ef6459e del 2026-09-29, con "$SF"). Ahora vale la ultima ficha que esta sesion escribio o edito y
 # lleva su session_id (lo sella Step 5c-bis antes de Step 8).
 # txvar TRANSCRIPT COMANDO: Write de la ficha en un turno, respuesta del usuario, y en el turno
 # nuevo solo el comando de Step 8b y "Visto." (el snippet no se pega). La ruta de la ficha va como
