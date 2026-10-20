@@ -13,16 +13,22 @@ QUE CUENTA COMO SHELL (decision del usuario, 2026-10-20): solo lo que lanzo la p
 con `run_in_background: true` o un `Monitor`. Un proceso con nohup, una pestana de herdr o un
 subagente quedan fuera.
 
-COMO DECIDE QUE SIGUE ABIERTA. Una tarea se abre con el tool_result del lanzamiento
-("Command running in background with ID: <id>", "Monitor started (task <id>", o el de un Bash
-sin `run_in_background` que paso solo a segundo plano al vencer su timeout: "...was moved to the
-background (ID: <id>)"). Se cierra con
-cualquiera de estos, el primero que aparezca:
+COMO DECIDE QUE SIGUE ABIERTA. Una tarea se abre con el id que el harness guarda en el
+`toolUseResult` del lanzamiento: `backgroundTaskId` para un Bash (con `run_in_background`, o uno que
+paso solo a segundo plano al vencer su timeout) y `taskId` para un Monitor. Medido el 2026-10-20 en
+400 JSONL: 985 lanzamientos, todos con ese campo; los 6 resultados con la frase de lanzamiento y sin
+el campo eran salidas de Bash normales que la imprimian como dato. Por eso el texto no basta: un
+`echo` o un `grep` que imprime "Command running in background with ID: X" al principio abria una
+tarea fantasma (revisor externo, ronda 1). Solo si la linea no trae `toolUseResult` (un transcript
+mas viejo) se lee el texto del resultado, anclado al inicio ("Command running in background with
+ID: <id>", "Command did not complete within ... moved to the background (ID: <id>)", "Monitor
+started (task <id>"). Se cierra con cualquiera de estos, el primero que aparezca:
   - una `<task-notification>` con ese `<task-id>` y un `<status>` (completed, failed, stopped, killed);
   - un evento `[Monitor expired ...]` de ese `<task-id>`;
   - el resultado de un TaskStop: "Successfully stopped task: <id>" o "No task found with ID: <id>".
-Las notificaciones se buscan solo en lineas del harness (user, queue-operation, attachment): un
-mensaje del agente que cita una notificacion no cierra nada.
+Las notificaciones se buscan solo en lineas del harness (user, queue-operation, attachment), y
+nunca dentro de un tool_result: ni un mensaje del agente que cita una notificacion ni la salida de
+un Bash que la imprime cierran nada.
 
 QUE NO SABE. No ve si el proceso vive de verdad: una tarea que murio sin notificacion sale como
 abierta (falso positivo, se ve porque su salida no crece). Y un /clear o un resume que abre otro
@@ -56,8 +62,8 @@ for _flujo in (sys.stdout, sys.stderr):
     if hasattr(_flujo, "reconfigure"):
         _flujo.reconfigure(encoding="utf-8")
 
-# Anclados al inicio del resultado: el harness abre el tool_result con esa frase. Sin el ancla, un
-# Bash que IMPRIME la frase como dato (un grep sobre otro transcript) abria una tarea fantasma.
+# Solo para transcripts sin `toolUseResult`. Anclados al inicio: un Bash que IMPRIME la frase en
+# medio de su salida (un grep sobre otro transcript) no abre nada.
 LANZA_BASH = re.compile(r"\s*(?:Command running in background with ID: ([A-Za-z0-9_-]+)"
                         r"|Command did not complete within [^\n]*? moved to the background \(ID: ([A-Za-z0-9_-]+)\))")
 LANZA_MONITOR = re.compile(r"\s*Monitor started \(task ([A-Za-z0-9_-]+)")
@@ -90,7 +96,12 @@ def texto(contenido):
 def textos_harness(o):
     """Los textos de una linea del harness donde puede venir una task-notification."""
     msg = o.get("message") or {}
-    yield texto(msg.get("content"))
+    contenido = msg.get("content")
+    if isinstance(contenido, list):
+        # Los bloques de texto, nunca un tool_result: la salida de un Bash no es el harness.
+        yield texto([b for b in contenido if isinstance(b, dict) and b.get("type") == "text"])
+    else:
+        yield texto(contenido)
     if isinstance(o.get("content"), str):
         yield o["content"]
     att = o.get("attachment")
@@ -134,18 +145,22 @@ def analizar(ruta):
             if tipo not in LINEAS_HARNESS:
                 continue
             if tipo == "user" and isinstance(contenido, list):
-                for b in contenido:
-                    if not isinstance(b, dict) or b.get("type") != "tool_result":
-                        continue
+                resultados = [b for b in contenido if isinstance(b, dict) and b.get("type") == "tool_result"]
+                # toolUseResult describe el tool_result de la linea: solo vale si hay uno.
+                tur = o.get("toolUseResult") if len(resultados) == 1 else None
+                for b in resultados:
                     uid, res = b.get("tool_use_id"), texto(b.get("content"))
                     if uid in lanzados:
                         info = lanzados.pop(uid)
-                        m = LANZA_BASH.match(res) or LANZA_MONITOR.match(res)
-                        if m:
+                        if isinstance(tur, dict):
+                            tid = tur.get("backgroundTaskId" if info["tipo"] == "Bash" else "taskId")
+                        else:
+                            m = LANZA_BASH.match(res) or LANZA_MONITOR.match(res)
+                            tid = next(g for g in m.groups() if g) if m else None
+                        if isinstance(tid, str) and tid:
                             info = dict(info)
                             ms = SALIDA.search(res)
                             info["salida"] = ms.group(1) if ms else ""
-                            tid = next(g for g in m.groups() if g)
                             tareas[tid] = info
                             orden.append(tid)
                     elif uid in stops:
