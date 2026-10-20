@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.63.21] - 2026-10-20
+Origen: `p-e1799cd04c`. El Step 8b real imprime el snippet con
+`python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"`, y `resolver()` descarta toda ruta con `$`.
+Si la ficha se escribio en un turno anterior (Step 2 antes de una respuesta del usuario), el turno de
+Step 8b quedaba sin ficha y `checkpoint-close-guard.sh` callaba entero: snippet, calendario, 8e y el
+chequeo de 7a. Medido en 9 turnos reales y en la sesion 8ef6459e (`"$SF"`).
+
+### Fixed
+- **El guard toma la ficha de la sesion cuando `print-como-retomar.py` recibe una variable.** Vale
+  la ultima ficha que esta sesion escribio o edito, en cualquier turno, y solo si su frontmatter
+  lleva el `session_id` de esta sesion (lo sella Step 5c-bis antes de Step 8): un `/backfill-3t`
+  escribe fichas de otras sesiones. Un revisor repitio el ultimo turno de 40 transcripts reales con
+  la forma de variable: 3 pasaron de silencio a aviso.
+
+### Added
+- Caso `p-e1799cd04c` en `test-checkpoint-close-guard.sh` con la forma de Step 8b (`"$SESSION_FILE"`
+  y `"$SF"`) y una ficha escrita en un turno anterior: rojo 276/3 con 2.63.18, verde 279/279. Control:
+  una ficha sellada con otra sesion se queda en silencio. Mutacion `variable-callada`
+  (`tools/mutaciones/m_ficha_sesion.py`).
+
+### Known
+- Siguen en silencio: una ficha escrita por Bash (no Write/Edit), una ficha sin el sello de la sesion,
+  y una ruta de Write con `\` (Windows; `SESION_RE_G` solo acepta `/`, como antes).
+- En un triage que imprime con variable la ficha de otra sesion, si esta sesion ya escribio una
+  ficha sellada, el guard revisa la de esta sesion. La ruta literal ya bloqueaba en ese caso.
+
 ## [2.63.20] - 2026-10-20
 Origen: `p-058a36018c`, hallazgo de 2.63.17.
 
