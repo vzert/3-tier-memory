@@ -1559,6 +1559,8 @@ invocaciones=(
   "env -i PATH=/usr/bin python3 $PR $F"
   "echo x | xargs -n1 python3 $PR $F"
   "timeout 30 python3 $PR $F"
+  "sudo -E -u nobody python3 $PR $F"
+  "timeout -k 5 30 python3 $PR $F"
 )
 for c in "${invocaciones[@]}"; do
   txcmd "$T/m.jsonl" "$c"

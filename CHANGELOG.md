@@ -21,10 +21,11 @@ mismo defecto bloqueo un turno real de la sesion que lo arreglaba.
 
 ### Added
 - Casos en `test-checkpoint-close-guard.sh`: cinco menciones con una ficha real detras, en silencio
-  (cuatro caen con el guard de 2.63.4; el `cat … | grep …` ya pasaba), y diez invocaciones reales que
+  (cuatro caen con el guard de 2.63.4; el `cat … | grep …` ya pasaba), y doce invocaciones reales que
   siguen disparando (`python3 "<ruta>"`, `cd … && python3 … | head`, `python3 -I "$JBIN/…"`, el script
   directo, `OUT=$(python3 …)`, `for …; do python3 …; done`, `uv run`, `env -i`, `xargs -n1`,
-  `timeout 30`).
+  `timeout 30`, `timeout -k 5 30`, `sudo -E -u nobody`). Cada envoltorio lleva su lista de opciones con
+  valor: `-E` lleva valor en `xargs` y no en `sudo`.
 - Mutaciones `mencion-cuenta` y `python-no-cuenta` (`tools/mutaciones/m_invocacion_retomar.py`).
 - La mutacion `ficha-cualquiera` de 2.63.3 apunta a un caso nuevo: una invocacion real sobre un `.py`
   con un `break` en la sesion, en silencio. El caso del `sed` de 2.63.3 ya no pasa por el filtro

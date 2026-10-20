@@ -122,8 +122,15 @@ _PREFIJOS = {"do", "then", "else", "elif", "if", "while", "until", "!", "time", 
              "nohup", "{"}
 # Programas que lanzan a otro (adversario de 2.63.13: `uv run`, `env -i` y `xargs` callaban el guard).
 _ENVOLTORIOS = {"env", "xargs", "sudo", "nice", "timeout", "nohup"}
-_OPC_CON_VALOR = {"-u", "-I", "-n", "-P", "-L", "-d", "-E", "-s", "--with", "--python", "-p",
-                  "--project", "--directory"}
+# Opciones que llevan valor, por envoltorio: `-E` lleva valor en xargs y no en sudo (adversario).
+_OPC_CON_VALOR = {
+    "env": {"-u", "-C", "-S"},
+    "xargs": {"-I", "-n", "-P", "-L", "-d", "-E", "-s", "-a"},
+    "sudo": {"-u", "-g", "-C", "-h", "-p", "-U", "-D", "-R", "-T"},
+    "nice": {"-n"},
+    "timeout": {"-k", "-s"},
+    "uv": {"--with", "--python", "-p", "--project", "--directory", "--package", "--env-file"},
+}
 
 
 def invocaciones_retomar(cmd):
@@ -160,10 +167,11 @@ def invocaciones_retomar(cmd):
                 # `env -i …`, `uv run --opt …`, `xargs -n1 …`, `timeout 30 …`: se salta el
                 # envoltorio, sus opciones (y el valor de las que lo llevan) y sigue con el programa.
                 j += 2 if t == "uv" else 1
-                if t == "timeout" and j < len(toks) and re.match(r"^\d", toks[j]):
-                    j += 1
+                con_valor = _OPC_CON_VALOR.get(t, ())
                 while j < len(toks) and toks[j].startswith("-") and not sep(toks[j]):
-                    j += 2 if toks[j] in _OPC_CON_VALOR else 1
+                    j += 2 if toks[j] in con_valor else 1
+                if t == "timeout" and j < len(toks) and re.match(r"^\d", toks[j]):
+                    j += 1   # la duracion va despues de las opciones: `timeout -k 5 30 …`
             else:
                 break
         if j < len(toks) and not sep(toks[j]):
