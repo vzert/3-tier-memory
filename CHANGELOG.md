@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.63.21] - 2026-10-20
+Origen: pedido del usuario. Un agente cerro con `/checkpoint-3t`, dejo su prompt para retomar y
+siguio con una shell en segundo plano viva: un muestreo que cada 15 minutos escribia "Timeout
+expired", justo el log que su Como retomar mandaba leer. El agente no puede preguntarle al harness
+que tareas tiene vivas, y tras una compactacion no recuerda lo que lanzo.
+
+### Added
+- **`bin/shells-abiertas.py`: lista las shells en segundo plano que la sesion dejo vivas.** Lee el
+  transcript de la sesion (`$CLAUDE_CODE_SESSION_ID`, o `--session-id`/`--transcript`). Cuenta los
+  Bash con `run_in_background`, los Bash que pasaron solos a segundo plano al vencer su timeout y los
+  `Monitor`. Una tarea se cierra con una `<task-notification>` con `<status>`, con un evento
+  `[Monitor expired`, o con un TaskStop (`Successfully stopped task` o `No task found`). Las formas
+  se midieron en los JSONL reales. Por tarea abierta imprime el comando, su fichero de salida con
+  tamano y edad, y sus ultimas lineas. Al final, `resumen: abiertas=N cerradas=M`. Solo lee: nunca
+  para nada. Limites: una tarea que murio sin notificacion sale como abierta. Un `/clear` o un
+  resume que abre otro JSONL no hereda las tareas del anterior. Un proceso con nohup, una pestana de
+  otro agente o un subagente quedan fuera, por decision del usuario.
+- **`/checkpoint-3t` Step 7c, antes de Step 8.** Corre el script y pone cada shell abierta en una de
+  cuatro casillas. **Sobra**: se para con TaskStop. **Se usa**: se queda, y el `Proximo paso` dice
+  su id y que muere al cerrar la sesion de Claude Code. **Viva pero falla**: se reporta con la linea
+  que falla. **No se**: se pregunta al usuario. El reporte de Step 7 lleva una linea `Shells:`. No
+  relanza nada con nohup ni launchd.
+- `bin/test-shells-abiertas.sh`: 19 casos sobre un transcript armado con esas formas.
+
 ## [2.63.17] - 2026-10-19
 Origen: `p-ac5a4bb888`, el Known de 2.63.7.
 
