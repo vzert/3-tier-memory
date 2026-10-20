@@ -113,6 +113,73 @@ def es_prompt_real(r):
     return not INYECTADO.match(txt)
 
 
+SCRIPT_RETOMAR = "print-como-retomar.py"
+_RE_MENCION = re.compile(r"print-como-retomar\.py[\"']?\s+(\"[^\"]+\"|'[^']+'|[^\s;&|]+)")
+_RE_PYTHON = re.compile(r"^python(?:3(?:\.\d+)?)?(?:\.exe)?$")
+_RE_ASIGNA = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+# Palabras de shell que pueden ir delante del programa de un segmento (`for …; do python3 …`).
+_PREFIJOS = {"do", "then", "else", "elif", "if", "while", "until", "!", "time", "exec", "command",
+             "nohup", "{"}
+# Programas que lanzan a otro (adversario de 2.63.16: `uv run`, `env -i` y `xargs` callaban el guard).
+_LANZADORES = {"env", "xargs", "sudo", "nice", "timeout", "nohup", "uv"}
+
+
+def invocaciones_retomar(cmd):
+    """Argumentos de cada invocacion REAL de print-como-retomar.py en un comando de Bash (2.63.16,
+    p-1fe14aa592): el script es el programa de un segmento de shell (tras el inicio, `;`, `&&`,
+    `||`, `|`, `&`, `(` o un salto de linea), directo o como argumento de python/python3, con
+    asignaciones `VAR=…` delante. Una mencion (`git diff … print-como-retomar.py <ficha>`, un grep,
+    un `sed -i`, un `echo "python3 …"`) no cuenta: bloqueaba el turno revisando la ficha que venia
+    detras. Devuelve una lista con el argumento que sigue al script (sin argumento no cuenta). Un comando que
+    shlex no puede partir (comillas sin cerrar) vuelve a la busqueda por mencion: un aviso de mas,
+    nunca uno de menos."""
+    if SCRIPT_RETOMAR not in cmd:
+        return []
+    # `$(…)` y las comillas invertidas abren un segmento: `OUT=$(python3 …print-como-retomar.py "$f")`
+    # es una invocacion (medido en los transcripts locales, 2026-10-19).
+    texto = re.sub(r"\\\r?\n", " ", cmd).replace("$(", " ( ").replace("`", " ( ")
+    try:
+        lx = shlex.shlex(texto, posix=True, punctuation_chars=";&|()\n")
+        lx.whitespace = " \t\r"
+        lx.whitespace_split = True
+        toks = list(lx)
+    except ValueError:
+        return [m.group(1).strip("\"'") for m in _RE_MENCION.finditer(cmd)]
+    sep = lambda t: t != "" and set(t) <= set(";&|()\n")
+    out = []
+    i = 0
+    while i < len(toks):
+        # Delante del script solo puede haber asignaciones, palabras de shell, lanzadores (`env`,
+        # `sudo`, `uv run`…), python, opciones (`-x`, `--y=z`) y el valor que sigue a una opcion
+        # (`-u nobody`, `-W ignore`), o la duracion de `timeout`. Sin listas de opciones por programa:
+        # el adversario de 2.63.16 encontro en tres rondas una opcion con valor que faltaba en ellas.
+        # Un programa cualquiera delante (`git`, `sudo cat`, `grep`) corta: es una mencion.
+        j, k, tras_opcion = i, None, False
+        while j < len(toks) and not sep(toks[j]):
+            t = toks[j]
+            base = os.path.basename(t.replace("\\", "/"))
+            if base == SCRIPT_RETOMAR:
+                k = j + 1
+                break
+            if not (_RE_ASIGNA.match(t) or t in _PREFIJOS or t in _LANZADORES
+                    or _RE_PYTHON.match(base)
+                    or (t == "run" and j > i and toks[j - 1] == "uv")
+                    or t.startswith("-") or tras_opcion
+                    or (re.match(r"^\d", t) and "timeout" in toks[i:j])):
+                break
+            tras_opcion = t.startswith("-") and "=" not in t
+            j += 1
+        # Sin argumento no es una invocacion: el script exige la ficha. Asi `print-como-retomar.py`
+        # entre comillas invertidas en la prosa de un commit no abre un segmento falso.
+        if k is not None and k < len(toks) and not sep(toks[k]):
+            out.append(toks[k])
+        while i < len(toks) and not sep(toks[i]):
+            i += 1
+        while i < len(toks) and sep(toks[i]):
+            i += 1
+    return out
+
+
 # Fichas de ESTA sesion, vistas en cualquier turno (no solo en el actual): las que se ESCRIBIERON o
 # EDITARON. Una ficha solo impresa con print-como-retomar.py (por ejemplo al leer la de una sesion
 # vieja durante un triage) no es de esta sesion salvo que su frontmatter lleve `session_id:` igual al
@@ -134,9 +201,7 @@ for r in recs:
         if b.get("name") in ("Write", "Edit", "MultiEdit") and SESION_RE_G.search(ruta):
             fichas_sesion.append(ruta)
         elif b.get("name") == "Bash":
-            for m in re.finditer(r"print-como-retomar\.py[\"']?\s+(\"[^\"]+\"|'[^']+'|[^\s;&|]+)",
-                                 inp.get("command") or ""):
-                impresas.append(m.group(1).strip("\"'"))
+            impresas.extend(a for a in invocaciones_retomar(inp.get("command") or "") if a)
 
 # Ultimo veredicto del adversario de goalspec en TODA la sesion (2.34.0, p-272254efc5). Desde
 # 2.42.0 cuenta tambien el que llega en un tool_result (el subagente `goal-adversary` o
@@ -402,7 +467,8 @@ for r in turno:
                           if re.search(r"--apply\b", s) and "--revertir" not in s)
             if n_apply:
                 expiraciones.append((b.get("id"), n_apply))
-            if "print-como-retomar.py" not in cmd:
+            args_retomar = invocaciones_retomar(cmd)
+            if not args_retomar:
                 continue
             disparo = True
             base = cwd
@@ -413,10 +479,10 @@ for r in turno:
             # una sola llamada Bash dejaban la segunda ficha sin revisar (adversario, ronda 2).
             # Solo una ruta sessions/*.md es una ficha (2.63.3, p-bea9639b92): un
             # `sed -i … print-como-retomar.py pendientes_afines.py` tomaba el .py como ficha y le
-            # pedia nombrar el `break` de la sesion en `## Bugs fixed`. Que cualquier mencion
-            # dispare sigue abierto (p-1fe14aa592).
-            for m in re.finditer(r"print-como-retomar\.py[\"']?\s+(\"[^\"]+\"|'[^']+'|[^\s;&|]+)", cmd):
-                f = resolver(m.group(1).strip("\"'"), base)
+            # pedia nombrar el `break` de la sesion en `## Bugs fixed`. Desde 2.63.16 solo cuenta la
+            # invocacion real del script, no una mencion (invocaciones_retomar, p-1fe14aa592).
+            for a in args_retomar:
+                f = resolver(a, base) if a else None
                 if f and FICHA_RE.search(f):
                     fichas.append(f)
         elif nombre in ("Edit", "MultiEdit", "Write"):
