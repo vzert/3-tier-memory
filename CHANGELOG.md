@@ -1,5 +1,55 @@
 # Changelog
 
+## [2.63.17] - 2026-10-19
+Origen: `p-ac5a4bb888`, el Known de 2.63.7.
+
+### Fixed
+- **Una excepcion cualquiera de un evento ya no atasca el compactador.** `validate` deja pasar
+  eventos que `apply_event` no sabe aplicar: medido sobre 2.63.7, unas 30 combinaciones de tipo y
+  campo (un texto que no es cadena, como `session.add` con `status: 1` o `pendiente.add` con
+  `text: 1`; o un sustituto suelto `\ud800`, que utf-8 no codifica) lanzan `TypeError`,
+  `AttributeError` o `UnicodeEncodeError`. No eran `Quarantine`: la pasada salia con traceback y
+  exit 1, el evento se quedaba en `pending/` y, como se aplica por orden de nombre, ningun evento de
+  detras se aplicaba nunca. Si un evento bueno iba delante, se aplicaba pero `guardar_huellas` no
+  corria, y la pasada siguiente lo reportaba como escrito fuera del journal (`fuera-de-banda`).
+  Ahora ese evento va a `quarantine/` con el motivo `error-interno: <Tipo>: <mensaje>`, y la pasada
+  sigue. El prefijo no casa con `RESCATABLE_RE`: el rescate no lo devuelve a `pending/`.
+- **Y no deja nada escrito a medias.** Un evento puede fallar despues de escribir: un
+  `pendiente.resolve` con `nota`, `sesion` o `estado` en forma de lista quitaba la linea de
+  `_pendientes.md` y la archivaba en `_resueltos.md`, y reventaba en la fila mensual (revisor externo,
+  ronda 3; antes de este cambio tambien quedaba asi, ademas atascado). Ahora `atomic_write` guarda los
+  bytes de cada fichero antes de su primera escritura en el evento y, con un `error-interno`,
+  `deshacer_evento` los restaura (o borra el fichero si no existia), devuelve su huella para que la
+  pasada siguiente no vea deriva, y anula en `reabiertos.log` lo que el evento anoto. El motivo dice
+  `(los indices que toco se restauraron)`, o nombra lo que no se pudo restaurar. Las cuarentenas
+  `Quarantine` de siempre no cambian. `atomic_write` borra ademas su temporal si la escritura falla
+  (un sustituto suelto dejaba un `<indice>.<pid>.tmp` vacio en `memory/`), y una restauracion que
+  falla tampoco deja el suyo.
+- `OSError` y `UnicodeDecodeError` siguen como antes, sin cuarentena: son fallos del disco, no del
+  evento. Un indice que no se pudo escribir espera al reintento (`escribir_anotado`, casos 27-28 de
+  `test-session-amend.sh`). Un `.md` con bytes que no son utf-8 mandaria a cuarentena todos los
+  eventos de ese indice; arreglado el fichero, la pasada siguiente aplica.
+
+### Known
+- `validate` sigue aceptando esos campos que no son cadena: el evento ya no atasca nada, pero se
+  pierde en cuarentena en vez de rechazarse al emitir. Endurecerlo tipo a tipo queda como pendiente.
+
+### Tests
+- `test-error-interno.sh` nuevo (60 asertos): text=1 y text con `\ud800` van a cuarentena con su
+  motivo y el bueno de detras se aplica; con el bueno delante, la pasada siguiente no reporta
+  deriva; un fallo de escritura y un indice que no es utf-8 dejan el evento en `pending/`; un
+  resolve con nota, sesion o estado en lista deja los indices byte a byte como estaban; un reopen
+  que falla despues de anotar (forzado) no deja la anotacion viva; una restauracion que falla
+  (forzada) se nombra en el motivo; y no quedan temporales. Contra 2.63.9 da 16 ok y 44 fallas.
+- `tools/mutaciones/m_error_interno.py` (9 mutaciones) y 10 casos en `tools/mutation-check.sh`: sin
+  la red; con OSError a cuarentena (cae tambien el caso 27 de `test-session-amend.sh`); con
+  UnicodeDecodeError a cuarentena; sin deshacer, sin la foto, sin anular lo anotado, sin devolver la
+  huella, sin borrar el temporal de `atomic_write` y sin borrar el de la restauracion.
+- `test-fecha-iso.sh` y su caso "compactador sin regex" (2.63.7): sin la regex, el evento con
+  `creado` ancho ya no atasca la pasada; va a cuarentena como `error-interno: ValueError` y lo
+  escrito se deshace, asi que solo el motivo lo distingue del rechazo por la fecha. Aserto nuevo
+  («la cuarentena es por la fecha, no error-interno») y el caso ahora espera ese.
+
 ## [2.63.16] - 2026-10-19
 Origen: p-1fe14aa592. `checkpoint-close-guard.sh` disparaba la revision del cierre con cualquier
 comando que nombrara `print-como-retomar.py` y tomaba como ficha la palabra siguiente. 2.63.3
