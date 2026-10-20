@@ -12,8 +12,9 @@ M = {
         (r'        lx = shlex.shlex(texto, posix=True, punctuation_chars=";&|()\n")',
          "        raise ValueError")],
     "python-no-cuenta": [
-        ('            elif _RE_PYTHON.match(os.path.basename(prog.replace("\\\\", "/"))):',
-         '            elif False and _RE_PYTHON.match(os.path.basename(prog.replace("\\\\", "/"))):')],
+        ("                    or _RE_PYTHON.match(base)", "                    or False")],
+    "opcion-sin-valor": [
+        ("                    or t.startswith(\"-\") or tras_opcion", "                    or t.startswith(\"-\")")],
 }
 
 p, nombre = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""

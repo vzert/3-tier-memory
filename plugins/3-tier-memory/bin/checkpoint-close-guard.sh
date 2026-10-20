@@ -121,16 +121,7 @@ _RE_ASIGNA = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _PREFIJOS = {"do", "then", "else", "elif", "if", "while", "until", "!", "time", "exec", "command",
              "nohup", "{"}
 # Programas que lanzan a otro (adversario de 2.63.16: `uv run`, `env -i` y `xargs` callaban el guard).
-_ENVOLTORIOS = {"env", "xargs", "sudo", "nice", "timeout", "nohup"}
-# Opciones que llevan valor, por envoltorio: `-E` lleva valor en xargs y no en sudo (adversario).
-_OPC_CON_VALOR = {
-    "env": {"-u", "-C", "-S"},
-    "xargs": {"-I", "-n", "-P", "-L", "-d", "-E", "-s", "-a"},
-    "sudo": {"-u", "-g", "-C", "-h", "-p", "-U", "-D", "-R", "-T"},
-    "nice": {"-n"},
-    "timeout": {"-k", "-s"},
-    "uv": {"--with", "--python", "-p", "--project", "--directory", "--package", "--env-file"},
-}
+_LANZADORES = {"env", "xargs", "sudo", "nice", "timeout", "nohup", "uv"}
 
 
 def invocaciones_retomar(cmd):
@@ -158,37 +149,30 @@ def invocaciones_retomar(cmd):
     out = []
     i = 0
     while i < len(toks):
-        j = i
+        # Delante del script solo puede haber asignaciones, palabras de shell, lanzadores (`env`,
+        # `sudo`, `uv run`…), python, opciones (`-x`, `--y=z`) y el valor que sigue a una opcion
+        # (`-u nobody`, `-W ignore`), o la duracion de `timeout`. Sin listas de opciones por programa:
+        # el adversario de 2.63.16 encontro en tres rondas una opcion con valor que faltaba en ellas.
+        # Un programa cualquiera delante (`git`, `sudo cat`, `grep`) corta: es una mencion.
+        j, k, tras_opcion = i, None, False
         while j < len(toks) and not sep(toks[j]):
             t = toks[j]
-            if _RE_ASIGNA.match(t) or t in _PREFIJOS:
-                j += 1
-            elif t in _ENVOLTORIOS or (t == "uv" and j + 1 < len(toks) and toks[j + 1] == "run"):
-                # `env -i …`, `uv run --opt …`, `xargs -n1 …`, `timeout 30 …`: se salta el
-                # envoltorio, sus opciones (y el valor de las que lo llevan) y sigue con el programa.
-                j += 2 if t == "uv" else 1
-                con_valor = _OPC_CON_VALOR.get(t, ())
-                while j < len(toks) and toks[j].startswith("-") and not sep(toks[j]):
-                    j += 2 if toks[j] in con_valor else 1
-                if t == "timeout" and j < len(toks) and re.match(r"^\d", toks[j]):
-                    j += 1   # la duracion va despues de las opciones: `timeout -k 5 30 …`
-            else:
-                break
-        if j < len(toks) and not sep(toks[j]):
-            prog = toks[j]
-            k = None
-            if os.path.basename(prog.replace("\\", "/")) == SCRIPT_RETOMAR:
+            base = os.path.basename(t.replace("\\", "/"))
+            if base == SCRIPT_RETOMAR:
                 k = j + 1
-            elif _RE_PYTHON.match(os.path.basename(prog.replace("\\", "/"))):
-                s = j + 1
-                while s < len(toks) and toks[s].startswith("-") and not sep(toks[s]):
-                    s += 1
-                if s < len(toks) and os.path.basename(toks[s].replace("\\", "/")) == SCRIPT_RETOMAR:
-                    k = s + 1
-            # Sin argumento no es una invocacion: el script exige la ficha. Asi `print-como-retomar.py`
-            # entre comillas invertidas en la prosa de un commit no abre un segmento falso.
-            if k is not None and k < len(toks) and not sep(toks[k]):
-                out.append(toks[k])
+                break
+            if not (_RE_ASIGNA.match(t) or t in _PREFIJOS or t in _LANZADORES
+                    or _RE_PYTHON.match(base)
+                    or (t == "run" and j > i and toks[j - 1] == "uv")
+                    or t.startswith("-") or tras_opcion
+                    or (re.match(r"^\d", t) and "timeout" in toks[i:j])):
+                break
+            tras_opcion = t.startswith("-") and "=" not in t
+            j += 1
+        # Sin argumento no es una invocacion: el script exige la ficha. Asi `print-como-retomar.py`
+        # entre comillas invertidas en la prosa de un commit no abre un segmento falso.
+        if k is not None and k < len(toks) and not sep(toks[k]):
+            out.append(toks[k])
         while i < len(toks) and not sep(toks[i]):
             i += 1
         while i < len(toks) and sep(toks[i]):

@@ -10,32 +10,37 @@ mismo defecto bloqueo un turno real de la sesion que lo arreglaba.
 
 ### Fixed
 - **El guard solo dispara con la invocacion real de `print-como-retomar.py`** (`invocaciones_retomar`).
-  Cuenta cuando el script es el programa de un segmento de shell (tras el inicio, `;`, `&&`, `||`,
-  `|`, `&`, `(`, `$(`, una comilla invertida o un salto de linea), directo o como argumento de
-  python/python3 con sus opciones, con asignaciones `VAR=…`, palabras de shell (`do`, `then`, `if`…)
-  o envoltorios (`env -i`, `uv run`, `xargs`, `sudo`, `nice`, `timeout`) delante. Una mencion (`git diff`, `grep`, `sed -i`, `cat`, un `echo "python3 …"`, el texto de un
-  `--text`) ya no dispara. Lo usan los dos sitios que antes buscaban la mencion: el disparo del turno
-  y las fichas impresas que cuentan para el cambio de estado. Un comando que shlex no puede partir
-  vuelve a la busqueda por mencion. Una invocacion dentro de `ssh host '…'` ya no dispara: corre en
-  otra maquina, y su ficha no existe aqui. `"$SF"` (p-e1799cd04c) sigue igual.
+  Cuenta cuando el script abre un segmento de shell (tras el inicio, `;`, `&&`, `||`, `|`, `&`, `(`,
+  `$(`, una comilla invertida o un salto de linea) y delante de el, dentro del segmento, solo hay
+  asignaciones `VAR=…`, palabras de shell (`do`, `then`, `if`…), lanzadores (`env`, `sudo`, `xargs`,
+  `nice`, `timeout`, `nohup`, `uv run`), python/python3, opciones (`-x`, `--y=z`) y el valor que sigue
+  a una opcion (`-u nobody`, `-W ignore`), o la duracion de `timeout`. No hay listas de opciones por
+  programa: en tres rondas el adversario externo encontro una opcion con valor que faltaba en ellas.
+  Un programa cualquiera delante (`git diff`, `grep`, `sed -i`, `cat`, `sudo cat`) es una mencion y
+  ya no dispara; tampoco un `echo "python3 …"` ni el texto de un `--text`. Lo usan los dos sitios que
+  antes buscaban la mencion: el disparo del turno y las fichas impresas que cuentan para el cambio de
+  estado. Un comando que shlex no puede partir vuelve a la busqueda por mencion. Una invocacion dentro
+  de `ssh host '…'` ya no dispara: corre en otra maquina, y su ficha no existe aqui. `"$SF"`
+  (p-e1799cd04c) sigue igual. Limite: `bash -c '…'`, `eval` y `py -3` quedan fuera.
 
 ### Added
-- Casos en `test-checkpoint-close-guard.sh`: cinco menciones con una ficha real detras, en silencio
-  (cuatro caen con el guard de 2.63.4; el `cat … | grep …` ya pasaba), y doce invocaciones reales que
-  siguen disparando (`python3 "<ruta>"`, `cd … && python3 … | head`, `python3 -I "$JBIN/…"`, el script
-  directo, `OUT=$(python3 …)`, `for …; do python3 …; done`, `uv run`, `env -i`, `xargs -n1`,
-  `timeout 30`, `timeout -k 5 30`, `sudo -E -u nobody`). Cada envoltorio lleva su lista de opciones con
-  valor: `-E` lleva valor en `xargs` y no en `sudo`.
-- Mutaciones `mencion-cuenta` y `python-no-cuenta` (`tools/mutaciones/m_invocacion_retomar.py`).
+- Casos en `test-checkpoint-close-guard.sh`: siete menciones con una ficha real detras, en silencio
+  (con el guard de 2.63.4 caen las de `git diff`, `grep`, `sed -i` y `echo`), y quince invocaciones
+  reales que siguen disparando (`python3 "<ruta>"`, `cd … && python3 … | head`, `python3 -I "$JBIN/…"`,
+  el script directo, `OUT=$(python3 …)`, `for …; do python3 …; done`, `uv run --python 3.12`,
+  `uv run --from foo`, `env -i`, `xargs -n1`, `timeout 30`, `timeout -k 5 30`, `sudo -E -u nobody`,
+  `sudo --user nobody`, `python3 -W ignore`).
+- Mutaciones `mencion-cuenta`, `python-no-cuenta` y `opcion-sin-valor`
+  (`tools/mutaciones/m_invocacion_retomar.py`).
 - La mutacion `ficha-cualquiera` de 2.63.3 apunta a un caso nuevo: una invocacion real sobre un `.py`
   con un `break` en la sesion, en silencio. El caso del `sed` de 2.63.3 ya no pasa por el filtro
   `sessions/*.md` (el `sed` no es una invocacion), y la mutacion sobrevivia en mutation-check.
-- Medido sobre 1.527 comandos de Bash de los transcripts locales que nombran el script (2026-10-19):
-  170 que la busqueda vieja contaba ya no cuentan, y ninguno que antes no contaba cuenta ahora. Los
-  170 son menciones (prosa de commits, listas de un `for`, `git`, `grep`, `wc`, `scp`, codigo Python
-  que busca el nombre, el `--text` de un `journal-emit.py`) e invocaciones remotas por `ssh`. Una invocacion sin
-  argumento no cuenta: el script exige la ficha, y asi el nombre entre comillas invertidas en la
-  prosa de un commit no abre un segmento falso.
+- Medido sobre los comandos de Bash de los transcripts locales que nombran el script (2026-10-19, la
+  ultima vez 1.593): ninguno que antes no contaba cuenta ahora, y los que dejan de contar (186 en la
+  ultima medicion) son menciones (prosa de commits, listas de un `for`, `git`, `grep`, `wc`, `scp`,
+  codigo Python que busca el nombre, el `--text` de un `journal-emit.py`) e invocaciones remotas por
+  `ssh`. Una invocacion sin argumento no cuenta: el script exige la ficha, y asi el nombre entre
+  comillas invertidas en la prosa de un commit no abre un segmento falso.
 
 ## [2.63.15] - 2026-10-19
 Origen: desde 2.63.0 el arranque ya no avisa de errores de estructura de `_pendientes.md`, y quedo

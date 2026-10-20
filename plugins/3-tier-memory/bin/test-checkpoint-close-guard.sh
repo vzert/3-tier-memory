@@ -1549,6 +1549,8 @@ menciones=(
   "sed -i.bak 's/a/b/' $PR $F"
   "echo \"python3 $PR $F\""
   "cat $PR | grep -c x $F"
+  "sudo cat $PR $F"
+  "env -i LC_ALL=C grep x $PR $F"
 )
 for c in "${menciones[@]}"; do
   txcmd "$T/m.jsonl" "$c"
@@ -1567,6 +1569,9 @@ invocaciones=(
   "timeout 30 python3 $PR $F"
   "sudo -E -u nobody python3 $PR $F"
   "timeout -k 5 30 python3 $PR $F"
+  "python3 -W ignore $PR $F"
+  "sudo --user nobody python3 $PR $F"
+  "uv run --from foo python3 $PR $F"
 )
 for c in "${invocaciones[@]}"; do
   txcmd "$T/m.jsonl" "$c"
