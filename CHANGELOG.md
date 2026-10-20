@@ -43,6 +43,21 @@ del usuario (276 sesiones; 127 con 2.62.0 o mas).
   detector del aviso al pegar, el chequeo del audit y su corte por dia, el bloque del hook de
   cierre y el respaldo del Alta). Cada una tumba su aserto.
 
+## [2.63.20] - 2026-10-20
+Origen: `p-058a36018c`, hallazgo de 2.63.17.
+
+### Fixed
+- **Un `error-interno` ya no deja directorios vacios en `memory/`.** `deshacer_evento` borraba el
+  fichero que el evento habia creado, pero no el directorio que `ensure_monthly`, `archivar_linea`
+  o `apply_learning_add` crearon para el. Medido sobre 2.63.17: un `pendiente.add` con `text` en
+  forma de lista, en una memoria sin `pendientes/`, iba a cuarentena y dejaba `memory/pendientes/`
+  vacio. Ahora esos tres sitios crean el directorio con `crear_dirs`, que apunta los que no
+  existian, y `deshacer_evento` los borra con `os.rmdir` del mas hondo al mas alto. Solo borra los
+  que el evento creo y solo si quedaron vacios; nunca un borrado recursivo. Uno que no se puede
+  borrar se nombra en el motivo, como un fichero que no se pudo restaurar. Seccion 10 de
+  `test-error-interno.sh` y tres mutaciones nuevas (`sin-borrar-dirs`, `sin-apuntar-dirs`,
+  `apunta-previos`).
+
 ## [2.63.18] - 2026-10-20
 Origen: el platforms de main sobre 5d9282c (2.63.16, PR #50) cayo en windows-latest (run
 39443101444): las 15 invocaciones reales de `test-checkpoint-close-guard.sh` salian en silencio. El

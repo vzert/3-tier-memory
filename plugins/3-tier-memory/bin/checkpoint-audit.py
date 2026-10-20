@@ -1610,9 +1610,11 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     # trabajo. Solo se comparan ids del campo `Proximo paso` (sin "ver tambien"), y el estado es
     # POR-DISENO: viaja en la revision del cierre, que ya bloquea una vez, y no suma un rechazo
     # (decision de Victor, d267). La sesion que cierra primero no ve nada; la segunda, si.
+    # El `ninguno` se mira con re.match y no copiando la linea de snippet.marco: la mutacion
+    # marco-con-ninguno (tools/mutaciones/m_hilo.py) exige que esa linea calce una sola vez.
     if pp is not None and fecha_ficha and fecha_ficha >= DESDE_PASO_COMPARTIDO \
             and "<filled in Step 8>" not in sec_retomar \
-            and not pp.lower().startswith(("ninguno", "nada accionable")):
+            and not re.match(r"(ninguno|nada accionable)", pp, re.I):
         ids_pp = set(ID_PENDIENTE.findall(re.sub(r"\bver\s+tambi[eé]n\b.*", "", pp, flags=re.I)))
         compartido = []
         carpeta = os.path.dirname(os.path.abspath(session_file))

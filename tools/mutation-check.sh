@@ -384,6 +384,9 @@ caso "deshacer sin desanotar"   journal-compact.py m_error_interno.py $T "reopen
 caso "deshacer sin huella"      journal-compact.py m_error_interno.py $T "resolve nota lista: y no reporta deriva" sin-huella
 caso "temporal sin borrar"      journal-compact.py m_error_interno.py $T "atomic_write con sustituto: sin temporales sueltos" sin-borrar-tmp
 caso "restaurar deja temporal"  journal-compact.py m_error_interno.py $T "restauracion rota: sin temporales sueltos" restaura-deja-tmp
+caso "deshacer sin rmdir"       journal-compact.py m_error_interno.py $T "pendientes/ nuevo: el directorio que creo el evento no queda" sin-borrar-dirs
+caso "dirs sin apuntar"         journal-compact.py m_error_interno.py $T "a/b/c nuevos: no queda ninguno" sin-apuntar-dirs
+caso "apunta dirs previos"      journal-compact.py m_error_interno.py $T "a previo, b/c nuevos: a sigue" apunta-previos
 # 2.63.22: aviso de snippet viejo al pegar, paso compartido al cerrar, ➕ sin el Alta. Cada caso
 # nombra su suite (sin $T) para no cambiar la de los casos de arriba ni la de los de abajo.
 caso "vigente sin paso cerrado" snippet-vigente.py m_paso_vigente.py test-snippet-vigente.sh "dice cerrado con fecha" vigente-sin-cerrado
