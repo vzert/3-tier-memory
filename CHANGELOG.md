@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.63.12] - 2026-10-19
+Origen: `p-e376b39ea2`. El aserto «supervisor nombrado como `nombre [ref]`» de
+`test-checkpoint-close-guard.sh` daba resultados distintos de una corrida a otra en el CI de ubuntu
+con `MUT_JOBS=4`, y tumbaba mutation-check del PR #43 por una prueba que ese PR no toca.
+
+### Fixed
+- **`test-checkpoint-close-guard.sh` ya no comparte archivos entre corridas a la vez.** Dos llamadas
+  al hook (el bloque del supervisor de lookout y el caso de la ficha con `session_id: sesion-actual`)
+  pasaban `cwd=/tmp` con un `session_id` fijo. El hook escribe su aviso en
+  `<cwd>/.3t-revision-cierre-<session_id>.md`, asi que las corridas paralelas de mutation-check
+  escribian y leian el mismo archivo de aviso en la carpeta temporal compartida, y un aserto podia leer el aviso
+  de otra corrida. Ahora cada llamada usa una carpeta propia dentro del `mktemp -d` de la corrida. El
+  hook no cambia.
+
+### Tests
+- Medido en macOS con 4 corridas a la vez del test: sobre origin/main (db1644e), 2 de 4 corridas con
+  fallos (3 asertos del bloque del supervisor); con el arreglo, 8 de 8 corridas limpias (251 de 251);
+  con una copia que vuelve a `cwd=/tmp`, 2 de 4 con fallos. No hay mutacion nueva en mutation-check:
+  el fallo depende del orden de las corridas, asi que una mutacion asi no caeria siempre.
+
 ## [2.63.9] - 2026-10-19
 Origen: `p-c0e7c422cb`, la nota del revisor de 2.63.4. La excepcion del usuario de `snippet.marco`
 solo miraba la palabra justo detras de `de`/`del`, asi que un articulo entre medias escondia al
