@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.63.21] - 2026-10-20
+## [2.63.25] - 2026-10-20
 Origen: pedido del usuario. Un agente cerro con `/checkpoint-3t`, dejo su prompt para retomar y
 siguio con una shell en segundo plano viva: un muestreo que cada 15 minutos escribia "Timeout
 expired", justo el log que su Como retomar mandaba leer. El agente no puede preguntarle al harness

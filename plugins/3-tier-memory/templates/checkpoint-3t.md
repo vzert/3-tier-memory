@@ -1504,7 +1504,7 @@ number really is a problem (a quarantined event, `unaligned_rows`, a bypassed du
 it blocks and what you did about it. Nothing here is for the user to fix by hand unless this file
 says so explicitly.
 
-## Step 7c: Shells en segundo plano de esta sesion (2.63.21) — ANTES de Step 8
+## Step 7c: Shells en segundo plano de esta sesion (2.63.25) — ANTES de Step 8
 
 ```bash
 python3 "$JBIN/shells-abiertas.py"

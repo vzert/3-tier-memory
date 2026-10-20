@@ -1,5 +1,5 @@
 #!/bin/bash
-# Prueba de shells-abiertas.py (2.63.21): lista las shells en segundo plano que la sesion dejo vivas.
+# Prueba de shells-abiertas.py (2.63.25): lista las shells en segundo plano que la sesion dejo vivas.
 #
 # El transcript se arma aqui con las formas reales medidas el 2026-10-20 en ~1500 JSONL: el
 # tool_result "Command running in background with ID", "Monitor started (task", la

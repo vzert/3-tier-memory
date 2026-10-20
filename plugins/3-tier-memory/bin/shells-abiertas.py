@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-3-tier-memory plugin: lista las shells en segundo plano que la sesion dejo vivas (2.63.21).
+3-tier-memory plugin: lista las shells en segundo plano que la sesion dejo vivas (2.63.25).
 
 POR QUE. Un agente cerraba con `/checkpoint-3t`, dejaba su prompt para retomar y seguia con shells
 en segundo plano abiertas. Caso real (2026-10-20): un muestreo lanzado con `run_in_background`
