@@ -12,7 +12,9 @@ Origen: `p-274c87b575` (reportado por cloudflare-expert en `/consolidate-3t`).
   regla 23 a cuarentena con `codigo-antes` y esta version la reescribe. Ahora cada tramo de codigo
   en linea de la linea (CommonMark 6.1: una tira de n comillas invertidas cerrada por la siguiente
   de exactamente n) se cambia por una letra antes de buscar. Una tira sin pareja, o de otro largo,
-  no se toca y sigue negando. Seccion 24 de `test-learning-update.sh`, tres mutaciones nuevas
+  no se toca y sigue negando. Un tramo que cruza lineas tampoco se empareja: la linea que sigue
+  puede abrir una valla de verdad (`` `texto `` y luego `~~~ texto` aqui.`), asi que se sigue negando
+  aunque a veces no haya bloque. Seccion 24 de `test-learning-update.sh`, tres mutaciones nuevas
   (`m_codigo_en_linea.py`) y cinco lineas con codigo en linea en el oraculo CommonMark.
 
 ## [2.63.20] - 2026-10-20

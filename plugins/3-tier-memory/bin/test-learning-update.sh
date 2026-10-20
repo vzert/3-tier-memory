@@ -420,6 +420,11 @@ caso22 "tira sin pareja" '- **A** - usa `x ~~~ y\n- **Vieja** - regla' "codigo-a
 caso22 "tiras de distinto largo" '- **A** - ``x ~~~ y`\n- **Vieja** - regla' "codigo-antes"
 caso22 "valla de tildes con codigo detras" '~~~ `x`\n- **Vieja** - dentro\n\n~~~' "codigo-antes"
 caso22 "valla tras codigo en linea" '- **A** - `x`\n\n```\n- **Vieja** - dentro\n\n```' "codigo-antes"
+# Un tramo que cruza lineas no se empareja, a proposito: aqui la segunda linea SI abre una valla de
+# tildes (CommonMark 4.5; lo confirma markdown-it), aunque parezca seguir el tramo de la primera.
+caso22 "tramo de dos lineas que abre valla" 'Usa `texto\n~~~ texto` aqui.\n\n- **Vieja** - regla' "codigo-antes"
+# Limite conocido: este tramo de dos lineas no abre bloque, pero la guarda tambien lo niega.
+caso22 "tramo de dos lineas sin bloque" 'Usa `a ~~~\nb` aqui.\n\n- **Vieja** - regla' "codigo-antes"
 
 echo
 echo "pass=$pass fail=$fail"
