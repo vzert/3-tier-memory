@@ -12,7 +12,7 @@ BIN="$(cd "$(dirname "$0")" && pwd)"
 HOOK="${HOOK:-$BIN/checkpoint-close-guard.sh}"
 FX="$BIN/fixtures/cierre-5790b9f2"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-# 2.63.23 (p-091714b9cf): una sola fecha para la prueba, el hook y los scripts que lanza. Antes HOY se
+# 2.63.27 (p-091714b9cf): una sola fecha para la prueba, el hook y los scripts que lanza. Antes HOY se
 # leia al arrancar y print-pendiente-opcional.py (aqui y desde el hook) la volvia a leer al correr: una
 # corrida que cruzaba la medianoche dejaba el 8e vacio. El sitecustomize del mktemp hace que
 # datetime.date.today() devuelva HOY en todo python hijo; HOY_PRUEBA cambia la fecha (fuera del dia real).

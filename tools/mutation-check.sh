@@ -218,7 +218,7 @@ caso "el hook exige el emoji" checkpoint-close-guard.sh m_capas_cierre.py test-c
 caso "cabecera de la revision" checkpoint-close-guard.sh m_capas_cierre.py test-checkpoint-close-guard.sh "la cita no tapa la cabecera" cabecera-rfind
 caso "solo Retomamos en color" checkpoint-close-guard.sh m_capas_cierre.py test-checkpoint-close-guard.sh "reclama el fence fuera del snippet" fences-sin-control
 caso "fence dentro de una cita" checkpoint-close-guard.sh m_capas_cierre.py test-checkpoint-close-guard.sh "reclama el fence en la cita" fence-sin-cita
-# 2.63.23 (p-091714b9cf): la prueba no depende de la hora. Sin el parche de la fecha, el 8e del fixture
+# 2.63.27 (p-091714b9cf): la prueba no depende de la hora. Sin el parche de la fecha, el 8e del fixture
 # sale vacio porque el hook y el script vuelven a leer el dia real.
 caso "prueba con fecha fija" test-checkpoint-close-guard.sh m_hoy_fijo.py test-checkpoint-close-guard.sh "el fixture trae un 8e con contenido" sin-parche
 caso "recomendacion con dueno" checkpoint-audit.py m_capas_cierre.py test-checkpoint-audit.sh "avisa del research" reco-sin-dueno-pasa
