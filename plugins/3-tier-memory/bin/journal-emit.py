@@ -28,6 +28,8 @@ Tipos de evento:
   pendiente.resolve --id ID --estado resolved|superseded|abandoned [--sesion S] [--nota N]
                     --nota solo la guardan resolve, learning.retire y learning.add --supersedes;
                     los demas tipos salen con error si la reciben, aun vacia (2.62.10).
+                    Lo mismo con cualquier otro flag (2.63.2): un flag que el tipo no lee
+                    (FLAGS_DE) sale con error y no escribe evento, aun abreviado o con `=`.
   pendiente.update  --id ID [--text T] [--prioridad Alta|Media|Baja] [--text-prefix P]
                     Corrige el texto y/o la prioridad de un pendiente VIVO conservando su id.
                     El id es el hash con el que NACIO, no el del texto de hoy: cambiarlo
@@ -213,6 +215,7 @@ ID_RE = re.compile(r"^p-[0-9a-f]{10}$")
 FICHA_RETOMAR_RE = re.compile(r"^sessions/[A-Za-z0-9][A-Za-z0-9._-]*(?<!_)$")
 SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,120}$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+FECHA_ISO_RE = re.compile(r"\d{4}-\d{2}-\d{2}")   # con fullmatch: sin el `\n` final que `$` deja pasar
 RESEARCH_STATUS = ("active", "completed")
 MAX_EXCL_RETRIES = 5
 
@@ -458,13 +461,16 @@ def find_session_cells(memory_dir, slug):
 
 
 def fecha_real(v):
-    """True solo si `v` es una fecha del calendario. `re` valida la FORMA: `2026-99-99` la pasa,
-    y los consumidores (`triage-scan.py`, `expire-pendientes.py`) revientan al parsearla.
-    (Hallazgo del adversario, ronda 2, 2026-09-11.)"""
+    """True solo si `v` es AAAA-MM-DD y una fecha del calendario. `re` valida la FORMA: `2026-99-99`
+    la pasa, y los consumidores (`triage-scan.py`, `expire-pendientes.py`) revientan al parsearla
+    (adversario, ronda 2, 2026-09-11). Y fromisoformat solo no basta: desde Python 3.11 acepta
+    `20261016` y `2026-W42-5`, y un `--creado 20261016` atascaba el compactador (2.63.7)."""
+    if not (isinstance(v, str) and FECHA_ISO_RE.fullmatch(v)):
+        return False
     try:
-        date.fromisoformat(str(v))
+        date.fromisoformat(v)
         return True
-    except (ValueError, TypeError):
+    except ValueError:
         return False
 
 
@@ -905,8 +911,58 @@ def dedup_al_emitir(memory_dir, topic, text, decision, solo_vecinos):
                  f"  - es otra leccion → --decision nueva.")
 
 
-# Los tipos que leen --nota. pendiente.update la rechaza con su propio mensaje (2.62.4).
-NOTA_LECTORES = ("pendiente.resolve", "pendiente.update", "learning.retire", "learning.add")
+# Los flags (dest de argparse) que lee cada tipo, ademas de --type, --memory-dir y --session. Un
+# flag de fuera salia rc=0 y se perdia sin avisar: 926 combinaciones tipo x flag en 2.62.10
+# (p-7ae84c8ef2, research/flags-sin-lector-journal-emit). Uno que el tipo lee solo en ciertos casos
+# va dentro, y su rama dice si sobra (p. ej. --quickref-prefix sin --supersedes en learning.add);
+# por eso pendiente.update lleva `nota`: la rechaza su rama, con su mensaje. Un flag nuevo del
+# parser que no este en ninguna fila sale con error en todos los tipos. Recoge el rechazo de --nota de
+# 2.62.10 (NOTA_LECTORES): leen --nota resolve, learning.retire y learning.add --supersedes.
+FLAGS_DE = {
+    "pendiente.add": {"text", "prioridad", "origen", "creado", "revisar", "bloqueado_por",
+                      "relacionado", "transcript"},
+    "pendiente.resolve": {"id", "estado", "sesion", "nota", "text_prefix"},
+    "pendiente.update": {"id", "text", "prioridad", "text_prefix", "nota"},
+    "pendiente.expire": {"id", "dias", "prioridad", "line"},
+    "pendiente.reopen": {"id", "prioridad"},
+    "pendiente.window": {"id", "revisar"},
+    "pendiente.retomar": {"id", "retomar", "ficha"},
+    "pendiente.block": {"id", "bloqueado_por", "desbloquear"},
+    "pendiente.relate": {"id", "relacionado", "sin_relacion"},
+    "pendiente.adopt": {"todas", "line", "id", "text_prefix", "colapsar"},
+    "session.add": {"slug", "date", "status", "summary", "commit"},
+    "session.amend": {"slug", "date", "alias", "fecha_vieja", "sesion_vieja"},
+    "learning.add": {"topic", "text", "section", "quickref", "title", "when", "importance",
+                     "disparadores", "sin_disparadores", "supersedes", "decision", "solo_vecinos",
+                     "quickref_prefix", "nota"},
+    "learning.update": {"topic", "text", "quickref", "match_prefix", "quickref_prefix", "title",
+                        "when", "disparadores", "sin_disparadores", "quickref_regla",
+                        "last_verified"},
+    "learning.retire": {"topic", "match_prefix", "motivo", "por", "nota", "quickref_prefix"},
+    "plan.upsert": {"slug", "parent", "inline", "promote", "title", "status", "date", "sesion",
+                    "pendientes", "learnings"},
+    "plan.reopen": {"slug", "title"},
+    "research.upsert": {"slug", "status", "tema", "date", "next_step", "resultado", "origen",
+                        "inline"},
+    "research.rename": {"slug", "tema", "tema_viejo"},
+}
+FLAGS_COMUNES = {"type", "memory_dir", "session"}
+
+
+def flags_pasados(ap, argv=None):
+    """Los dest de los flags que llegaron en la linea de comandos.
+
+    Se mira con el propio parser y no con sys.argv a mano: argparse acepta abreviaturas (`--motiv`
+    es `--motivo`) y `--flag=valor`. Con todos los default en SUPPRESS, el namespace solo trae lo
+    que se paso; despues se devuelven los default."""
+    viejos = [(act, act.default) for act in ap._actions]
+    try:
+        for act, _ in viejos:
+            act.default = argparse.SUPPRESS
+        return set(vars(ap.parse_args(argv)))
+    finally:
+        for act, d in viejos:
+            act.default = d
 
 
 def main():
@@ -991,15 +1047,21 @@ def main():
     ap.add_argument("--last-verified", dest="last_verified", default="")
     # learning.update: enlace Quick Reference -> regla (F7, 2.51.0)
     ap.add_argument("--quickref-regla", dest="quickref_regla", default="")
+    pasados = flags_pasados(ap)
     a = ap.parse_args()
 
-    # --nota solo la guardan los tipos de NOTA_LECTORES (learning.add, solo con --supersedes; se
-    # mira abajo). En cualquier otro se descartaba sin avisar y quien la paso creia haberla dejado
-    # escrita (p-3bf672997c, como p-a37851219c en pendiente.update, que tiene su propio mensaje).
-    if a.nota is not None and a.type not in NOTA_LECTORES:   # aun vacia: quien la paso esperaba guardarla
-        sys.exit(f"journal-emit: {a.type} no guarda --nota (el evento no tiene campo donde ponerla). "
-                 "Solo la guardan pendiente.resolve, learning.retire y learning.add --supersedes; "
-                 "si la nota describe lo que emites, metela en el --text")
+    # Un flag que el tipo no lee se descartaba sin avisar y quien lo paso creia haberlo dejado
+    # escrito: --nota primero (p-3bf672997c, p-a37851219c), luego 926 combinaciones (p-7ae84c8ef2).
+    # Cuenta haberlo pasado, no su valor: `--nota ""` tambien esperaba guardar algo.
+    sobran = sorted(pasados - FLAGS_COMUNES - FLAGS_DE[a.type])
+    if sobran:
+        opc = {act.dest: act.option_strings[0] for act in ap._actions if act.option_strings}
+        nota = (f" {a.type} no guarda --nota: solo la guardan pendiente.resolve, learning.retire y "
+                "learning.add --supersedes; si la nota describe lo que emites, metela en el --text."
+                if "nota" in sobran else "")
+        sys.exit(f"journal-emit: {a.type} no lee {', '.join(opc[d] for d in sobran)}: el evento no "
+                 f"tiene donde guardarlo y se perderia sin avisar. Quitalo, o usa el tipo que lo lee. "
+                 f"{a.type} lee: {' '.join(sorted(opc[d] for d in FLAGS_DE[a.type]))}.{nota}")
 
     memory_dir = resolve_memory_dir(a.memory_dir)
     if not os.path.isdir(memory_dir):
@@ -1393,8 +1455,8 @@ def main():
         if not ID_RE.match(pid):
             sys.exit("journal-emit: --id debe tener la forma p-<10 hex>")
         ret = (a.retomar or "").strip()
-        # fecha_real (fromisoformat) acepta `20261016` y `2026-W42-5`: el compactador los cuarentena
-        # y el mod no los lee. Aqui solo AAAA-MM-DD.
+        # fecha_real (fromisoformat) acepta `20261016` y `2026-W42-5` desde Python 3.11 (en 3.9 no):
+        # el compactador los cuarentena y el mod no los lee. Aqui solo AAAA-MM-DD, en cualquier version.
         if not (re.fullmatch(r"\d{4}-\d{2}-\d{2}", ret) and fecha_real(ret)):
             sys.exit("journal-emit: pendiente.retomar necesita --retomar AAAA-MM-DD con una fecha real")
         ficha = (a.ficha or "").strip()

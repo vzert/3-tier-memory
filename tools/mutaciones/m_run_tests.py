@@ -57,6 +57,20 @@ M = {
     "candado-en-tmpdir": [
         ('CANDADO="${RUN_TESTS_CANDADO:-/tmp/3tm-run-tests.candado}"',
          'CANDADO="${RUN_TESTS_CANDADO:-${TMPDIR:-/tmp}/3tm-run-tests.candado}"')],
+    # p-4be2b6ea23: sin el modo, mutation-check suelto corre la suite completa en vez de su cuerpo.
+    "sin-con-candado": [
+        ('if [ "${1:-}" = "--con-candado" ]; then shift; type tmp_propio_avisos >/dev/null 2>&1 && tmp_propio_avisos; "$@"; exit $?; fi', ':')],
+    # p-7c1fa85c1e: el candado guarda la hora de arranque de su dueno.
+    "sin-comparar-hora": [
+        ('    elif candado_reusado "$quien"; then', '    elif false; then')],
+    "hora-siempre-distinta": [
+        ('  [ -n "$ahora" ] && [ "$ahora" != "$guardada" ]', '  true')],
+    "sin-hora-es-reusado": [
+        ('  [ -n "$guardada" ] || return 1', '  [ -n "$guardada" ] || return 0')],
+    "hora-con-tz-local": [
+        ('    TZ=UTC0 LC_ALL=C ps -o lstart= -p "$1"', '    LC_ALL=C ps -o lstart= -p "$1"')],
+    "sin-escribir-hora": [
+        ('      candado_hora "$$" > "$CANDADO/arranque" 2>/dev/null', '      :')],
 }
 p, nombre = sys.argv[1], sys.argv[2]
 s = io.open(p, encoding="utf-8", newline="").read()

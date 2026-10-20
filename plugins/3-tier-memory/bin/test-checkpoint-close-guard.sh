@@ -406,7 +406,10 @@ python3 - "$F" <<'PYX'
 import sys; p=sys.argv[1]; t=open(p, encoding="utf-8").read()
 open(p, "w", encoding="utf-8").write(t.replace("date: 2026-09-22\n", "date: 2026-09-22\nsession_id: sesion-actual\n", 1))
 PYX
-O=$(python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":False,"session_id":"sesion-actual","cwd":"/tmp"}))' "$T/t.jsonl" | bash "$HOOK" 2>/dev/null | expande)
+# cwd propio, no /tmp: el aviso se escribe en `<cwd>/.3t-revision-cierre-<session_id>.md`, y con un
+# cwd comun dos corridas a la vez (mutation-check, MUT_JOBS=4) leian el aviso de la otra (p-e376b39ea2).
+CW="$T/cwd-actual"; mkdir -p "$CW"
+O=$(python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":False,"session_id":"sesion-actual","cwd":sys.argv[2]}))' "$T/t.jsonl" "$CW" | bash "$HOOK" 2>/dev/null | RAIZ_EXP="$CW" expande)
 chk "bloquea" "1" "$(bloquea "$O")"
 
 # ================================================================================================
@@ -1329,9 +1332,12 @@ echo "== p-1d0f012aa9: sesion supervisada por lookout, la pregunta va por SendMe
 # de lookout 0.13): solo cuenta un SendMessage a ese supervisor. $1 transcript, $2 LOOKOUT_STATE_DIR.
 LK="$T/lookout"; mkdir -p "$LK/sessions"
 printf '{"project_id": "p", "supervisor": "supervisor-x", "address": "uds:/tmp/cc-socks/9.sock", "nombre": "a"}\n' > "$LK/sessions/sess-sup.json"
+# cwd propio por corrida, no /tmp: con /tmp las corridas paralelas de mutation-check compartian
+# el mismo archivo de aviso en la carpeta temporal y un aserto leia el de otra corrida (p-e376b39ea2).
+CWS="$T/cwd-sup"; mkdir -p "$CWS"
 corre_sup() {
-  python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":False,"last_assistant_message":"","cwd":"/tmp","session_id":"sess-sup"}))' "$1" \
-    | LOOKOUT_STATE_DIR="$2" bash "$HOOK" 2>/dev/null | expande
+  python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":False,"last_assistant_message":"","cwd":sys.argv[2],"session_id":"sess-sup"}))' "$1" "$CWS" \
+    | LOOKOUT_STATE_DIR="$2" bash "$HOOK" 2>/dev/null | RAIZ_EXP="$CWS" expande
 }
 txc "$T/tc.jsonl" peer
 chk "SendMessage al supervisor y su respuesta: no lo reclama" "0" "$(corre_sup "$T/tc.jsonl" "$LK" | grep -c 'candidatos_pregunta')"
@@ -1490,6 +1496,30 @@ chk "y no lo cuenta como falta del cierre" "0" "$(grep -c 'checkpoint-audit.py s
 bloqueo_ficha '- [ ] otro sin bloqueo — `p-014255373e`'
 corre_en "$T/t.jsonl" false - "$RB" >/dev/null
 chk "Ninguno sin pendiente bloqueado en la ficha: no pregunta por el bloqueo" "1 0" "$([ -f "$AB" ] && echo 1 || echo 0) $(grep -c 'no es el usuario' "$AB" 2>/dev/null)"
+
+echo "== 2.63.3: un sed que edita print-como-retomar.py y otro .py, con un break en la sesion y sin ficha: silencio =="
+# Forma real (sesion 4237bac9, p-bea9639b92): `sed -i` sobre el fuente de print-como-retomar.py
+# seguido de pendientes_afines.py, sin /checkpoint-3t ni ficha. El guard tomaba el .py como ficha,
+# le corria checkpoint-audit.py con el `break` de la sesion y pedia nombrar el hallazgo en
+# `## Bugs fixed` de un archivo que no es una ficha. Solo cuenta una ruta memory/sessions/*.md.
+RS="$T/repo-sed"; mkdir -p "$RS/plugins/3-tier-memory/bin"
+echo 'print(1)' > "$RS/plugins/3-tier-memory/bin/print-como-retomar.py"
+echo 'x = 1' > "$RS/plugins/3-tier-memory/bin/pendientes_afines.py"
+python3 - "$T/t.jsonl" "$RS" "$BRK" <<'PYS'
+import json, sys
+out, rs, brk = sys.argv[1:4]
+cmd = (f"cd {rs} && sed -i '' 's/2\\.61\\.x/2.62.0/g' plugins/3-tier-memory/bin/print-como-retomar.py "
+       "plugins/3-tier-memory/bin/pendientes_afines.py")
+R = [{"type": "user", "message": {"role": "user", "content": "sigue con el arreglo"}},
+     {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "adv", "name": "Agent", "input": {"subagent_type": "goalspec:goal-adversary"}}]}},
+     {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "adv", "content": [{"type": "text", "text": "- grounding: mutaciones viejas\n" + brk}]}]}},
+     {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "sed", "name": "Bash", "input": {"command": cmd}}]}},
+     {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "sed", "content": ""}]}},
+     {"type": "assistant", "message": {"content": [{"type": "text", "text": "Cambie las versiones."}]}}]
+open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r) for r in R) + "\n")
+PYS
+chk "silencio (el .py no es una ficha)" "" "$(corre "$T/t.jsonl" false -)"
+chk "y en la vuelta reentrante tampoco avisa" "" "$(corre "$T/t.jsonl" true -)"
 
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

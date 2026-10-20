@@ -74,9 +74,13 @@ M = {
     "audit-sin-ninguno-bloqueo": [("        if es_ninguno_snip and bloq_ficha:", "        if False:")],
     "ninguno-bloqueo-solo-sesion": [("bloq_ficha = [i for i in dict.fromkeys(abiertos_ficha) if i in bloqueados]",
                                      "bloq_ficha = [i for i in dict.fromkeys(abiertos_ficha) if i in bloqueados and i in origenes_abiertos(memory_dir) and origenes_abiertos(memory_dir)[i] == slug]")],
-    "marco-decidir-con-usuario": [('r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b(?!\\s*-|\\s+(?:extern|final|ajen|client|del?\\s)))\\S+"', 'r"|\\bdecidir\\s+con\\s+\\S+"')],
-    "marco-sin-decidir-con": [('r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b(?!\\s*-|\\s+(?:extern|final|ajen|client|del?\\s)))\\S+"', 'r"|\\bnunca-calza-esto"')],
-    "usuario-sin-apellido": [('r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b(?!\\s*-|\\s+(?:extern|final|ajen|client|del?\\s)))\\S+"', 'r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b)\\S+"')],
+    "marco-decidir-con-usuario": [('r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b(?!\\s*-|\\s+(?:extern|final\\b|ajen|client|del?\\s+(?:(?:la|el|los|las)\\s+)?(?:client|proveedor|tercer|otr))))\\S+"', 'r"|\\bdecidir\\s+con\\s+\\S+"')],
+    "marco-sin-decidir-con": [('r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b(?!\\s*-|\\s+(?:extern|final\\b|ajen|client|del?\\s+(?:(?:la|el|los|las)\\s+)?(?:client|proveedor|tercer|otr))))\\S+"', 'r"|\\bnunca-calza-esto"')],
+    "usuario-sin-apellido": [('r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b(?!\\s*-|\\s+(?:extern|final\\b|ajen|client|del?\\s+(?:(?:la|el|los|las)\\s+)?(?:client|proveedor|tercer|otr))))\\S+"', 'r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b)\\S+"')],
+    # p-c501ad10c6: un complemento del usuario ("de la tienda", "finalmente") no lo vuelve tercero.
+    "usuario-complemento-tercero": [('r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b(?!\\s*-|\\s+(?:extern|final\\b|ajen|client|del?\\s+(?:(?:la|el|los|las)\\s+)?(?:client|proveedor|tercer|otr))))\\S+"', 'r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b(?!\\s*-|\\s+(?:extern|final|ajen|client|del?\\s)))\\S+"')],
+    # p-c0e7c422cb: un articulo entre de/del y el tercero no lo vuelve el usuario.
+    "articulo-tercero": [('r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b(?!\\s*-|\\s+(?:extern|final\\b|ajen|client|del?\\s+(?:(?:la|el|los|las)\\s+)?(?:client|proveedor|tercer|otr))))\\S+"', 'r"|\\bdecidir\\s+con\\s+(?!(?:el\\s+)?usuario\\b(?!\\s*-|\\s+(?:extern|final\\b|ajen|client|del?\\s+(?:client|proveedor|tercer|otr))))\\S+"')],
     "guard-sin-bloqueo": [("        if avisos_bloqueo:", "        if False:")],
 }
 

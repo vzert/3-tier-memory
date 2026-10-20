@@ -21,6 +21,41 @@
 # sella-huellas: no (trabaja sobre copias en temporales)
 set -u
 cd "$(cd "$(dirname "$0")/.." && pwd)" || exit 2
+# Una corrida por maquina, con el mismo candado que tools/run-tests.sh (p-4be2b6ea23): lanzado solo,
+# junto a otro o junto a una corrida completa, cargaba la maquina igual que dos suites a la vez.
+# Solo, se relanza dentro de `run-tests.sh --con-candado`. Dentro de una corrida que ya lo tiene
+# (run-tests, o una tanda de abajo) no lo pide: se esperaria a si mismo. Dentro = el pid que exporto
+# quien lo tomo es el del candado, y es un antecesor de este proceso. Una variable heredada sola no
+# basta: test-run-tests corre copias con su propio candado DENTRO del runner real, y la del runner no
+# casa con el de la prueba; un candado abandonado (kill -9) con el pid de una corrida muerta no es de
+# nadie; y un candado con el pid de un proceso vivo ajeno, con ese pid en la variable, tampoco
+# (adversario externo, ronda 2). Un pid 0 o no numerico no vale (`kill -0 0` sale 0).
+# 0 si el pid $1 es un antecesor de este proceso. ppid: /proc/<pid>/ppid en Git Bash (MSYS), donde
+# ps no tiene -o; `ps -o ppid=` en macOS y Linux. Si no se puede leer, no es antecesor: se relanza.
+es_antecesor() {
+  local p=$$ i=0
+  while [ "$i" -lt 64 ] && [ "$p" -gt 1 ] 2>/dev/null; do
+    [ "$p" = "$1" ] && return 0
+    if [ -r "/proc/$p/ppid" ]; then p=$(cat "/proc/$p/ppid" 2>/dev/null)
+    else p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' '); fi
+    i=$(( i + 1 ))
+  done
+  return 1
+}
+if [ "$(cat "$(bash tools/run-tests.sh --ruta-candado)/pid" 2>/dev/null)" != "${RUN_TESTS_CANDADO_DUENO:-ninguno}" ] \
+   || ! [ "${RUN_TESTS_CANDADO_DUENO:-0}" -gt 0 ] 2>/dev/null \
+   || ! es_antecesor "${RUN_TESTS_CANDADO_DUENO:-}"; then
+  # Relanzado una vez (su padre es el run-tests al que se paso) y aun no lo ve: run-tests no lo tomo.
+  # Relanzarse otra vez era una cadena sin fin de procesos: con la mutacion sin-candado de run-tests,
+  # 1752 en 25 s (adversario, 2.63.1). Sale con error.
+  if [ "${MUT_RELANZADO:-}" = "$PPID" ]; then
+    echo "ERROR mutation-check: relanzado por run-tests.sh --con-candado y no veo su candado; no me relanzo otra vez." >&2
+    exit 2
+  fi
+  export MUT_RELANZADO=$$
+  exec bash tools/run-tests.sh --con-candado bash tools/mutation-check.sh "$@"
+fi
+# --- hasta aqui el candado: test-run-tests.sh corta aqui su copia de este script ---
 # Cada caso copia bin/ en un mktemp: matar el arnes a mitad dejaba esas copias en el temporal del
 # sistema (p-292d06c4c0). Dentro de run-tests ya va anidado y no hace nada.
 [ -f tools/tmp-propio.sh ] && . tools/tmp-propio.sh && tmp_propio_avisos
@@ -111,10 +146,10 @@ caso() {  # etiqueta | fichero a mutar | mutador | suite | aserto que DEBE caer 
 }
 
 # Igual que caso(), pero para un script de tools/ (no de bin/): muta una copia de tools/<f> y corre
-# la suite de tools/ con RUN_TESTS apuntando a la copia.
-caso_tools() {  # etiqueta | fichero de tools/ | mutador | suite de tools/ | aserto | arg
+# la suite de tools/ con RUN_TESTS (u otra variable, la 7a) apuntando a la copia.
+caso_tools() {  # etiqueta | fichero de tools/ | mutador | suite de tools/ | aserto | arg | [variable]
   mio || return 0
-  local et="$1" f="$2" m="$3" suite="$4" espera="$5" arg="${6:-}"
+  local et="$1" f="$2" m="$3" suite="$4" espera="$5" arg="${6:-}" var="${7:-RUN_TESTS}"
   local D; D=$(mktemp -d); cp "tools/$f" "$D/$f"
   TOTAL=$(( TOTAL + 1 ))
   local n; n=$(python3 "$MUT/$m" "$D/$f" ${arg:+"$arg"} 2>&1)
@@ -122,7 +157,18 @@ caso_tools() {  # etiqueta | fichero de tools/ | mutador | suite de tools/ | ase
     0\ *) printf '  ?? %-30s LA MUTACION NO SE APLICO (%s) -> SIN PROBAR\n' "$et" "$n"
           PEND=$(( PEND + 1 )); rm -rf "$D"; return ;;
   esac
-  local out rc; out=$(RUN_TESTS="$D/$f" bash "tools/$suite" 2>&1); rc=$?
+  local out rc; out=$(env "$var=$D/$f" bash "tools/$suite" 2>&1); rc=$?
+  # Como en caso(): una linea `SKIP ... <aserto>` dice que ese aserto no se evalua aqui. Faltaba, y en
+  # ubuntu la mutacion del TZ (la hora sale de /proc) salia como aserto vacuo (adversario, 2.63.6).
+  # Mayusculas y al inicio de la linea: un "skip" dentro de otro aserto no cuenta. Y si el aserto
+  # cayo (FALLA con su texto), cuenta como caido aunque haya SKIP: un SKIP no tapa un fallo real
+  # (adversario externo, ronda 3).
+  if printf '%s\n' "$out" | grep -qE "^ *SKIP .*${espera}" \
+     && ! printf '%s' "$out" | grep -qiE "(FAIL|FALLA).*${espera}"; then
+    printf '  -- %-30s no evaluable aqui: %s\n' "$et" \
+      "$(printf '%s\n' "$out" | grep -E "^ *SKIP .*${espera}" | head -1 | sed 's/^ *//')"
+    rm -rf "$D"; return
+  fi
   if [ "$rc" -eq 0 ]; then
     printf '  NO %-30s la suite NO cae (%s) -> el aserto es vacuo\n' "$et" "$n"; PEND=$(( PEND + 1 ))
   elif printf '%s' "$out" | grep -qiE "(FAIL|FALLA).*${espera}"; then
@@ -222,6 +268,7 @@ caso "marco: campo entero" checkpoint-audit.py m_hilo.py $T "dos pendientes, el 
 caso "marco: aviso, no falta" checkpoint-audit.py m_hilo.py $T "y no lo vuelve SALTADO" marco-saltado
 caso "marco: caso 5 fuera" checkpoint-audit.py m_hilo.py $T "caso 5 \(ninguno\): el marco no aplica" marco-con-ninguno
 caso "marco: el hook lo pone en la revision" checkpoint-close-guard.sh m_hilo.py test-checkpoint-close-guard.sh "el archivo de la revision trae el bloque de avisos del marco" guard-sin-marco
+caso "ficha: solo sessions/*.md"   checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "el .py no es una ficha" ficha-cualquiera
 caso "extras: citado en Terminas" pendientes_afines.py m_hilo.py $T "el citado en Terminas cuando no va de extra" extras-sin-citados
 caso "extras: citado en No repitas" pendientes_afines.py m_hilo.py $T "el citado en No repitas no va de extra" extras-sin-no-repitas
 caso "extras: prueba en vivo" pendientes_afines.py m_hilo.py $T "pruebas en vivo y esperas de OK fuera: el unico extra es la tarea de codigo" extras-sin-vivo
@@ -237,6 +284,8 @@ caso "decision del usuario: origen en research" checkpoint-audit.py m_hilo.py te
 caso "decision del usuario: el marco la deja" pendientes_afines.py m_hilo.py test-ninguno-bloqueo.sh "decidir con el usuario no es espera ajena" marco-decidir-con-usuario
 caso "decision del usuario: un tercero avisa" pendientes_afines.py m_hilo.py test-ninguno-bloqueo.sh "y decidir con un tercero" marco-sin-decidir-con
 caso "decision del usuario: usuario externo avisa" pendientes_afines.py m_hilo.py test-ninguno-bloqueo.sh "un usuario con apellido es un tercero" usuario-sin-apellido
+caso "decision del usuario: complemento no es tercero" pendientes_afines.py m_hilo.py test-ninguno-bloqueo.sh "un complemento del usuario no lo vuelve tercero" usuario-complemento-tercero
+caso "decision del usuario: tercero con articulo" pendientes_afines.py m_hilo.py test-ninguno-bloqueo.sh "un tercero con articulo tras de/del sigue avisando" articulo-tercero
 caso "decision del usuario: el hook pregunta" checkpoint-close-guard.sh m_hilo.py test-checkpoint-close-guard.sh "la revision pregunta si el bloqueo espera" guard-sin-bloqueo
 
 echo "Contrato de check-project-dir-fallback.py (2.41.4): cada pieza, rota, tumba su aserto"
@@ -300,6 +349,23 @@ caso "--nota sin lector"        journal-emit.py m_nota_sin_lector.py $T "pendien
 caso "--nota en learning.add"   journal-emit.py m_nota_sin_lector.py $T "learning.add sin --supersedes con nota texto sale con error" add-sin-rechazo
 caso "--nota por verdad"        journal-emit.py m_nota_sin_lector.py $T "pendiente.add con nota vacia sale con error" nota-por-verdad
 caso "--nota lector de mas"     journal-emit.py m_nota_sin_lector.py $T "pendiente.add con nota texto sale con error" lector-de-mas
+T=test-flags-sin-lector.sh
+caso "flag sin lector"          journal-emit.py m_flags_sin_lector.py $T "pendiente.add --dias rechaza" sin-rechazo
+caso "fila con flag de mas"     journal-emit.py m_flags_sin_lector.py $T "pendiente.add --dias rechaza" fila-de-mas
+caso "fila con flag de menos"   journal-emit.py m_flags_sin_lector.py $T "pendiente.expire --line pasa con su evento" fila-de-menos
+caso "flag comun de mas"        journal-emit.py m_flags_sin_lector.py $T "pendiente.reopen --text rechaza" comunes-de-mas
+caso "argv sin abreviaturas"    journal-emit.py m_flags_sin_lector.py $T "abreviado --motiv rechaza" argv-sin-abreviar
+caso "argv sin --flag=valor"    journal-emit.py m_flags_sin_lector.py $T "con igual --text=hola rechaza" argv-sin-igual
+caso "flag por su valor"        journal-emit.py m_flags_sin_lector.py $T "valor vacio en --prioridad tambien rechaza" por-valor
+caso "rama rechaza flag leido"  journal-emit.py m_flags_sin_lector.py $T "pendiente.relate --sin-relacion pasa con su evento" rama-rechaza
+T=test-marcar-retomar.sh
+caso "--hoy sin forma ancha"    marcar-retomar.py m_marcar_retomar.py $T "marcar-retomar --hoy 20261016 sale 0" sin-forma-ancha
+caso "--hoy sin semana ISO"     marcar-retomar.py m_marcar_retomar.py $T "marcar-retomar --hoy 2026-W42-5 sale 0" sin-semana
+caso "--hoy guiones sueltos"    marcar-retomar.py m_marcar_retomar.py $T "marcar-retomar --hoy 2026-1016 sale 2" guiones-sueltos
+T=test-fecha-iso.sh
+caso "emisor sin regex de fecha" journal-emit.py m_fecha_iso.py $T "pendiente.add --creado 20261016: error" sin-regex
+caso "compactador sin regex"    journal-compact.py m_fecha_iso.py $T "creado ancho: el malo va a cuarentena" sin-regex
+caso "fecha solo en learning"   journal-compact.py m_fecha_iso.py $T "resolve con fecha ancha: va a cuarentena" sin-fecha-generica
 caso "sin identidad"           journal-emit.py m_learning_dedup.py test-learning-dedup.sh "mismo texto sin --decision: rc 0" sin-identidad
 caso "decision fuera"          journal-emit.py m_learning_dedup.py test-learning-dedup.sh "la decision viaja en el payload" decision-fuera-del-payload
 caso "reemplaza sin supersedes" journal-emit.py m_learning_dedup.py test-learning-dedup.sh "reemplaza:2 lleva supersedes 2" reemplaza-sin-supersedes
@@ -482,6 +548,20 @@ caso_tools "candado en TMPDIR"     run-tests.sh m_run_tests.py test-run-tests.sh
 caso_tools "candado no creable cuelga" run-tests.sh m_run_tests.py test-run-tests.sh "un candado que no se puede crear no cuelga" no-crea-espera
 caso_tools "sin candado corre igual" run-tests.sh m_run_tests.py test-run-tests.sh "y no corre la suite sin candado" no-crea-corre
 caso_tools "pid 0 por vivo"        run-tests.sh m_run_tests.py test-run-tests.sh "un candado con pid 0 cuenta como abandonado" pid-cero-vivo
+caso_tools "pid reusado espera"     run-tests.sh m_run_tests.py test-run-tests.sh "con el pid reusado, quita el candado y corre su suite" sin-comparar-hora
+caso_tools "roba al dueno vivo"     run-tests.sh m_run_tests.py test-run-tests.sh "un pid vivo con su misma hora de arranque es el dueno" hora-siempre-distinta
+caso_tools "sin hora es reusado"    run-tests.sh m_run_tests.py test-run-tests.sh "un candado sin hora de arranque" sin-hora-es-reusado
+caso_tools "hora en el TZ del lector" run-tests.sh m_run_tests.py test-run-tests.sh "un lector con otro TZ que el dueno no le roba el candado" hora-con-tz-local
+caso_tools "no guarda la hora"      run-tests.sh m_run_tests.py test-run-tests.sh "la corrida que toma el candado guarda su hora" sin-escribir-hora
+caso_tools "sin --con-candado"     run-tests.sh m_run_tests.py test-run-tests.sh "los tres mutation-check corren su cuerpo" sin-con-candado
+# p-4be2b6ea23: mutation-check.sh lanzado solo toma el mismo candado.
+caso_tools "mutation-check sin candado" mutation-check.sh m_mutation_check.py test-run-tests.sh "tres mutation-check sueltos y una corrida completa" sin-candado MUTATION_CHECK
+caso_tools "se espera a si mismo"  mutation-check.sh m_mutation_check.py test-run-tests.sh "dentro de una corrida completa no se espera a si mismo" siempre-pide MUTATION_CHECK
+caso_tools "dueno sin mirar el pid" mutation-check.sh m_mutation_check.py test-run-tests.sh "una variable heredada que no casa con el candado no lo salta" solo-la-variable MUTATION_CHECK
+caso_tools "dueno muerto vale"     mutation-check.sh m_mutation_check.py test-run-tests.sh "un dueno heredado que ya murio no vale: quita el abandonado" dueno-muerto-vale MUTATION_CHECK
+caso_tools "falsificado con pid ajeno" mutation-check.sh m_mutation_check.py test-run-tests.sh "un candado falsificado con un pid vivo ajeno como dueno no lo salta" dueno-muerto-vale MUTATION_CHECK
+caso_tools "cualquiera es antecesor" mutation-check.sh m_mutation_check.py test-run-tests.sh "un candado falsificado con un pid vivo ajeno como dueno no lo salta" ascendencia-cualquiera MUTATION_CHECK
+caso_tools "se relanza sin fin"    mutation-check.sh m_mutation_check.py test-run-tests.sh "un relanzado que no ve el candado no se relanza sin fin" relanza-sin-fin MUTATION_CHECK
 
 echo
 if [ "$PEND" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $TOTAL)"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi

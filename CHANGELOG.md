@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.63.5] - 2026-10-18
+## [2.63.13] - 2026-10-19
 Origen: desde 2.63.0 el arranque ya no avisa de errores de estructura de `_pendientes.md`, y quedo
 por ver si los otros dos lectores descartan items sin decirlo (`p-c87fde0912`). Medido el
 2026-10-18 en los 39 `_pendientes.md` locales, sin escribir en ellos: `build-recall-index.py` indexa
@@ -23,6 +23,264 @@ acompana al mod para que la version publicada avance con el arbol.
 - `/enrich-3t` no da id a un sub-item indentado: en cloudflare-expert quedan 2, y el aviso sigue ahi.
 - Dar id a los 1395 de los otros proyectos no se hizo: son datos fuera de este repositorio
   (`p-cddd176cd7`).
+
+## [2.63.12] - 2026-10-19
+Origen: `p-e376b39ea2`. El aserto «supervisor nombrado como `nombre [ref]`» de
+`test-checkpoint-close-guard.sh` daba resultados distintos de una corrida a otra en el CI de ubuntu
+con `MUT_JOBS=4`, y tumbaba mutation-check del PR #43 por una prueba que ese PR no toca.
+
+### Fixed
+- **`test-checkpoint-close-guard.sh` ya no comparte archivos entre corridas a la vez.** Dos llamadas
+  al hook (el bloque del supervisor de lookout y el caso de la ficha con `session_id: sesion-actual`)
+  pasaban `cwd=/tmp` con un `session_id` fijo. El hook escribe su aviso en
+  `<cwd>/.3t-revision-cierre-<session_id>.md`, asi que las corridas paralelas de mutation-check
+  escribian y leian el mismo archivo de aviso en la carpeta temporal compartida, y un aserto podia leer el aviso
+  de otra corrida. Ahora cada llamada usa una carpeta propia dentro del `mktemp -d` de la corrida. El
+  hook no cambia.
+
+### Tests
+- Medido en macOS con 4 corridas a la vez del test: sobre origin/main (db1644e), 2 de 4 corridas con
+  fallos (3 asertos del bloque del supervisor); con el arreglo, 8 de 8 corridas limpias (251 de 251);
+  con una copia que vuelve a `cwd=/tmp`, 2 de 4 con fallos. No hay mutacion nueva en mutation-check:
+  el fallo depende del orden de las corridas, asi que una mutacion asi no caeria siempre.
+
+## [2.63.9] - 2026-10-19
+Origen: `p-c0e7c422cb`, la nota del revisor de 2.63.4. La excepcion del usuario de `snippet.marco`
+solo miraba la palabra justo detras de `de`/`del`, asi que un articulo entre medias escondia al
+tercero.
+
+### Fixed
+- **Un tercero escrito con articulo vuelve a avisar en `snippet.marco`.** `decidir con el usuario
+  de la otra empresa`, `de los clientes` o `de las otras areas` daban 0 avisos desde 2.63.4 (antes de
+  2.63.4 daban 1). Ahora se admite un articulo (`la`, `el`, `los`, `las`) entre `de`/`del` y
+  cliente, proveedor, tercero u otr(o/a). `de la tienda`, `del equipo` y `finalmente` siguen sin
+  aviso. Es formato, no juicio: `de la otra vez` tambien avisa, y el aviso no bloquea.
+
+### Tests
+- `test-ninguno-bloqueo.sh`: aserto nuevo (tres terceros con articulo dan 1; la tienda, el equipo y
+  finalmente dan 0). Contra 2.63.4 da `0 0 0 0 0 0`.
+- `tools/mutation-check.sh`: mutacion `articulo-tercero` (quita el articulo opcional) tumba ese
+  aserto; las cuatro mutaciones del marco que ya habia llevan la cadena nueva.
+
+## [2.63.7] - 2026-10-19
+Origen: p-0ccd79fe36 (decisiones d182 y d183 de Victor). Con el python3 de macOS (3.9.6),
+`test-marcar-retomar.sh` salia con rc=2 en el caso 9b: `marcar-retomar.py --hoy 20261016` respondia
+`uso: --hoy no es una fecha`. 2.62.8 normalizaba `--hoy` con `date.fromisoformat`, que solo acepta
+`20261016` y `2026-W42-5` desde Python 3.11. Medido sobre f7444ab con 3.9.6: 58 de las 59 suites de
+`bin/` salian con rc=0, y esa suite cortaba en 9b, asi que sus casos de despues no corrian.
+
+**El alcance crecio** (decision del supervisor de lookout, reversible y de la misma causa): al revisar
+los usos de `fromisoformat` salio el problema al reves, con Python 3.11 o mas (el CI y casi todos).
+`journal-emit` validaba `--creado` y `--revisar` con `fromisoformat`, asi que aceptaba
+`pendiente.add --creado 20261016`. El compactador escribia la linea de `_pendientes.md`, reventaba al
+crear la fila mensual (`ValueError` en `ensure_monthly`) y el evento se quedaba en `pending/`. Cada
+compactacion siguiente reventaba igual y ningun evento nuevo se aplicaba: la memoria se atascaba.
+Con `--revisar 2026W425` no reventaba, pero escribia `_revisar: 2026W425_`, que nadie lee bien.
+Medido en una memoria temporal con 3.14.3; ninguna memoria real de esta maquina tiene esas formas.
+
+### Fixed
+- **`marcar-retomar.py` normaliza `--hoy` con su propio parser**, igual en cualquier Python 3:
+  `2026-10-16`, `20261016` y `2026-W42-5` (o `2026W425`) dan `2026-10-16`. Con guiones a medias
+  (`2026-1016`, `2026-W425`) o una fecha imposible, sale con error de uso y no marca nada. Es lo que
+  hace `fromisoformat` de 3.11+ con esas formas, pero sin depender de la version.
+- **El emisor y el compactador exigen AAAA-MM-DD en todas las fechas de eventos**, en cualquier
+  Python: `fecha_real` de `journal-emit.py` y el nuevo `fecha_iso` de `journal-compact.py` (en
+  `validate`: `fecha` del marcador, `creado` y `revisar` de `pendiente.add`, `fecha` de
+  `pendiente.update`, `revisar` de `pendiente.window` y `creado_nuevo` de `pendiente.adopt`) pasan
+  primero una regex con `fullmatch`. Un evento con fecha ancha que ya este en `pending/` va a
+  cuarentena y la pasada sigue con los demas; la linea mala no llega a `_pendientes.md`.
+- **El compactador valida la `fecha` del marcador de todo evento**, no solo la de `learning.add` y
+  `learning.retire`. La de `pendiente.resolve`, `expire`, `reopen`, `window` y `retomar` no la miraba
+  nadie, en ningun Python: un resolve con `fecha` 20261016 escrito a mano llegaba a la celda Resuelto
+  de la fila mensual y a `_resuelto: 20261016_`, una marca que `MARCA_RESUELTO_RE` no quita al reabrir.
+  Lo encontro el revisor independiente; ya pasaba antes de este cambio.
+- Dos comentarios daban la forma ancha por valida sin decir que es solo desde 3.11
+  (`journal-emit.py`, `pendiente.retomar`; `journal-compact.py`, `validate` de `pendiente.retomar`). Su
+  codigo ya validaba con regex y no cambia.
+
+### Changed
+- `test-marcar-retomar.sh`, caso 9b: las tres formas, cada una con su codigo de salida (antes un rc=2
+  abortaba la suite con `set -e`), y cinco fechas que salen con error de uso sin marcar nada.
+  Con 3.9 y el codigo de 2.63.2 caen 4 asertos; con 3.9 y con 3.14 sobre HEAD, 65/0. Tres casos nuevos
+  en `tools/mutation-check.sh` (`m_marcar_retomar.py`), que caen con 3.9 y con 3.14.
+- `test-fecha-iso.sh` nuevo: el emisor rechaza `20261016`, `2026-W42-5`, `2026W425` y `2026-10-16x`
+  en `pendiente.add --creado`/`--revisar` y `pendiente.window --revisar`, con su control; y un evento
+  con `creado` o `revisar` ancho escrito a mano en `pending/` va a cuarentena sin traceback, el evento
+  bueno de detras se aplica y la pasada siguiente tampoco revienta; y un `resolve`, `expire`,
+  `reopen`, `update`, `window` o `retomar` con la `fecha` del marcador ancha va a cuarentena sin dejar
+  esa fecha en la memoria. 53 asertos; con el codigo de 2.63.2 fallan 27 con 3.14 y 7 con 3.9. Tres
+  casos nuevos en `tools/mutation-check.sh` (`m_fecha_iso.py`): los dos de la regex discriminan con
+  3.11+ y el de la fecha del marcador tambien con 3.9.
+
+### Known
+- El compactador sigue parando ante una excepcion que no sea de validacion (no `Quarantine`): este
+  cambio cierra la de las fechas, no todas las posibles.
+- Volver a `date.fromisoformat` no lo ve un CI con Python 3.11 o mas, que acepta las tres formas: solo
+  una corrida con 3.9 lo atrapa. El CI usa el `python3` de cada runner.
+
+## [2.63.6] - 2026-10-18
+Origen: p-7c1fa85c1e. Un candado de `tools/run-tests.sh` cuya corrida murio (kill -9) y cuyo pid
+reuso otro proceso vivo hacia esperar sin fin a la corrida siguiente: `kill -0` decia vivo.
+
+### Fixed
+- **El candado guarda la hora de arranque de su dueno** (`$CANDADO/arranque`, escrita antes que el
+  pid). En Linux es el campo 22 de `/proc/<pid>/stat`, tics desde el arranque de la maquina; en
+  macOS, `ps -o lstart=` con `TZ=UTC0` y `LC_ALL=C`. Asi sale igual para quien
+  la escribe y para quien la lee: con `lstart` en hora local, un lector con otro TZ veia otra hora y
+  robaba un candado vivo, dos suites a la vez (adversario, ronda 1). Si el pid del candado vive con
+  otra hora, no es el dueno: el
+  candado se quita con aviso ("otro proceso reuso su pid"), bajo el sub-candado y releyendo el pid y
+  la hora. Sin hora guardada (un candado de 2.63.1 o anterior) o sin poder leer la de ahora, se
+  espera como antes. `run-tests.sh --hora-candado <pid>` imprime la hora con la misma funcion.
+
+### Added
+- `test-run-tests.sh`: 8 asertos (88 → 96), y uno mas solo en Git Bash: ahi la hora sale vacia (si
+  alguien quita la guarda de Linux, el CI de Windows cae). Los del pid reusado se escribieron antes del arreglo y
+  se midieron en rojo (2 fallas: la corrida agotaba el tope esperando al pid reusado). Un pid vivo
+  con otra hora se quita y la suite corre; con su misma hora espera; un lector con otro TZ que el
+  dueno espera; un candado sin hora espera; la corrida que toma el candado guarda su hora. Donde
+  run-tests no sabe leer la hora, los de la hora dicen "sin probar aqui"; en Linux, donde la hora
+  sale de /proc, el del TZ lo dice con una linea `SKIP` que mutation-check lee.
+- `mutation-check.sh`: `caso_tools` lee la linea `SKIP ... <aserto>` como `caso` (en mayusculas y al
+  inicio de la linea). Faltaba: en ubuntu la mutacion del TZ habria salido como aserto vacuo y el CI
+  en rojo (adversario, ronda 2). Si el aserto cayo (FALLA con su texto), cuenta como caido aunque
+  haya SKIP: un SKIP no tapa un fallo real (adversario externo, ronda 3).
+- `mutation-check.sh`: 5 mutaciones nuevas en `m_run_tests.py`. Las mutaciones del candado
+  (`m_run_tests.py` y `m_mutation_check.py`) pasaron por la prueba nueva con un candado de runner
+  tomado y un vigilante de procesos: todas caen. La relectura de "vivo y con su hora" bajo el
+  sub-candado no tiene una mutacion que la haga caer: la carrera que cubre no se reproduce a voluntad.
+
+### Known
+- En macOS `lstart` tiene resolucion de un segundo: un pid reusado en el mismo segundo de su arranque
+  da la misma hora y se espera, como antes del arreglo.
+- Git Bash no compara la hora: su `/proc/<pid>/stat` resta la hora de arranque de Windows a la de
+  creacion del proceso, y las dos se mueven si alguien cambia el reloj (msys2 `process.cc`; adversario,
+  ronda 2), y su `ps` no tiene `-o`. La hora sale vacia y un pid reusado sigue esperando, como antes.
+- El camino de Linux (/proc) lo mide solo el CI de ubuntu; en macOS no hay /proc. Medido en el run
+  39211792674 (platforms sobre 9fe4f4f): ubuntu 96/96, macOS 96/96, Windows 84/84 (salta los 12 de
+  chmod, pid ajeno y la hora).
+
+## [2.63.4] - 2026-10-17
+Origen: `p-c501ad10c6`, abierto al cerrar 2.62.11. La excepcion del usuario de `snippet.marco` trataba
+como tercero a cualquier `usuario` seguido de `de`/`del` o de una palabra que empieza por `final`.
+
+### Fixed
+- **Un complemento del usuario ya no lo vuelve tercero en `snippet.marco`.** `decidir con el usuario
+  de la tienda`, `decidir con el usuario del equipo` y `decidir con el usuario finalmente` daban el
+  aviso de espera ajena, que pide bloquear el pendiente: lo que 2.62.11 prohibe para una decision del
+  usuario. Ahora `de`/`del` solo avisa seguido de cliente, proveedor, tercero u otr(o/a), y `final`
+  solo como palabra entera. `usuario externo`, `usuario final`, `usuario-final`, `usuario del cliente`
+  y `proveedor externo` siguen avisando. Es formato, no juicio: un tercero escrito de otra forma
+  (`usuario de soporte`) no avisa.
+
+### Tests
+- `test-ninguno-bloqueo.sh`: dos asertos nuevos (los tres complementos dan 0; `de otra empresa`,
+  `del proveedor`, `de cliente` dan 1). Contra 2.62.11 cae el primero.
+- `tools/mutation-check.sh`: mutacion `usuario-complemento-tercero` (vuelve a la excepcion de
+  2.62.11) tumba ese aserto.
+
+## [2.63.3] - 2026-10-17
+Origen: la sesion 4237bac9 de este repo (ficha `2026-10-16-hilo-un-salto-snippet-ajeno`), antes de
+cualquier /checkpoint-3t y sin ficha propia, recibio dos veces el aviso `bugs.veredicto_break`: nombrar
+en `## Bugs fixed` el hallazgo del adversario. Medido pasando su transcript por el guard: lo disparo
+un `sed -i '' … plugins/3-tier-memory/bin/print-como-retomar.py plugins/3-tier-memory/bin/pendientes_afines.py`.
+El guard tomo `pendientes_afines.py` como ficha y le corrio `checkpoint-audit.py` con el `break` de la
+sesion.
+
+### Fixed
+- **`checkpoint-close-guard.sh` solo toma como ficha un argumento `sessions/*.md` de
+  `print-como-retomar.py`** (p-bea9639b92). Un comando que edita o lee el fuente del script y nombra
+  otro archivo despues ya no le pide al agente nombrar el veredicto del adversario en un archivo que
+  no es una ficha. Es una mitad del arreglo de p-1fe14aa592, que sigue abierto con la otra: disparar
+  solo con la invocacion real del script, no con cualquier mencion. Una ruta con variables (`"$SF"`,
+  p-e1799cd04c) sigue igual.
+  El filtro es `sessions/*.md` (`FICHA_RE`), no `memory/sessions/*.md` (`SESION_RE`): con este
+  ultimo caen 24 asertos existentes cuya memoria de prueba no vive en `memory/`. Acepta tambien `\`,
+  porque en Windows `resolver()` (normpath) deja la ruta con barras invertidas.
+
+### Added
+- Caso en `test-checkpoint-close-guard.sh` con la forma real del `sed` y un `break` en la sesion:
+  silencio en la vuelta normal y en la reentrante (cae 2 de 2 con el guard de 2.62.11).
+- Mutacion `ficha-cualquiera` (`tools/mutaciones/m_ficha_sesion.py`): quita el filtro y el caso cae.
+
+## [2.63.2] - 2026-10-17
+Origen: p-7ae84c8ef2 (decision d133 de Victor, opcion A). 2.62.10 cerro `--nota`, pero
+`journal-emit` seguia aceptando con rc=0 cualquier otro flag que el tipo no lee: medido con el
+emisor de 2.62.10, 926 combinaciones tipo x flag salian 0 sin cambiar el evento
+(`memory/research/flags-sin-lector-journal-emit.md`). Un solo argparse con 55 flags para 19 tipos;
+cada rama leia los suyos y nadie miraba el resto.
+
+### Changed
+- **`journal-emit` rechaza todo flag que su tipo no lee**: sale con error, nombra los flags que
+  sobran y lista los que el tipo lee, y no escribe evento. La tabla es `FLAGS_DE` (un conjunto por
+  tipo, mas `--type`, `--memory-dir` y `--session`, que valen en todos). Cuenta haberlo pasado, no
+  su valor (`--x ""` tambien se rechaza), y se detecta con el propio parser, asi que tambien la
+  forma abreviada (`--motiv`) y `--flag=valor`. Un flag nuevo del parser que no este en ninguna
+  fila sale con error en todos los tipos.
+- El rechazo de `--nota` de 2.62.10 pasa a ser este y se elimina la tupla `NOTA_LECTORES`; su mensaje sigue
+  diciendo donde va la nota. `pendiente.update` conserva el suyo de 2.62.4 y `learning.add` sin
+  `--supersedes` el suyo de 2.62.10.
+- `test-flags-sin-lector.sh` nuevo: saca los tipos y los flags del `--help` del emisor y, con su
+  propia tabla de lo que lee cada tipo (separada de `FLAGS_DE` a proposito), prueba cada tipo x
+  flag de fuera (error, lo nombra, ningun evento) y cada flag de dentro (pasa y deja su evento, con
+  los compañeros que su rama pide; los dos que su propia rama rechaza, con su mensaje),
+  mas la forma abreviada, `--flag=valor` y el valor vacio. 1033 asertos; 931 fallan contra
+  2.62.10. Ocho casos nuevos en `tools/mutation-check.sh` (`m_flags_sin_lector.py`), y los tres de
+  `m_nota_sin_lector.py` que apuntaban a `NOTA_LECTORES` apuntan ahora al rechazo generico.
+- Llamadores del repo fuera de las pruebas (plantillas, commands, `bin/`, hooks): ninguno pasa un
+  flag que su tipo no lee, incluidos los que arman la llamada en Python con el tipo fijo
+  (`expire-pendientes.py`, `marcar-retomar.py`, `learnings-migracion.py`) y los comandos que
+  imprimen `checkpoint-audit.py` y `repair-dualwrite.py`. Las pruebas negativas que pasan flags de
+  mas a proposito esperan el rechazo.
+
+### Known
+- Siguen igual tres lecturas condicionales: `pendiente.adopt --todas` ignora `--line`, `--id` y
+  `--text-prefix`; `session.amend` ignora `--fecha-vieja` sin `--date` y `--sesion-vieja` sin
+  `--alias`. El flag es del tipo; solo sobra en esa combinacion.
+
+## [2.63.1] - 2026-10-17
+Origen: p-4be2b6ea23. `tools/mutation-check.sh` lanzado solo es tan pesado como la suite completa y
+no tomaba el candado de 2.62.7: dos a la vez, o uno junto a un `run-tests.sh`, cargaban la maquina
+igual que dos suites.
+
+### Added
+- **`tools/mutation-check.sh` lanzado solo toma el mismo candado que `tools/run-tests.sh`.** Se
+  relanza dentro de `run-tests.sh --con-candado <comando...>`, un modo nuevo que toma el candado,
+  corre el comando y sale con su rc. Quien tiene el candado exporta `RUN_TESTS_CANDADO_DUENO` con su
+  pid. mutation-check no lo pide si ese pid es el del candado y es un antecesor suyo (sube por los
+  ppid: `/proc/<pid>/ppid` en Git Bash, `ps -o ppid=` en macOS y Linux): dentro de una corrida
+  completa, o en sus tandas de `MUT_JOBS`, se esperaria a si mismo. La variable sola no basta: una
+  heredada que no casa con el candado (las copias de `test-run-tests.sh` corren con su propio candado
+  dentro del runner real) no lo salta; la de una corrida muerta con su candado abandonado tampoco, ni
+  un candado con el pid de un proceso vivo ajeno y ese pid en la variable (adversario externo,
+  rondas 1 y 2). Un pid 0 o no numerico no vale. Relanzado una vez y sin ver aun el candado, sale con rc 2 en vez de
+  relanzarse otra vez: con la mutacion `sin-candado` de run-tests eso era una cadena sin fin de
+  procesos (1752 en 25 s; adversario). `--con-candado` imprime los avisos de restos viejos de
+  tmp-propio antes del comando: el mutation-check de dentro va anidado y ya no los juntaba.
+- `test-run-tests.sh`: 18 asertos (70 → 88) con una copia de mutation-check cortada tras su candado
+  y un cuerpo que anota en el registro: tres mutation-check sueltos y una corrida completa lanzados a
+  la vez corren uno tras otro y los tres corren su cuerpo; dentro de una corrida completa
+  mutation-check sale ok sin esperarse; un `RUN_TESTS_CANDADO_DUENO` que no casa espera; uno de un
+  pid muerto no vale; uno falsificado con un pid vivo ajeno espera; un relanzado que no ve el
+  candado sale con rc 2; la marca de corte existe.
+  `RUN_TESTS_CANDADO_TOPE` (solo pruebas) pone tope a la espera: una copia rota que espera a la
+  corrida que la lanzo no muere con kill, porque bash espera a su hijo antes de correr el trap
+  (medido: 29 s de un `sleep 30`).
+- `mutation-check.sh`: 7 mutaciones nuevas (`m_mutation_check.py` y `sin-con-candado`);
+  `caso_tools` acepta la variable que apunta a la copia (7o argumento). Medido con el mutation-check
+  real lanzado solo, que tomo el candado real: 299 de 299 discriminan, 46 procesos como maximo. Tras
+  el merge con 2.63.0, `run-tests.sh` completo bajo el candado (espero a otra corrida y luego lo
+  tomo): VERDE CON SALTOS, 66 sin fallos; solo sin correr oraculo-rewrite-rule (sin markdown-it-py
+  en esta maquina; tampoco corre en main sin el). mutation-check dentro, 311 de 311.
+
+### Known
+- Sigue abierto p-7c1fa85c1e: un candado cuyo pid lo reusa otro proceso vivo hace esperar sin fin.
+- Un candado escrito a mano con el pid de un ANTECESOR de mutation-check (la shell que lo lanza) y ese
+  mismo pid en `RUN_TESTS_CANDADO_DUENO` lo salta (adversario externo, ronda 3). Se queda asi
+  (Victor, d119): quien escribe a mano el candado y la variable, con su mismo usuario, tambien puede
+  borrar el candado, y una ficha o una comprobacion del comando se falsifican igual. Por accidente
+  no pasa: la variable solo la exporta run-tests, y el pid de un antecesor solo acaba en el candado
+  si un pid se reusa (p-7c1fa85c1e).
 
 ## [2.63.0] - 2026-10-16
 Origen: Victor noto que la lista de pendientes que veia al abrir cada sesion no le servia, y pidio
