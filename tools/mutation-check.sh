@@ -128,7 +128,10 @@ caso() {  # etiqueta | fichero a mutar | mutador | suite | aserto que DEBE caer 
   # salta porque un `bash.exe` con el PATH reducido no encuentra sus DLL, asi que ahi no hay nada
   # que mutar. Confundir "no evaluable aqui" con "no discrimina" seria acusar al aserto de algo
   # que no hizo — el mismo error que este arnes existe para no cometer. (CI, 2026-09-12.)
-  if printf '%s' "$out" | grep -qiE "SKIP.*${espera}"; then
+  # Pero si el aserto cayo (FALLA con su texto), cuenta como caido aunque haya SKIP: un SKIP no tapa
+  # un fallo real (p-984862c40d; la misma regla que caso_tools desde 2.63.6).
+  if printf '%s' "$out" | grep -qiE "SKIP.*${espera}" \
+     && ! printf '%s\n' "$out" | grep -qiE "(FAIL|FALLA).*${espera}"; then
     printf '  -- %-30s no evaluable aqui: %s\n' "$et" \
       "$(printf '%s' "$out" | grep -iE "SKIP.*${espera}" | head -1 | sed 's/^ *//')"
     rm -rf "$(dirname "$D")"; return
@@ -572,6 +575,9 @@ caso_tools "dueno sin mirar el pid" mutation-check.sh m_mutation_check.py test-r
 caso_tools "dueno muerto vale"     mutation-check.sh m_mutation_check.py test-run-tests.sh "un dueno heredado que ya murio no vale: quita el abandonado" dueno-muerto-vale MUTATION_CHECK
 caso_tools "falsificado con pid ajeno" mutation-check.sh m_mutation_check.py test-run-tests.sh "un candado falsificado con un pid vivo ajeno como dueno no lo salta" dueno-muerto-vale MUTATION_CHECK
 caso_tools "cualquiera es antecesor" mutation-check.sh m_mutation_check.py test-run-tests.sh "un candado falsificado con un pid vivo ajeno como dueno no lo salta" ascendencia-cualquiera MUTATION_CHECK
+# p-984862c40d: un SKIP no tapa un FALLA del mismo aserto, en caso() y en caso_tools().
+caso_tools "SKIP tapa FALLA en caso" mutation-check.sh m_mutation_check.py test-mutation-filtro.sh "caso: SKIP y FALLA del mismo aserto" skip-tapa-falla-caso MUTATION_CHECK
+caso_tools "SKIP tapa FALLA en tools" mutation-check.sh m_mutation_check.py test-mutation-filtro.sh "caso_tools: SKIP y FALLA del mismo aserto" skip-tapa-falla-tools MUTATION_CHECK
 caso_tools "se relanza sin fin"    mutation-check.sh m_mutation_check.py test-run-tests.sh "un relanzado que no ve el candado no se relanza sin fin" relanza-sin-fin MUTATION_CHECK
 
 echo
