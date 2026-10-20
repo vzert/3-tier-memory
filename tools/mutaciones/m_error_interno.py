@@ -36,6 +36,16 @@ M = {
     "restaura-deja-tmp": [
         ("                        os.remove(tmp)   # una restauracion que falla tampoco deja su temporal",
          "                        pass")],
+    # Sin borrar los directorios: el evento deja en memory/ el directorio vacio que creo
+    # (p-058a36018c).
+    "sin-borrar-dirs": [
+        ("            os.rmdir(d)", "            pass")],
+    # Sin apuntarlos: deshacer_evento no sabe que directorios creo el evento.
+    "sin-apuntar-dirs": [
+        ("        _DIRS_NUEVOS.extend(reversed(nuevos))", "        pass")],
+    # Apunta tambien los que ya existian: borraria un directorio vacio que el evento no creo.
+    "apunta-previos": [
+        ("        while not os.path.isdir(p):", "        while p != os.path.dirname(p):")],
 }
 
 p, nombre = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""
