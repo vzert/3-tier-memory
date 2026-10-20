@@ -37,6 +37,68 @@ mismo defecto bloqueo un turno real de la sesion que lo arreglaba.
   argumento no cuenta: el script exige la ficha, y asi el nombre entre comillas invertidas en la
   prosa de un commit no abre un segmento falso.
 
+## [2.63.15] - 2026-10-19
+Origen: desde 2.63.0 el arranque ya no avisa de errores de estructura de `_pendientes.md`, y quedo
+por ver si los otros dos lectores descartan items sin decirlo (`p-c87fde0912`). Medido el
+2026-10-18 en los 39 `_pendientes.md` locales, sin escribir en ellos: `build-recall-index.py` indexa
+2987 de 2987 lineas `- [ ]` (preambulo, secciones fuera de Alta/Media/Baja y encabezados repetidos
+entran todos) y no cambia. El panel del mod `pendientes` veia 1592: los 1395 que faltaban son lineas
+sin `_id`, y en 18 proyectos decia `0 abiertos` sin mas. Este bump no cambia nada de 3-tier-memory;
+acompana al mod para que la version publicada avance con el arbol.
+
+### Fixed
+- **Mod `pendientes` 0.2.4: el panel dice cuantos pendientes no puede mostrar.** `pendientes-ahora.py`
+  anade `resumen.sin_id` (lineas `- [ ]` que `pendientes_afines.pendientes()` no devuelve, contadas
+  aparte sin tocar la libreria). El panel lo pinta en una fila propia (`● N sin id: /enrich-3t (no
+  salen aquí)`) y la tarjeta sobre el prompt como `● N sin id`; la tarjeta sale aunque no haya nada
+  mas que mostrar, para que un proyecto donde ningun pendiente tiene id tambien lo vea.
+- Pruebas: 3 comprobaciones en `tests/test_pendientes_ahora.py` (2 rojas antes del cambio) y 3 casos
+  en `tests/pane.test.tsx` (los 2 de sin id rojos con el `register.tsx` anterior).
+
+### Known
+- Una linea `- [ ]` dentro de un bloque de codigo cuenta en `sin_id` (0 casos en los datos medidos).
+- `/enrich-3t` no da id a un sub-item indentado: en cloudflare-expert quedan 2, y el aviso sigue ahi.
+- Dar id a los 1395 de los otros proyectos no se hizo: son datos fuera de este repositorio
+  (`p-cddd176cd7`).
+
+## [2.63.14] - 2026-10-19
+Origen: p-984862c40d. `caso()` de `tools/mutation-check.sh` daba un caso por "no evaluable aqui" con
+cualquier linea SKIP del aserto, aunque la misma suite lo tumbara con FALLA: una mutacion que si cae no se
+contaba. `caso_tools()` ya lo arreglo en 2.63.6.
+
+### Fixed
+- **En `caso()`, un FALLA del aserto gana a un SKIP**, como en `caso_tools()`. La forma del SKIP de `caso()`
+  no cambia (sin distinguir mayusculas y en cualquier parte de la linea): las suites de `bin/` lo imprimen
+  asi y Git Bash depende de eso.
+
+### Added
+- `tools/test-mutation-filtro.sh` (10 asertos, entra en `tools/run-tests.sh`): saca `caso()` y
+  `caso_tools()` del `mutation-check.sh` real y los corre contra suites falsas. SKIP solo no se evalua,
+  SKIP y FALLA cae, FALLA solo cae, ni uno ni otro es vacuo, y un "skip" en minusculas no cuenta en
+  `caso_tools`. Escrita antes del arreglo y medida en rojo: 1 falla, la de SKIP y FALLA en `caso()`.
+- `mutation-check.sh`: 2 mutaciones nuevas (`skip-tapa-falla-caso`, `skip-tapa-falla-tools`); la de
+  `caso_tools` cubre el arreglo de 2.63.6, que no tenia mutacion.
+
+## [2.63.12] - 2026-10-19
+Origen: `p-e376b39ea2`. El aserto «supervisor nombrado como `nombre [ref]`» de
+`test-checkpoint-close-guard.sh` daba resultados distintos de una corrida a otra en el CI de ubuntu
+con `MUT_JOBS=4`, y tumbaba mutation-check del PR #43 por una prueba que ese PR no toca.
+
+### Fixed
+- **`test-checkpoint-close-guard.sh` ya no comparte archivos entre corridas a la vez.** Dos llamadas
+  al hook (el bloque del supervisor de lookout y el caso de la ficha con `session_id: sesion-actual`)
+  pasaban `cwd=/tmp` con un `session_id` fijo. El hook escribe su aviso en
+  `<cwd>/.3t-revision-cierre-<session_id>.md`, asi que las corridas paralelas de mutation-check
+  escribian y leian el mismo archivo de aviso en la carpeta temporal compartida, y un aserto podia leer el aviso
+  de otra corrida. Ahora cada llamada usa una carpeta propia dentro del `mktemp -d` de la corrida. El
+  hook no cambia.
+
+### Tests
+- Medido en macOS con 4 corridas a la vez del test: sobre origin/main (db1644e), 2 de 4 corridas con
+  fallos (3 asertos del bloque del supervisor); con el arreglo, 8 de 8 corridas limpias (251 de 251);
+  con una copia que vuelve a `cwd=/tmp`, 2 de 4 con fallos. No hay mutacion nueva en mutation-check:
+  el fallo depende del orden de las corridas, asi que una mutacion asi no caeria siempre.
+
 ## [2.63.9] - 2026-10-19
 Origen: `p-c0e7c422cb`, la nota del revisor de 2.63.4. La excepcion del usuario de `snippet.marco`
 solo miraba la palabra justo detras de `de`/`del`, asi que un articulo entre medias escondia al

@@ -29,6 +29,9 @@ No escribe nada. No copia el parser: importa pendientes_afines.py del plugin 3-t
 (--lib, o $THREE_TIER_BIN, o el repo del proyecto, o la version mas alta del cache). La excepcion
 son `_origen`, `_relacionado` y `_retomar`, que lee de la linea (ver contexto_por_id).
 Si algo falla, sale 0 con {"ok": false, "error": ...}: el mod lo pinta en vez de callar.
+
+`resumen.sin_id`: lineas `- [ ]` del archivo que pendientes_afines no devuelve (sin `_id`). El
+panel no puede mostrarlas; `abiertos` cuenta solo las que ve, y el mod pinta las dos cifras.
 """
 import datetime
 import glob
@@ -459,6 +462,11 @@ def calcular(memory_dir, hoy, maximo, lib=None, session_id=None, projects_root=N
     fuentes = marcar_en_curso(elegidos, memory_dir, ficha, session_id, projects_root, pa)
     mostrados = repartir(elegidos, maximo)
     abiertos = len(todos)
+    # Lo que la libreria se salta (hoy, la linea sin `_id`): medido 2026-10-18, 1395 de 2987 en 39
+    # proyectos, y el panel decia "0 abiertos" en 18. Se cuenta aparte en vez de tocar
+    # pendientes_afines.pendientes(), que hilo() y el resto usan dando por hecho que hay id.
+    with open(pend_path, encoding="utf-8") as fh:
+        lineas = sum(1 for l in fh if l.strip().startswith("- [ ]"))
     return {
         "ok": True,
         "hoy": hoy,
@@ -475,6 +483,7 @@ def calcular(memory_dir, hoy, maximo, lib=None, session_id=None, projects_root=N
             "hoy": sum(1 for p in vencen if vence(p) == hoy),
             "alta": sum(1 for p in todos if p["prio"] == "Alta"),
             "bloqueados": sum(1 for p in todos if p["bloqueado"]),
+            "sin_id": max(0, lineas - abiertos),
         },
         "en_curso_fuentes": fuentes,
         "lib": {"origen": origen, "dir": bin_dir, "hilo": hasattr(pa, "hilo")},

@@ -282,6 +282,7 @@ fi
 echo "Higiene del repo"
 correr "test-run-tests" bash tools/test-run-tests.sh
 correr "test-tmp-propio" bash tools/test-tmp-propio.sh
+correr "test-mutation-filtro" bash tools/test-mutation-filtro.sh
 correr "check-ignored-tracked" bash tools/check-ignored-tracked.sh
 # Que las comprobaciones editadas sigan sabiendo fallar. Un aserto que nunca se ha visto fallar no
 # se ha visto funcionar, y en esta sesion tres afirmaron cubrir mas de lo que cubrian.

@@ -169,6 +169,59 @@ test('la banda: solo con el panel cerrado, muestra el nombre, los abiertos y los
   expect(await otraVez.find({ key: 'abrir' })).toBeDefined()
 })
 
+// Medido 2026-10-18: 1395 de 2987 abiertos en 39 proyectos sin `_id`; en 18 el panel decia
+// "0 abiertos" y nada mas. El script los cuenta en resumen.sin_id y aqui se dice.
+test('sin id: la banda y el pie dicen cuantos pendientes el panel no ve', async ($, on) => {
+  const reloj = mock.clock(on)
+  mock.store(on)
+  motor(on, JSON.stringify({ ...AHORA, resumen: { ...AHORA.resumen, sin_id: 7 } }))
+  await $.command.run({ command: 'pendientes-ahora' })
+  await $.command.run({ command: 'pendientes-ahora' })
+  await reloj.advance(1)
+  const banda = await $.ui.mount({ ...BANDA, surface: 'terminal' })
+  expect(await banda.find({ text: '● 7 sin id  ' })).toBeDefined()
+  await banda.unmount()
+
+  await $.command.run({ command: 'pendientes-ahora' })
+  const p = await $.ui.mount({ ...pane(40), surface: 'terminal' })
+  expect(await p.find({ text: '● 7 sin id: /enrich-3t (no salen aquí)' })).toBeDefined()
+  expect(await p.find({ text: /20 abiertos/ })).toBeDefined()
+  await p.unmount()
+})
+
+test('sin id y nada que mostrar: el panel no dice "Nada urgente" a secas', async ($, on) => {
+  const reloj = mock.clock(on)
+  mock.store(on)
+  const vacio = { ...AHORA, items: [], resto: [], quedan: 0, candidatos: 0, resumen: { abiertos: 0, vencidos: 0, hoy: 0, alta: 0, bloqueados: 0, sin_id: 1108 } }
+  motor(on, JSON.stringify(vacio))
+  await $.command.run({ command: 'pendientes-ahora' })
+  await reloj.advance(1)
+  const p = await $.ui.mount({ ...pane(40), surface: 'terminal' })
+  expect(await p.find({ text: /^Nada urgente en este proyecto\.$/ })).toBeUndefined()
+  expect(await p.find({ text: /1108 sin id: \/enrich-3t/ })).toBeDefined()
+  await p.unmount()
+
+  // Ninguno con id: la tarjeta sale igual, es lo unico que la persona ve sin abrir el panel.
+  await $.command.run({ command: 'pendientes-ahora' })
+  const banda = await $.ui.mount({ ...BANDA, surface: 'terminal' })
+  expect(await banda.find({ text: '● 1108 sin id  ' })).toBeDefined()
+  expect(await banda.find({ key: 'abrir' })).toBeDefined()
+  await banda.unmount()
+})
+
+test('nada que mostrar y todos con id: no hay tarjeta', async ($, on) => {
+  const reloj = mock.clock(on)
+  mock.store(on)
+  const vacio = { ...AHORA, items: [], resto: [], quedan: 0, candidatos: 0, resumen: { abiertos: 3, vencidos: 0, hoy: 0, alta: 0, bloqueados: 0, sin_id: 0 } }
+  motor(on, JSON.stringify(vacio))
+  await $.command.run({ command: 'pendientes-ahora' })
+  await $.command.run({ command: 'pendientes-ahora' })
+  await reloj.advance(1)
+  const banda = await $.ui.mount({ ...BANDA, surface: 'terminal' })
+  expect(await banda.find({ key: 'abrir' })).toBeUndefined()
+  await banda.unmount()
+})
+
 test('el titulo del modelo sustituye al corte automatico; cada pendiente se pide una sola vez', async ($, on) => {
   const reloj = mock.clock(on)
   mock.store(on)
