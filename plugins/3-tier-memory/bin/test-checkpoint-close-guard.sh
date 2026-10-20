@@ -1640,6 +1640,23 @@ chk "la forma \"\$SF\" (sesion 8ef6459e) tambien bloquea" "1" "$(bloquea "$(corr
 armar "$M" "$FX/snippet-2120.txt"; fecha30 "$F"; sellar otra-sesion
 txvar "$T/v.jsonl" 'python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"'
 chk "ficha escrita con el session_id de otra sesion: silencio" "" "$(corre_sid "$T/v.jsonl")"
+# Triage (adversario externo de 2.63.24): esta sesion ya tiene su ficha sellada e incompleta, y el
+# turno imprime con una variable ASIGNADA en el mismo comando la ficha de otra sesion. Se revisa la
+# impresa, como con la ruta literal, no la propia. La ruta va relativa al cwd: dentro del texto del
+# comando, Git Bash no convierte una ruta absoluta (2.63.18).
+armar "$M" "$FX/snippet-2120.txt"; fecha30 "$F"; sellar sesion-8b
+mkdir -p "$CWV/memory/sessions"; cp "$F" "$CWV/memory/sessions/2026-09-22-otra.md"
+python3 - "$CWV/memory/sessions/2026-09-22-otra.md" <<'PYO'
+import sys; p = sys.argv[1]; t = open(p, encoding="utf-8").read()
+open(p, "w", encoding="utf-8").write(t.replace("session_id: sesion-8b", "session_id: otra-sesion"))
+PYO
+txvar "$T/v.jsonl" 'python3 "$JBIN/print-como-retomar.py" memory/sessions/2026-09-22-otra.md'
+LIT=$(corre_sid "$T/v.jsonl" | grep -c '2026-09-22-demo' || true)
+txvar "$T/v.jsonl" 'OTRA=memory/sessions/2026-09-22-otra.md; python3 "$JBIN/print-como-retomar.py" "$OTRA"'
+VAR=$(corre_sid "$T/v.jsonl" | grep -c '2026-09-22-demo' || true)
+chk "triage: la ficha asignada se revisa como la literal, no la propia" "$LIT" "$VAR"
+chk "triage: la ruta literal no nombra la ficha propia" "0" "$LIT"
+rm -r "$CWV/memory"
 
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

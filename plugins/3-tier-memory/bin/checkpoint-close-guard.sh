@@ -273,6 +273,26 @@ FICHA_RE = re.compile(r"(?:^|[/\\])sessions[/\\][^/\\]+\.md$")
 MARCAS_EDIT = ("## Como retomar", "Proximo paso:", "Próximo paso:", "## Recordatorios de calendario")
 
 
+_RE_ASIGNACION = re.compile(r"(?:^|[;&|\n(]|\s)(?:export\s+)?([A-Za-z_]\w*)=(\"[^\"]*\"|'[^']*'|[^\s;&|)]*)")
+
+
+def asignaciones(cmd):
+    """`VAR=valor` del comando, sin comillas; la ultima gana."""
+    return {m.group(1): m.group(2)[1:-1] if m.group(2)[:1] in "\"'" and len(m.group(2)) > 1
+            else m.group(2) for m in _RE_ASIGNACION.finditer(cmd)}
+
+
+def expandir(arg, asigna):
+    """Sustituye `$VAR` y `${VAR}` con las asignaciones del comando; lo que no se conoce queda."""
+    for _ in range(5):
+        nuevo = re.sub(r"\$\{(\w+)\}|\$(\w+)",
+                       lambda m: asigna.get(m.group(1) or m.group(2), m.group(0)), arg)
+        if nuevo == arg:
+            break
+        arg = nuevo
+    return arg
+
+
 def resolver(ruta, base):
     ruta = os.path.expanduser(ruta)
     if "$" in ruta:
@@ -482,11 +502,18 @@ for r in turno:
             # `sed -i … print-como-retomar.py pendientes_afines.py` tomaba el .py como ficha y le
             # pedia nombrar el `break` de la sesion en `## Bugs fixed`. Desde 2.63.16 solo cuenta la
             # invocacion real del script, no una mencion (invocaciones_retomar, p-1fe14aa592).
+            # Una variable asignada en el mismo comando (`OTRA=memory/sessions/x.md; … "$OTRA"`) se
+            # expande antes: el estado del shell no pasa de una llamada Bash a otra, asi que la
+            # ficha impresa suele estar escrita ahi. Solo si queda sin resolver, o no existe, vale la
+            # ficha de la sesion (abajo): con la ficha de OTRA sesion, un triage revisaba la propia
+            # (adversario externo de 2.63.24).
+            asigna = asignaciones(cmd)
             for a in args_retomar:
-                f = resolver(a, base) if a else None
-                if f and FICHA_RE.search(f):
+                e = expandir(a, asigna) if a else a
+                f = resolver(e, base) if e else None
+                if f and FICHA_RE.search(f) and ("$" not in a or os.path.isfile(f)):
                     fichas.append(f)
-                elif a and "$" in a:
+                elif a and "$" in a and (f is None or (FICHA_RE.search(f) and not os.path.isfile(f))):
                     con_variable = True
         elif nombre in ("Edit", "MultiEdit", "Write"):
             ruta = inp.get("file_path") or ""

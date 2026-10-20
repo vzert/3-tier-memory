@@ -14,18 +14,26 @@ esta version no los re-midio.
   la ultima ficha que esta sesion escribio o edito, en cualquier turno, y solo si su frontmatter
   lleva el `session_id` de esta sesion (lo sella Step 5c-bis antes de Step 8): un `/backfill-3t`
   escribe fichas de otras sesiones.
+- **Antes, expande las asignaciones del mismo comando.** `OTRA=memory/sessions/x.md; …
+  print-como-retomar.py "$OTRA"` revisa `x.md`, igual que la ruta literal: el estado del shell no
+  pasa de una llamada Bash a otra, asi que la variable suele asignarse ahi. Solo si la variable queda
+  sin resolver, o su ficha no existe, vale la de la sesion. Sin esto, un triage que imprimia la ficha
+  de otra sesion revisaba la propia (adversario externo, ronda sobre 231abec).
 
 ### Added
 - Caso `p-e1799cd04c` en `test-checkpoint-close-guard.sh` con la forma de Step 8b (`"$SESSION_FILE"`
-  y `"$SF"`) y una ficha escrita en un turno anterior: rojo 276/3 con 2.63.18, verde 279/279. Control:
-  una ficha sellada con otra sesion se queda en silencio. Mutacion `variable-callada`
-  (`tools/mutaciones/m_ficha_sesion.py`).
+  y `"$SF"`) y una ficha escrita en un turno anterior. Control: una ficha sellada con otra sesion se
+  queda en silencio. Caso del triage con la variable asignada: se revisa la misma ficha que con la
+  ruta literal (con 2.63.18 pasa, porque callaba con cualquier variable; lo mide `asigna-ignorada`).
+  Arnes completo: 278/3 con el guard de 2.63.18, 281/281 con el de esta version. Mutaciones `variable-callada` y
+  `asigna-ignorada` (`tools/mutaciones/m_ficha_sesion.py`); `ficha-cualquiera` reapuntada a la linea
+  nueva.
 
 ### Known
 - Siguen en silencio: una ficha escrita por Bash (no Write/Edit), una ficha sin el sello de la sesion,
   y una ruta de Write con `\` (Windows; `SESION_RE_G` solo acepta `/`, como antes).
-- En un triage que imprime con variable la ficha de otra sesion, si esta sesion ya escribio una
-  ficha sellada, el guard revisa la de esta sesion. La ruta literal ya bloqueaba en ese caso.
+- En un triage que imprime la ficha de otra sesion con una variable que NO se asigna en el mismo
+  comando, si esta sesion ya escribio una ficha sellada, el guard revisa la de esta sesion.
 
 ## [2.63.20] - 2026-10-20
 Origen: `p-058a36018c`, hallazgo de 2.63.17.
