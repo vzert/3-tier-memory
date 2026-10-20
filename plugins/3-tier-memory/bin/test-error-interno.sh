@@ -1,5 +1,5 @@
 #!/bin/bash
-# Prueba de que una excepcion cualquiera de apply_event ya no atasca el compactador (2.63.11).
+# Prueba de que una excepcion cualquiera de apply_event ya no atasca el compactador (2.63.17).
 #
 # validate deja pasar eventos con un campo de texto que no es cadena (session.add con status=1,
 # pendiente.add con text=1) o con un sustituto suelto (\ud800) que utf-8 no codifica. apply_event

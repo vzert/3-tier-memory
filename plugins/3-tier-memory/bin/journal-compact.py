@@ -15,7 +15,7 @@ porque en Windows un antivirus, el indexador u otro compactador pueden tener el 
 un instante; por la misma razon el lock se borra con rmtree_with_retry (medido: sin reintento
 el lock quedaba huerfano en 1 de 5 ensayos en Windows). Cada evento aplicado se mueve a
 applied/YYYY-MM/; un evento invalido o cuyo ancla no existe va a quarantine/ con un archivo
-.reason al lado (y, desde 2.63.11, uno cuya aplicacion lanza otra excepcion: `error-interno:`, con
+.reason al lado (y, desde 2.63.17, uno cuya aplicacion lanza otra excepcion: `error-interno:`, con
 los indices que toco restaurados a como estaban antes del evento; ver deshacer_evento). Nunca se pierde un evento en silencio. Excepcion deliberada (2.22.0): un ancla
 que el compactador sabe escribir sin mover nada se escribe — si falta el header de prioridad de
 un `pendiente.add` (o de un `pendiente.reopen`), se crea y el evento se aplica, porque eso es el

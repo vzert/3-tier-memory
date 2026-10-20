@@ -1,7 +1,7 @@
 # Changelog
 
-## [2.63.11] - 2026-10-19
-Origen: `p-ac5a4bb888`, el Known de 2.63.7. Version provisional: la 2.63.10 es de otro agente.
+## [2.63.17] - 2026-10-19
+Origen: `p-ac5a4bb888`, el Known de 2.63.7.
 
 ### Fixed
 - **Una excepcion cualquiera de un evento ya no atasca el compactador.** `validate` deja pasar

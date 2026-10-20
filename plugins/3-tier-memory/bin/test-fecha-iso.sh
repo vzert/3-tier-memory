@@ -69,7 +69,7 @@ PY
   chk "$campo ancho: la compactacion no revienta" "0" "$(printf '%s' "$OUT" | grep -c 'Traceback')"
   chk "$campo ancho: sale 0" "0" "$RC"
   chk "$campo ancho: el malo va a cuarentena" "1" "$(cuar)"
-  # Por la fecha, no como error-interno (2.63.11): sin la regex, apply_event revienta con ValueError,
+  # Por la fecha, no como error-interno (2.63.17): sin la regex, apply_event revienta con ValueError,
   # el evento tambien va a cuarentena y se deshace lo escrito, asi que solo el motivo lo distingue.
   chk "$campo ancho: la cuarentena es por la fecha, no error-interno" "0" "$(cat "$M"/.journal/quarantine/*.reason 2>/dev/null | grep -c '^error-interno:')"
   chk "$campo ancho: no queda nada en pending" "0" "$(pend)"

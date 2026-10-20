@@ -1,6 +1,6 @@
 import io, sys
 # journal-compact (compact) manda a cuarentena con `error-interno:` cualquier excepcion de
-# apply_event que no sea Quarantine, OSError ni UnicodeDecodeError (2.63.11, p-ac5a4bb888). Cada
+# apply_event que no sea Quarantine, OSError ni UnicodeDecodeError (2.63.17, p-ac5a4bb888). Cada
 # mutacion deshace una parte y su aserto de test-error-interno.sh (o de test-session-amend.sh)
 # tiene que caer.
 #
