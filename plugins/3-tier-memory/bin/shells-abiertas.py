@@ -38,8 +38,9 @@ JSONL no hereda las tareas del anterior. Solo lee: nunca para nada; eso lo decid
 Uso:
     shells-abiertas.py [--session-id ID | --transcript RUTA] [--projects-root DIR] [--ahora EPOCH]
 
-Sin --session-id usa $CLAUDE_CODE_SESSION_ID. Busca <projects-root>/*/<ID>.jsonl (por defecto
-~/.claude/projects). Si no lo encuentra imprime `resumen: abiertas=? motivo=<...>` y sale 2.
+Sin --session-id usa $CLAUDE_CODE_SESSION_ID. Busca <projects-root>/*/<ID>.jsonl (por defecto la
+carpeta de proyectos de Claude Code en el HOME, armada como en pendientes_afines.py). Si no lo
+encuentra imprime `resumen: abiertas=? motivo=<...>` y sale 2.
 
 Salida (stdout), por tarea abierta:
     ABIERTA  <id>  <Bash|Monitor>  <descripcion>
@@ -193,7 +194,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--session-id")
     ap.add_argument("--transcript")
-    ap.add_argument("--projects-root", default=os.path.expanduser("~/.claude/projects"))
+    ap.add_argument("--projects-root", default=os.path.join(os.path.expanduser("~"), ".claude", "projects"))
     ap.add_argument("--ahora", type=float, help="epoch para calcular la edad de la salida (pruebas)")
     a = ap.parse_args()
 
