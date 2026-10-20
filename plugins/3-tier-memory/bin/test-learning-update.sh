@@ -412,6 +412,9 @@ caso24 "tildes en codigo en linea" '- **A** - usa `Name OpenSSH.Server~~~~0.0.1.
 caso24 "comillas triples en codigo de dos" '- **A** - la valla `` ``` `` abre codigo\n- **Vieja** - regla'
 caso24 "dos tramos en la misma linea" '- **A** - `~~~` y `x` y ```` ``` ````\n- **Vieja** - regla'
 caso24 "codigo al inicio y luego <" '`x` <b>no es bloque</b>\n\n- **Vieja** - regla'
+# El reporte culpaba a un `<` dentro de codigo en linea: nunca disparo la guarda (el `<` de HTML
+# tiene que empezar la linea, y el codigo empieza con comillas). Queda como caso de no regresion.
+caso24 "< dentro de codigo en linea" '`<div>` y `a < b` en un parrafo\n\n- **Vieja** - regla'
 # Lo que no es codigo en linea sigue negandose.
 caso22 "tira sin pareja" '- **A** - usa `x ~~~ y\n- **Vieja** - regla' "codigo-antes"
 caso22 "tiras de distinto largo" '- **A** - ``x ~~~ y`\n- **Vieja** - regla' "codigo-antes"
