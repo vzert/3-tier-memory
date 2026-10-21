@@ -376,7 +376,8 @@ def write_event(memory_dir, event):
     pending/ y no en otra carpeta porque el rename tiene que ser en el mismo sistema de archivos
     y porque .journal/.gitignore no se reescribe en instalaciones viejas: una carpeta nueva se
     versionaria. Ningun lector toma un `.tmp` (todos filtran `*.json`), y el compactador borra
-    el de un emit que murio a medias (`limpiar_temporales`).
+    el de un emit que murio a medias (`limpiar_temporales`). Si borro el de un emit que solo
+    estaba parado, el rename falla y el evento se reescribe con el seq siguiente.
 
     El nombre ya es unico por construccion (session_id completo + pid + seq). Si aun asi
     O_EXCL falla, se reintenta con seq+1 hasta MAX_EXCL_RETRIES; si se agota, el evento se
@@ -406,7 +407,14 @@ def write_event(memory_dir, event):
         # en cualquier sistema, y asi el hash de un evento no depende de donde se emitio.
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
             fh.write(payload)
-        publicar(tmp, path)
+        try:
+            publicar(tmp, path)
+        except FileNotFoundError as e:
+            # El temporal ya no esta: este proceso quedo parado mas de STALE_SECONDS (una Mac que
+            # se durmio a mitad) y un compactador lo tomo por huerfano y lo borro. Se reescribe
+            # con el seq siguiente; agotados los intentos, la copia de failed/ de abajo.
+            last_err = e
+            continue
         return path
     failed = os.path.join(journal, "failed")
     os.makedirs(failed, exist_ok=True)

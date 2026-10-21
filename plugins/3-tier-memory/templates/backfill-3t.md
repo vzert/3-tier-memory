@@ -578,7 +578,7 @@ After all sessions are processed:
    ```
    It must print `JOURNAL applied=N quarantined=0 pending_left=0` (a `rescued=N` there is fine: events an older version quarantined for a missing anchor, applied now). If `quarantined>0`, read each
    `memory/.journal/quarantine/*.reason`, apply that change by hand, delete the `.json`/`.reason` pair,
-   and report it in Step 6. Compacting once at the end (instead of per session) is fine: events are
+   and report it in Step 6. A `pending_left` above 0 means an agent was still writing an event when the pass ran (since 2.63.34 the compactor waits for it instead of quarantining it): run it again after a few seconds. Compacting once at the end (instead of per session) is fine: events are
    applied in emission order.
 2. **Pruning** of sessions and plans is done by the compactor on every event it applies (same limits
    as checkpoint): `_session-index.md` 10 most recent by date; `_plans-index.md` active/draft/testing +

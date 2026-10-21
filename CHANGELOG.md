@@ -11,8 +11,9 @@ contadores.
   compactador que listaba `pending/` en ese hueco leia un archivo vacio, lo mandaba a cuarentena con
   `malformed: Expecting value: line 1 column 1 (char 0)` y el evento no volvia nunca (`malformed` no
   se rescata). Quien lo emitio ya tenia su id y creia que estaba guardado. Medido en una Mac con 4
-  corridas de `test-journal-race.sh` en paralelo: 2 de 1000 trials, los dos con la firma de CI. Pasa
-  en uso real cada vez que una sesion compacta (session-start, recall) mientras otra emite.
+  corridas de `test-journal-race.sh` en paralelo: 2 de 1000 trials, los dos con la firma de CI. En
+  uso real puede pasar cuando una sesion compacta (session-start, recall) justo en ese instante en
+  que otra emite.
   - `journal-emit.py` escribe el evento en `pending/.<evento>.json.tmp` (O_EXCL) y lo renombra al
     `.json`: un compactador solo ve el evento entero o no lo ve. El temporal va en `pending/` y no en
     una carpeta nueva porque el rename tiene que quedar en el mismo sistema de archivos y porque
@@ -23,6 +24,8 @@ contadores.
     da a un proceso vivo: un emit que no escribio en ese plazo murio, y su evento va a cuarentena
     como antes. Una mtime en el futuro lejano cuenta como vieja: nada se queda en `pending/` para
     siempre. Tambien borra el `.json.tmp` de mas de 60 s que deja un emit que murio a medias.
+    Si ese emit solo estaba parado (una Mac que se durmio a mitad) y no muerto, su rename falla y
+    `journal-emit.py` reescribe el evento con el seq siguiente: no se pierde (revisor externo).
     Limite: un compactador anterior a 2.63.34 no lo borra; hasta que corra uno nuevo, ese `.tmp`
     hace que `ls -A pending/` lance el compactador en cada arranque de sesion (no aplica nada).
 - **`test-journal-race.sh` imprime el `.reason` y el evento de cada cuarentena (y lo que haya en
@@ -30,15 +33,20 @@ contadores.
   evento apartado deja dos (el `.json` y su `.reason`): `quarantine=2` es un evento.
 
 ### Added
-- `bin/test-journal-hueco.sh` (10 casos): abre el hueco a proposito, sin depender del azar. Corre un
+- `bin/test-journal-hueco.sh` (12 casos): abre el hueco a proposito, sin depender del azar. Corre un
   compactador entre la creacion y la escritura del evento (rojo en 2.63.25: el evento era visible y
   acababa en cuarentena; verde ahora), y prueba el `.json` vacio de un emisor viejo (reciente se
   espera; 120 s o una hora en el futuro, cuarentena) y el temporal huerfano (reciente se respeta;
-  120 s se borra). `test-journal-race.sh` con el arreglo: 60 de 60 corridas, 600 trials, 0
+  120 s se borra; si era de un emit parado, el evento se reescribe). `test-journal-race.sh` con el arreglo: 60 de 60 corridas, 600 trials, 0
   cuarentenas, con 4 en paralelo (de 2 en 1000 antes; esta cifra sola no lo probaria).
-- Tres mutaciones en `tools/mutation-check.sh` que esta suite tumba: el emit vuelve a escribir
+- Cuatro mutaciones en `tools/mutation-check.sh` que esta suite tumba: el emit vuelve a escribir
   directo el `.json` (`m_emit_directo.py`), el compactador deja de esperar al ilegible reciente, y
-  lo espera para siempre (`m_compact_espera.py`).
+  lo espera para siempre (`m_compact_espera.py`), y el emit no reescribe cuando le borraron el
+  temporal (`m_emit_sin_reintento.py`).
+- Las plantillas que mandan compactar (`checkpoint-3t`, `save-learning`, `backfill-3t`,
+  `consolidate-3t`, `migrate`) dicen que hacer con `pending_left>0`: otro agente esta emitiendo en
+  ese momento (o un emisor anterior a 2.63.34 a medio escribir); se vuelve a correr en unos segundos,
+  como con `JOURNAL busy`.
 
 ## [2.63.25] - 2026-10-20
 Origen: pedido del usuario. Un agente cerro con `/checkpoint-3t`, dejo su prompt para retomar y

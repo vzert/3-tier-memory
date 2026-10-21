@@ -193,6 +193,7 @@ caso "huella / md5"             journal-compact.py      m_compact.py         tes
 caso "emit atomico (2.63.34)"   journal-emit.py         m_emit_directo.py    test-journal-hueco.sh       "el evento ya era visible"
 caso "espera del ilegible"      journal-compact.py      m_compact_espera.py  test-journal-hueco.sh       "reciente: el .json vacio fue a cuarentena"
 caso "espera eterna"            journal-compact.py      m_compact_espera.py  test-journal-hueco.sh       "120 s: no fue a cuarentena" viejo
+caso "emit sin reintento"       journal-emit.py         m_emit_sin_reintento.py test-journal-hueco.sh    "el emit fallo al perder su temporal"
 caso "norm + SYSTEMROOT"        resolve-project-dir.sh  m_projdir.py         test-resolve-project-dir.sh "el respaldo de python3"
 caso "publicacion del .gitignore" journal-compact.py    m_gitignore_publicacion.py test-expire-reopen.sh "fichero ENTERO"
 caso "deriva sin lector"        journal-compact.py      m_drift_humano.py    test-expire-reopen.sh       "no se consume"

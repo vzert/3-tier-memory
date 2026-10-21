@@ -13,6 +13,8 @@
 #      con mtime de hace 120 s va a cuarentena malformed; con mtime una hora en el futuro, tambien
 #      (nada se queda en pending/ para siempre).
 #   C) temporal huerfano de un emit que murio: reciente se respeta; con mas de 60 s se borra.
+#   D) un emit que solo estaba parado (> 60 s) y al que C) le borro el temporal: el rename falla
+#      y el evento se reescribe; no se pierde (revisor externo, ronda 1 de 2.63.34).
 #
 # Uso: bash bin/test-journal-hueco.sh    (sale != 0 si algo falla)
 
@@ -97,6 +99,37 @@ python3 journal-compact.py --memory-dir "$M" --quiet >/dev/null
 [ -f "$P/.1002-x-1-0.json.tmp" ] && ok "temporal reciente: se respeta (emit en curso)" || fail "temporal reciente: se borro"
 [ ! -f "$P/.1003-x-1-0.json.tmp" ] && ok "temporal de 120 s: se borra" || fail "temporal de 120 s: sigue ahi"
 [ "$(nq "$M")" = 0 ] && ok "un temporal nunca va a cuarentena" || fail "un temporal fue a cuarentena"
+
+echo "D) emit parado: el compactador borro su temporal antes del rename"
+M=$(nuevo_mem); TMPS="$TMPS $M"
+OUT=$(python3 - "$(pwd)/journal-emit.py" "$M" <<'PYEOF' 2>/dev/null
+import importlib.util, io, os, sys
+emit, mem = sys.argv[1:3]
+spec = importlib.util.spec_from_file_location("je", emit); je = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(je)
+real_publicar = je.publicar; borrados = []
+def publicar_tras_borrar(tmp, path):
+    if not borrados:   # la primera vez: lo que haria limpiar_temporales con un emit parado > 60 s
+        os.remove(tmp); borrados.append(tmp)
+    return real_publicar(tmp, path)
+je.publicar = publicar_tras_borrar
+sys.argv = ["journal-emit.py", "--memory-dir", mem, "--type", "pendiente.add", "--text",
+            "item del emit parado", "--prioridad", "Media", "--origen", "[[sessions/test]]"]
+buf = io.StringIO(); real_out = sys.stdout; sys.stdout = buf; rc = 0
+try:
+    je.main()
+except SystemExit as e:
+    rc = e.code or 0
+sys.stdout = real_out
+print(f"borrados={len(borrados)} rc={rc} id={buf.getvalue().strip()}")
+PYEOF
+)
+echo "    $OUT"
+python3 journal-compact.py --memory-dir "$M" --quiet >/dev/null
+case "$OUT" in *"borrados=1 rc=0 id=p-"*) ok "el emit no falla aunque le borraron el temporal";;
+  *) fail "el emit fallo al perder su temporal ($OUT)";; esac
+[ "$(grep -c '^- \[ \] item del emit parado' "$M/_pendientes.md")" = 1 ] && ok "el evento del emit parado quedo aplicado" \
+  || fail "el evento del emit parado se perdio"
 
 echo "RESULT: pass=$PASS fail=$FAIL"
 [ "$FAIL" = 0 ]
