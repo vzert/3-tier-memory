@@ -1136,6 +1136,13 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     # (regla de `<pendientes de esta sesion>`, Step 8).
     rev_por_id = {p[0]: p[2] for p in abiertos if p[0]}
     ref = fecha_ficha or hoy
+    _bloq_todos = bloqueados_abiertos(memory_dir)
+
+    def espera_viva(i):
+        """Bloqueado y su `_revisar` no ha pasado (2.63.32). Con la fecha pasada el paso es mirar si
+        ya llego lo que esperaba: accionable, igual que en pendientes_afines.hacible. Lo usan las
+        tres guardias de `ninguno` (sigue_abierto, proximo_paso, ninguno_defecto)."""
+        return i in _bloq_todos and not (rev_por_id.get(i) and rev_por_id[i] < ref)
     abiertos_ficha = []
     excluidos_por_fecha = []
     for l in sec_pend.splitlines():
@@ -1156,14 +1163,14 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         # reemplaza el prompt opcional de print-pendiente-opcional.py, Step 8e). Los pendientes
         # propios quedan en `## Pendientes` de la ficha, que el snippet manda leer. Lo que SIGUE
         # valiendo es la guardia del colapso: el caso 5 de una linea no puede tapar un pendiente
-        # propio que se puede hacer ya (sin `_bloqueado`, sin `_revisar` futuro).
+        # propio que se puede hacer ya (sin espera viva: `_bloqueado` con `_revisar` sin pasar; sin
+        # `_revisar` futuro).
         # Propio = nacido en esta ficha (`_origen`), mismo criterio que snippet.proximo_paso: un
         # vencido de OTRA sesion que Step 3a reconcilio y lista con `- [ ]` (pendientes.vencidos
         # exige mencionarlo) no es trabajo que el colapso tape (p-a9f0514be0).
-        _bloq = bloqueados_abiertos(memory_dir)
         _origen = origenes_abiertos(memory_dir)
         accionables_propios = [i for i in abiertos_ficha
-                               if i not in _bloq and _origen.get(i) == slug]
+                               if not espera_viva(i) and _origen.get(i) == slug]
         if "```" not in sec_retomar and accionables_propios:
             h.append(Hallazgo(SALTADO, "snippet.sigue_abierto",
                               f"bloque `Como retomar` colapsado pero la sesion deja "
@@ -1292,13 +1299,8 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     #       afines (pendientes_afines.fecha_futura); y el caso 1 ya no empieza por `Fase actual:`.
     # Una linea que empieza por `ninguno` puede citar ids como MOTIVO ("lo unico propio espera a
     # otra instalacion, p-…") — por eso (b) y (c) no miran esa forma; la mira (d).
-    bloqueados = bloqueados_abiertos(memory_dir)
+    bloqueados = _bloq_todos
     origen_por_id = origenes_abiertos(memory_dir)
-
-    def espera_viva(i):
-        """Bloqueado y su `_revisar` no ha pasado (2.63.32). Con la fecha pasada el paso es mirar si
-        ya llego lo que esperaba: accionable, igual que en pendientes_afines.hacible."""
-        return i in bloqueados and not (rev_por_id.get(i) and rev_por_id[i] < ref)
     pp = linea_proximo_paso(sec_retomar)
     if seccion_por_prefijo(secs, "Como retomar") is None:
         # Sin la seccion no hay paso que medir; la ausencia ya la marca `ficha.secciones`.
@@ -1406,7 +1408,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                            and origen_por_id.get(i) == slug]
             if accionables:
                 problemas.append("dice `ninguno` pero la sesion deja pendiente(s) propio(s) "
-                                 "accionables hoy (sin `_bloqueado` ni `_revisar` futuro): "
+                                 "accionables hoy (sin espera viva ni `_revisar` futuro): "
                                  + ", ".join(accionables))
         if problemas:
             h.append(Hallazgo(SALTADO, "snippet.proximo_paso",
@@ -1556,7 +1558,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
 
     # 8-sexies. `ninguno` no puede tapar un defecto abierto (2.34.0, p-272254efc5). Dos senales,
     # las dos estructuradas: (1) un `_pendiente:` de `## Bugs fixed` que sigue abierto e inmediato
-    # (sin `_bloqueado`, sin `_revisar` futuro) — cualquier origen: la linea dice que es un defecto
+    # (sin espera viva, sin `_revisar` futuro) — cualquier origen: la linea dice que es un defecto
     # de ESTA sesion; (2) el hook de cierre pasa `--veredicto-adversario break` cuando el ultimo
     # veredicto del adversario en el transcript es `break` sin `[GOAL-CLOSE-WAIVED` detras; se
     # levanta citando en `## Bugs fixed` un `_pendiente:` todavia abierto (el defecto quedo
@@ -1568,7 +1570,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     else:
         prob = []
         vivos = [i for i in dict.fromkeys(ids_bugs) if i in ids_abiertos]
-        inmediatos = [i for i in vivos if i not in bloqueados
+        inmediatos = [i for i in vivos if not espera_viva(i)
                       and not (rev_por_id.get(i) and rev_por_id[i] > ref)]
         if inmediatos:
             prob.append("`## Bugs fixed` registra defecto(s) abierto(s) e inmediato(s): "

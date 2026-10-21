@@ -135,6 +135,10 @@ chk "bloqueado con _revisar futuro: sigue fuera de Proximo paso" "SALTADO" "$(es
 memoria " — _revisar: 2026-10-19_" " — _revisar: 2026-10-25_"
 ficha 2026-10-20 "$NINGUNO"
 chk "Ninguno colapsado con un bloqueado ya vencido: SALTADO en el hilo (hay que mirarlo)" "SALTADO" "$(estado snippet.hilo)"
+chk "y en snippet.sigue_abierto (la guardia del colapso usa la misma regla)" "SALTADO" "$(estado snippet.sigue_abierto)"
+memoria " — _revisar: 2026-10-25_" " — _revisar: 2026-10-25_"
+chk "con la fecha aun futura, el colapso no lo reclama" "HECHO" "$(estado snippet.sigue_abierto)"
+memoria " — _revisar: 2026-10-19_" " — _revisar: 2026-10-25_"
 ficha 2026-10-20 "$(paso 'nada accionable hoy — espera a infra (p-98a561dc02).')"
 chk "ninguno en bloque con un bloqueado propio ya vencido: SALTADO" "SALTADO" "$(estado snippet.proximo_paso)"
 

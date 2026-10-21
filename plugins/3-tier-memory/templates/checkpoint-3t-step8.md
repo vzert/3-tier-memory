@@ -106,7 +106,8 @@ Reglas para llenar los slots:
      **Esto es una variante MAS del caso 5, no un mecanismo nuevo de colapso** — mismo principio
      que la variante ya documentada para casos 2-3 mas abajo ("Tambien aplica cuando..."): si,
      ADEMAS de que la `Proxima accion` es puro futuro, no queda ningun pendiente PROPIO de esta
-     sesion que se pueda hacer ya (sin `_bloqueado:` y sin `_revisar` futuro), entonces `<next-step>` en su conjunto ES el caso 5, y
+     sesion que se pueda hacer ya (sin `_revisar` futuro y sin `_bloqueado:`, salvo el bloqueado
+     cuyo `_revisar` ya paso: ese toca mirarlo, 2.63.32), entonces `<next-step>` en su conjunto ES el caso 5, y
      8a colapsa el bloque a una linea con la media-linea de arriba como motivo — el MISMO mecanismo
      de 8a, sin condicion nueva que agregarle ahi. **Un pendiente Alta de OTRA sesion, sin relacion
      con esta, no cuenta para esta cuenta** — mismo criterio que ya rige el colapso general (ver
@@ -307,7 +308,8 @@ Reglas para llenar los slots:
   `_pendientes.md`, uno con `_revisar` futuro, uno con `_bloqueado:` cuyo `_revisar` no ha pasado
   y (2.56.0) un paso que nombra
   una fecha `AAAA-MM-DD` posterior a la de la ficha, en cualquier caso, el 1 incluido. Tambien marca `ninguno`
-  cuando la ficha deja un pendiente propio abierto, sin `_bloqueado` ni `_revisar` futuro.
+  cuando la ficha deja un pendiente propio abierto, sin `_revisar` futuro y sin `_bloqueado` (o
+  bloqueado con su `_revisar` ya pasado, 2.63.32).
 
   **Antes de fijar cualquier candidato de los casos 2 o 3 como `<next-step>`, hazte la
   pregunta explicita: "¿esto se puede hacer de inmediato, en la sesion siguiente, sin esperar una
