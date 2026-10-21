@@ -21,8 +21,8 @@ M = {
     "descartado-no-cierra": [
         ("            if not ids_b and not evid and not desc:", "            if not ids_b and not evid:")],
     "solo-snippet-sin-candidatos": [
-        ('        return [x for x in h if x.clave.startswith(("snippet.", "bugs.", "pendientes.candidatos"))',
-         '        return [x for x in h if x.clave.startswith(("snippet.", "bugs."))')],
+        ('        return [x for x in h if x.clave.startswith(("snippet.", "bugs.", "pendientes.candidatos",',
+         '        return [x for x in h if x.clave.startswith(("snippet.", "bugs.",')],
     # checkpoint-close-guard.sh
     "guard-no-pasa": [
         ('        extra += ["--preguntas-usuario", str(respondidas)]', "        pass")],
