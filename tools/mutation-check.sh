@@ -190,6 +190,9 @@ caso "CONTROL del resolutor"    test-plugin-bin-resolver.sh m_control.py     tes
 caso "canon / cabecera_crlf"    normalize-pendientes.py m_crlf_normalize.py  test-normalize-pendientes.sh "crlf"
 caso "cr_lineas (mensual)"      journal-compact.py      m_crlf_compact.py    test-monthly-rows.sh        "lineas CRLF no cambia"
 caso "huella / md5"             journal-compact.py      m_compact.py         test-expire-reopen.sh       "byte a byte"
+caso "emit atomico (2.63.34)"   journal-emit.py         m_emit_directo.py    test-journal-hueco.sh       "el evento ya era visible"
+caso "espera del ilegible"      journal-compact.py      m_compact_espera.py  test-journal-hueco.sh       "reciente: el .json vacio fue a cuarentena"
+caso "espera eterna"            journal-compact.py      m_compact_espera.py  test-journal-hueco.sh       "120 s: no fue a cuarentena" viejo
 caso "norm + SYSTEMROOT"        resolve-project-dir.sh  m_projdir.py         test-resolve-project-dir.sh "el respaldo de python3"
 caso "publicacion del .gitignore" journal-compact.py    m_gitignore_publicacion.py test-expire-reopen.sh "fichero ENTERO"
 caso "deriva sin lector"        journal-compact.py      m_drift_humano.py    test-expire-reopen.sh       "no se consume"
