@@ -1056,10 +1056,12 @@ prosa del plan (22 % con criterio de cierre, 35 % de los disparadores con fecha 
 y un cierre `ninguno` con el plan `active` dejaba a la sesión siguiente sin hilo. Antes de cerrar
 este paso, por cada plan `active` que enlazas en `## Plans`: la fase siguiente (y cada disparador
 que espera una fecha o un evento) tiene que existir como pendiente ABIERTO con
-`_relacionado: plan-<slug>`. Si falta, vuelve a Step 3b punto 9 y propónlo como candidato (el
-usuario decide, como todo pendiente nuevo): `pendiente.add --relacionado plan-<slug>`, con
-`--revisar AAAA-MM-DD` si espera una fecha. Si el plan ya no tiene nada abierto, no es `active`:
-ciérralo con `plan.upsert --status completed` (o `abandoned`). Step 7a rechaza
+`_relacionado: plan-<slug>` (`<slug>` = el nombre del fichero del plan sin `.md`; si no empieza
+por `plan-`, ponle `plan-` delante). Si falta, vuelve a Step 3b (punto 1, item 4: pasos de plan sin
+ejecutar) y propónlo como candidato (el usuario decide, como todo pendiente nuevo):
+`pendiente.add --relacionado plan-<slug>`, con `--revisar AAAA-MM-DD` si espera una fecha. Si el
+plan ya no tiene nada abierto, o el usuario no quiere guardar su fase siguiente, no es `active`:
+ciérralo con `plan.upsert --status completed` (o `abandoned`), o deja un `Proximo paso` real. Step 7a rechaza
 (`snippet.ninguno_plan_activo`) un `Como retomar` `ninguno` con un plan `active` de `## Plans` sin
 pendiente abierto ligado; se mide el campo `_relacionado`, no la prosa del plan.
 

@@ -1660,14 +1660,17 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         if vivos_plan and os.path.exists(ruta_pend):
             for pe in _afines_mod().pendientes(ruta_pend):
                 ligados |= pe["rel"]
-        planes_sin_hilo = [p for p in vivos_plan if p not in ligados]
+        # `_relacionado` solo admite `plan-<slug>` (journal-emit RELACIONADO_RE): un plan cuyo
+        # fichero no empieza por `plan-` (hay planes viejos asi) se liga con `plan-<su nombre>`.
+        planes_sin_hilo = [p for p in vivos_plan if p not in ligados and "plan-" + p not in ligados]
         if planes_sin_hilo:
             h.append(Hallazgo(SALTADO, "snippet.ninguno_plan_activo",
                               f"el snippet dice `ninguno` y {len(planes_sin_hilo)} plan(es) `active` de "
                               "`## Plans` no tienen ningun pendiente abierto ligado",
                               [f"plans/{p}.md" for p in planes_sin_hilo],
                               corrige="por cada fase abierta o disparador del plan: `journal-emit.py "
-                                      "--type pendiente.add --relacionado <plan-slug> ...` (con "
+                                      "--type pendiente.add --relacionado plan-<slug> ...` (el nombre "
+                                      "del fichero sin `.md`, con `plan-` delante si no lo trae; con "
                                       "`--revisar AAAA-MM-DD` si espera una fecha) y rehaz el snippet "
                                       "con esa fase como `Proximo paso`; si el plan ya no tiene nada "
                                       "abierto, cierralo con `plan.upsert` (status completed)"))

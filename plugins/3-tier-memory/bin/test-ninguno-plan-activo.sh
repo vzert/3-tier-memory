@@ -171,5 +171,13 @@ armar
 sed -i.bak 's/^date: 2026-10-21$/date: 2026-10-20/' "$F"; rm -f "$F.bak"
 chk "antes de 2.63.31" "HECHO|" "$(estado)"
 
+echo "== 13. plan viejo sin prefijo plan- en el fichero: se liga con plan-<nombre> =="
+armar
+mv "$M/plans/plan-demo-fases.md" "$M/plans/2026-10-01-demo-viejo.md"
+for f in "$M/_plans-index.md" "$F"; do sed -i.bak 's#plans/plan-demo-fases#plans/2026-10-01-demo-viejo#' "$f"; rm -f "$f.bak"; done
+chk "sin pendiente: SALTADO" "SALTADO|plans/2026-10-01-demo-viejo.md" "$(estado)"
+anade_pend "- [ ] demo: fase 2 — _creado: 2026-10-21_ — _id: p-2b2b2b2b2b_ — _relacionado: plan-2026-10-01-demo-viejo_"
+chk "ligado con plan-<nombre>" "HECHO|" "$(estado)"
+
 echo "RESULT: pass=$pass fail=$fail"
 [ "$fail" = 0 ]

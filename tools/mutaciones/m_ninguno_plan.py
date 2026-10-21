@@ -13,7 +13,8 @@ M = {
                          '                ligados |= pe["rel"] | set(re.findall(r"plan-[\\w.-]+", pe["texto"]))')],
     "plan-cualquier-estado": [("        vivos_plan = [p for p in enlazados if plan_activo(memory_dir, p)]",
                                "        vivos_plan = enlazados")],
-    "plan-sin-corte": [("fecha_ficha >= DESDE_NINGUNO_PLAN", 'fecha_ficha >= "2000-01-01"')],
+    "plan-sin-prefijo": [(' and "plan-" + p not in ligados]', "]")],
+    "plan-sin-corte":[("fecha_ficha >= DESDE_NINGUNO_PLAN", 'fecha_ficha >= "2000-01-01"')],
     "plan-cualquier-snippet": [("            and es_ninguno_snip:", "            and True:")],
 }
 

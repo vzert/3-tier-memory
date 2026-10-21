@@ -10,12 +10,13 @@ usuario: chequeo SALTADO con fecha de corte; plan aprobado en d305).
   `ninguno` (con bloque o colapsado), `## Plans` enlaza un plan `active` (fila del indice o, sin
   fila, su frontmatter) y ningun pendiente ABIERTO de `_pendientes.md` lo cita en `_relacionado:`,
   sale SALTADO y el hook de cierre lo rechaza. Lee el campo `_relacionado`, nunca la prosa del plan
-  ni del pendiente (regla 216). Solo fichas con fecha 2026-10-21 o posterior.
+  ni del pendiente (regla 216). Un plan cuyo fichero no empieza por `plan-` se liga con
+  `plan-<nombre del fichero>`. Solo fichas con fecha 2026-10-21 o posterior.
 - **Step 5 de `/checkpoint-3t`: cada fase abierta o disparador de un plan tocado es un pendiente
   ligado** (`pendiente.add --relacionado plan-<slug>`, con `--revisar` si espera una fecha),
   propuesto como candidato en Step 3b. Un plan sin nada abierto se cierra con `plan.upsert`.
-- Prueba `bin/test-ninguno-plan-activo.sh` (14 asertos; los 14 caen con el checkpoint-audit.py de
-  2.63.22) y 5 mutaciones nuevas (`tools/mutaciones/m_ninguno_plan.py`).
+- Prueba `bin/test-ninguno-plan-activo.sh` (16 asertos; los 16 caen con el checkpoint-audit.py de
+  2.63.22) y 6 mutaciones nuevas (`tools/mutaciones/m_ninguno_plan.py`).
 
 ### Limites
 - No lee el texto viejo de un plan: un plan `active` con fases solo en su prosa sale SALTADO hasta
