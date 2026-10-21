@@ -1520,6 +1520,43 @@ number really is a problem (a quarantined event, `unaligned_rows`, a bypassed du
 it blocks and what you did about it. Nothing here is for the user to fix by hand unless this file
 says so explicitly.
 
+## Step 7c: Shells en segundo plano de esta sesion (2.63.25) — ANTES de Step 8
+
+```bash
+python3 "$JBIN/shells-abiertas.py"
+```
+
+**Por que existe.** Un agente cerraba con su Como retomar listo y seguia con shells en segundo plano
+vivas. Unas ya no servian para nada. Otras seguian vivas pero solo fallaban: un muestreo que cada 15
+minutos escribia "Timeout expired", justo el log que el Como retomar mandaba leer. Tu no puedes
+preguntarle al harness que tareas tienes vivas, y tras una compactacion ya no recuerdas lo que
+lanzaste. El script lee el transcript de esta sesion y lista cada Bash con `run_in_background` y
+cada `Monitor` sin notificacion de fin ni TaskStop. **Solo lee: no para nada.** Lo que se para lo
+decides tu, con estas reglas.
+
+Cuenta solo lo que lanzo esta sesion. Un proceso con nohup, una pestana de otro agente o un
+subagente no entran: no los toques.
+
+Por cada `ABIERTA`, mira su `ultimas lineas` y los ficheros que escribe su comando (un log de
+muestreo escribe en su log, no en la salida de la tarea), y ponla en UNA de estas cuatro casillas:
+
+| Casilla | Cuando | Que haces |
+|---|---|---|
+| **Sobra** | nada pendiente la usa: la espera ya llego, el watcher de un PR ya mergeado, un servidor de prueba | la paras con `TaskStop` y lo dices en el reporte |
+| **Se usa** | el `Proximo paso` del Como retomar, o un pendiente de esta sesion, depende de lo que produce | la dejas, y en el `Proximo paso` de Step 8 escribes su id, que hace, y que **muere al cerrar esta sesion de Claude Code**: quien retome desde otra sesion no la tiene |
+| **Viva pero falla** | su salida o su log solo trae errores (timeouts, conexion rechazada) o no crece desde hace mucho mas que su intervalo | no la paras por tu cuenta si se usa: lo dices en el reporte con la linea que falla, y en el `Proximo paso` dices que sus datos no sirven desde esa hora |
+| **No se** | no puedes decidir si algo la necesita | preguntas al usuario (AskUserQuestion, o el canal del supervisor si la sesion esta supervisada) antes de cerrar, con tu recomendacion |
+
+Si alguna queda en **Se usa**, la sesion deja trabajo que retomar: el caso 5 de Step 8 (`Ninguno`)
+no aplica. No relances nada con nohup ni launchd para que sobreviva: eso lo decide el usuario.
+
+Si el script imprime `resumen: abiertas=?`, no pudo leer el transcript (falta
+`$CLAUDE_CODE_SESSION_ID`): dilo en el reporte y revisa de memoria lo que lanzaste en segundo plano.
+Una tarea que murio sin notificacion sale como `ABIERTA`: si `TaskStop` dice `No task found`, ya
+estaba cerrada.
+
+**En el reporte de Step 7**, una linea: `Shells: <N> abiertas — <id> parada (sobraba), <id> se queda (se usa en el Proximo paso), …`, o `Shells: ninguna abierta`.
+
 ## Step 8: Como retomar — snippet de continuidad
 
 El detalle de este paso vive en su propio fichero, junto a este template (2.42.0: era el 37 % del
