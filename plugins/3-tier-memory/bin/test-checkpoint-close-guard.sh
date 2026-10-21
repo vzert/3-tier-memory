@@ -1663,7 +1663,7 @@ chk "la forma \"\$SF\" (sesion 8ef6459e) tambien bloquea" "1" "$(bloquea "$(corr
 armar "$M" "$FX/snippet-2120.txt"; fecha30 "$F"; sellar otra-sesion
 txvar "$T/v.jsonl" 'python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"'
 chk "ficha escrita con el session_id de otra sesion: silencio" "" "$(corre_sid "$T/v.jsonl")"
-# Triage (adversario externo de 2.63.28): esta sesion ya tiene su ficha sellada e incompleta, y el
+# Triage (adversario externo de 2.63.31): esta sesion ya tiene su ficha sellada e incompleta, y el
 # turno imprime con una variable ASIGNADA en el mismo comando la ficha de otra sesion. Se revisa la
 # impresa, como con la ruta literal, no la propia. La ruta va relativa al cwd: dentro del texto del
 # comando, Git Bash no convierte una ruta absoluta (2.63.18).
