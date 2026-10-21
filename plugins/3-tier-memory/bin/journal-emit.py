@@ -52,11 +52,13 @@ Tipos de evento:
                     Pone o cambia `_retomar: FECHA sessions/<slug>_`: el pendiente que cita el
                     `Proximo paso` de esa ficha, para que el mod pendientes lo saque en VENCEN.
                     Solo lo lee el mod; 8e, el hilo y el calendario lo ignoran (2.62.8).
-  pendiente.block   --id ID (--bloqueado-por "QUE" [--revisar YYYY-MM-DD] | --desbloquear)
+  pendiente.block   --id ID (--bloqueado-por "QUE" | --desbloquear) [--revisar YYYY-MM-DD]
                     Pone, cambia o quita `_bloqueado: QUE_` en un pendiente VIVO. Existe para
                     marcar en Step 3a uno que nacio sin el campo; no cambia el id.
                     (2.63.29) Al bloquear pone tambien `_revisar`: la fecha dada, o hoy+5 si la
-                    linea no trae ya un `_revisar` futuro (ese se conserva).
+                    linea no trae ya un `_revisar` futuro (ese se conserva). Al desbloquear quita
+                    `_revisar` (era la fecha de mirar si llego la espera), salvo que se de
+                    --revisar, que queda como la ventana nueva.
                     [--text-prefix P]  (si no se da, se toma del archivo si la linea existe)
   pendiente.relate  --id ID (--relacionado X [--relacionado Y ...] | --sin-relacion)
                     Pone (reemplaza) o quita `_relacionado: X, Y_` en un pendiente VIVO
@@ -1499,11 +1501,18 @@ def main():
             sys.exit("journal-emit: pendiente.block necesita --bloqueado-por \"QUE\" o "
                      "--desbloquear (uno de los dos)")
         rev = (a.revisar or "").strip()
-        if rev and not bloqueado:
-            sys.exit("journal-emit: --revisar en pendiente.block va solo con --bloqueado-por")
         if rev and not fecha_real(rev):
             sys.exit("journal-emit: --revisar debe ser una fecha real YYYY-MM-DD")
         base["payload"] = {"id": pid, "bloqueado": bloqueado}
+        if not bloqueado:
+            # 2.63.29: el `_revisar` de un bloqueado es la fecha de mirar si llego la espera; sin
+            # espera sobra, y con el puesto el paso "pedirle a X (p-…)" salia rechazado como
+            # `_revisar` futuro (adversario, ronda 1). Un --revisar dado queda como ventana nueva.
+            # `quita_revisar` distingue este evento de un desbloqueo anterior a 2.63.29, que no
+            # tocaba la ventana y se sigue aplicando igual.
+            base["payload"]["quita_revisar"] = True
+            if rev:
+                base["payload"]["revisar"] = rev
         if bloqueado:
             # 2.63.29: el bloqueo trae su ventana. `revisar_defecto` le dice al compactador que
             # conserve un `_revisar` futuro que la linea ya tenga; una fecha dada lo reemplaza.

@@ -1386,7 +1386,7 @@ def apply_window(mem, p):
     return True
 
 
-BLOQUEADO_RE = re.compile(r"\s*—\s*_bloqueado:[^—]*")
+BLOQUEADO_RE = re.compile(r"\s*—\s*_bloqueado:[^—]*?(?=\s*—|$)")
 RETOMAR_RE = re.compile(r"\s*—\s*_retomar:[^—]*")
 # La misma expresion que journal-emit.py: sessions/<slug> sin espacios, `—` ni `_` final.
 FICHA_RETOMAR_RE = re.compile(r"^sessions/[A-Za-z0-9][A-Za-z0-9._-]*(?<!_)$")
@@ -1428,6 +1428,12 @@ def apply_block(mem, p):
         log(f"WARN block: no hay linea abierta con id {p['id']}")
         return False
     nueva = BLOQUEADO_RE.sub("", lines[i].rstrip("\n"))
+    if not p.get("bloqueado") and p.get("quita_revisar"):
+        # 2.63.29: desbloquear quita la fecha de mirar si llego la espera; un `revisar` dado queda
+        # como la ventana nueva. Un desbloqueo anterior (sin `quita_revisar`) no toca la ventana.
+        nueva = re.sub(r"\s*—\s*_revisar: \d{4}-\d{2}-\d{2}_", "", nueva)
+        if p.get("revisar"):
+            nueva = f"{nueva} — _revisar: {p['revisar']}_"
     if p.get("bloqueado"):
         nueva = f"{nueva} — _bloqueado: {p['bloqueado']}_"
         # 2.63.29: el bloqueo trae su ventana (`revisar`). Un evento anterior no la trae y se

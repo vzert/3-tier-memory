@@ -730,8 +730,8 @@ infra instale un plugin y un dev mande un mensaje) cerro con snippet `Ninguno`.
 `_revisar` listado en `## Pendientes` de la ficha. **Si para que se mueva hace falta que el usuario
 le pida algo a alguien** (mandar un mensaje, pedir un acceso, avisar a otro equipo), preguntale al
 cerrar si lo va a pedir el (AskUserQuestion; en una sesion supervisada, SendMessage al supervisor).
-Si dice que si, el pendiente espera al usuario y no a un tercero: sin `_bloqueado`, y `Proximo
-paso: pedirle a <quien> <que> (p-…)`. Si ya lo pidio o no le toca, queda bloqueado con su
+Si dice que si, el pendiente espera al usuario y no a un tercero: `pendiente.block --id p-…
+--desbloquear` (quita tambien su `_revisar`) y `Proximo paso: pedirle a <quien> <que> (p-…)`. Si ya lo pidio o no le toca, queda bloqueado con su
 `_revisar`.
 
 **`--revisar` cuando el pendiente nombra una fecha futura** (`revisar el 2026-09-22`, `target

@@ -5,14 +5,17 @@ Origen: Victor (via `/goalspec:interview`, bajo el supervisor lookout `superviso
 d296-d301) reporto cierres que dejaban un pendiente `_bloqueado` sin fecha y snippet `Ninguno`, y
 pidio auditar en que casos pasa y cerrar el hueco. Caso real: claude-vzert, `p-98a561dc02`
 (espera a que la cuenta de infra instale un plugin y un dev mande un mensaje). Auditoria de solo
-lectura del mismo dia sobre los 40 proyectos 3-tier de la Mac: 7 tienen bloqueados, 54 abiertos,
+lectura del mismo dia sobre los 39 proyectos 3-tier de la Mac: 7 tienen bloqueados, 54 abiertos,
 50 sin `_revisar`, y en los 7 hay fichas `Ninguno` que citan un bloqueado.
 
 ### Changed
 - **Todo bloqueado lleva fecha.** `journal-emit.py --bloqueado-por` sin `--revisar` nace con
   `_revisar: hoy+5` (la regla 2 de Step 3b) y lo avisa por stderr. `pendiente.block` acepta
   `--revisar` y, sin el, pone hoy+5 salvo que la linea ya traiga un `_revisar` futuro (lo conserva).
-  Un evento `pendiente.block` anterior, sin ventana, se aplica como antes.
+  `--desbloquear` quita tambien el `_revisar` (era la fecha de mirar si llego la espera; con el
+  puesto, `Proximo paso: pedirle a <quien> …` salia rechazado como fecha futura), salvo que se de
+  `--revisar`, que queda como ventana nueva. Un evento `pendiente.block` anterior a 2.63.29 se
+  aplica como antes: el bloqueo sin ventana, y el desbloqueo sin tocar la que haya.
 - **Ese dia vuelve a salir.** `print-pendiente-opcional.py` (🔔 vence hoy, ➕ vencidos) ya no
   descarta un bloqueado con `_revisar`; le anade "Espera a alguien de fuera: mira si ya llego".
   `pendientes_afines.hacible` (hilo y afines) y `checkpoint-audit.py` (`snippet.proximo_paso`)
@@ -36,7 +39,8 @@ lectura del mismo dia sobre los 40 proyectos 3-tier de la Mac: 7 tienen bloquead
   de cierre lo rechaza); POR-DISEÑO con el conteo si los sin fecha estan solo en el indice. Fichas
   anteriores al 2026-10-20 no se miden. Sobre la ficha real del caso (claude-vzert, commit
   `1281555`) sale SALTADO; con 2.63.22 salia solo el aviso `snippet.ninguno_bloqueo`.
-- Prueba: `bin/test-bloqueado-fecha.sh` (25 casos; contra 2.63.22, 17 rojos).
+- Prueba: `bin/test-bloqueado-fecha.sh`; `bin/test-flags-sin-lector.sh` suma `--revisar` a `pendiente.block`.
+
 ## [2.63.25] - 2026-10-20
 Origen: pedido del usuario. Un agente cerro con `/checkpoint-3t`, dejo su prompt para retomar y
 siguio con una shell en segundo plano viva: un muestreo que cada 15 minutos escribia "Timeout

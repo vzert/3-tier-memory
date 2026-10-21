@@ -54,8 +54,25 @@ chk "block sin --revisar sobre un _revisar vencido: hoy+5" "1" "$(linea "$C" | g
 emit --type pendiente.block --id "$C" --bloqueado-por "otra instalacion" --revisar 2026-11-11 >/dev/null; compact
 chk "block con --revisar reemplaza la ventana" "1 1" "$(linea "$C" | grep -c '_revisar: 2026-11-11_') $(linea "$C" | grep -o '_revisar:' | wc -l | tr -d ' ')"
 emit --type pendiente.block --id "$C" --desbloquear >/dev/null; compact
-chk "--desbloquear quita el bloqueo y deja la ventana" "0 1" "$(linea "$C" | grep -c '_bloqueado:') $(linea "$C" | grep -c '_revisar: 2026-11-11_')"
-chk "--revisar con --desbloquear: error" "1" "$(emit --type pendiente.block --id "$C" --desbloquear --revisar 2026-11-11 >/dev/null 2>&1; echo $?)"
+chk "--desbloquear quita el bloqueo y su fecha" "0 0" "$(linea "$C" | grep -c '_bloqueado:') $(linea "$C" | grep -c '_revisar:')"
+chk "sin separadores pegados (\`_— \`)" "0" "$(grep -c '_— ' "$M/_pendientes.md")"
+emit --type pendiente.block --id "$C" --bloqueado-por "otra" >/dev/null 2>&1; compact
+emit --type pendiente.block --id "$C" --desbloquear --revisar 2026-11-30 >/dev/null; compact
+chk "--desbloquear --revisar F: queda F como ventana nueva" "0 1" "$(linea "$C" | grep -c '_bloqueado:') $(linea "$C" | grep -c '_revisar: 2026-11-30_')"
+# Un desbloqueo anterior a 2.63.29 (sin `quita_revisar`) no toca la ventana: un evento real al que
+# se le quita el campo antes de compactar, como lo habria escrito 2.63.22.
+emit --type pendiente.block --id "$C" --bloqueado-por "otra" --revisar 2026-11-30 >/dev/null; compact
+emit --type pendiente.block --id "$C" --desbloquear >/dev/null
+chk "el evento nuevo lleva quita_revisar" "1" "$(grep -l '"quita_revisar": true' "$M"/.journal/pending/*.json 2>/dev/null | wc -l | tr -d ' ')"
+python3 - "$M" <<'PY'
+import glob, json, os, sys
+for f in glob.glob(os.path.join(sys.argv[1], ".journal", "pending", "*.json")):
+    ev = json.load(open(f, encoding="utf-8")); ev["payload"].pop("quita_revisar", None)
+    json.dump(ev, open(f, "w", encoding="utf-8"))
+PY
+compact
+chk "desbloqueo viejo (sin quita_revisar): quita el bloqueo, conserva la ventana" "0 1" "$(linea "$C" | grep -c '_bloqueado:') $(linea "$C" | grep -c '_revisar: 2026-11-30_')"
+chk "sin cuarentena tras el desbloqueo viejo" "0" "$(ls "$M/.journal/quarantine" 2>/dev/null | wc -l | tr -d ' ')"
 chk "sin cuarentena" "0" "$(ls "$M/.journal/quarantine" 2>/dev/null | wc -l | tr -d ' ')"
 
 echo "== 2-3. checkpoint-audit: bloqueado sin fecha y bloqueado vencido =="
@@ -120,6 +137,28 @@ ficha 2026-10-20 "$NINGUNO"
 chk "Ninguno colapsado con un bloqueado ya vencido: SALTADO en el hilo (hay que mirarlo)" "SALTADO" "$(estado snippet.hilo)"
 ficha 2026-10-20 "$(paso 'nada accionable hoy — espera a infra (p-98a561dc02).')"
 chk "ninguno en bloque con un bloqueado propio ya vencido: SALTADO" "SALTADO" "$(estado snippet.proximo_paso)"
+
+echo "== 3b. pregunta al cerrar: el usuario lo pedira -> desbloquear y \`pedirle a X\` es el paso =="
+M="$T/m3"; mkdir -p "$M/sessions" "$M/pendientes"
+printf -- '---\ntype: index\n---\n# Pendientes\n\n## Alta prioridad\n\n## Media prioridad\n\n## Baja prioridad\n' > "$M/_pendientes.md"
+P=$(python3 "$BIN/journal-emit.py" --memory-dir "$M" --type pendiente.add --text "Cerrar la Fase 4 con una prueba real de infra" \
+     --prioridad Media --origen "[[sessions/$SLUG]]" --creado 2026-10-20 --bloqueado-por "que infra instale el plugin" 2>/dev/null)
+python3 "$BIN/journal-emit.py" --memory-dir "$M" --type pendiente.block --id "$P" --desbloquear >/dev/null
+python3 "$BIN/journal-compact.py" --memory-dir "$M" --quiet >/dev/null 2>&1
+python3 - "$M/sessions/$SLUG.md" "$P" "$SLUG" <<'PY'
+import sys
+p, pid, slug = sys.argv[1:4]
+open(p, "w", encoding="utf-8").write(
+    "---\ntype: session\ndate: 2026-10-20\n---\n# Canal\n\n## Contexto\nalgo\n\n## Bugs fixed\n- Ninguno\n\n"
+    "## Plans\n- Ninguno\n\n## Research\n- Ninguno\n\n## Learnings generados\n- Ninguno\n\n"
+    f"## Pendientes\n- [ ] Cerrar la Fase 4 con una prueba real de infra — `{pid}`\n\n"
+    "## Commits\n- `abc1234`\n\n## Como retomar\n\n```\nRetomamos: bandeja.\n\n"
+    f"Lee memory/sessions/{slug}.md para el contexto completo.\n\n"
+    f"Proximo paso: pedirle a infra que instale el plugin y al dev que mande el mensaje ({pid}).\n\n"
+    "Antes de actuar, dime en 3 lineas donde quedamos.\n```\n\n## Related\n- [[_pendientes]]\n")
+PY
+chk "pedirle a X (p-…) tras desbloquear: Proximo paso HECHO" "HECHO" "$(estado snippet.proximo_paso)"
+chk "y sin bloqueado sin fecha" "HECHO" "$(estado pendientes.bloqueado_sin_fecha)"
 hac() { python3 -c "import importlib.util,sys;s=importlib.util.spec_from_file_location('a',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(m.hacible({'prio':'Media','bloqueado':sys.argv[2]=='1','revisar':sys.argv[3] or None,'texto':'x'},'2026-10-20'))" "$BIN/pendientes_afines.py" "$@"; }
 chk "hacible: bloqueado vencido si, con fecha futura no, sin fecha no, sin bloqueo si" "True False False True" "$(hac 1 2026-10-19) $(hac 1 2026-10-25) $(hac 1 '') $(hac 0 '')"
 
