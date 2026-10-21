@@ -2882,6 +2882,9 @@ REGLA_PLANA = re.compile(r"^(?:([-*])|\d{1,9}\.) (?=\S)")   # columna 0, marcado
 RAYA = re.compile(r"^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$")  # `- - -` es raya horizontal, no item
 ATX = re.compile(r"^#{1,6}(?:[ \t]|$)")                     # `#t` NO es cabecera
 ABRE_BLOQUE = re.compile(r"```|~~~|^[ \t>]*<")              # valla o HTML en cualquier sitio
+# Codigo en linea (CommonMark 6.1): una tira de n comillas invertidas cerrada por la siguiente tira
+# de exactamente n en la misma linea. Lo de dentro no abre bloque. Una tira sin pareja no se toca.
+CODIGO_EN_LINEA = re.compile(r"(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)")
 
 
 def familia(linea):
@@ -2930,7 +2933,11 @@ def regla_reescribible(lines, i, end):
     # Una valla o un bloque HTML antes, en CUALQUIER parte del fichero, puede contener la regla.
     # Saber si esta cerrado pide emparejar vallas y los siete finales de HTML: eso es un parser, y
     # la decision (del usuario, 2026-09-21) fue negarse antes que escribir otro a medias.
-    if any(ABRE_BLOQUE.search(x) for x in lines[:i]):
+    # El codigo en linea se cambia por una letra, no se borra: asi no acerca un `<` al inicio.
+    # Quitarlo nunca esconde una valla: una valla empieza la linea, y un tramo que la contenga
+    # empieza con comillas antes que ella o es la propia valla con comillas detras, que
+    # CommonMark (4.5) no deja abrir.
+    if any(ABRE_BLOQUE.search(CODIGO_EN_LINEA.sub("c", x)) for x in lines[:i]):
         return "codigo-antes"
     return None
 
