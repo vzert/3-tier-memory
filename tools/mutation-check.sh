@@ -387,6 +387,17 @@ caso "restaurar deja temporal"  journal-compact.py m_error_interno.py $T "restau
 caso "deshacer sin rmdir"       journal-compact.py m_error_interno.py $T "pendientes/ nuevo: el directorio que creo el evento no queda" sin-borrar-dirs
 caso "dirs sin apuntar"         journal-compact.py m_error_interno.py $T "a/b/c nuevos: no queda ninguno" sin-apuntar-dirs
 caso "apunta dirs previos"      journal-compact.py m_error_interno.py $T "a previo, b/c nuevos: a sigue" apunta-previos
+# 2.63.22: aviso de snippet viejo al pegar, paso compartido al cerrar, ➕ sin el Alta. Cada caso
+# nombra su suite (sin $T) para no cambiar la de los casos de arriba ni la de los de abajo.
+caso "vigente sin paso cerrado" snippet-vigente.py m_paso_vigente.py test-snippet-vigente.sh "dice cerrado con fecha" vigente-sin-cerrado
+caso "vigente sin ficha nueva"  snippet-vigente.py m_paso_vigente.py test-snippet-vigente.sh "nombra la ficha nueva" vigente-sin-ficha-nueva
+caso "vigente sin marca"        snippet-vigente.py m_paso_vigente.py test-snippet-vigente.sh "nombra la ficha de la marca" vigente-sin-marca
+caso "vigente sin tarjeta mod"  snippet-vigente.py m_paso_vigente.py test-snippet-vigente.sh "avisa por el id de la tarjeta" vigente-sin-tarjeta-mod
+caso "vigente mismo dia"        snippet-vigente.py m_paso_vigente.py test-snippet-vigente.sh "sin salida" vigente-mismo-dia-sin-mtime
+caso "cierre sin paso compartido" checkpoint-audit.py m_paso_vigente.py test-paso-compartido.sh "la segunda ficha" audit-sin-paso-compartido
+caso "paso compartido otro dia" checkpoint-audit.py m_paso_vigente.py test-paso-compartido.sh "otro dia" audit-compartido-cualquier-dia
+caso "guard sin paso compartido" checkpoint-close-guard.sh m_paso_vigente.py test-checkpoint-close-guard.sh "la revision trae el aviso del paso compartido" guard-sin-compartido
+caso "opcional con Alta"        print-pendiente-opcional.py m_paso_vigente.py test-print-pendiente-opcional.sh "nada" opcional-con-alta
 caso "sin identidad"           journal-emit.py m_learning_dedup.py test-learning-dedup.sh "mismo texto sin --decision: rc 0" sin-identidad
 caso "decision fuera"          journal-emit.py m_learning_dedup.py test-learning-dedup.sh "la decision viaja en el payload" decision-fuera-del-payload
 caso "reemplaza sin supersedes" journal-emit.py m_learning_dedup.py test-learning-dedup.sh "reemplaza:2 lleva supersedes 2" reemplaza-sin-supersedes

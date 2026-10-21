@@ -1137,11 +1137,11 @@ grep -v -e '^🔁 Siguiente' -e '^🔔 ' -e '^🗓️ ' -e '^```$' "$T/r44.txt" 
 tx "$T/t44v.jsonl" skill "$F" "$T/sin-cierre.txt" "$T/n8b.txt"
 vuelta "$T/t44v.jsonl" "$T/t.jsonl" "$T/r44-viejo.txt"
 chk "silencio" "0" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -cE 'despues de tu revision|no quedo como lo ultimo')"
-echo "== 2.44.0: caso 5 sin nada que venza hoy -> ➕; con uno que vence hoy -> 🔔 y no ➕ =="
+echo "== 2.44.0: caso 5 sin nada que venza hoy -> ➕ solo con un vencido; con uno que vence hoy -> 🔔 y no ➕ =="
 armar "$M" -; fecha01 "$F"
 python3 "$BIN/print-pendiente-opcional.py" "$F" > "$T/c5.txt"
-chk "➕ con el Alta abierto" "1" "$(grep -c '^➕ ' "$T/c5.txt")"
-chk "propone el Alta" "1" "$(grep -c 'p-daf3051915' "$T/c5.txt")"
+# 2.63.22 (decision de Victor, d265-d266): sin vencidos, el Alta abierto ya no sale en ➕.
+chk "sin vencidos: ni ➕ ni el Alta" "0 0" "$(grep -c '^➕ ' "$T/c5.txt") $(grep -c 'p-daf3051915' "$T/c5.txt")"
 chk "caso 5 en una linea con 🔁" "1" "$(python3 "$BIN/print-como-retomar.py" "$F" | grep -c '^🔁 Como retomar: Ninguno')"
 vence_hoy "$M/_pendientes.md" p-0c0c0c0c0c
 python3 "$BIN/print-pendiente-opcional.py" "$F" > "$T/c5h.txt"
@@ -1496,6 +1496,29 @@ chk "y no lo cuenta como falta del cierre" "0" "$(grep -c 'checkpoint-audit.py s
 bloqueo_ficha '- [ ] otro sin bloqueo — `p-014255373e`'
 corre_en "$T/t.jsonl" false - "$RB" >/dev/null
 chk "Ninguno sin pendiente bloqueado en la ficha: no pregunta por el bloqueo" "1 0" "$([ -f "$AB" ] && echo 1 || echo 0) $(grep -c 'no es el usuario' "$AB" 2>/dev/null)"
+
+echo "== 2.63.22: otra ficha del mismo dia ya deja el mismo Proximo paso: aviso en la revision, sin rechazo =="
+# compartido_ficha PASO_OTRA: la ficha demo con fecha 2026-10-20 y `Proximo paso` sobre
+# p-daf3051915, y otra ficha de ese dia cuyo `Proximo paso` es PASO_OTRA. Forma del caso real
+# (otro proyecto, 2026-10-20: dos cierres con 23 s de diferencia sobre el mismo `p-…`).
+compartido_ficha() {
+  marco_ficha "ver en vivo la 0.13.41 (p-daf3051915)."
+  python3 -c 'import sys;p=sys.argv[1];t=open(p,encoding="utf-8").read();open(p,"w",encoding="utf-8").write(t.replace("date: 2026-10-14","date: 2026-10-20",1))' "$F"
+  rm -f "$M"/sessions/2026-10-20-*.md
+  printf -- '---\ntype: session\ndate: 2026-10-20\n---\n# Otra\n\n## Como retomar\n\n```\nRetomamos: otra.\n\nProximo paso: %s\n```\n' "$1" > "$M/sessions/2026-10-20-otra.md"
+  tx "$T/t.jsonl" skill "$F" - -
+}
+RC="$T/repo-compartido"; mkdir -p "$RC"; git -C "$RC" init -q
+AC="$RC/.git/3t-revision-cierre-sin-sesion.md"
+compartido_ficha "pregunta antes; si nadie lo lleva, ver en vivo la 0.13.41 (p-daf3051915)."
+OJ=$(corre_en "$T/t.jsonl" false - "$RC")
+chk "la revision trae el aviso del paso compartido" "1" "$(grep -c '^Otra sesion de hoy ya deja el mismo `Proximo paso`' "$AC" 2>/dev/null)"
+chk "y nombra la otra ficha" "1" "$(grep -c '^- p-daf3051915 ya es el `Proximo paso` de memory/sessions/2026-10-20-otra.md' "$AC" 2>/dev/null)"
+chk "y no lo cuenta como falta del cierre" "0" "$(grep -c 'checkpoint-audit.py snippet.paso_compartido:' "$AC" 2>/dev/null)"
+compartido_ficha "otra cosa (p-0c0c0c0c0c); ver tambien p-daf3051915."
+corre_en "$T/t.jsonl" false - "$RC" >/dev/null
+chk "la otra solo lo cita tras 'ver tambien': sin aviso" "1 0" "$([ -f "$AC" ] && echo 1 || echo 0) $(grep -c 'mismo `Proximo paso`' "$AC" 2>/dev/null)"
+rm -f "$M"/sessions/2026-10-20-*.md
 
 echo "== 2.63.3: un sed que edita print-como-retomar.py y otro .py, con un break en la sesion y sin ficha: silencio =="
 # Forma real (sesion 4237bac9, p-bea9639b92): `sed -i` sobre el fuente de print-como-retomar.py
