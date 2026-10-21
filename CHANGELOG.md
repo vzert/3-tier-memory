@@ -25,7 +25,9 @@ esta version no los re-midio.
   y `"$SF"`) y una ficha escrita en un turno anterior. Control: una ficha sellada con otra sesion se
   queda en silencio. Caso del triage con la variable asignada: se revisa la misma ficha que con la
   ruta literal (con 2.63.18 pasa, porque callaba con cualquier variable; lo mide `asigna-ignorada`).
-  Arnes completo: 278/3 con el guard de 2.63.18, 281/281 con el de esta version. Mutaciones `variable-callada` y
+  Arnes de esta rama antes de juntar 2.63.22 (281 asertos): 278/3 con el guard de 2.63.18, 281/281
+  con el de esta version. Tras juntar 2.63.22 (284 asertos): 284/284, y 279/5 con el guard de 2.63.18
+  (los 3 de Step 8b y 2 de 2.63.22). Mutaciones `variable-callada` y
   `asigna-ignorada` (`tools/mutaciones/m_ficha_sesion.py`); `ficha-cualquiera` reapuntada a la linea
   nueva.
 
