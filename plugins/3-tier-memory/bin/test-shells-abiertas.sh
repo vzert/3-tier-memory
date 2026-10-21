@@ -97,7 +97,9 @@ OUT=$($S --transcript "$J"); RC=$?
 chk "sale 0" "0" "$RC"
 chk "resumen: 6 abiertas, 5 cerradas" "resumen: abiertas=6 cerradas=5" "$(printf '%s\n' "$OUT" | tail -1)"
 chk "1: el Bash vivo sale ABIERTA" "1" "$(printf '%s\n' "$OUT" | grep -c '^ABIERTA  bvivo0001  Bash  Muestreo de prueba$')"
-chk "1: muestra la salida con sus bytes" "1" "$(printf '%s\n' "$OUT" | grep -c "salida: $T/tasks/bvivo0001.output ($(wc -c < "$T/tasks/bvivo0001.output" | tr -d ' ') bytes")"
+# Sin $T en el patron: en Git Bash la ruta llega a python.exe convertida a C:/... (o C:\...), y el
+# script imprime esa forma, no la de /tmp que ve bash (platforms windows-latest, run 39531445952).
+chk "1: muestra la salida con sus bytes" "1" "$(printf '%s\n' "$OUT" | grep -c "^  salida: .*tasks/bvivo0001\.output ($(wc -c < "$T/tasks/bvivo0001.output" | tr -d ' ') bytes")"
 chk "1: muestra las 3 ultimas lineas no vacias" "muestra 1 ok|Timeout expired|Timeout expired" "$(printf '%s\n' "$OUT" | sed -n 's/^  ultimas lineas: //p' | paste -sd'|' -)"
 chk "2: completed no sale" "0" "$(printf '%s\n' "$OUT" | grep -c bfin00002)"
 chk "2: failed en bloques no sale" "0" "$(printf '%s\n' "$OUT" | grep -c bfalla003)"
