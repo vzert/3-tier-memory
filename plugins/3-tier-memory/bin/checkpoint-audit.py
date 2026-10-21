@@ -151,6 +151,9 @@ DESDE_MARCO = "2026-10-14"
 # Desde 2.62.11 un snippet `ninguno` con un pendiente `_bloqueado` en la ficha sale como aviso
 # (snippet.ninguno_bloqueo): una decision del usuario no es un bloqueo. Incluye el caso real.
 DESDE_NINGUNO_BLOQUEO = "2026-10-16"
+# Desde 2.63.22 un `Proximo paso` que otra ficha del mismo dia ya deja como el suyo sale como aviso
+# (snippet.paso_compartido). Incluye el caso real del 2026-10-20.
+DESDE_PASO_COMPARTIDO = "2026-10-20"
 # Tercer cierre de un defecto (2.53.0): el usuario decidio en Step 3b no abrirle pendiente.
 DESCARTADO_BUG = re.compile(r"_descartado:\s*(.*?)_(?=\s|$|[.,;:)\]—])", re.S)
 # `pendientes.candidatos` (2.53.0): desde aqui cada pendiente nuevo sale en `## Candidatos a
@@ -1600,6 +1603,43 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         else:
             h.append(Hallazgo(HECHO, "snippet.ninguno_bloqueo",
                               "sin `ninguno` sobre un pendiente `_bloqueado` de la ficha"))
+
+    # 8-sexies-ter. Otra ficha del mismo dia ya deja el mismo `Proximo paso` (2.63.22). Caso real
+    # (otro proyecto, 2026-10-20): dos sesiones cerraron con 23 s de diferencia y las dos
+    # dejaron el mismo `p-…` como paso; Victor recibio dos snippets casi iguales para un solo
+    # trabajo. Solo se comparan ids del campo `Proximo paso` (sin "ver tambien"), y el estado es
+    # POR-DISENO: viaja en la revision del cierre, que ya bloquea una vez, y no suma un rechazo
+    # (decision de Victor, d267). La sesion que cierra primero no ve nada; la segunda, si.
+    # El `ninguno` se mira con re.match y no copiando la linea de snippet.marco: la mutacion
+    # marco-con-ninguno (tools/mutaciones/m_hilo.py) exige que esa linea calce una sola vez.
+    if pp is not None and fecha_ficha and fecha_ficha >= DESDE_PASO_COMPARTIDO \
+            and "<filled in Step 8>" not in sec_retomar \
+            and not re.match(r"(ninguno|nada accionable)", pp, re.I):
+        ids_pp = set(ID_PENDIENTE.findall(re.sub(r"\bver\s+tambi[eé]n\b.*", "", pp, flags=re.I)))
+        compartido = []
+        carpeta = os.path.dirname(os.path.abspath(session_file))
+        for otra in sorted(glob.glob(os.path.join(glob.escape(carpeta), fecha_ficha + "-*.md"))):
+            if os.path.basename(otra)[:-3] == slug or not ids_pp:
+                continue
+            pp_otra = linea_proximo_paso(seccion_por_prefijo(secciones(leer(otra)), "Como retomar") or "")
+            if not pp_otra:
+                continue
+            comunes = sorted(ids_pp & set(ID_PENDIENTE.findall(
+                re.sub(r"\bver\s+tambi[eé]n\b.*", "", pp_otra, flags=re.I))))
+            if comunes:
+                compartido.append(f"{', '.join(comunes)} ya es el `Proximo paso` de "
+                                  f"memory/sessions/{os.path.basename(otra)}")
+        if compartido:
+            h.append(Hallazgo(DISENO, "snippet.paso_compartido",
+                              f"{len(compartido)} ficha(s) mas de hoy ya dejan el mismo "
+                              "`Proximo paso` (aviso, no bloquea)", compartido,
+                              corrige="pregunta a esa sesion por SendMessage si sigue con el paso; "
+                                      "si lo lleva ella, rehaz tu snippet con otro paso o `ninguno — "
+                                      "lo lleva <ficha>`; si lo tomas tu, dilo en la revision del "
+                                      "cierre"))
+        else:
+            h.append(Hallazgo(HECHO, "snippet.paso_compartido",
+                              "ninguna otra ficha de hoy deja el mismo `Proximo paso`"))
 
     # 8-quater. `Sigue abierto:` solo nombra pendientes VIVOS (2.33.1, p-c72a33ae7a). Medido en vivo
     # en la sesion que construyo 2.33.0: tras el checkpoint se resolvio `p-477bb60303` (el push) y

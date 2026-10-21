@@ -17,6 +17,92 @@ vencia y el 8e salia vacio.
 - `tools/mutation-check.sh`: caso nuevo "prueba con fecha fija" (`m_hoy_fijo.py sin-parche`): sin
   el parche cae "el fixture trae un 8e con contenido".
 
+## [2.63.25] - 2026-10-20
+Origen: pedido del usuario. Un agente cerro con `/checkpoint-3t`, dejo su prompt para retomar y
+siguio con una shell en segundo plano viva: un muestreo que cada 15 minutos escribia "Timeout
+expired", justo el log que su Como retomar mandaba leer. El agente no puede preguntarle al harness
+que tareas tiene vivas, y tras una compactacion no recuerda lo que lanzo.
+
+### Added
+- **`bin/shells-abiertas.py`: lista las shells en segundo plano que la sesion dejo vivas.** Lee el
+  transcript de la sesion (`$CLAUDE_CODE_SESSION_ID`, o `--session-id`/`--transcript`). Cuenta los
+  Bash con `run_in_background`, los Bash que pasaron solos a segundo plano al vencer su timeout y los
+  `Monitor`. El id de cada tarea sale del campo que el harness guarda en el resultado
+  (`toolUseResult.backgroundTaskId` en un Bash, `taskId` en un Monitor), no del texto: un `echo` que
+  imprime la frase de lanzamiento no abre nada (revisor externo, ronda 1). Medido en 400 JSONL: los
+  985 lanzamientos reales traen ese campo. Una linea sin el (transcript viejo) se lee por el texto,
+  anclado al inicio. Una tarea se cierra con una `<task-notification>` con `<status>`, con un evento
+  `[Monitor expired`, o con un TaskStop (`Successfully stopped task` o `No task found`). Una
+  notificacion que solo aparece en la salida de un Bash o en un mensaje del agente no cierra nada. Por tarea abierta imprime el comando, su fichero de salida con
+  tamano y edad, y sus ultimas lineas. Al final, `resumen: abiertas=N cerradas=M`. Solo lee: nunca
+  para nada. Limites: una tarea que murio sin notificacion sale como abierta. Un `/clear` o un
+  resume que abre otro JSONL no hereda las tareas del anterior. Un proceso con nohup, una pestana de
+  otro agente o un subagente quedan fuera, por decision del usuario.
+- **`/checkpoint-3t` Step 7c, antes de Step 8.** Corre el script y pone cada shell abierta en una de
+  cuatro casillas. **Sobra**: se para con TaskStop. **Se usa**: se queda, y el `Proximo paso` dice
+  su id y que muere al cerrar la sesion de Claude Code. **Viva pero falla**: se reporta con la linea
+  que falla. **No se**: se pregunta al usuario. El reporte de Step 7 lleva una linea `Shells:`. No
+  relanza nada con nohup ni launchd.
+- `bin/test-shells-abiertas.sh`: 22 casos sobre un transcript armado con esas formas.
+
+## [2.63.22] - 2026-10-20
+Origen: auditoria de los hilos y el snippet de retomar pedida por Victor (via `/goalspec:interview`,
+d262-d269), sobre las sesiones del 2026-10-10 al 2026-10-20 de este repo y de otros tres proyectos
+del usuario (276 sesiones; 127 con 2.62.0 o mas).
+
+### Added
+- **Un snippet de retomar pegado que ya quedo viejo se avisa antes de actuar.** Nuevo hook
+  UserPromptSubmit `bin/snippet-vigente.sh` (logica en `bin/snippet-vigente.py`). Si el prompt
+  empieza por `Retomamos:`, `Proximo paso:` o `p-…:` (la tarjeta del mod pendientes), mira
+  `memory/` y le dice al agente, una linea por id: (A) que el `p-…` del paso ya esta cerrado (fecha
+  y nota de su fila mensual) o no existe; (B) que sigue abierto pero una ficha mas nueva que la
+  citada ya lo retoma (en su `## Como retomar`, en su sello `hilo_paso`, o en la marca `_retomar`
+  del pendiente), y cual. Solo avisa: no bloquea y no decide si el trabajo sigue haciendo falta.
+  Medido: de 5 pegados que el agente llamo "viejos" en la ventana, 4 lo eran (3 con el paso ya
+  cerrado, 1 de un plan de varias noches con una ficha mas nueva); A y B cubren los 4 y no disparan
+  en el quinto, que era vigente. En los 4 el agente lo descubrio por su cuenta, leyendo la memoria
+  en su primer turno (15-42 s), y en otras sesiones el usuario llego a escribir a mano "revisa si tu
+  snippet sigue vigente". Una tercera señal al pegar ("otra sesion viva arranco con el mismo paso")
+  no cubria ningun caso que A y B no cubrieran, y no se construyo. Lee ids, fechas y nombres de
+  archivo, nunca juzga la prosa (regla 216); 0,02-0,04 s sobre las memorias reales. Prueba:
+  `bin/test-snippet-vigente.sh`.
+- **Al cerrar, aviso si otra ficha del mismo dia ya deja el mismo `Proximo paso`.** Nuevo chequeo
+  `snippet.paso_compartido` en `checkpoint-audit.py`, POR-DISEÑO: `checkpoint-close-guard.sh` lo
+  pone en la revision del cierre, que ya bloquea una vez, y no suma un rechazo (decision de Victor,
+  d267). Solo compara los `p-…` del campo `Proximo paso` (no la linea de extras ni lo que va tras
+  "ver tambien"); un `ninguno` no es un paso. Caso real en otro proyecto, 2026-10-20: dos
+  cierres con 23 s de diferencia dejaron el mismo `p-…` como paso. El fixture
+  `bin/fixtures/paso-compartido/` tiene dos cierres con esa forma y texto inventado. Prueba:
+  `bin/test-paso-compartido.sh` y un caso nuevo en `test-checkpoint-close-guard.sh`.
+
+### Changed
+- **El bloque ➕ de Step 8e ya no ofrece el Alta abierto mas reciente cuando no hay vencidos**
+  (decision de Victor, d265-d266). Ofrece hasta 2 vencidos, o nada. Sin relacion con la sesion, el
+  mismo Alta salia en cada cierre hasta que alguien lo cerraba: uno que era trabajo de otro agente
+  salio 14 veces en 10 sesiones de otro proyecto sin que nadie lo tomara. El backlog ya lo
+  muestran el sidebar de pendientes y el recall por peticion. Template, README y las dos pruebas
+  que esperaban el Alta, al dia.
+
+### Pruebas
+- `tools/mutaciones/m_paso_vigente.py`: 9 mutaciones nuevas en `tools/mutation-check.sh` (cada
+  detector del aviso al pegar, el chequeo del audit y su corte por dia, el bloque del hook de
+  cierre y el respaldo del Alta). Cada una tumba su aserto.
+
+## [2.63.20] - 2026-10-20
+Origen: `p-058a36018c`, hallazgo de 2.63.17.
+
+### Fixed
+- **Un `error-interno` ya no deja directorios vacios en `memory/`.** `deshacer_evento` borraba el
+  fichero que el evento habia creado, pero no el directorio que `ensure_monthly`, `archivar_linea`
+  o `apply_learning_add` crearon para el. Medido sobre 2.63.17: un `pendiente.add` con `text` en
+  forma de lista, en una memoria sin `pendientes/`, iba a cuarentena y dejaba `memory/pendientes/`
+  vacio. Ahora esos tres sitios crean el directorio con `crear_dirs`, que apunta los que no
+  existian, y `deshacer_evento` los borra con `os.rmdir` del mas hondo al mas alto. Solo borra los
+  que el evento creo y solo si quedaron vacios; nunca un borrado recursivo. Uno que no se puede
+  borrar se nombra en el motivo, como un fichero que no se pudo restaurar. Seccion 10 de
+  `test-error-interno.sh` y tres mutaciones nuevas (`sin-borrar-dirs`, `sin-apuntar-dirs`,
+  `apunta-previos`).
+
 ## [2.63.18] - 2026-10-20
 Origen: el platforms de main sobre 5d9282c (2.63.16, PR #50) cayo en windows-latest (run
 39443101444): las 15 invocaciones reales de `test-checkpoint-close-guard.sh` salian en silencio. El

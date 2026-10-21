@@ -38,14 +38,20 @@ echo "== ➕ solo en el caso 5: con snippet completo, ni el Alta ni los vencidos
 armar "$(L p-aaaaaaaaaa 'alta nueva' 2026-09-22 '')" "$(L p-2222222222 'media vencida' 2026-09-10 ' — _revisar: 2026-09-15_')" "$PP"
 chk "snippet completo y nada vence hoy: nada" "" "$(out)"
 
-echo "== ➕ caso 5, Alta: el _creado mas reciente; a igual fecha, la fila de mas arriba =="
-armar "$(L p-aaaaaaaaaa 'alta vieja' 2026-09-01 '')$(L p-bbbbbbbbbb 'alta nueva arriba' 2026-09-20 '')$(L p-cccccccccc 'alta nueva abajo' 2026-09-20 '')" "" CASO5
+echo "== ➕ caso 5 sin vencidos: un Alta abierto ya no sale (2.63.22, decision de Victor d265-d266) =="
+# Hasta 2.63.17 salia el Alta abierto mas reciente, y el mismo salia en cada cierre: uno de otro
+# agente salio 14 veces en 10 sesiones de otro proyecto sin que nadie lo tomara.
+armar "$(L p-aaaaaaaaaa 'alta vieja' 2026-09-01 '')$(L p-bbbbbbbbbb 'alta nueva arriba' 2026-09-20 '')" "$(L p-1111111111 'media sin fecha' 2026-09-22 '')" CASO5
+chk "nada" "" "$(out)"
+
+echo "== ➕ caso 5, forma del prompt (un vencido) =="
+armar "$(L p-bbbbbbbbbb 'alta vencida' 2026-09-20 ' — _revisar: 2026-09-21_')" "" CASO5
 O=$(out)
 chk "cabecera ➕" "1" "$(printf '%s' "$O" | grep -c '^➕ ')"
 chk "sin cabecera 🔔" "0" "$(printf '%s' "$O" | grep -c '^🔔')"
-chk "elige la nueva de arriba" "1" "$(printf '%s' "$O" | grep -c 'alta nueva arriba _id: p-bbbbbbbbbb_')"
+chk "el vencido" "1" "$(printf '%s' "$O" | grep -c 'alta vencida _id: p-bbbbbbbbbb_')"
 chk "un solo prompt" "1" "$(printf '%s' "$O" | grep -c '^Retomamos:')"
-chk "motivo Alta" "1" "$(printf '%s' "$O" | grep -c '^Motivo: Alta abierto desde 2026-09-20')"
+chk "sin motivo 'abierto desde'" "0" "$(printf '%s' "$O" | grep -c '^Motivo: Alta abierto desde')"
 chk "texto sin metadatos" "0" "$(printf '%s' "$O" | grep '^Retomamos:' | grep -c '_origen')"
 # La ruta se compara por su final: en Windows Python imprime la ruta nativa (C:\...) y $P es la de
 # Git Bash (/c/...). Las dos son la misma carpeta; el prompt se pega en el sistema de quien lo lee.
@@ -55,13 +61,13 @@ chk "clausula de cierre" "1" "$(printf '%s' "$O" | grep -c 'cierralo con /checkp
 chk "sin separadores viejos" "0" "$(printf '%s' "$O" | grep -c '───\|Si tienes tiempo, abre')"
 
 echo "== ➕ adversariales: bloqueado y _revisar futuro no se proponen =="
-armar "$(L p-aaaaaaaaaa 'alta bloqueada' 2026-09-22 ' — _bloqueado: otra instalacion_')$(L p-bbbbbbbbbb 'alta con fecha futura' 2026-09-22 ' — _revisar: 2026-09-30_')$(L p-dddddddddd 'alta valida' 2026-09-01 '')" "" CASO5
+armar "$(L p-aaaaaaaaaa 'alta bloqueada' 2026-09-22 ' — _revisar: 2026-09-15 — _bloqueado: otra instalacion_')$(L p-bbbbbbbbbb 'alta con fecha futura' 2026-09-22 ' — _revisar: 2026-09-30_')$(L p-dddddddddd 'alta valida' 2026-09-01 ' — _revisar: 2026-09-16_')" "" CASO5
 O=$(out)
 chk "elige la unica valida" "1" "$(printf '%s' "$O" | grep -c 'p-dddddddddd')"
 chk "ni bloqueada ni futura" "0" "$(printf '%s' "$O" | grep -c 'p-aaaaaaaaaa\|p-bbbbbbbbbb')"
 armar "$(L p-aaaaaaaaaa 'alta bloqueada' 2026-09-22 ' — _bloqueado: otra instalacion_')" "" CASO5
 chk "solo bloqueados: nada" "" "$(out)"
-armar "$(L p-aaaaaaaaaa 'la palabra _bloqueado en el texto no bloquea' 2026-09-22 '')" "" CASO5
+armar "$(L p-aaaaaaaaaa 'la palabra _bloqueado en el texto no bloquea' 2026-09-22 ' — _revisar: 2026-09-15_')" "" CASO5
 chk "'_bloqueado' dentro del texto no cuenta (campo, no prosa)" "1" "$(out | grep -c 'p-aaaaaaaaaa')"
 
 echo "== ➕ caso 5, vencidos: ganan a los Alta, hasta 2, el mas viejo primero, de cualquier prioridad =="
@@ -77,7 +83,7 @@ armar "" "$(L p-1111111111 'vencida pero bloqueada' 2026-09-10 ' — _revisar: 2
 chk "vencida y bloqueada: nada" "" "$(out)"
 
 echo "== ➕ origen sin ficha: sin linea Contexto =="
-armar "$(printf -- '- [ ] alta sin origen — _creado: 2026-09-22_ — _id: p-aaaaaaaaaa_\\n')" "" CASO5
+armar "$(printf -- '- [ ] alta sin origen — _creado: 2026-09-22_ — _id: p-aaaaaaaaaa_ — _revisar: 2026-09-15_\\n')" "" CASO5
 O=$(out)
 chk "propone" "1" "$(printf '%s' "$O" | grep -c 'p-aaaaaaaaaa')"
 chk "sin Contexto" "0" "$(printf '%s' "$O" | grep -c '^Contexto:')"
