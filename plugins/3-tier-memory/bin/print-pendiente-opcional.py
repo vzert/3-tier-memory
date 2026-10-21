@@ -20,7 +20,7 @@ ninguno hoy), asi que el cierre lleva a lo sumo un bloque de pendiente, justo de
 
 Nunca propone un pendiente con `_bloqueado:` sin `_revisar` (espera a algo fuera de la sesion y no
 dice cuando mirar), uno con `_revisar` futuro (ya tiene su recordatorio de calendario) ni el que ya
-cita `Proximo paso:` de la ficha. Un `_bloqueado:` con `_revisar` de hoy o vencido SI sale (2.63.29):
+cita `Proximo paso:` de la ficha. Un `_bloqueado:` con `_revisar` de hoy o vencido SI sale (2.63.32):
 ese dia toca mirar si ya llego lo que esperaba; sin esto el bloqueo lo escondia tambien aqui. Todo sale de campos estructurados de `_pendientes.md` y de la forma de `## Como retomar`:
 nada se decide leyendo el texto (regla 216). Si no hay candidato no imprime nada y sale con 0.
 

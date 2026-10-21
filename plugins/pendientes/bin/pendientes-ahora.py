@@ -101,7 +101,7 @@ def fecha_futura(pa, texto, hoy):
 
 def hacible(pa, p, hoy):
     """Como pendientes_afines.hacible, pero sin su filtro de prioridad (el paso puede ser Baja) y
-    dejando fuera todo `_bloqueado`, aun con su `_revisar` ya pasado (3-tier-memory 2.63.29 lo
+    dejando fuera todo `_bloqueado`, aun con su `_revisar` ya pasado (3-tier-memory 2.63.32 lo
     vuelve hacible): ese sale en "vence", que cuenta todo `_revisar` de hoy o pasado."""
     if p["bloqueado"]:
         return False

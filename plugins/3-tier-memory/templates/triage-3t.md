@@ -164,7 +164,7 @@ uses `pendiente.add` con el `--creado` original para reproducir el id. No invent
 `memory/.memory-config`, el hook `journal-guard.sh` deniega precisamente ese `Edit` sobre
 `memory/_*.md` — o sea que la instruccion manual era inaplicable justo en la configuracion que el
 plugin recomienda. Desde que el campo existe, `expire-pendientes.py --modo revisar` caduca el item
-solo cuando la fecha pase. Un `_bloqueado` nunca se caduca (2.63.29): su fecha dice cuando mirar si
+solo cuando la fecha pase. Un `_bloqueado` nunca se caduca (2.63.32): su fecha dice cuando mirar si
 ya llego lo que espera. Un `_bloqueado` sin `_revisar` se fecha aqui con `pendiente.window` (la
 fecha dicha, o hoy+5), o se desbloquea si lo que espera es una decision o un comando del usuario.
 

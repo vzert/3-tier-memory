@@ -154,7 +154,7 @@ DESDE_NINGUNO_BLOQUEO = "2026-10-16"
 # Desde 2.63.22 un `Proximo paso` que otra ficha del mismo dia ya deja como el suyo sale como aviso
 # (snippet.paso_compartido). Incluye el caso real del 2026-10-20.
 DESDE_PASO_COMPARTIDO = "2026-10-20"
-# Desde 2.63.29 un pendiente `_bloqueado` sin `_revisar` en `## Pendientes` de la ficha es SALTADO
+# Desde 2.63.32 un pendiente `_bloqueado` sin `_revisar` en `## Pendientes` de la ficha es SALTADO
 # (pendientes.bloqueado_sin_fecha). Fichas anteriores: sin cambio al re-auditarlas.
 DESDE_BLOQUEADO_FECHA = "2026-10-20"
 # Tercer cierre de un defecto (2.53.0): el usuario decidio en Step 3b no abrirle pendiente.
@@ -1296,7 +1296,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     origen_por_id = origenes_abiertos(memory_dir)
 
     def espera_viva(i):
-        """Bloqueado y su `_revisar` no ha pasado (2.63.29). Con la fecha pasada el paso es mirar si
+        """Bloqueado y su `_revisar` no ha pasado (2.63.32). Con la fecha pasada el paso es mirar si
         ya llego lo que esperaba: accionable, igual que en pendientes_afines.hacible."""
         return i in bloqueados and not (rev_por_id.get(i) and rev_por_id[i] < ref)
     pp = linea_proximo_paso(sec_retomar)
@@ -1616,13 +1616,13 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             h.append(Hallazgo(HECHO, "snippet.ninguno_bloqueo",
                               "sin `ninguno` sobre un pendiente `_bloqueado` de la ficha"))
 
-    # 8-sexies-quater. Un bloqueado sin fecha (2.63.29). `_bloqueado` saca el pendiente del hilo,
+    # 8-sexies-quater. Un bloqueado sin fecha (2.63.32). `_bloqueado` saca el pendiente del hilo,
     # de `Proximo paso` y de la caducidad; sin `_revisar` tampoco sale en el recordatorio de
     # calendario, asi que nada lo vuelve a mostrar y "pedirle a X" o "mirar si X ya contesto" se
     # olvida. Caso real (claude-vzert, 2026-10-20): `p-98a561dc02` bloqueado por "que infra
     # instale el plugin y un dev mande el mensaje", snippet `Ninguno`, y Victor tuvo que
     # preguntar como se iba a acordar nadie. Medido ese dia: 50 de 54 bloqueados abiertos en 7
-    # proyectos, sin `_revisar`. Desde 2.63.29 journal-emit.py pone hoy+5 al bloquear; este
+    # proyectos, sin `_revisar`. Desde 2.63.32 journal-emit.py pone hoy+5 al bloquear; este
     # chequeo atrapa lo que no paso por ahi (un bloqueado viejo reconciliado, una linea a mano).
     # Mira todo `- [ ]` de `## Pendientes` de la ficha (la ficha lo cita: es de esta sesion
     # decidir su fecha); los demas del indice salen como aviso con el conteo.

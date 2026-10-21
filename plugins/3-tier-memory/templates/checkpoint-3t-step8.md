@@ -177,7 +177,7 @@ Reglas para llenar los slots:
   Media) y, si queda mas, `quedan N en el hilo: <ids>`. Esa linea la lee el sello de la sesion
   siguiente: lo que no entro vuelve por ahi, no por una lista que escribas. Asi un Media que una sesion dejo junto a un Alta vuelve en el snippet siguiente
   sin depender de que alguien se acuerde. Nunca suma uno con `_bloqueado:` cuyo `_revisar` no ha
-  pasado (2.63.29: pasado, el paso es mirar si ya llego), con `_revisar` de hoy o futuro, ni (2.56.0) uno cuyo texto nombra una fecha `AAAA-MM-DD` posterior a hoy: eso no se
+  pasado (2.63.32: pasado, el paso es mirar si ya llego), con `_revisar` de hoy o futuro, ni (2.56.0) uno cuyo texto nombra una fecha `AAAA-MM-DD` posterior a hoy: eso no se
   puede hacer en la sesion siguiente (caso real: un pendiente Alta, "revision a 24 h desde el
   2026-10-14", sumado el 2026-10-13). **Desde 2.61.0 tampoco suma de extra** (va a `quedan N`):
   un id que tu snippet cita en `Terminas cuando:` o `No repitas:` (ya le diste un papel: "va
@@ -328,7 +328,7 @@ Reglas para llenar los slots:
   2026-10-20, dos cierres con 23 s de diferencia). **Desde 2.33.0 esta pregunta tiene respaldo mecanico, pero solo si el pendiente
   lleva el campo**: nace con `--bloqueado-por "<que espera>"` (Step 3b) o se lo pone
   `pendiente.block` (Step 3a), y entonces el audit rechaza citarlo en `Proximo paso` hasta que
-  pase su `_revisar`, que desde 2.63.29 todo bloqueado lleva (hoy+5 si nadie dijo otra fecha; ver
+  pase su `_revisar`, que desde 2.63.32 todo bloqueado lleva (hoy+5 si nadie dijo otra fecha; ver
   Step 3b, "Todo bloqueado lleva fecha"). Si para que se mueva hace falta que el usuario le pida
   algo a alguien, preguntale si lo pedira el: si dice que si, no es bloqueo y el paso es
   `pedirle a <quien> <que> (p-…)`. El juicio de
@@ -350,7 +350,7 @@ Reglas para llenar los slots:
   defecto, palabras distintas, sin la frase literal "revisar si X respondio" que la version
   anterior de esta regla buscaba. El usuario lo senalo en vivo, en el propio cierre del cambio que
   arreglaba justo esta clase de fallo en otro proyecto. El seguimiento no es una linea de este
-  snippet: es el `_revisar` del pendiente bloqueado (2.63.29). Ese dia sale en el aviso 🔔 del
+  snippet: es el `_revisar` del pendiente bloqueado (2.63.32). Ese dia sale en el aviso 🔔 del
   cierre y, pasada la fecha, vuelve al hilo como "mirar si X ya llego". Sin esa fecha el pendiente
   no volvia a salir nunca (caso real `p-98a561dc02`, claude-vzert 2026-10-20).
 
@@ -735,7 +735,7 @@ repetian durante varias sesiones. Ahora solo sale cuando la sesion no deja nada 
 El script elige por campos de `_pendientes.md` y por la forma de `## Como retomar`, nunca por el
 texto (regla 216). Nunca propone un pendiente con `_bloqueado:` sin `_revisar`, uno con `_revisar`
 futuro (ya tiene su recordatorio de calendario) ni el que cita `Proximo paso:`. Un bloqueado con
-`_revisar` de hoy o vencido si sale (2.63.29): toca mirar si ya llego lo que esperaba.
+`_revisar` de hoy o vencido si sale (2.63.32): toca mirar si ya llego lo que esperaba.
 
 **No se guarda en la ficha.** Se genera en vivo desde `_pendientes.md`, y el hook de cierre
 (`checkpoint-close-guard.sh`) lo vuelve a correr y exige cada linea en tu respuesta. Si en la misma

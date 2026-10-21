@@ -1,5 +1,5 @@
 #!/bin/bash
-# Prueba de 2.63.29: todo pendiente `_bloqueado` lleva `_revisar`, y ese dia vuelve a salir.
+# Prueba de 2.63.32: todo pendiente `_bloqueado` lleva `_revisar`, y ese dia vuelve a salir.
 # Caso real (claude-vzert, 2026-10-20): `p-98a561dc02` quedo bloqueado ("que la cuenta de infra
 # instale el plugin y que un dev mande un mensaje"), sin fecha, con snippet `Ninguno`; nada lo
 # iba a volver a mostrar. Medido ese dia: 50 de 54 bloqueados abiertos en 7 proyectos sin fecha.
@@ -59,7 +59,7 @@ chk "sin separadores pegados (\`_— \`)" "0" "$(grep -c '_— ' "$M/_pendientes
 emit --type pendiente.block --id "$C" --bloqueado-por "otra" >/dev/null 2>&1; compact
 emit --type pendiente.block --id "$C" --desbloquear --revisar 2026-11-30 >/dev/null; compact
 chk "--desbloquear --revisar F: queda F como ventana nueva" "0 1" "$(linea "$C" | grep -c '_bloqueado:') $(linea "$C" | grep -c '_revisar: 2026-11-30_')"
-# Un desbloqueo anterior a 2.63.29 (sin `quita_revisar`) no toca la ventana: un evento real al que
+# Un desbloqueo anterior a 2.63.32 (sin `quita_revisar`) no toca la ventana: un evento real al que
 # se le quita el campo antes de compactar, como lo habria escrito 2.63.22.
 emit --type pendiente.block --id "$C" --bloqueado-por "otra" --revisar 2026-11-30 >/dev/null; compact
 emit --type pendiente.block --id "$C" --desbloquear >/dev/null

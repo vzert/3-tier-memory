@@ -1429,14 +1429,14 @@ def apply_block(mem, p):
         return False
     nueva = BLOQUEADO_RE.sub("", lines[i].rstrip("\n"))
     if not p.get("bloqueado") and p.get("quita_revisar"):
-        # 2.63.29: desbloquear quita la fecha de mirar si llego la espera; un `revisar` dado queda
+        # 2.63.32: desbloquear quita la fecha de mirar si llego la espera; un `revisar` dado queda
         # como la ventana nueva. Un desbloqueo anterior (sin `quita_revisar`) no toca la ventana.
         nueva = re.sub(r"\s*—\s*_revisar: \d{4}-\d{2}-\d{2}_", "", nueva)
         if p.get("revisar"):
             nueva = f"{nueva} — _revisar: {p['revisar']}_"
     if p.get("bloqueado"):
         nueva = f"{nueva} — _bloqueado: {p['bloqueado']}_"
-        # 2.63.29: el bloqueo trae su ventana (`revisar`). Un evento anterior no la trae y se
+        # 2.63.32: el bloqueo trae su ventana (`revisar`). Un evento anterior no la trae y se
         # aplica como antes. La ventana por defecto (`revisar_defecto`) no pisa un `_revisar` que
         # la linea ya tenga y no haya vencido el dia del evento; una fecha dada si lo reemplaza.
         rev = p.get("revisar")

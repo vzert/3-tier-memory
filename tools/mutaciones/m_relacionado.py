@@ -16,7 +16,7 @@ M = {
     "snippet-sin-afines": [('inner = con_afines(fence.group(1).strip("\\n"), text, path)',
                             'inner = fence.group(1).strip("\\n")')],
     # pendientes_afines.py
-    # 2.63.29: el filtro de bloqueados deja pasar el que ya vencio; apagarlo entero.
+    # 2.63.32: el filtro de bloqueados deja pasar el que ya vencio; apagarlo entero.
     "afines-con-bloqueados": [('if p["bloqueado"] and not (p["revisar"] and p["revisar"] < hoy):', "if False:")],
     "afines-con-vence-hoy": [('if p["revisar"] and p["revisar"] >= hoy:', 'if p["revisar"] and p["revisar"] > hoy:')],
     # 2.57.0: el hilo sustituyo al filtro de afines; las mismas piezas, en su codigo nuevo.

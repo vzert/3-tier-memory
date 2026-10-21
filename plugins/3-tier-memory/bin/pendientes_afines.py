@@ -15,7 +15,7 @@ slugs `plan-…`) y devuelve hasta 2 pendientes abiertos Alta o Media ligados a 
   - el candidato y un pendiente ancla citan el mismo `plan-…`.
 Sin importar de que sesion vengan: el arrastre entre sesiones es justo el punto.
 
-Nunca devuelve uno con `_bloqueado:` (salvo que su `_revisar` ya paso, 2.63.29), uno con
+Nunca devuelve uno con `_bloqueado:` (salvo que su `_revisar` ya paso, 2.63.32), uno con
 `_revisar` futuro (ya tiene su recordatorio de calendario), uno que vence hoy (lo muestra la capa 🔔 de print-pendiente-opcional.py), uno cuyo
 texto nombra una fecha ISO posterior a hoy (ver `fecha_futura`) ni uno que ya cita el `Proximo
 paso:`. Orden: Alta antes que Media; dentro, el `_creado` mas viejo primero (el que mas tiempo
@@ -350,8 +350,8 @@ def sello(ficha_texto):
 def hacible(p, hoy):
     """Se puede hacer en la sesion siguiente: sin `_revisar` de hoy o futuro (tiene su
     recordatorio), sin una fecha `AAAA-MM-DD` futura en el texto, y sin `_bloqueado` salvo que su
-    `_revisar` ya haya pasado (2.63.29): entonces el paso es mirar si ya llego lo que esperaba. Un
-    bloqueado sin `_revisar` (anterior a 2.63.29) sigue fuera."""
+    `_revisar` ya haya pasado (2.63.32): entonces el paso es mirar si ya llego lo que esperaba. Un
+    bloqueado sin `_revisar` (anterior a 2.63.32) sigue fuera."""
     if p["prio"] not in PRIORIDAD_HILO:
         return False
     if p["bloqueado"] and not (p["revisar"] and p["revisar"] < hoy):

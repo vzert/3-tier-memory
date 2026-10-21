@@ -425,7 +425,7 @@ Para los pendientes DENTRO del alcance, clasifica cada uno en exactamente uno de
   `journal-emit.py --type pendiente.block --id p-… --bloqueado-por "<what it waits for>"`.
   Without the field, Step 8 can promote it to `Proximo paso` (see Step 3b, `--bloqueado-por`).
   The event also sets `_revisar` (today+5, or `--revisar YYYY-MM-DD` when the date to look is
-  known) so the item comes back that day (2.63.29). A still-open `_bloqueado` line this session
+  known) so the item comes back that day (2.63.32). A still-open `_bloqueado` line this session
   lists that has no `_revisar` gets one: `journal-emit.py --type pendiente.window --id p-…
   --revisar YYYY-MM-DD` — the audit marks it `SALTADO` otherwise (`pendientes.bloqueado_sin_fecha`).
   If a still-open item clearly goes with a pendiente or plan this session touched and its line
@@ -718,7 +718,7 @@ sigue siendo la via que el audit hace cumplir. `decidir con el usuario` dejo de 
 2.62.11: es la forma del paso que pone delante una decision del usuario (`decidir con <otro>`
 sigue avisando: puede ser un tercero).
 
-**Todo bloqueado lleva fecha (2.63.29).** `--bloqueado-por` sin `--revisar` nace con `_revisar:
+**Todo bloqueado lleva fecha (2.63.32).** `--bloqueado-por` sin `--revisar` nace con `_revisar:
 hoy+5` (la regla 2 de abajo), y `pendiente.block` hace lo mismo si la linea no trae ya un
 `_revisar` futuro. Si se sabe cuando mirar ("infra instala el lunes"), pasa esa fecha con
 `--revisar`. Ese dia el pendiente sale en el aviso 🔔 del cierre y, pasada la fecha, vuelve al hilo
@@ -782,7 +782,7 @@ reapareciendo dateless en `Sigue abierto` de una sesion posterior
 dias (`_revisar: 2026-09-21`) al fecharlo a mano. Si el pendiente de verdad no depende del tiempo
 sino de una condicion o decision, no le pongas `--revisar` — esta regla es solo para el que su
 unico bloqueo real es "que pase tiempo o actividad". Un pendiente que espera a un tercero lleva
-`--bloqueado-por` y tambien su `_revisar` (2.63.29, parrafo "Todo bloqueado lleva fecha"): la
+`--bloqueado-por` y tambien su `_revisar` (2.63.32, parrafo "Todo bloqueado lleva fecha"): la
 fecha no lo vuelve `Proximo paso` antes de tiempo, solo dice que dia mirar si ya llego.
 
 It prints the id. Do NOT also edit the files. The compactor (Step 3c) writes both tiers:

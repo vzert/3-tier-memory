@@ -18,7 +18,7 @@ Tipos de evento:
                     instalacion, un peer, un PR ajeno; nunca una decision del usuario,
                     que va en el `Proximo paso`; checkpoint-audit.py rechaza un
                     `Proximo paso:` que cite un id con `_bloqueado:` y `_revisar` futuro)
-                    (2.63.29) Con --bloqueado-por y sin --revisar, la ventana es hoy+5: un
+                    (2.63.32) Con --bloqueado-por y sin --revisar, la ventana es hoy+5: un
                     bloqueado sin fecha no volvia a salir nunca (medido 2026-10-20: 50 de 54
                     bloqueados abiertos en 7 proyectos). Lo avisa por stderr.
                     [--relacionado p-<10 hex>|plan-<slug>]...  (repetible, 2.55.0: otro
@@ -55,7 +55,7 @@ Tipos de evento:
   pendiente.block   --id ID (--bloqueado-por "QUE" | --desbloquear) [--revisar YYYY-MM-DD]
                     Pone, cambia o quita `_bloqueado: QUE_` en un pendiente VIVO. Existe para
                     marcar en Step 3a uno que nacio sin el campo; no cambia el id.
-                    (2.63.29) Al bloquear pone tambien `_revisar`: la fecha dada, o hoy+5 si la
+                    (2.63.32) Al bloquear pone tambien `_revisar`: la fecha dada, o hoy+5 si la
                     linea no trae ya un `_revisar` futuro (ese se conserva). Al desbloquear quita
                     `_revisar` (era la fecha de mirar si llego la espera), salvo que se de
                     --revisar, que queda como la ventana nueva.
@@ -481,7 +481,7 @@ def fecha_real(v):
         return False
 
 
-# 2.63.29: ventana de un bloqueado que nace sin fecha. Es la regla 2 de Step 3b de /checkpoint-3t
+# 2.63.32: ventana de un bloqueado que nace sin fecha. Es la regla 2 de Step 3b de /checkpoint-3t
 # ("en cualquier otro caso, 5 dias"), el mismo numero, para que dos agentes lleguen a la misma fecha.
 DIAS_BLOQUEADO = 5
 
@@ -1115,7 +1115,7 @@ def main():
         # `bloqueado` tampoco entra en el hash, por lo mismo que `revisar`: es un estado del
         # pendiente, no su identidad.
         bloqueado = limpiar_bloqueado(a.bloqueado_por)
-        # 2.63.29: un bloqueado sin ventana no volvia a salir en ningun cierre (ni recordatorio, ni
+        # 2.63.32: un bloqueado sin ventana no volvia a salir en ningun cierre (ni recordatorio, ni
         # hilo, ni `Proximo paso`). La ventana por defecto es la regla 2 de Step 3b (5 dias).
         if bloqueado and not revisar:
             revisar = revisar_por_defecto()
@@ -1505,16 +1505,16 @@ def main():
             sys.exit("journal-emit: --revisar debe ser una fecha real YYYY-MM-DD")
         base["payload"] = {"id": pid, "bloqueado": bloqueado}
         if not bloqueado:
-            # 2.63.29: el `_revisar` de un bloqueado es la fecha de mirar si llego la espera; sin
+            # 2.63.32: el `_revisar` de un bloqueado es la fecha de mirar si llego la espera; sin
             # espera sobra, y con el puesto el paso "pedirle a X (p-…)" salia rechazado como
             # `_revisar` futuro (adversario, ronda 1). Un --revisar dado queda como ventana nueva.
-            # `quita_revisar` distingue este evento de un desbloqueo anterior a 2.63.29, que no
+            # `quita_revisar` distingue este evento de un desbloqueo anterior a 2.63.32, que no
             # tocaba la ventana y se sigue aplicando igual.
             base["payload"]["quita_revisar"] = True
             if rev:
                 base["payload"]["revisar"] = rev
         if bloqueado:
-            # 2.63.29: el bloqueo trae su ventana. `revisar_defecto` le dice al compactador que
+            # 2.63.32: el bloqueo trae su ventana. `revisar_defecto` le dice al compactador que
             # conserve un `_revisar` futuro que la linea ya tenga; una fecha dada lo reemplaza.
             base["payload"]["revisar"] = rev or revisar_por_defecto()
             base["payload"]["revisar_defecto"] = not rev

@@ -50,9 +50,9 @@ EXCLUSIONES (se cuentan y se imprimen; no se archivan)
     - sin `_creado:`            -> no se puede saber la edad
     - `_revisar:` en el futuro  -> el item declara su propia ventana y aun no vence
     - `_no-caduca_`             -> marca explicita del usuario
-    - `_bloqueado:`             -> (2.63.29) espera a alguien de fuera; su `_revisar` vencido
+    - `_bloqueado:`             -> (2.63.32) espera a alguien de fuera; su `_revisar` vencido
                                    significa "mira si ya llego", no "dejo de ser compromiso".
-                                   Desde 2.63.29 todo bloqueado nace con `_revisar` (hoy+5), asi
+                                   Desde 2.63.32 todo bloqueado nace con `_revisar` (hoy+5), asi
                                    que sin esta exclusion /triage-3t caducaria cada espera viva
                                    al dia siguiente de su fecha.
 """

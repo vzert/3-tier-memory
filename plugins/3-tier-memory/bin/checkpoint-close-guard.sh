@@ -1145,7 +1145,7 @@ else:
                 "la sesion siguiente, con el agente. Si es eso, desbloquealo (`journal-emit.py --type "
                 "pendiente.block --id p-… --desbloquear`) y rehaz el snippet con `Proximo paso: "
                 "decidir con el usuario <que> (p-…)`. Si para que se mueva hace falta que el usuario "
-                "le pida algo a alguien (2.63.29), preguntale si lo va a pedir el (AskUserQuestion; "
+                "le pida algo a alguien (2.63.32), preguntale si lo va a pedir el (AskUserQuestion; "
                 "en una sesion supervisada, SendMessage al supervisor): si dice que si, desbloquealo "
                 "y el paso es `pedirle a <quien> <que> (p-…)`; si ya lo pidio o no le toca, queda "
                 "bloqueado con su `_revisar` (sale ese dia en el recordatorio). Si espera a alguien "

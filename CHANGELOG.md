@@ -1,12 +1,14 @@
 # Changelog
 
-## [2.63.29] - 2026-10-20
+## [2.63.32] - 2026-10-21
 Origen: Victor (via `/goalspec:interview`, bajo el supervisor lookout `supervisor-3-tier-memory`,
 d296-d301) reporto cierres que dejaban un pendiente `_bloqueado` sin fecha y snippet `Ninguno`, y
 pidio auditar en que casos pasa y cerrar el hueco. Caso real: claude-vzert, `p-98a561dc02`
 (espera a que la cuenta de infra instale un plugin y un dev mande un mensaje). Auditoria de solo
 lectura del mismo dia sobre los 39 proyectos 3-tier de la Mac: 7 tienen bloqueados, 54 abiertos,
-50 sin `_revisar`, y en los 7 hay fichas `Ninguno` que citan un bloqueado.
+50 sin `_revisar`, y en los 7 hay fichas `Ninguno` que citan un bloqueado. Esos 50 se
+arreglaron el mismo dia con aprobacion de Victor (d303): 12 desbloqueados porque esperaban una
+decision o un comando suyo, 38 fechados al 2026-10-25.
 
 ### Changed
 - **Todo bloqueado lleva fecha.** `journal-emit.py --bloqueado-por` sin `--revisar` nace con
@@ -14,7 +16,7 @@ lectura del mismo dia sobre los 39 proyectos 3-tier de la Mac: 7 tienen bloquead
   `--revisar` y, sin el, pone hoy+5 salvo que la linea ya traiga un `_revisar` futuro (lo conserva).
   `--desbloquear` quita tambien el `_revisar` (era la fecha de mirar si llego la espera; con el
   puesto, `Proximo paso: pedirle a <quien> …` salia rechazado como fecha futura), salvo que se de
-  `--revisar`, que queda como ventana nueva. Un evento `pendiente.block` anterior a 2.63.29 se
+  `--revisar`, que queda como ventana nueva. Un evento `pendiente.block` anterior a 2.63.32 se
   aplica como antes: el bloqueo sin ventana, y el desbloqueo sin tocar la que haya.
 - **Ese dia vuelve a salir.** `print-pendiente-opcional.py` (🔔 vence hoy, ➕ vencidos) ya no
   descarta un bloqueado con `_revisar`; le anade "Espera a alguien de fuera: mira si ya llego".
