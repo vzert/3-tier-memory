@@ -405,7 +405,7 @@ caso "ninguno plan sin rechazo"  checkpoint-audit.py m_ninguno_plan.py test-ning
 caso "ninguno plan liga prosa"   checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "la prosa no liga" plan-liga-prosa
 caso "ninguno plan cualquiera"   checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "plan cerrado" plan-cualquier-estado
 caso "ninguno plan sin prefijo"  checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "ligado con plan-<nombre>" plan-sin-prefijo
-caso "ninguno plan sin corte"   checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "antes de 2.63.31" plan-sin-corte
+caso "ninguno plan sin corte"    checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "antes de 2.63.31" plan-sin-corte
 caso "ninguno plan con paso"     checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "paso real" plan-cualquier-snippet
 caso "sin identidad"           journal-emit.py m_learning_dedup.py test-learning-dedup.sh "mismo texto sin --decision: rc 0" sin-identidad
 caso "decision fuera"          journal-emit.py m_learning_dedup.py test-learning-dedup.sh "la decision viaja en el payload" decision-fuera-del-payload
