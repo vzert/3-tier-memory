@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.63.31] - 2026-10-20
+## [2.63.33] - 2026-10-20
 Origen: p-7fd6a82eaa, el gap que dejo abierto la auditoria de hilos de 2.63.22 (decision d284 del
 usuario: chequeo SALTADO con fecha de corte; plan aprobado en d305).
 

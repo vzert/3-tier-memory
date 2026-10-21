@@ -1,5 +1,5 @@
 #!/bin/bash
-# Prueba de `snippet.ninguno_plan_activo` en checkpoint-audit.py (2.63.31, p-7fd6a82eaa).
+# Prueba de `snippet.ninguno_plan_activo` en checkpoint-audit.py (2.63.33, p-7fd6a82eaa).
 #
 # Que tiene que cumplir, y por que:
 # - Medido el 2026-10-20 en 54 planes de 4 proyectos: las fases de un plan vivian solo en su prosa,
@@ -169,7 +169,7 @@ chk "sin plan" "HECHO|" "$(estado)"
 echo "== 12. ficha anterior al corte (2026-10-20): no aplica =="
 armar
 sed -i.bak 's/^date: 2026-10-21$/date: 2026-10-20/' "$F"; rm -f "$F.bak"
-chk "antes de 2.63.31" "HECHO|" "$(estado)"
+chk "antes de 2.63.33" "HECHO|" "$(estado)"
 
 echo "== 13. plan viejo sin prefijo plan- en el fichero: se liga con plan-<nombre> =="
 armar

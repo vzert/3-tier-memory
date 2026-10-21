@@ -399,14 +399,14 @@ caso "paso compartido otro dia" checkpoint-audit.py m_paso_vigente.py test-paso-
 caso "guard sin paso compartido" checkpoint-close-guard.sh m_paso_vigente.py test-checkpoint-close-guard.sh "la revision trae el aviso del paso compartido" guard-sin-compartido
 caso "opcional con Alta"        print-pendiente-opcional.py m_paso_vigente.py test-print-pendiente-opcional.sh "nada" opcional-con-alta
 
-# 2.63.31: `ninguno` con un plan `active` sin pendiente ligado (p-7fd6a82eaa). Cada caso nombra su
+# 2.63.33: `ninguno` con un plan `active` sin pendiente ligado (p-7fd6a82eaa). Cada caso nombra su
 # suite (sin $T), igual que los de 2.63.22.
 caso "ninguno plan sin rechazo"  checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "rechaza y nombra el plan" plan-sin-rechazo
 caso "ninguno plan liga prosa"   checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "la prosa no liga" plan-liga-prosa
 caso "ninguno plan cualquiera"   checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "plan cerrado" plan-cualquier-estado
 caso "ninguno plan sin prefijo"  checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "ligado con plan-<nombre>" plan-sin-prefijo
 caso "ninguno plan enlace"       checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "forma \[\[\.\./plans" plan-enlace-estricto
-caso "ninguno plan sin corte"checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "antes de 2.63.31" plan-sin-corte
+caso "ninguno plan sin corte"checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "antes de 2.63.33" plan-sin-corte
 caso "ninguno plan con paso"     checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "paso real" plan-cualquier-snippet
 caso "sin identidad"           journal-emit.py m_learning_dedup.py test-learning-dedup.sh "mismo texto sin --decision: rc 0" sin-identidad
 caso "decision fuera"          journal-emit.py m_learning_dedup.py test-learning-dedup.sh "la decision viaja en el payload" decision-fuera-del-payload

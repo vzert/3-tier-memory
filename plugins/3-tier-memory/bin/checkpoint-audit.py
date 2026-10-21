@@ -154,7 +154,7 @@ DESDE_NINGUNO_BLOQUEO = "2026-10-16"
 # Desde 2.63.22 un `Proximo paso` que otra ficha del mismo dia ya deja como el suyo sale como aviso
 # (snippet.paso_compartido). Incluye el caso real del 2026-10-20.
 DESDE_PASO_COMPARTIDO = "2026-10-20"
-# Desde 2.63.31 (p-7fd6a82eaa) un snippet `ninguno` con un plan `active` enlazado en `## Plans` y
+# Desde 2.63.33 (p-7fd6a82eaa) un snippet `ninguno` con un plan `active` enlazado en `## Plans` y
 # ningun pendiente abierto `_relacionado` a ese plan sale como SALTADO (snippet.ninguno_plan_activo).
 # Corte al dia siguiente de la medicion (d284): las fichas de antes no tenian la regla del Step 5.
 DESDE_NINGUNO_PLAN = "2026-10-21"
@@ -1645,7 +1645,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             h.append(Hallazgo(HECHO, "snippet.paso_compartido",
                               "ninguna otra ficha de hoy deja el mismo `Proximo paso`"))
 
-    # 8-sexies-quater. `ninguno` no puede enterrar un plan `active` (2.63.31, p-7fd6a82eaa). Medido
+    # 8-sexies-quater. `ninguno` no puede enterrar un plan `active` (2.63.33, p-7fd6a82eaa). Medido
     # el 2026-10-20 en 54 planes de 4 proyectos: las fases y los disparadores de un plan vivian solo
     # en su prosa, y un cierre `ninguno` con el plan enlazado dejaba a la siguiente sesion sin hilo.
     # Desde aqui el Step 5 emite cada fase abierta como `pendiente.add --relacionado plan-<slug>`.
@@ -1654,7 +1654,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     if fecha_ficha and fecha_ficha >= DESDE_NINGUNO_PLAN and "<filled in Step 8>" not in sec_retomar \
             and es_ninguno_snip:
         # planes_laxo (el de plan.mencionado_no_enlazado) acepta `../`, `.md` y `#ancla`: el mismo
-        # plan escrito de otra forma no puede escapar del chequeo (adversario externo de 2.63.31).
+        # plan escrito de otra forma no puede escapar del chequeo (adversario externo de 2.63.33).
         enlazados = sorted({p[:-3] if p.endswith(".md") else p for p in planes_laxo})
         vivos_plan = [p for p in enlazados if plan_activo(memory_dir, p)]
         ruta_pend = os.path.join(memory_dir, "_pendientes.md")

@@ -1050,7 +1050,7 @@ fecha en formato `AAAA-MM-DD` (`El 2026-10-14 después de las 11:51 UTC: …`) y
 con `--revisar <fecha>` en Step 3b. Step 8 la manda al recordatorio de calendario de ese día, no al
 snippet de la sesión siguiente (2.56.0).
 
-**Cada fase abierta o disparador de un plan tocado es un pendiente ligado al plan (2.63.31,
+**Cada fase abierta o disparador de un plan tocado es un pendiente ligado al plan (2.63.33,
 p-7fd6a82eaa).** Medido el 2026-10-20 en 54 planes de 4 proyectos: las fases vivían solo en la
 prosa del plan (22 % con criterio de cierre, 35 % de los disparadores con fecha citaban un `p-…`),
 y un cierre `ninguno` con el plan `active` dejaba a la sesión siguiente sin hilo. Antes de cerrar

@@ -1,5 +1,5 @@
 import io, sys
-# `snippet.ninguno_plan_activo` (2.63.31, p-7fd6a82eaa). Cada mutacion apaga una pieza del chequeo
+# `snippet.ninguno_plan_activo` (2.63.33, p-7fd6a82eaa). Cada mutacion apaga una pieza del chequeo
 # de checkpoint-audit.py y su aserto de test-ninguno-plan-activo.sh tiene que caer: (1) el rechazo
 # mismo; (2) leer el campo `_relacionado` y no la prosa (regla 216); (3) contar solo planes `active`;
 # (4) el corte de fecha (d284); (5) aplicar solo a un snippet `ninguno`; (6) ligar un plan cuyo
