@@ -1,7 +1,7 @@
 # Changelog
 
 ## [2.63.26] - 2026-10-20
-Origen: `p-274c87b575` (reportado por cloudflare-expert en `/consolidate-3t`).
+Origen: `p-274c87b575` (reportado desde otro proyecto en `/consolidate-3t`).
 
 ### Fixed
 - **Una valla dentro de codigo en linea ya no bloquea `learning.update`.** La guarda `codigo-antes`
