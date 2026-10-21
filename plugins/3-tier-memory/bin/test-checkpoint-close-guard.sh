@@ -1636,5 +1636,68 @@ done
 txcmd "$T/m.jsonl" "python3 $PR $RS/plugins/3-tier-memory/bin/pendientes_afines.py" "$BRK"
 chk "invocacion real sobre un archivo que no es ficha: silencio" "" "$(corre "$T/m.jsonl" false -)"
 
+echo "== p-e1799cd04c: Step 8b real, print-como-retomar.py recibe la ficha en una variable =="
+# Forma de la plantilla: `python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"`. resolver() no
+# expande `$`, y si la ficha se escribio en un turno anterior (Step 2 antes de una respuesta del
+# usuario) el turno de Step 8b no tenia ficha: el guard entero callaba (el pendiente cita 9 turnos
+# reales del 2026-09-28 y la sesion 8ef6459e del 2026-09-29, con "$SF"). Ahora vale la ultima ficha que esta sesion escribio o edito y
+# lleva su session_id (lo sella Step 5c-bis antes de Step 8).
+# txvar TRANSCRIPT COMANDO: Write de la ficha en un turno, respuesta del usuario, y en el turno
+# nuevo solo el comando de Step 8b y "Visto." (el snippet no se pega). La ruta de la ficha va como
+# argumento (MSYS la convierte en Git Bash), no dentro del texto del comando.
+txvar() {
+  python3 - "$1" "$F" "$2" <<'PYV'
+import json, sys
+out, ficha, cmd = sys.argv[1:4]
+R = [{"type": "user", "message": {"role": "user", "content": "guarda el checkpoint"}},
+     {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "w", "name": "Write",
+        "input": {"file_path": ficha, "content": "## Como retomar\n..."}}]}},
+     {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "w", "content": "ok"}]}},
+     {"type": "assistant", "message": {"content": [{"type": "text", "text": "Candidatos: guardo p-x?"}]}},
+     {"type": "user", "message": {"role": "user", "content": "si, guardalo"}},
+     {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "b", "name": "Bash", "input": {"command": cmd}}]}},
+     {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "b", "content": "(salida)"}]}},
+     {"type": "assistant", "message": {"content": [{"type": "text", "text": "Visto."}]}}]
+open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r) for r in R) + "\n")
+PYV
+}
+sellar() { python3 - "$F" "$1" <<'PYS2'
+import re, sys
+p, sid = sys.argv[1:3]; t = open(p, encoding="utf-8").read()
+open(p, "w", encoding="utf-8").write(re.sub(r"(?m)^(date: .*\n)", r"\1session_id: " + sid + "\n", t, count=1))
+PYS2
+}
+CWV="$T/cw-var"; mkdir -p "$CWV"
+corre_sid() { python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":False,"session_id":"sesion-8b","cwd":sys.argv[2]}))' "$1" "$CWV" | bash "$HOOK" 2>/dev/null | RAIZ_EXP="$CWV" expande; }
+armar "$M" "$FX/snippet-2120.txt"; fecha30 "$F"; sellar sesion-8b
+txvar "$T/v.jsonl" 'python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"'
+O=$(corre_sid "$T/v.jsonl")
+chk "Step 8b con \"\$SESSION_FILE\": bloquea" "1" "$(bloquea "$O")"
+chk "...y reclama el snippet sin pegar" "1" "$(printf '%s' "$O" | grep -c 'snippet `Como retomar` no esta')"
+txvar "$T/v.jsonl" 'SF="$MEMORY_DIR/sessions/$DATE-$SLUG.md"; python3 "$JBIN/print-como-retomar.py" "$SF"'
+chk "la forma \"\$SF\" (sesion 8ef6459e) tambien bloquea" "1" "$(bloquea "$(corre_sid "$T/v.jsonl")")"
+# Sin el sello de esta sesion la ficha escrita no se toma: un /backfill-3t escribe fichas de otras
+# sesiones, y una variable sin resolver no dice cual se imprimio.
+armar "$M" "$FX/snippet-2120.txt"; fecha30 "$F"; sellar otra-sesion
+txvar "$T/v.jsonl" 'python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"'
+chk "ficha escrita con el session_id de otra sesion: silencio" "" "$(corre_sid "$T/v.jsonl")"
+# Triage (adversario externo de 2.63.31): esta sesion ya tiene su ficha sellada e incompleta, y el
+# turno imprime con una variable ASIGNADA en el mismo comando la ficha de otra sesion. Se revisa la
+# impresa, como con la ruta literal, no la propia. La ruta va relativa al cwd: dentro del texto del
+# comando, Git Bash no convierte una ruta absoluta (2.63.18).
+armar "$M" "$FX/snippet-2120.txt"; fecha30 "$F"; sellar sesion-8b
+mkdir -p "$CWV/memory/sessions"; cp "$F" "$CWV/memory/sessions/2026-09-22-otra.md"
+python3 - "$CWV/memory/sessions/2026-09-22-otra.md" <<'PYO'
+import sys; p = sys.argv[1]; t = open(p, encoding="utf-8").read()
+open(p, "w", encoding="utf-8").write(t.replace("session_id: sesion-8b", "session_id: otra-sesion"))
+PYO
+txvar "$T/v.jsonl" 'python3 "$JBIN/print-como-retomar.py" memory/sessions/2026-09-22-otra.md'
+LIT=$(corre_sid "$T/v.jsonl" | grep -c '2026-09-22-demo' || true)
+txvar "$T/v.jsonl" 'OTRA=memory/sessions/2026-09-22-otra.md; python3 "$JBIN/print-como-retomar.py" "$OTRA"'
+VAR=$(corre_sid "$T/v.jsonl" | grep -c '2026-09-22-demo' || true)
+chk "triage: la ficha asignada se revisa como la literal, no la propia" "$LIT" "$VAR"
+chk "triage: la ruta literal no nombra la ficha propia" "0" "$LIT"
+rm -r "$CWV/memory"
+
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

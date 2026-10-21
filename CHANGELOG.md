@@ -1,5 +1,41 @@
 # Changelog
 
+## [2.63.31] - 2026-10-20
+Origen: `p-e1799cd04c`. El Step 8b real imprime el snippet con
+`python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"`, y `resolver()` descarta toda ruta con `$`.
+Si la ficha se escribio en un turno anterior (Step 2 antes de una respuesta del usuario), el turno de
+Step 8b quedaba sin ficha y `checkpoint-close-guard.sh` callaba entero: snippet, calendario, 8e y el
+chequeo de 7a. El pendiente cita 9 turnos reales (medidos el 2026-09-28,
+[[sessions/2026-09-28-aviso-7a-al-cierre-del-turno]]) y la sesion 8ef6459e del 2026-09-29 (`"$SF"`);
+esta version no los re-midio.
+
+### Fixed
+- **El guard toma la ficha de la sesion cuando `print-como-retomar.py` recibe una variable.** Vale
+  la ultima ficha que esta sesion escribio o edito, en cualquier turno, y solo si su frontmatter
+  lleva el `session_id` de esta sesion (lo sella Step 5c-bis antes de Step 8): un `/backfill-3t`
+  escribe fichas de otras sesiones.
+- **Antes, expande las asignaciones del mismo comando.** `OTRA=memory/sessions/x.md; …
+  print-como-retomar.py "$OTRA"` revisa `x.md`, igual que la ruta literal: el estado del shell no
+  pasa de una llamada Bash a otra, asi que la variable suele asignarse ahi. Solo si la variable queda
+  sin resolver, o su ficha no existe, vale la de la sesion. Sin esto, un triage que imprimia la ficha
+  de otra sesion revisaba la propia (adversario externo, ronda sobre 231abec).
+
+### Added
+- Caso `p-e1799cd04c` en `test-checkpoint-close-guard.sh` con la forma de Step 8b (`"$SESSION_FILE"`
+  y `"$SF"`) y una ficha escrita en un turno anterior. Control: una ficha sellada con otra sesion se
+  queda en silencio. Caso del triage con la variable asignada: se revisa la misma ficha que con la
+  ruta literal (con 2.63.18 pasa, porque callaba con cualquier variable; lo mide `asigna-ignorada`).
+  Arnes del arbol publicado (285 asertos, con los de 2.63.22-2.63.30): 285/285, y 280/5 con el guard
+  de 2.63.18 (los 3 de Step 8b y 2 de 2.63.22). Mutaciones `variable-callada` y
+  `asigna-ignorada` (`tools/mutaciones/m_ficha_sesion.py`); `ficha-cualquiera` reapuntada a la linea
+  nueva.
+
+### Known
+- Siguen en silencio: una ficha escrita por Bash (no Write/Edit), una ficha sin el sello de la sesion,
+  y una ruta de Write con `\` (Windows; `SESION_RE_G` solo acepta `/`, como antes).
+- En un triage que imprime la ficha de otra sesion con una variable que NO se asigna en el mismo
+  comando, si esta sesion ya escribio una ficha sellada, el guard revisa la de esta sesion.
+
 ## [2.63.30] - 2026-10-20
 Origen: `p-274c87b575` (reportado desde otro proyecto en `/consolidate-3t`).
 
