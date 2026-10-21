@@ -490,6 +490,9 @@ caso "lv fecha sin validar"    journal-compact.py m_consolidate.py test-learning
 caso "lv inventa frontmatter"  journal-compact.py m_consolidate.py test-learning-update.sh "23g sin frontmatter" lv-inventa-frontmatter
 caso "lv ignorado"             journal-compact.py m_consolidate.py test-learning-update.sh "23a sin el campo" lv-ignorado-validador
 caso "lv emisor sin validar"   journal-emit.py    m_consolidate.py test-learning-update.sh "23d fecha imposible" lv-emisor-sin-validar
+caso "valla en codigo en linea" journal-compact.py m_codigo_en_linea.py test-learning-update.sh "tildes en codigo en linea: sin cuarentena" sin-codigo-en-linea
+caso "codigo en linea borrado" journal-compact.py m_codigo_en_linea.py test-learning-update.sh "codigo al inicio y luego <: sin cuarentena" codigo-borrado
+caso "cierre de otro largo"    journal-compact.py m_codigo_en_linea.py test-learning-update.sh "tiras de distinto largo: cuarentena" cierre-de-otro-largo
 
 echo
 echo "Enlace Quick Reference -> regla y learnings-migracion.py (2.51.0, F7)"
