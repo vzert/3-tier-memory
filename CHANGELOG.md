@@ -1,8 +1,9 @@
 # Changelog
 
 ## [2.63.34] - 2026-10-21
-Origen: p-4c4f8274a6. `test-journal-race.sh` fallo una vez en macos-latest (CI 38756506567, trial 4:
-`open=9 rows=19 quarantine=2`) y nadie sabia por que: la prueba solo imprimia contadores.
+Origen: p-4c4f8274a6. `test-journal-race.sh` fallaba de vez en cuando en macos-latest (p. ej. CI
+38756506567, trial 4: `open=9 rows=19 quarantine=2`) y nadie sabia por que: la prueba solo imprimia
+contadores.
 
 ### Fixed
 - **Un evento se perdia si el compactador leia su archivo mientras `journal-emit.py` lo escribia.**
@@ -22,6 +23,8 @@ Origen: p-4c4f8274a6. `test-journal-race.sh` fallo una vez en macos-latest (CI 3
     da a un proceso vivo: un emit que no escribio en ese plazo murio, y su evento va a cuarentena
     como antes. Una mtime en el futuro lejano cuenta como vieja: nada se queda en `pending/` para
     siempre. Tambien borra el `.json.tmp` de mas de 60 s que deja un emit que murio a medias.
+    Limite: un compactador anterior a 2.63.34 no lo borra; hasta que corra uno nuevo, ese `.tmp`
+    hace que `ls -A pending/` lance el compactador en cada arranque de sesion (no aplica nada).
 - **`test-journal-race.sh` imprime el `.reason` y el evento de cada cuarentena (y lo que haya en
   `failed/`) cuando un trial sale rojo.** Nota: su contador `quarantine=` cuenta archivos, y cada
   evento apartado deja dos (el `.json` y su `.reason`): `quarantine=2` es un evento.

@@ -3,7 +3,8 @@
 3-tier-memory plugin: emisor de eventos del journal (v2.12.0, Fases 1 y 2).
 
 Los agentes NO editan los indices compartidos de memory/ a mano. Cada cambio entra como un
-evento: un archivo JSON propio en memory/.journal/pending/, creado con O_CREAT|O_EXCL, que
+evento: un archivo JSON propio en memory/.journal/pending/ (escrito en un temporal creado con
+O_CREAT|O_EXCL y renombrado al .json ya completo, desde 2.63.34; ver write_event), que
 un unico compactador (journal-compact.py) aplica bajo lock. Asi N agentes en la misma
 maquina pueden escribir "a la vez" sin pisarse: cada uno solo crea archivos nuevos.
 
