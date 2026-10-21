@@ -179,5 +179,16 @@ chk "sin pendiente: SALTADO" "SALTADO|plans/2026-10-01-demo-viejo.md" "$(estado)
 anade_pend "- [ ] demo: fase 2 — _creado: 2026-10-21_ — _id: p-2b2b2b2b2b_ — _relacionado: plan-2026-10-01-demo-viejo_"
 chk "ligado con plan-<nombre>" "HECHO|" "$(estado)"
 
+echo "== 14. el enlace con ../, .md o #ancla sigue siendo el plan =="
+for enlace in "[[../plans/plan-demo-fases]]" "[[plans/plan-demo-fases.md#Estado]]" "[[plans/plan-demo-fases#Estado|demo]]"; do
+  armar
+  ENLACE="$enlace" python3 - "$F" <<'PY'
+import os, sys
+p = sys.argv[1]; t = open(p, encoding="utf-8").read()
+open(p, "w", encoding="utf-8").write(t.replace("[[plans/plan-demo-fases]]", os.environ["ENLACE"]))
+PY
+  chk "forma $enlace" "SALTADO|plans/plan-demo-fases.md" "$(estado)"
+done
+
 echo "RESULT: pass=$pass fail=$fail"
 [ "$fail" = 0 ]

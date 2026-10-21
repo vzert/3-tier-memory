@@ -3,7 +3,7 @@ import io, sys
 # de checkpoint-audit.py y su aserto de test-ninguno-plan-activo.sh tiene que caer: (1) el rechazo
 # mismo; (2) leer el campo `_relacionado` y no la prosa (regla 216); (3) contar solo planes `active`;
 # (4) el corte de fecha (d284); (5) aplicar solo a un snippet `ninguno`; (6) ligar un plan cuyo
-# fichero no empieza por `plan-` con `plan-<nombre>`.
+# fichero no empieza por `plan-` con `plan-<nombre>`; (7) reconocer el enlace con `../`, `.md` o `#ancla`.
 #
 # Uso: m_ninguno_plan.py <fichero> <mutacion>
 # Patrones de una sola linea, sin "\n": el checkout de Windows trae CRLF (regla 322).
@@ -15,6 +15,7 @@ M = {
     "plan-cualquier-estado": [("        vivos_plan = [p for p in enlazados if plan_activo(memory_dir, p)]",
                                "        vivos_plan = enlazados")],
     "plan-sin-prefijo": [(' and "plan-" + p not in ligados]', "]")],
+    "plan-enlace-estricto": [("for p in planes_laxo})", "for p in planes})")],
     "plan-sin-corte": [("fecha_ficha >= DESDE_NINGUNO_PLAN", 'fecha_ficha >= "2000-01-01"')],
     "plan-cualquier-snippet": [("            and es_ninguno_snip:", "            and True:")],
 }

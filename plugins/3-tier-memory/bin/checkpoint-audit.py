@@ -1653,7 +1653,9 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     # un plan sin fases abiertas que sigue `active` tambien sale, porque su estado es el defecto.
     if fecha_ficha and fecha_ficha >= DESDE_NINGUNO_PLAN and "<filled in Step 8>" not in sec_retomar \
             and es_ninguno_snip:
-        enlazados = sorted({p[:-3] if p.endswith(".md") else p for p in planes})
+        # planes_laxo (el de plan.mencionado_no_enlazado) acepta `../`, `.md` y `#ancla`: el mismo
+        # plan escrito de otra forma no puede escapar del chequeo (adversario externo de 2.63.31).
+        enlazados = sorted({p[:-3] if p.endswith(".md") else p for p in planes_laxo})
         vivos_plan = [p for p in enlazados if plan_activo(memory_dir, p)]
         ruta_pend = os.path.join(memory_dir, "_pendientes.md")
         ligados = set()
