@@ -26,7 +26,7 @@ md = MarkdownIt("commonmark")
 IND = ["", " ", "  ", "   ", "    ", "\t", " \t", "\t ", "\u00a0", "\v", "\u3000"]
 CON = ["- a", "* a", "1. a", "2. a", "-\u00a0a", "- ", "# h", "#t", "```", "~~~", "<div>", "</div>",
        "x", "", "> q", "---", "- - -", "    ", "\u00a0", "  more", "<!--", "-->", "````", "+ a", "1) a", "==", "   ```", "1. a",
-       # Codigo en linea (2.63.26): lo de dentro no abre bloque; una tira sin pareja si puede.
+       # Codigo en linea (2.63.30): lo de dentro no abre bloque; una tira sin pareja si puede.
        "`~~~`", "`` ``` ``", "``` `x`", "``~~~`", "`x` <div>", "`x", "~~~ y`"]
 LINES = sorted(set(i + c for i in IND for c in CON))
 def toks(text):

@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.63.26] - 2026-10-20
+## [2.63.30] - 2026-10-20
 Origen: `p-274c87b575` (reportado desde otro proyecto en `/consolidate-3t`).
 
 ### Fixed
