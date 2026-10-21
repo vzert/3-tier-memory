@@ -667,7 +667,8 @@ python3 "$JBIN/journal-emit.py" --type pendiente.add --text "<texto del pendient
 sin preguntar al usuario (es un dato, no una decision):
 - el pendiente sale del mismo trabajo que otro que esta sesion guarda o retomo: emite PRIMERO el de
   mayor prioridad, toma el id que imprime y pasalo como `--relacionado` en los demas;
-- el pendiente es un paso de un plan: `--relacionado plan-<slug>`;
+- el pendiente es un paso de un plan: `--relacionado plan-<slug>` (la fase siguiente de un plan
+  `active` va siempre así; ver Step 5, "Cada fase abierta");
 - el pendiente continua uno que ya existe (otra sesion): `--relacionado <su id>`.
 **La liga al paso recibido la pone `journal-emit.py` solo (2.57.0, p-b282a8cfc4)**: si esta sesion
 arranco con un snippet `Retomamos:`, todo `pendiente.add` queda ligado a los ids de su `Proximo
@@ -1048,6 +1049,19 @@ Actualizado: <DATE>
 fecha en formato `AAAA-MM-DD` (`El 2026-10-14 después de las 11:51 UTC: …`) y registra el pendiente
 con `--revisar <fecha>` en Step 3b. Step 8 la manda al recordatorio de calendario de ese día, no al
 snippet de la sesión siguiente (2.56.0).
+
+**Cada fase abierta o disparador de un plan tocado es un pendiente ligado al plan (2.63.31,
+p-7fd6a82eaa).** Medido el 2026-10-20 en 54 planes de 4 proyectos: las fases vivían solo en la
+prosa del plan (22 % con criterio de cierre, 35 % de los disparadores con fecha citaban un `p-…`),
+y un cierre `ninguno` con el plan `active` dejaba a la sesión siguiente sin hilo. Antes de cerrar
+este paso, por cada plan `active` que enlazas en `## Plans`: la fase siguiente (y cada disparador
+que espera una fecha o un evento) tiene que existir como pendiente ABIERTO con
+`_relacionado: plan-<slug>`. Si falta, vuelve a Step 3b punto 9 y propónlo como candidato (el
+usuario decide, como todo pendiente nuevo): `pendiente.add --relacionado plan-<slug>`, con
+`--revisar AAAA-MM-DD` si espera una fecha. Si el plan ya no tiene nada abierto, no es `active`:
+ciérralo con `plan.upsert --status completed` (o `abandoned`). Step 7a rechaza
+(`snippet.ninguno_plan_activo`) un `Como retomar` `ninguno` con un plan `active` de `## Plans` sin
+pendiente abierto ligado; se mide el campo `_relacionado`, no la prosa del plan.
 
 Actualízalo en CADA checkpoint que toque este plan — es el único campo de todo el plan que se
 reescribe en vez de acumularse; el historial de cómo llegó ahí ya vive en la narrativa de abajo,
