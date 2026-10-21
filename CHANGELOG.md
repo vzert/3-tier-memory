@@ -17,6 +17,51 @@ Origen: `p-274c87b575` (reportado desde otro proyecto en `/consolidate-3t`).
   aunque a veces no haya bloque. Seccion 24 de `test-learning-update.sh`, tres mutaciones nuevas
   (`m_codigo_en_linea.py`) y siete lineas con codigo en linea en el oraculo CommonMark.
 
+## [2.63.27] - 2026-10-20
+Origen: una corrida de mutation-check que cruzo la medianoche UTC tumbo los asertos del bloque 8e
+de `test-checkpoint-close-guard.sh` (run 39342960137, intento 1; `p-091714b9cf`). La prueba leia
+la fecha una vez al arrancar, y `print-pendiente-opcional.py` (llamado por la prueba y por el hook)
+la volvia a leer al correr: si el dia cambiaba entre medio, el pendiente que vencia "hoy" ya no
+vencia y el 8e salia vacio.
+
+### Fixed
+- **`test-checkpoint-close-guard.sh` no depende de la hora.** La prueba fija una sola fecha
+  (`2031-03-15`, o `HOY_PRUEBA`) y pone un `sitecustomize.py` en su mktemp, por `PYTHONPATH`, para
+  que `datetime.date.today()` devuelva esa fecha en todo python que lanza, el hook incluido. El hook
+  y los scripts no cambian. Un aserto nuevo comprueba que un python hijo ve la fecha fija.
+- Prueba roja: la prueba anterior con la fecha de arranque en ayer da 6 fallos (los dos bloques 8e).
+  Con el arreglo pasa entera con `2031-03-15`, con ayer y con el dia real.
+- `tools/mutation-check.sh`: caso nuevo "prueba con fecha fija" (`m_hoy_fijo.py sin-parche`): sin
+  el parche cae "el fixture trae un 8e con contenido".
+
+## [2.63.25] - 2026-10-20
+Origen: pedido del usuario. Un agente cerro con `/checkpoint-3t`, dejo su prompt para retomar y
+siguio con una shell en segundo plano viva: un muestreo que cada 15 minutos escribia "Timeout
+expired", justo el log que su Como retomar mandaba leer. El agente no puede preguntarle al harness
+que tareas tiene vivas, y tras una compactacion no recuerda lo que lanzo.
+
+### Added
+- **`bin/shells-abiertas.py`: lista las shells en segundo plano que la sesion dejo vivas.** Lee el
+  transcript de la sesion (`$CLAUDE_CODE_SESSION_ID`, o `--session-id`/`--transcript`). Cuenta los
+  Bash con `run_in_background`, los Bash que pasaron solos a segundo plano al vencer su timeout y los
+  `Monitor`. El id de cada tarea sale del campo que el harness guarda en el resultado
+  (`toolUseResult.backgroundTaskId` en un Bash, `taskId` en un Monitor), no del texto: un `echo` que
+  imprime la frase de lanzamiento no abre nada (revisor externo, ronda 1). Medido en 400 JSONL: los
+  985 lanzamientos reales traen ese campo. Una linea sin el (transcript viejo) se lee por el texto,
+  anclado al inicio. Una tarea se cierra con una `<task-notification>` con `<status>`, con un evento
+  `[Monitor expired`, o con un TaskStop (`Successfully stopped task` o `No task found`). Una
+  notificacion que solo aparece en la salida de un Bash o en un mensaje del agente no cierra nada. Por tarea abierta imprime el comando, su fichero de salida con
+  tamano y edad, y sus ultimas lineas. Al final, `resumen: abiertas=N cerradas=M`. Solo lee: nunca
+  para nada. Limites: una tarea que murio sin notificacion sale como abierta. Un `/clear` o un
+  resume que abre otro JSONL no hereda las tareas del anterior. Un proceso con nohup, una pestana de
+  otro agente o un subagente quedan fuera, por decision del usuario.
+- **`/checkpoint-3t` Step 7c, antes de Step 8.** Corre el script y pone cada shell abierta en una de
+  cuatro casillas. **Sobra**: se para con TaskStop. **Se usa**: se queda, y el `Proximo paso` dice
+  su id y que muere al cerrar la sesion de Claude Code. **Viva pero falla**: se reporta con la linea
+  que falla. **No se**: se pregunta al usuario. El reporte de Step 7 lleva una linea `Shells:`. No
+  relanza nada con nohup ni launchd.
+- `bin/test-shells-abiertas.sh`: 22 casos sobre un transcript armado con esas formas.
+
 ## [2.63.22] - 2026-10-20
 Origen: auditoria de los hilos y el snippet de retomar pedida por Victor (via `/goalspec:interview`,
 d262-d269), sobre las sesiones del 2026-10-10 al 2026-10-20 de este repo y de otros tres proyectos
