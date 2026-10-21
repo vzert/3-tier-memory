@@ -1577,6 +1577,7 @@ txcmd() {   # $3 opcional: un veredicto del adversario que el turno trae antes d
   if command -v cygpath >/dev/null 2>&1; then
     c="${c//$BIN/$(cygpath -m "$BIN")}"; c="${c//$T/$(cygpath -m "$T")}"
   fi
+  [ -z "${TX_CRUDO:-}" ] || c="$2"   # p-0c334693d4: el comando tal como lo escribe el agente
   python3 - "$1" "$c" "${3:-}" <<'PYM'
 import json, sys
 out, cmd, brk = sys.argv[1:4]
@@ -1597,6 +1598,19 @@ PR="$BIN/print-como-retomar.py"
 txcmd "$T/m.jsonl" "python3 \"$PR\" \"$F\""
 chk "arnes Git Bash: con las rutas dentro del comando, la invocacion dispara" "1" "$(bloquea "$(corre "$T/m.jsonl" false -)")"
 command -v cygpath >/dev/null 2>&1 || echo "  SKIP arnes Git Bash: sin cygpath, la conversion de rutas no aplica aqui"
+# p-0c334693d4: la ruta de la ficha tal como la escribe un agente en Git Bash, SIN convertir: la forma
+# /tmp/... del mktemp y la forma de unidad /c/... El guard corre en el Python nativo de Windows, que no
+# entiende ninguna de las dos: no encontraba la ficha y callaba (run 39443101444). Fuera de Git Bash
+# las dos son la ruta POSIX de siempre.
+FU="$F"
+if command -v cygpath >/dev/null 2>&1; then
+  w=$(cygpath -m "$F"); FU="/$(printf '%s' "${w:0:1}" | tr '[:upper:]' '[:lower:]')${w:2}"
+  echo "  (ruta /c/...: $FU)"
+fi
+TX_CRUDO=1 txcmd "$T/m.jsonl" "python3 \"$PR\" \"$F\""
+chk "ruta Git Bash /tmp/... sin convertir dentro del comando: dispara" "1" "$(bloquea "$(corre "$T/m.jsonl" false -)")"
+TX_CRUDO=1 txcmd "$T/m.jsonl" "python3 \"$PR\" \"$FU\""
+chk "ruta Git Bash /c/... sin convertir dentro del comando: dispara" "1" "$(bloquea "$(corre "$T/m.jsonl" false -)")"
 menciones=(
   "git diff HEAD~1 -- $PR $F"
   "grep -n Retomamos $PR $F"
