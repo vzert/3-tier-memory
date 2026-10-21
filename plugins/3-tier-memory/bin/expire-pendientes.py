@@ -50,6 +50,11 @@ EXCLUSIONES (se cuentan y se imprimen; no se archivan)
     - sin `_creado:`            -> no se puede saber la edad
     - `_revisar:` en el futuro  -> el item declara su propia ventana y aun no vence
     - `_no-caduca_`             -> marca explicita del usuario
+    - `_bloqueado:`             -> (2.63.29) espera a alguien de fuera; su `_revisar` vencido
+                                   significa "mira si ya llego", no "dejo de ser compromiso".
+                                   Desde 2.63.29 todo bloqueado nace con `_revisar` (hoy+5), asi
+                                   que sin esta exclusion /triage-3t caducaria cada espera viva
+                                   al dia siguiente de su fecha.
 """
 # sella-huellas: no (emite eventos con journal-emit; el compactador escribe y sella)
 import argparse
@@ -73,6 +78,7 @@ CREADO = re.compile(r"_creado: (\d{4}-\d{2}-\d{2})")
 REVISAR = re.compile(r"_revisar: (\d{4}-\d{2}-\d{2})")
 ID = re.compile(r"_id: (p-[0-9a-f]{10})_")
 NO_CADUCA = "_no-caduca_"
+BLOQUEADO = re.compile(r"—\s*_bloqueado:")
 
 
 def parse_date(s):
@@ -109,7 +115,8 @@ def scan(mem, days, hoy, modo="revisar"):
     if not os.path.isfile(path):
         sys.exit(f"expire-pendientes: no existe {path}")
     cands, excl = [], {"sin _creado": 0, "_revisar futuro": 0, "_no-caduca_": 0,
-                       "sin _id": 0, "mas nuevo que el umbral": 0, "sin _revisar": 0}
+                       "_bloqueado": 0, "sin _id": 0, "mas nuevo que el umbral": 0,
+                       "sin _revisar": 0}
     prio = "?"
     with open(path, encoding="utf-8", errors="replace") as fh:
         for raw in fh:
@@ -125,6 +132,9 @@ def scan(mem, days, hoy, modo="revisar"):
             line = raw.rstrip("\n")
             if NO_CADUCA in line:
                 excl["_no-caduca_"] += 1
+                continue
+            if BLOQUEADO.search(line):
+                excl["_bloqueado"] += 1
                 continue
             mc = CREADO.search(line)
             if not mc:

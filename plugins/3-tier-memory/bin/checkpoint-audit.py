@@ -154,6 +154,9 @@ DESDE_NINGUNO_BLOQUEO = "2026-10-16"
 # Desde 2.63.22 un `Proximo paso` que otra ficha del mismo dia ya deja como el suyo sale como aviso
 # (snippet.paso_compartido). Incluye el caso real del 2026-10-20.
 DESDE_PASO_COMPARTIDO = "2026-10-20"
+# Desde 2.63.29 un pendiente `_bloqueado` sin `_revisar` en `## Pendientes` de la ficha es SALTADO
+# (pendientes.bloqueado_sin_fecha). Fichas anteriores: sin cambio al re-auditarlas.
+DESDE_BLOQUEADO_FECHA = "2026-10-20"
 # Tercer cierre de un defecto (2.53.0): el usuario decidio en Step 3b no abrirle pendiente.
 DESCARTADO_BUG = re.compile(r"_descartado:\s*(.*?)_(?=\s|$|[.,;:)\]—])", re.S)
 # `pendientes.candidatos` (2.53.0): desde aqui cada pendiente nuevo sale en `## Candidatos a
@@ -1291,6 +1294,11 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     # otra instalacion, p-…") — por eso (b) y (c) no miran esa forma; la mira (d).
     bloqueados = bloqueados_abiertos(memory_dir)
     origen_por_id = origenes_abiertos(memory_dir)
+
+    def espera_viva(i):
+        """Bloqueado y su `_revisar` no ha pasado (2.63.29). Con la fecha pasada el paso es mirar si
+        ya llego lo que esperaba: accionable, igual que en pendientes_afines.hacible."""
+        return i in bloqueados and not (rev_por_id.get(i) and rev_por_id[i] < ref)
     pp = linea_proximo_paso(sec_retomar)
     if seccion_por_prefijo(secs, "Como retomar") is None:
         # Sin la seccion no hay paso que medir; la ausencia ya la marca `ficha.secciones`.
@@ -1359,9 +1367,10 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                     # invento, o ya se cerro. Sin esto, citar cualquier `p-…` bastaba para pasar.
                     problemas.append(f"{i} no esta abierto en _pendientes.md: cita el id de un "
                                      "pendiente vivo")
-                elif i in bloqueados:
+                elif espera_viva(i):
                     problemas.append(f"{i} esta bloqueado (`_bloqueado: {bloqueados[i]}`): "
-                                     "espera a algo fuera de la sesion: no va en `Proximo paso`")
+                                     "espera a algo fuera de la sesion: no va en `Proximo paso` "
+                                     "hasta que pase su `_revisar`")
                 elif rev_por_id.get(i) and rev_por_id[i] > ref:
                     problemas.append(f"{i} tiene `_revisar: {rev_por_id[i]}` futuro: ya sale en "
                                      "`## Recordatorios de calendario`")
@@ -1393,7 +1402,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             # como still-open, y esos no son "trabajo propio" que el caso 5 tape (medido en
             # claude-vzert: `verificar-reaper-…` listaba 4 ajenos y salia SALTADO en falso).
             accionables = [i for i in abiertos_ficha
-                           if i in ids_abiertos and i not in bloqueados
+                           if i in ids_abiertos and not espera_viva(i)
                            and origen_por_id.get(i) == slug]
             if accionables:
                 problemas.append("dice `ninguno` pero la sesion deja pendiente(s) propio(s) "
@@ -1598,11 +1607,50 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                               corrige="si lo que espera es una decision del usuario, no es bloqueo: "
                                       "`journal-emit.py --type pendiente.block --id p-… "
                                       "--desbloquear` y `Proximo paso: decidir con el usuario <que> "
-                                      "(p-…)`; si espera a alguien que no es el usuario, dilo en la "
-                                      "revision del cierre"))
+                                      "(p-…)`; si hace falta que el usuario le pida algo a alguien, "
+                                      "preguntale si lo pedira el (si: desbloquear y `Proximo paso: "
+                                      "pedirle a <quien> <que> (p-…)`; no: queda bloqueado con su "
+                                      "`_revisar`); si espera a alguien que no es el usuario, dilo "
+                                      "en la revision del cierre"))
         else:
             h.append(Hallazgo(HECHO, "snippet.ninguno_bloqueo",
                               "sin `ninguno` sobre un pendiente `_bloqueado` de la ficha"))
+
+    # 8-sexies-quater. Un bloqueado sin fecha (2.63.29). `_bloqueado` saca el pendiente del hilo,
+    # de `Proximo paso` y de la caducidad; sin `_revisar` tampoco sale en el recordatorio de
+    # calendario, asi que nada lo vuelve a mostrar y "pedirle a X" o "mirar si X ya contesto" se
+    # olvida. Caso real (claude-vzert, 2026-10-20): `p-98a561dc02` bloqueado por "que infra
+    # instale el plugin y un dev mande el mensaje", snippet `Ninguno`, y Victor tuvo que
+    # preguntar como se iba a acordar nadie. Medido ese dia: 50 de 54 bloqueados abiertos en 7
+    # proyectos, sin `_revisar`. Desde 2.63.29 journal-emit.py pone hoy+5 al bloquear; este
+    # chequeo atrapa lo que no paso por ahi (un bloqueado viejo reconciliado, una linea a mano).
+    # Mira todo `- [ ]` de `## Pendientes` de la ficha (la ficha lo cita: es de esta sesion
+    # decidir su fecha); los demas del indice salen como aviso con el conteo.
+    if fecha_ficha and fecha_ficha >= DESDE_BLOQUEADO_FECHA:
+        ids_sec = list(dict.fromkeys(m.group(0) for l in sec_pend.splitlines()
+                                     if l.strip().startswith("- [ ]")
+                                     for m in [ID_PENDIENTE.search(l)] if m))
+        sin_fecha = [i for i in ids_sec if i in bloqueados and not rev_por_id.get(i)]
+        resto = [i for i in bloqueados if not rev_por_id.get(i) and i not in ids_sec]
+        if sin_fecha:
+            h.append(Hallazgo(SALTADO, "pendientes.bloqueado_sin_fecha",
+                              f"{len(sin_fecha)} pendiente(s) `_bloqueado` de la ficha sin "
+                              "`_revisar`: nada los vuelve a mostrar",
+                              [f"{i} `_bloqueado: {bloqueados[i]}`" for i in sin_fecha],
+                              corrige="ponle la fecha en que hay que mirar si ya llego lo que "
+                                      "espera: `journal-emit.py --type pendiente.window --id p-… "
+                                      "--revisar AAAA-MM-DD` (la dicha, o hoy+5, regla 2 de Step "
+                                      "3b). Si lo que espera es una decision o un comando del "
+                                      "usuario, no es bloqueo: `pendiente.block --desbloquear`"))
+        elif resto:
+            h.append(Hallazgo(DISENO, "pendientes.bloqueado_sin_fecha",
+                              f"{len(resto)} pendiente(s) `_bloqueado` del indice sin `_revisar` "
+                              "(fuera de esta ficha; aviso, no bloquea)",
+                              [f"{i} `_bloqueado: {bloqueados[i]}`" for i in resto[:10]],
+                              corrige="fechalos en /triage-3t con `pendiente.window --revisar`"))
+        else:
+            h.append(Hallazgo(HECHO, "pendientes.bloqueado_sin_fecha",
+                              "todo pendiente `_bloqueado` tiene `_revisar`"))
 
     # 8-sexies-ter. Otra ficha del mismo dia ya deja el mismo `Proximo paso` (2.63.22). Caso real
     # (otro proyecto, 2026-10-20): dos sesiones cerraron con 23 s de diferencia y las dos
@@ -1843,7 +1891,8 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     if solo_snippet:
         # Modo del hook de cierre (checkpoint-close-guard.sh): solo lo que Step 8 escribe. Los
         # reparadores en seco tardan segundos y no dependen del snippet; ya los midio Step 7a.
-        return [x for x in h if x.clave.startswith(("snippet.", "bugs.", "pendientes.candidatos"))
+        return [x for x in h if x.clave.startswith(("snippet.", "bugs.", "pendientes.candidatos",
+                                                    "pendientes.bloqueado_sin_fecha"))
                 or x.clave == "plan.mencionado_no_enlazado"]
     avisos_script_en_seco(h, memory_dir, "repair-dualwrite.py",
                           ("header_issues", "odd_values", "unaligned_rows", "unrepairable",
