@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.63.27] - 2026-10-20
+Origen: una corrida de mutation-check que cruzo la medianoche UTC tumbo los asertos del bloque 8e
+de `test-checkpoint-close-guard.sh` (run 39342960137, intento 1; `p-091714b9cf`). La prueba leia
+la fecha una vez al arrancar, y `print-pendiente-opcional.py` (llamado por la prueba y por el hook)
+la volvia a leer al correr: si el dia cambiaba entre medio, el pendiente que vencia "hoy" ya no
+vencia y el 8e salia vacio.
+
+### Fixed
+- **`test-checkpoint-close-guard.sh` no depende de la hora.** La prueba fija una sola fecha
+  (`2031-03-15`, o `HOY_PRUEBA`) y pone un `sitecustomize.py` en su mktemp, por `PYTHONPATH`, para
+  que `datetime.date.today()` devuelva esa fecha en todo python que lanza, el hook incluido. El hook
+  y los scripts no cambian. Un aserto nuevo comprueba que un python hijo ve la fecha fija.
+- Prueba roja: la prueba anterior con la fecha de arranque en ayer da 6 fallos (los dos bloques 8e).
+  Con el arreglo pasa entera con `2031-03-15`, con ayer y con el dia real.
+- `tools/mutation-check.sh`: caso nuevo "prueba con fecha fija" (`m_hoy_fijo.py sin-parche`): sin
+  el parche cae "el fixture trae un 8e con contenido".
+
 ## [2.63.25] - 2026-10-20
 Origen: pedido del usuario. Un agente cerro con `/checkpoint-3t`, dejo su prompt para retomar y
 siguio con una shell en segundo plano viva: un muestreo que cada 15 minutos escribia "Timeout
