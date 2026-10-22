@@ -424,6 +424,10 @@ Para los pendientes DENTRO del alcance, clasifica cada uno en exactamente uno de
   next session takes with the agent) and its line has no `_bloqueado:`, mark it:
   `journal-emit.py --type pendiente.block --id p-… --bloqueado-por "<what it waits for>"`.
   Without the field, Step 8 can promote it to `Proximo paso` (see Step 3b, `--bloqueado-por`).
+  The event also sets `_revisar` (today+5, or `--revisar YYYY-MM-DD` when the date to look is
+  known) so the item comes back that day (2.63.32). A still-open `_bloqueado` line this session
+  lists that has no `_revisar` gets one: `journal-emit.py --type pendiente.window --id p-…
+  --revisar YYYY-MM-DD` — the audit marks it `SALTADO` otherwise (`pendientes.bloqueado_sin_fecha`).
   If a still-open item clearly goes with a pendiente or plan this session touched and its line
   has no `_relacionado:`, link it: `journal-emit.py --type pendiente.relate --id p-…
   --relacionado <p-… | plan-slug>` (2.55.0). That is what brings it back in the next snippet
@@ -704,7 +708,7 @@ tome?". Desde 2.62.11 `checkpoint-audit.py` avisa (`snippet.ninguno_bloqueo`, PO
 snippet dice `ninguno` y la ficha deja un pendiente `_bloqueado`, y el hook de cierre pregunta en la
 revision si ese bloqueo espera a alguien que no es el usuario. El compactador anade `— _bloqueado: <que>_` a la linea de Tier 2. Ese campo tiene un
 consumidor: `checkpoint-audit.py` rechaza (`snippet.proximo_paso`) un `Proximo paso:` que cite
-ese id. El pendiente sigue en `## Pendientes` de la ficha. No cambia el id. Para un pendiente que ya
+ese id mientras su `_revisar` no haya pasado. El pendiente sigue en `## Pendientes` de la ficha. No cambia el id. Para un pendiente que ya
 existe: `journal-emit.py --type pendiente.block --id p-… --bloqueado-por "…"` (o
 `--desbloquear` cuando ya no espera). Caso real (2026-09-22, sesion 5790b9f2): `p-a4439fa8fd`
 ("verificar... una vez esa instalacion actualice a 2.32.0") llego a `Proximo paso` porque nada
@@ -714,6 +718,22 @@ sale como aviso `POR-DISEÑO` en `snippet.marco`. Es una red de formato que no b
 sigue siendo la via que el audit hace cumplir. `decidir con el usuario` dejo de ser senal en
 2.62.11: es la forma del paso que pone delante una decision del usuario (`decidir con <otro>`
 sigue avisando: puede ser un tercero).
+
+**Todo bloqueado lleva fecha (2.63.32).** `--bloqueado-por` sin `--revisar` nace con `_revisar:
+hoy+5` (la regla 2 de abajo), y `pendiente.block` hace lo mismo si la linea no trae ya un
+`_revisar` futuro. Si se sabe cuando mirar ("infra instala el lunes"), pasa esa fecha con
+`--revisar`. Ese dia el pendiente sale en el aviso 🔔 del cierre y, pasada la fecha, vuelve al hilo
+y puede ser `Proximo paso` ("mirar si X ya llego"); `expire-pendientes.py` nunca caduca un
+bloqueado. Antes un bloqueado sin fecha no volvia a salir en ningun lado: medido 2026-10-20, 50 de
+54 bloqueados abiertos en 7 proyectos, y el caso real `p-98a561dc02` de claude-vzert (espera a que
+infra instale un plugin y un dev mande un mensaje) cerro con snippet `Ninguno`.
+`checkpoint-audit.py` marca `SALTADO` (`pendientes.bloqueado_sin_fecha`) un `_bloqueado` sin
+`_revisar` listado en `## Pendientes` de la ficha. **Si para que se mueva hace falta que el usuario
+le pida algo a alguien** (mandar un mensaje, pedir un acceso, avisar a otro equipo), preguntale al
+cerrar si lo va a pedir el (AskUserQuestion; en una sesion supervisada, SendMessage al supervisor).
+Si dice que si, el pendiente espera al usuario y no a un tercero: `pendiente.block --id p-…
+--desbloquear` (quita tambien su `_revisar`) y `Proximo paso: pedirle a <quien> <que> (p-…)`. Si ya lo pidio o no le toca, queda bloqueado con su
+`_revisar`.
 
 **`--revisar` cuando el pendiente nombra una fecha futura** (`revisar el 2026-09-22`, `target
 2026-10-01`, `T+7` resuelto a fecha). Escribe la fecha **como campo**, no solo en prosa: el
@@ -762,8 +782,9 @@ reapareciendo dateless en `Sigue abierto` de una sesion posterior
 (`2026-09-16-verificar-backfill-tier3-no-aplicado`) sin que nada lo corrigiera; el usuario eligio 5
 dias (`_revisar: 2026-09-21`) al fecharlo a mano. Si el pendiente de verdad no depende del tiempo
 sino de una condicion o decision, no le pongas `--revisar` — esta regla es solo para el que su
-unico bloqueo real es "que pase tiempo o actividad", nunca para el que espera una decision ajena
-(ver la advertencia contra "revisar si X respondio" en Step 8, mas abajo).
+unico bloqueo real es "que pase tiempo o actividad". Un pendiente que espera a un tercero lleva
+`--bloqueado-por` y tambien su `_revisar` (2.63.32, parrafo "Todo bloqueado lleva fecha"): la
+fecha no lo vuelve `Proximo paso` antes de tiempo, solo dice que dia mirar si ya llego.
 
 It prints the id. Do NOT also edit the files. The compactor (Step 3c) writes both tiers:
 **Tier 2** the line `- [ ] <texto> — _origen: [[sessions/DATE-SLUG]]_ — _creado: <today>_ — _id: p-…_`

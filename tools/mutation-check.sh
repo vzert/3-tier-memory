@@ -218,6 +218,9 @@ caso "el hook exige el emoji" checkpoint-close-guard.sh m_capas_cierre.py test-c
 caso "cabecera de la revision" checkpoint-close-guard.sh m_capas_cierre.py test-checkpoint-close-guard.sh "la cita no tapa la cabecera" cabecera-rfind
 caso "solo Retomamos en color" checkpoint-close-guard.sh m_capas_cierre.py test-checkpoint-close-guard.sh "reclama el fence fuera del snippet" fences-sin-control
 caso "fence dentro de una cita" checkpoint-close-guard.sh m_capas_cierre.py test-checkpoint-close-guard.sh "reclama el fence en la cita" fence-sin-cita
+# 2.63.27 (p-091714b9cf): la prueba no depende de la hora. Sin el parche de la fecha, el 8e del fixture
+# sale vacio porque el hook y el script vuelven a leer el dia real.
+caso "prueba con fecha fija" test-checkpoint-close-guard.sh m_hoy_fijo.py test-checkpoint-close-guard.sh "el fixture trae un 8e con contenido" sin-parche
 caso "recomendacion con dueno" checkpoint-audit.py m_capas_cierre.py test-checkpoint-audit.sh "avisa del research" reco-sin-dueno-pasa
 T=test-pendiente-relacionado.sh
 caso "_relacionado en la linea" journal-compact.py m_relacionado.py $T "la linea lleva _relacionado: plan-foo_" linea-sin-campo
@@ -272,6 +275,8 @@ caso "marco: aviso, no falta" checkpoint-audit.py m_hilo.py $T "y no lo vuelve S
 caso "marco: caso 5 fuera" checkpoint-audit.py m_hilo.py $T "caso 5 \(ninguno\): el marco no aplica" marco-con-ninguno
 caso "marco: el hook lo pone en la revision" checkpoint-close-guard.sh m_hilo.py test-checkpoint-close-guard.sh "el archivo de la revision trae el bloque de avisos del marco" guard-sin-marco
 caso "ficha: solo sessions/*.md"   checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "invocacion real sobre un archivo que no es ficha" ficha-cualquiera
+caso "ficha: variable de Step 8b" checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "Step 8b con" variable-callada
+caso "ficha: variable asignada"  checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "triage: la ficha asignada" asigna-ignorada
 caso "retomar: mencion no dispara"  checkpoint-close-guard.sh m_invocacion_retomar.py test-checkpoint-close-guard.sh "mencion en silencio: git" mencion-cuenta
 caso "retomar: python3 cuenta"       checkpoint-close-guard.sh m_invocacion_retomar.py test-checkpoint-close-guard.sh "invocacion real sigue disparando: python3" python-no-cuenta
 caso "retomar: valor tras opcion"   checkpoint-close-guard.sh m_invocacion_retomar.py test-checkpoint-close-guard.sh "invocacion real sigue disparando: python3 -W ignore" opcion-sin-valor
@@ -497,6 +502,9 @@ caso "lv fecha sin validar"    journal-compact.py m_consolidate.py test-learning
 caso "lv inventa frontmatter"  journal-compact.py m_consolidate.py test-learning-update.sh "23g sin frontmatter" lv-inventa-frontmatter
 caso "lv ignorado"             journal-compact.py m_consolidate.py test-learning-update.sh "23a sin el campo" lv-ignorado-validador
 caso "lv emisor sin validar"   journal-emit.py    m_consolidate.py test-learning-update.sh "23d fecha imposible" lv-emisor-sin-validar
+caso "valla en codigo en linea" journal-compact.py m_codigo_en_linea.py test-learning-update.sh "tildes en codigo en linea: sin cuarentena" sin-codigo-en-linea
+caso "codigo en linea borrado" journal-compact.py m_codigo_en_linea.py test-learning-update.sh "codigo al inicio y luego <: sin cuarentena" codigo-borrado
+caso "cierre de otro largo"    journal-compact.py m_codigo_en_linea.py test-learning-update.sh "tiras de distinto largo: cuarentena" cierre-de-otro-largo
 
 echo
 echo "Enlace Quick Reference -> regla y learnings-migracion.py (2.51.0, F7)"

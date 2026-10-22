@@ -257,6 +257,7 @@ disparo = False
 por_checkpoint = False # el turno corrio /checkpoint-3t (no solo reimprimio un snippet)
 fichas = []            # fichas que el turno CERRO: argumento de print-como-retomar.py o Edit con marca
 escritas = []          # fichas escritas con Write (Step 2 del checkpoint, o /backfill-3t)
+con_variable = False   # print-como-retomar.py recibio la ficha en una variable ("$SESSION_FILE")
 preguntas = []         # tool_use_id de cada AskUserQuestion del turno (Step 3b, 2.53.0; 2.54.1: y de los checkpoints anteriores)
 n_preg = {}            # tool_use_id -> cuantas preguntas lleva ese modal (2.54.0)
 encab = {}             # tool_use_id -> encabezados de sus preguntas (2.54.0)
@@ -270,6 +271,26 @@ SESION_RE = re.compile(r"(?:^|/)memory/sessions/[^/]+\.md$")
 # barras invertidas.
 FICHA_RE = re.compile(r"(?:^|[/\\])sessions[/\\][^/\\]+\.md$")
 MARCAS_EDIT = ("## Como retomar", "Proximo paso:", "Próximo paso:", "## Recordatorios de calendario")
+
+
+_RE_ASIGNACION = re.compile(r"(?:^|[;&|\n(]|\s)(?:export\s+)?([A-Za-z_]\w*)=(\"[^\"]*\"|'[^']*'|[^\s;&|)]*)")
+
+
+def asignaciones(cmd):
+    """`VAR=valor` del comando, sin comillas; la ultima gana."""
+    return {m.group(1): m.group(2)[1:-1] if m.group(2)[:1] in "\"'" and len(m.group(2)) > 1
+            else m.group(2) for m in _RE_ASIGNACION.finditer(cmd)}
+
+
+def expandir(arg, asigna):
+    """Sustituye `$VAR` y `${VAR}` con las asignaciones del comando; lo que no se conoce queda."""
+    for _ in range(5):
+        nuevo = re.sub(r"\$\{(\w+)\}|\$(\w+)",
+                       lambda m: asigna.get(m.group(1) or m.group(2), m.group(0)), arg)
+        if nuevo == arg:
+            break
+        arg = nuevo
+    return arg
 
 
 def resolver(ruta, base):
@@ -481,10 +502,19 @@ for r in turno:
             # `sed -i … print-como-retomar.py pendientes_afines.py` tomaba el .py como ficha y le
             # pedia nombrar el `break` de la sesion en `## Bugs fixed`. Desde 2.63.16 solo cuenta la
             # invocacion real del script, no una mencion (invocaciones_retomar, p-1fe14aa592).
+            # Una variable asignada en el mismo comando (`OTRA=memory/sessions/x.md; … "$OTRA"`) se
+            # expande antes: el estado del shell no pasa de una llamada Bash a otra, asi que la
+            # ficha impresa suele estar escrita ahi. Solo si queda sin resolver, o no existe, vale la
+            # ficha de la sesion (abajo): con la ficha de OTRA sesion, un triage revisaba la propia
+            # (adversario externo de 2.63.31).
+            asigna = asignaciones(cmd)
             for a in args_retomar:
-                f = resolver(a, base) if a else None
-                if f and FICHA_RE.search(f):
+                e = expandir(a, asigna) if a else a
+                f = resolver(e, base) if e else None
+                if f and FICHA_RE.search(f) and ("$" not in a or os.path.isfile(f)):
                     fichas.append(f)
+                elif a and "$" in a and (f is None or (FICHA_RE.search(f) and not os.path.isfile(f))):
+                    con_variable = True
         elif nombre in ("Edit", "MultiEdit", "Write"):
             ruta = inp.get("file_path") or ""
             if not SESION_RE.search(ruta):
@@ -555,6 +585,17 @@ if ids_cambiados or ids_a_ciegas:
             disparo = True
             fichas.append(f)
 fichas = [f for f in fichas if f and os.path.isfile(f)]
+# Step 8b real (p-e1799cd04c): `python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"`. resolver() no
+# expande la variable y, si la ficha se escribio en un turno anterior (Step 2 antes de una respuesta
+# del usuario), el turno de Step 8b quedaba sin ficha y el guard entero callaba (el pendiente cita 9
+# turnos reales del 2026-09-28 y la sesion 8ef6459e del 2026-09-29, con "$SF"). Vale la ULTIMA ficha que esta sesion escribio o edito, en cualquier turno,
+# y solo si su frontmatter lleva el session_id de esta sesion (lo sella Step 5c-bis antes de Step 8):
+# un /backfill-3t escribe fichas de otras sesiones. Limite declarado: una ficha sin sellar no se toma.
+if con_variable:
+    for f in reversed([resolver(r, cwd) for r in fichas_sesion]):
+        if f and os.path.isfile(f) and de_esta_sesion(f):
+            fichas.append(f)
+            break
 if not fichas:
     fichas = [f for f in escritas[-1:] if f and os.path.isfile(f)]
 if not disparo or not fichas:
@@ -1144,8 +1185,12 @@ else:
                 "alguien que no es el usuario? Una decision del usuario no es bloqueo: la toma el en "
                 "la sesion siguiente, con el agente. Si es eso, desbloquealo (`journal-emit.py --type "
                 "pendiente.block --id p-… --desbloquear`) y rehaz el snippet con `Proximo paso: "
-                "decidir con el usuario <que> (p-…)`. Si espera a alguien de fuera, di a quien en la "
-                "linea " + str(len(REVISION_ITEMS)) + " de la revision:\n"
+                "decidir con el usuario <que> (p-…)`. Si para que se mueva hace falta que el usuario "
+                "le pida algo a alguien (2.63.32), preguntale si lo va a pedir el (AskUserQuestion; "
+                "en una sesion supervisada, SendMessage al supervisor): si dice que si, desbloquealo "
+                "y el paso es `pedirle a <quien> <que> (p-…)`; si ya lo pidio o no le toca, queda "
+                "bloqueado con su `_revisar` (sale ese dia en el recordatorio). Si espera a alguien "
+                "de fuera, di a quien en la linea " + str(len(REVISION_ITEMS)) + " de la revision:\n"
                 + "\n".join(f"- {a}" for a in avisos_bloqueo))
         if avisos_compartido:
             partes.append(

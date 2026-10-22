@@ -1386,7 +1386,7 @@ def apply_window(mem, p):
     return True
 
 
-BLOQUEADO_RE = re.compile(r"\s*—\s*_bloqueado:[^—]*")
+BLOQUEADO_RE = re.compile(r"\s*—\s*_bloqueado:[^—]*?(?=\s*—|$)")
 RETOMAR_RE = re.compile(r"\s*—\s*_retomar:[^—]*")
 # La misma expresion que journal-emit.py: sessions/<slug> sin espacios, `—` ni `_` final.
 FICHA_RETOMAR_RE = re.compile(r"^sessions/[A-Za-z0-9][A-Za-z0-9._-]*(?<!_)$")
@@ -1428,8 +1428,24 @@ def apply_block(mem, p):
         log(f"WARN block: no hay linea abierta con id {p['id']}")
         return False
     nueva = BLOQUEADO_RE.sub("", lines[i].rstrip("\n"))
+    if not p.get("bloqueado") and p.get("quita_revisar"):
+        # 2.63.32: desbloquear quita la fecha de mirar si llego la espera; un `revisar` dado queda
+        # como la ventana nueva. Un desbloqueo anterior (sin `quita_revisar`) no toca la ventana.
+        nueva = re.sub(r"\s*—\s*_revisar: \d{4}-\d{2}-\d{2}_", "", nueva)
+        if p.get("revisar"):
+            nueva = f"{nueva} — _revisar: {p['revisar']}_"
     if p.get("bloqueado"):
         nueva = f"{nueva} — _bloqueado: {p['bloqueado']}_"
+        # 2.63.32: el bloqueo trae su ventana (`revisar`). Un evento anterior no la trae y se
+        # aplica como antes. La ventana por defecto (`revisar_defecto`) no pisa un `_revisar` que
+        # la linea ya tenga y no haya vencido el dia del evento; una fecha dada si lo reemplaza.
+        rev = p.get("revisar")
+        if rev:
+            m = re.search(r"_revisar: (\d{4}-\d{2}-\d{2})_", nueva)
+            vigente = m and m.group(1) > str(p.get("fecha") or "")
+            if not (p.get("revisar_defecto") and vigente):
+                nueva = re.sub(r"\s*—\s*_revisar: \d{4}-\d{2}-\d{2}_", "", nueva)
+                nueva = f"{nueva} — _revisar: {rev}_"
     if nueva == lines[i]:
         return False                      # idempotente
     lines[i] = nueva
@@ -2882,6 +2898,9 @@ REGLA_PLANA = re.compile(r"^(?:([-*])|\d{1,9}\.) (?=\S)")   # columna 0, marcado
 RAYA = re.compile(r"^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$")  # `- - -` es raya horizontal, no item
 ATX = re.compile(r"^#{1,6}(?:[ \t]|$)")                     # `#t` NO es cabecera
 ABRE_BLOQUE = re.compile(r"```|~~~|^[ \t>]*<")              # valla o HTML en cualquier sitio
+# Codigo en linea (CommonMark 6.1): una tira de n comillas invertidas cerrada por la siguiente tira
+# de exactamente n en la misma linea. Lo de dentro no abre bloque. Una tira sin pareja no se toca.
+CODIGO_EN_LINEA = re.compile(r"(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)")
 
 
 def familia(linea):
@@ -2930,7 +2949,11 @@ def regla_reescribible(lines, i, end):
     # Una valla o un bloque HTML antes, en CUALQUIER parte del fichero, puede contener la regla.
     # Saber si esta cerrado pide emparejar vallas y los siete finales de HTML: eso es un parser, y
     # la decision (del usuario, 2026-09-21) fue negarse antes que escribir otro a medias.
-    if any(ABRE_BLOQUE.search(x) for x in lines[:i]):
+    # El codigo en linea se cambia por una letra, no se borra: asi no acerca un `<` al inicio.
+    # Quitarlo nunca esconde una valla: una valla empieza la linea, y un tramo que la contenga
+    # empieza con comillas antes que ella o es la propia valla con comillas detras, que
+    # CommonMark (4.5) no deja abrir.
+    if any(ABRE_BLOQUE.search(CODIGO_EN_LINEA.sub("c", x)) for x in lines[:i]):
         return "codigo-antes"
     return None
 
@@ -4365,6 +4388,11 @@ def validate(ev):
             raise Quarantine("malformed: pendiente.block sin 'id'")
         if "—" in str(p.get("bloqueado", "")) or "\n" in str(p.get("bloqueado", "")):
             raise Quarantine("malformed: pendiente.block con '—' o salto de linea en 'bloqueado'")
+        if p.get("revisar"):
+            try:
+                fecha_iso(str(p["revisar"]))
+            except (ValueError, TypeError):
+                raise Quarantine("malformed: pendiente.block con 'revisar' sin fecha real")
     elif t == "pendiente.relate":
         if not p.get("id"):
             raise Quarantine("malformed: pendiente.relate sin 'id'")
