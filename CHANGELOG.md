@@ -48,6 +48,143 @@ contadores.
   ese momento (o un emisor anterior a 2.63.34 a medio escribir); se vuelve a correr en unos segundos,
   como con `JOURNAL busy`.
 
+## [2.63.33] - 2026-10-20
+Origen: p-7fd6a82eaa, el gap que dejo abierto la auditoria de hilos de 2.63.22 (decision d284 del
+usuario: chequeo SALTADO con fecha de corte; plan aprobado en d305).
+
+### Added
+- **Un cierre `ninguno` ya no entierra un plan `active`.** Nuevo chequeo
+  `snippet.ninguno_plan_activo` en `bin/checkpoint-audit.py`: si el snippet de `Como retomar` es
+  `ninguno` (con bloque o colapsado), `## Plans` enlaza un plan `active` (tambien con `../`, `.md`
+  o `#ancla`; fila del indice o, sin fila, su frontmatter) y ningun pendiente ABIERTO de
+  `_pendientes.md` lo cita en `_relacionado:`, sale SALTADO y el hook de cierre lo rechaza. Lee el
+  campo `_relacionado`, nunca la prosa del plan ni del pendiente (regla 216). Un plan cuyo fichero
+  no empieza por `plan-` se liga con `plan-<nombre del fichero>`. Solo fichas con fecha 2026-10-21
+  o posterior.
+- **Step 5 de `/checkpoint-3t`: cada fase abierta o disparador de un plan tocado es un pendiente
+  ligado** (`pendiente.add --relacionado plan-<slug>`, con `--revisar` si espera una fecha),
+  propuesto como candidato en Step 3b. Un plan sin nada abierto se cierra con `plan.upsert`.
+- Prueba `bin/test-ninguno-plan-activo.sh` (19 asertos; los 19 caen con el checkpoint-audit.py de
+  2.63.22) y 7 mutaciones nuevas (`tools/mutaciones/m_ninguno_plan.py`).
+
+### Limites
+- No lee el texto viejo de un plan: un plan `active` con fases solo en su prosa sale SALTADO hasta
+  que alguien registra la fase como pendiente o cierra el plan. Un pendiente ligado falso (que no
+  es la fase real) lo pasa: el chequeo vigila la omision, no la calidad del enlace.
+
+## [2.63.32] - 2026-10-21
+Origen: Victor (via `/goalspec:interview`, bajo el supervisor lookout `supervisor-3-tier-memory`,
+d296-d301) reporto cierres que dejaban un pendiente `_bloqueado` sin fecha y snippet `Ninguno`, y
+pidio auditar en que casos pasa y cerrar el hueco. Caso real: claude-vzert, `p-98a561dc02`
+(espera a que la cuenta de infra instale un plugin y un dev mande un mensaje). Auditoria de solo
+lectura del mismo dia sobre los 39 proyectos 3-tier de la Mac: 7 tienen bloqueados, 54 abiertos,
+50 sin `_revisar`, y en los 7 hay fichas `Ninguno` que citan un bloqueado. Esos 50 se
+arreglaron el mismo dia con aprobacion de Victor (d303): 12 desbloqueados porque esperaban una
+decision o un comando suyo, 38 fechados al 2026-10-25.
+
+### Changed
+- **Todo bloqueado lleva fecha.** `journal-emit.py --bloqueado-por` sin `--revisar` nace con
+  `_revisar: hoy+5` (la regla 2 de Step 3b) y lo avisa por stderr. `pendiente.block` acepta
+  `--revisar` y, sin el, pone hoy+5 salvo que la linea ya traiga un `_revisar` futuro (lo conserva).
+  `--desbloquear` quita tambien el `_revisar` (era la fecha de mirar si llego la espera; con el
+  puesto, `Proximo paso: pedirle a <quien> …` salia rechazado como fecha futura), salvo que se de
+  `--revisar`, que queda como ventana nueva. Un evento `pendiente.block` anterior a 2.63.32 se
+  aplica como antes: el bloqueo sin ventana, y el desbloqueo sin tocar la que haya.
+- **Ese dia vuelve a salir.** `print-pendiente-opcional.py` (🔔 vence hoy, ➕ vencidos) ya no
+  descarta un bloqueado con `_revisar`; le anade "Espera a alguien de fuera: mira si ya llego".
+  `pendientes_afines.hacible` (hilo y afines) y `checkpoint-audit.py` (`snippet.proximo_paso`)
+  tratan como accionable un bloqueado cuyo `_revisar` ya paso: el paso es mirar si llego. Antes
+  de su fecha sigue fuera. Un bloqueado sin `_revisar` sigue fuera de todo, como antes.
+- **`expire-pendientes.py` nunca caduca un bloqueado.** Su `_revisar` vencido significa "mira si
+  ya llego", no "dejo de ser compromiso"; sin esto, /triage-3t habria caducado cada espera viva al
+  dia siguiente de su fecha. Lo cuenta en `excluidos: _bloqueado N`.
+- **La pregunta al cerrar.** Si para que un bloqueado se mueva hace falta que el usuario le pida
+  algo a alguien, el agente le pregunta si lo pedira el (AskUserQuestion, o SendMessage al
+  supervisor): si dice que si, no es bloqueo y el paso es `pedirle a <quien> <que> (p-…)`; si no,
+  queda bloqueado con su fecha. Va en Step 3b de `checkpoint-3t.md`, en Step 8, y en el aviso
+  `snippet.ninguno_bloqueo` de la revision del cierre.
+- Plantillas: se quita la regla que prohibia `--revisar` en un pendiente que espera a un tercero
+  (Step 3b) y la que mandaba el seguimiento a `routine-followup` (Step 8). /triage-3t fecha los
+  bloqueados viejos con `pendiente.window`.
+
+### Added
+- **`pendientes.bloqueado_sin_fecha` en `checkpoint-audit.py`.** SALTADO si `## Pendientes` de la
+  ficha lista un `_bloqueado` sin `_revisar` (corre tambien en `--solo-snippet`, asi que el hook
+  de cierre lo rechaza); POR-DISEÑO con el conteo si los sin fecha estan solo en el indice. Fichas
+  anteriores al 2026-10-20 no se miden. Sobre la ficha real del caso (claude-vzert, commit
+  `1281555`) sale SALTADO; con 2.63.22 salia solo el aviso `snippet.ninguno_bloqueo`.
+- Prueba: `bin/test-bloqueado-fecha.sh`; `bin/test-flags-sin-lector.sh` suma `--revisar` a `pendiente.block`.
+
+## [2.63.31] - 2026-10-20
+Origen: `p-e1799cd04c`. El Step 8b real imprime el snippet con
+`python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"`, y `resolver()` descarta toda ruta con `$`.
+Si la ficha se escribio en un turno anterior (Step 2 antes de una respuesta del usuario), el turno de
+Step 8b quedaba sin ficha y `checkpoint-close-guard.sh` callaba entero: snippet, calendario, 8e y el
+chequeo de 7a. El pendiente cita 9 turnos reales (medidos el 2026-09-28,
+[[sessions/2026-09-28-aviso-7a-al-cierre-del-turno]]) y la sesion 8ef6459e del 2026-09-29 (`"$SF"`);
+esta version no los re-midio.
+
+### Fixed
+- **El guard toma la ficha de la sesion cuando `print-como-retomar.py` recibe una variable.** Vale
+  la ultima ficha que esta sesion escribio o edito, en cualquier turno, y solo si su frontmatter
+  lleva el `session_id` de esta sesion (lo sella Step 5c-bis antes de Step 8): un `/backfill-3t`
+  escribe fichas de otras sesiones.
+- **Antes, expande las asignaciones del mismo comando.** `OTRA=memory/sessions/x.md; …
+  print-como-retomar.py "$OTRA"` revisa `x.md`, igual que la ruta literal: el estado del shell no
+  pasa de una llamada Bash a otra, asi que la variable suele asignarse ahi. Solo si la variable queda
+  sin resolver, o su ficha no existe, vale la de la sesion. Sin esto, un triage que imprimia la ficha
+  de otra sesion revisaba la propia (adversario externo, ronda sobre 231abec).
+
+### Added
+- Caso `p-e1799cd04c` en `test-checkpoint-close-guard.sh` con la forma de Step 8b (`"$SESSION_FILE"`
+  y `"$SF"`) y una ficha escrita en un turno anterior. Control: una ficha sellada con otra sesion se
+  queda en silencio. Caso del triage con la variable asignada: se revisa la misma ficha que con la
+  ruta literal (con 2.63.18 pasa, porque callaba con cualquier variable; lo mide `asigna-ignorada`).
+  Arnes del arbol publicado (285 asertos, con los de 2.63.22-2.63.30): 285/285, y 280/5 con el guard
+  de 2.63.18 (los 3 de Step 8b y 2 de 2.63.22). Mutaciones `variable-callada` y
+  `asigna-ignorada` (`tools/mutaciones/m_ficha_sesion.py`); `ficha-cualquiera` reapuntada a la linea
+  nueva.
+
+### Known
+- Siguen en silencio: una ficha escrita por Bash (no Write/Edit), una ficha sin el sello de la sesion,
+  y una ruta de Write con `\` (Windows; `SESION_RE_G` solo acepta `/`, como antes).
+- En un triage que imprime la ficha de otra sesion con una variable que NO se asigna en el mismo
+  comando, si esta sesion ya escribio una ficha sellada, el guard revisa la de esta sesion.
+
+## [2.63.30] - 2026-10-20
+Origen: `p-274c87b575` (reportado desde otro proyecto en `/consolidate-3t`).
+
+### Fixed
+- **Una valla dentro de codigo en linea ya no bloquea `learning.update`.** La guarda `codigo-antes`
+  de `regla_reescribible` busca ```` ``` ````, `~~~` o un `<` al inicio de linea en todo lo que hay
+  antes de la regla. En el fichero reportado la unica coincidencia era `~~~~` dentro de codigo en
+  linea (`` `OpenSSH.Server~~~~0.0.1.0` ``, regla 1); no un `<`, como decia el reporte. Con ella
+  ninguna regla posterior se podia editar. Medido con una copia de ese fichero: 2.63.20 manda la
+  regla 23 a cuarentena con `codigo-antes` y esta version la reescribe. Ahora cada tramo de codigo
+  en linea de la linea (CommonMark 6.1: una tira de n comillas invertidas cerrada por la siguiente
+  de exactamente n) se cambia por una letra antes de buscar. Una tira sin pareja, o de otro largo,
+  no se toca y sigue negando. Un tramo que cruza lineas tampoco se empareja: la linea que sigue
+  puede abrir una valla de verdad (`` `texto `` y luego `~~~ texto` aqui.`), asi que se sigue negando
+  aunque a veces no haya bloque. Seccion 24 de `test-learning-update.sh`, tres mutaciones nuevas
+  (`m_codigo_en_linea.py`) y siete lineas con codigo en linea en el oraculo CommonMark.
+
+## [2.63.27] - 2026-10-20
+Origen: una corrida de mutation-check que cruzo la medianoche UTC tumbo los asertos del bloque 8e
+de `test-checkpoint-close-guard.sh` (run 39342960137, intento 1; `p-091714b9cf`). La prueba leia
+la fecha una vez al arrancar, y `print-pendiente-opcional.py` (llamado por la prueba y por el hook)
+la volvia a leer al correr: si el dia cambiaba entre medio, el pendiente que vencia "hoy" ya no
+vencia y el 8e salia vacio.
+
+### Fixed
+- **`test-checkpoint-close-guard.sh` no depende de la hora.** La prueba fija una sola fecha
+  (`2031-03-15`, o `HOY_PRUEBA`) y pone un `sitecustomize.py` en su mktemp, por `PYTHONPATH`, para
+  que `datetime.date.today()` devuelva esa fecha en todo python que lanza, el hook incluido. El hook
+  y los scripts no cambian. Un aserto nuevo comprueba que un python hijo ve la fecha fija.
+- Prueba roja: la prueba anterior con la fecha de arranque en ayer da 6 fallos (los dos bloques 8e).
+  Con el arreglo pasa entera con `2031-03-15`, con ayer y con el dia real.
+- `tools/mutation-check.sh`: caso nuevo "prueba con fecha fija" (`m_hoy_fijo.py sin-parche`): sin
+  el parche cae "el fixture trae un 8e con contenido".
+
 ## [2.63.25] - 2026-10-20
 Origen: pedido del usuario. Un agente cerro con `/checkpoint-3t`, dejo su prompt para retomar y
 siguio con una shell en segundo plano viva: un muestreo que cada 15 minutos escribia "Timeout

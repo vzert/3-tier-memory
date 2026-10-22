@@ -16,7 +16,8 @@ M = {
     "snippet-sin-afines": [('inner = con_afines(fence.group(1).strip("\\n"), text, path)',
                             'inner = fence.group(1).strip("\\n")')],
     # pendientes_afines.py
-    "afines-con-bloqueados": [('or p["bloqueado"]:', ":")],
+    # 2.63.32: el filtro de bloqueados deja pasar el que ya vencio; apagarlo entero.
+    "afines-con-bloqueados": [('if p["bloqueado"] and not (p["revisar"] and p["revisar"] < hoy):', "if False:")],
     "afines-con-vence-hoy": [('if p["revisar"] and p["revisar"] >= hoy:', 'if p["revisar"] and p["revisar"] > hoy:')],
     # 2.57.0: el hilo sustituyo al filtro de afines; las mismas piezas, en su codigo nuevo.
     # 2.62.0: el hilo es de un salto; la direccion "el ancla cita al candidato" es esta rama.

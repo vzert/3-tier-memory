@@ -92,6 +92,10 @@ M4=$(emit --type pendiente.add --text "media ligada pero bloqueada" --prioridad 
 M5=$(emit --type pendiente.add --text "media ligada con ventana futura" --prioridad Media --origen "[[sessions/2026-10-13-hoy]]" --creado 2026-08-02 --relacionado "$A" --revisar 2099-01-01)
 B1=$(emit --type pendiente.add --text "baja ligada" --prioridad Baja --origen "[[sessions/2026-10-13-hoy]]" --creado 2026-08-03 --relacionado "$A")
 compact --quiet >/dev/null
+# 2.63.32: --bloqueado-por le pone `_revisar: hoy+5`, y entonces a M4 la excluiria la fecha futura y
+# no el bloqueo (el caso "afines sin bloqueados" de mutation-check quedaba sin caer). Se le quita la
+# fecha, como un bloqueado anterior a 2.63.32: lo que se mide aqui es el filtro del bloqueo.
+python3 -c 'import re,sys;p,i=sys.argv[1],sys.argv[2];t=open(p,encoding="utf-8").read();open(p,"w",encoding="utf-8").write("".join(re.sub(r"\s*—\s*_revisar: \d{4}-\d{2}-\d{2}_","",l) if "_id: "+i+"_" in l else l for l in t.splitlines(True)))' "$M/_pendientes.md" "$M4"
 # 2.57.0: la ficha es de OTRA sesion que la de origen de estos pendientes. Si fuera la de
 # `2026-10-13-hoy`, todos los nacidos en ella entrarian al hilo por haber nacido ahi (regla 2), y
 # esta seccion mide la liga por `_relacionado`; lo nacido en la sesion lo mide test-hilo-pendientes.sh.

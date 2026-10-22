@@ -18,7 +18,10 @@ Tipos de evento:
                     [--bloqueado-por "QUE"]  (espera a algo FUERA de la sesion: otra
                     instalacion, un peer, un PR ajeno; nunca una decision del usuario,
                     que va en el `Proximo paso`; checkpoint-audit.py rechaza un
-                    `Proximo paso:` que cite un id con `_bloqueado:`)
+                    `Proximo paso:` que cite un id con `_bloqueado:` y `_revisar` futuro)
+                    (2.63.32) Con --bloqueado-por y sin --revisar, la ventana es hoy+5: un
+                    bloqueado sin fecha no volvia a salir nunca (medido 2026-10-20: 50 de 54
+                    bloqueados abiertos en 7 proyectos). Lo avisa por stderr.
                     [--relacionado p-<10 hex>|plan-<slug>]...  (repetible, 2.55.0: otro
                     pendiente o un plan con el que este va junto; lo lee pendientes_afines.py,
                     que print-como-retomar.py usa para sumar afines al `Proximo paso`)
@@ -50,9 +53,13 @@ Tipos de evento:
                     Pone o cambia `_retomar: FECHA sessions/<slug>_`: el pendiente que cita el
                     `Proximo paso` de esa ficha, para que el mod pendientes lo saque en VENCEN.
                     Solo lo lee el mod; 8e, el hilo y el calendario lo ignoran (2.62.8).
-  pendiente.block   --id ID (--bloqueado-por "QUE" | --desbloquear)
+  pendiente.block   --id ID (--bloqueado-por "QUE" | --desbloquear) [--revisar YYYY-MM-DD]
                     Pone, cambia o quita `_bloqueado: QUE_` en un pendiente VIVO. Existe para
                     marcar en Step 3a uno que nacio sin el campo; no cambia el id.
+                    (2.63.32) Al bloquear pone tambien `_revisar`: la fecha dada, o hoy+5 si la
+                    linea no trae ya un `_revisar` futuro (ese se conserva). Al desbloquear quita
+                    `_revisar` (era la fecha de mirar si llego la espera), salvo que se de
+                    --revisar, que queda como la ventana nueva.
                     [--text-prefix P]  (si no se da, se toma del archivo si la linea existe)
   pendiente.relate  --id ID (--relacionado X [--relacionado Y ...] | --sin-relacion)
                     Pone (reemplaza) o quita `_relacionado: X, Y_` en un pendiente VIVO
@@ -201,7 +208,7 @@ import sys
 import time
 import unicodedata
 import uuid
-from datetime import date
+from datetime import date, timedelta
 
 for _flujo in (sys.stdout, sys.stderr):
     if hasattr(_flujo, "reconfigure"):
@@ -511,6 +518,15 @@ def fecha_real(v):
         return True
     except ValueError:
         return False
+
+
+# 2.63.32: ventana de un bloqueado que nace sin fecha. Es la regla 2 de Step 3b de /checkpoint-3t
+# ("en cualquier otro caso, 5 dias"), el mismo numero, para que dos agentes lleguen a la misma fecha.
+DIAS_BLOQUEADO = 5
+
+
+def revisar_por_defecto():
+    return (date.today() + timedelta(days=DIAS_BLOQUEADO)).isoformat()
 
 
 def limpiar_bloqueado(valor):
@@ -966,7 +982,7 @@ FLAGS_DE = {
     "pendiente.reopen": {"id", "prioridad"},
     "pendiente.window": {"id", "revisar"},
     "pendiente.retomar": {"id", "retomar", "ficha"},
-    "pendiente.block": {"id", "bloqueado_por", "desbloquear"},
+    "pendiente.block": {"id", "bloqueado_por", "desbloquear", "revisar"},
     "pendiente.relate": {"id", "relacionado", "sin_relacion"},
     "pendiente.adopt": {"todas", "line", "id", "text_prefix", "colapsar"},
     "session.add": {"slug", "date", "status", "summary", "commit"},
@@ -1138,6 +1154,12 @@ def main():
         # `bloqueado` tampoco entra en el hash, por lo mismo que `revisar`: es un estado del
         # pendiente, no su identidad.
         bloqueado = limpiar_bloqueado(a.bloqueado_por)
+        # 2.63.32: un bloqueado sin ventana no volvia a salir en ningun cierre (ni recordatorio, ni
+        # hilo, ni `Proximo paso`). La ventana por defecto es la regla 2 de Step 3b (5 dias).
+        if bloqueado and not revisar:
+            revisar = revisar_por_defecto()
+            print(f"journal-emit: bloqueado sin --revisar: ventana por defecto {revisar} "
+                  f"(hoy+{DIAS_BLOQUEADO})", file=sys.stderr)
         # `relacionado` tampoco: es un enlace, no la identidad.
         relacionado = limpiar_relacionados(a.relacionado, pid)
         # Pieza 1 del hilo: se suma el paso recibido a lo que el agente haya pasado.
@@ -1517,7 +1539,29 @@ def main():
         if bool(bloqueado) == bool(a.desbloquear):
             sys.exit("journal-emit: pendiente.block necesita --bloqueado-por \"QUE\" o "
                      "--desbloquear (uno de los dos)")
+        rev = (a.revisar or "").strip()
+        if rev and not fecha_real(rev):
+            sys.exit("journal-emit: --revisar debe ser una fecha real YYYY-MM-DD")
         base["payload"] = {"id": pid, "bloqueado": bloqueado}
+        if not bloqueado:
+            # 2.63.32: el `_revisar` de un bloqueado es la fecha de mirar si llego la espera; sin
+            # espera sobra, y con el puesto el paso "pedirle a X (p-…)" salia rechazado como
+            # `_revisar` futuro (adversario, ronda 1). Un --revisar dado queda como ventana nueva.
+            # `quita_revisar` distingue este evento de un desbloqueo anterior a 2.63.32, que no
+            # tocaba la ventana y se sigue aplicando igual.
+            base["payload"]["quita_revisar"] = True
+            if rev:
+                base["payload"]["revisar"] = rev
+        if bloqueado:
+            # 2.63.32: el bloqueo trae su ventana. `revisar_defecto` le dice al compactador que
+            # conserve un `_revisar` futuro que la linea ya tenga; una fecha dada lo reemplaza.
+            base["payload"]["revisar"] = rev or revisar_por_defecto()
+            base["payload"]["revisar_defecto"] = not rev
+            base["payload"]["fecha"] = date.today().isoformat()
+            if not rev:
+                print(f"journal-emit: bloqueado sin --revisar: ventana por defecto "
+                      f"{base['payload']['revisar']} (hoy+{DIAS_BLOQUEADO}) si la linea no trae "
+                      "ya un `_revisar` futuro", file=sys.stderr)
         write_event(memory_dir, base)
         print(pid)
         return

@@ -222,6 +222,9 @@ caso "el hook exige el emoji" checkpoint-close-guard.sh m_capas_cierre.py test-c
 caso "cabecera de la revision" checkpoint-close-guard.sh m_capas_cierre.py test-checkpoint-close-guard.sh "la cita no tapa la cabecera" cabecera-rfind
 caso "solo Retomamos en color" checkpoint-close-guard.sh m_capas_cierre.py test-checkpoint-close-guard.sh "reclama el fence fuera del snippet" fences-sin-control
 caso "fence dentro de una cita" checkpoint-close-guard.sh m_capas_cierre.py test-checkpoint-close-guard.sh "reclama el fence en la cita" fence-sin-cita
+# 2.63.27 (p-091714b9cf): la prueba no depende de la hora. Sin el parche de la fecha, el 8e del fixture
+# sale vacio porque el hook y el script vuelven a leer el dia real.
+caso "prueba con fecha fija" test-checkpoint-close-guard.sh m_hoy_fijo.py test-checkpoint-close-guard.sh "el fixture trae un 8e con contenido" sin-parche
 caso "recomendacion con dueno" checkpoint-audit.py m_capas_cierre.py test-checkpoint-audit.sh "avisa del research" reco-sin-dueno-pasa
 T=test-pendiente-relacionado.sh
 caso "_relacionado en la linea" journal-compact.py m_relacionado.py $T "la linea lleva _relacionado: plan-foo_" linea-sin-campo
@@ -276,6 +279,8 @@ caso "marco: aviso, no falta" checkpoint-audit.py m_hilo.py $T "y no lo vuelve S
 caso "marco: caso 5 fuera" checkpoint-audit.py m_hilo.py $T "caso 5 \(ninguno\): el marco no aplica" marco-con-ninguno
 caso "marco: el hook lo pone en la revision" checkpoint-close-guard.sh m_hilo.py test-checkpoint-close-guard.sh "el archivo de la revision trae el bloque de avisos del marco" guard-sin-marco
 caso "ficha: solo sessions/*.md"   checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "invocacion real sobre un archivo que no es ficha" ficha-cualquiera
+caso "ficha: variable de Step 8b" checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "Step 8b con" variable-callada
+caso "ficha: variable asignada"  checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "triage: la ficha asignada" asigna-ignorada
 caso "retomar: mencion no dispara"  checkpoint-close-guard.sh m_invocacion_retomar.py test-checkpoint-close-guard.sh "mencion en silencio: git" mencion-cuenta
 caso "retomar: python3 cuenta"       checkpoint-close-guard.sh m_invocacion_retomar.py test-checkpoint-close-guard.sh "invocacion real sigue disparando: python3" python-no-cuenta
 caso "retomar: valor tras opcion"   checkpoint-close-guard.sh m_invocacion_retomar.py test-checkpoint-close-guard.sh "invocacion real sigue disparando: python3 -W ignore" opcion-sin-valor
@@ -402,6 +407,16 @@ caso "cierre sin paso compartido" checkpoint-audit.py m_paso_vigente.py test-pas
 caso "paso compartido otro dia" checkpoint-audit.py m_paso_vigente.py test-paso-compartido.sh "otro dia" audit-compartido-cualquier-dia
 caso "guard sin paso compartido" checkpoint-close-guard.sh m_paso_vigente.py test-checkpoint-close-guard.sh "la revision trae el aviso del paso compartido" guard-sin-compartido
 caso "opcional con Alta"        print-pendiente-opcional.py m_paso_vigente.py test-print-pendiente-opcional.sh "nada" opcional-con-alta
+
+# 2.63.33: `ninguno` con un plan `active` sin pendiente ligado (p-7fd6a82eaa). Cada caso nombra su
+# suite (sin $T), igual que los de 2.63.22.
+caso "ninguno plan sin rechazo"  checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "rechaza y nombra el plan" plan-sin-rechazo
+caso "ninguno plan liga prosa"   checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "la prosa no liga" plan-liga-prosa
+caso "ninguno plan cualquiera"   checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "plan cerrado" plan-cualquier-estado
+caso "ninguno plan sin prefijo"  checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "ligado con plan-<nombre>" plan-sin-prefijo
+caso "ninguno plan enlace"       checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "forma \[\[\.\./plans" plan-enlace-estricto
+caso "ninguno plan sin corte"    checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "antes de 2.63.33" plan-sin-corte
+caso "ninguno plan con paso"     checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "paso real" plan-cualquier-snippet
 caso "sin identidad"           journal-emit.py m_learning_dedup.py test-learning-dedup.sh "mismo texto sin --decision: rc 0" sin-identidad
 caso "decision fuera"          journal-emit.py m_learning_dedup.py test-learning-dedup.sh "la decision viaja en el payload" decision-fuera-del-payload
 caso "reemplaza sin supersedes" journal-emit.py m_learning_dedup.py test-learning-dedup.sh "reemplaza:2 lleva supersedes 2" reemplaza-sin-supersedes
@@ -491,6 +506,9 @@ caso "lv fecha sin validar"    journal-compact.py m_consolidate.py test-learning
 caso "lv inventa frontmatter"  journal-compact.py m_consolidate.py test-learning-update.sh "23g sin frontmatter" lv-inventa-frontmatter
 caso "lv ignorado"             journal-compact.py m_consolidate.py test-learning-update.sh "23a sin el campo" lv-ignorado-validador
 caso "lv emisor sin validar"   journal-emit.py    m_consolidate.py test-learning-update.sh "23d fecha imposible" lv-emisor-sin-validar
+caso "valla en codigo en linea" journal-compact.py m_codigo_en_linea.py test-learning-update.sh "tildes en codigo en linea: sin cuarentena" sin-codigo-en-linea
+caso "codigo en linea borrado" journal-compact.py m_codigo_en_linea.py test-learning-update.sh "codigo al inicio y luego <: sin cuarentena" codigo-borrado
+caso "cierre de otro largo"    journal-compact.py m_codigo_en_linea.py test-learning-update.sh "tiras de distinto largo: cuarentena" cierre-de-otro-largo
 
 echo
 echo "Enlace Quick Reference -> regla y learnings-migracion.py (2.51.0, F7)"
