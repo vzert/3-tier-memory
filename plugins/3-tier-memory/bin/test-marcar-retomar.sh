@@ -3,7 +3,7 @@
 #
 # Que tiene que cumplir, y por que:
 # - El pendiente que cita el `Proximo paso` de una ficha queda con `_retomar: HOY sessions/<slug>_`,
-#   escrito por evento (nunca a mano), para que el mod pendientes lo saque en VENCEN y no se pierda
+#   escrito por evento (nunca a mano), para que el mod pendientes lo saque en PLANES ACTIVOS y no se pierda
 #   si el snippet no se pega (decision de Victor d65-d68, 2026-10-16).
 # - Es un campo APARTE de `_revisar`: con `_revisar` = hoy el 🔔 de 8e de cualquier cierre del dia
 #   sacaba el paso de otra sesion y `hacible()` lo sacaba del hilo. El caso 6 mide que con

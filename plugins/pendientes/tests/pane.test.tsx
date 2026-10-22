@@ -356,30 +356,92 @@ test('el clic pega tambien que leer: la ficha de origen, o su texto, y lo relaci
   ])
 })
 
-// 0.2.3: un pendiente con `_retomar` (el paso de un snippet que no se pego) sale con ↻ y el clic pega
-// el snippet entero de su ficha; uno sin `_retomar` sigue pegando id y texto.
-test('retomar: ↻ en vez de ●, y el clic pega el snippet de la ficha', async ($, on) => {
+// 0.3.0: los pasos de un snippet `Retomamos` (`_retomar`) ya no salen en VENCEN: van a PLANES ACTIVOS,
+// arriba, una fila por ficha, todos (fuera del tope), con la ventana a la derecha. El clic pega el
+// snippet de la ficha. Un pendiente de VENCEN que tambien trae `_retomar` sigue pegando su snippet.
+const SNIPPET = 'Retomamos: demo.\n\nLee memory/sessions/2026-10-16-uno.md para el contexto completo.\n\nProximo paso: hacer p-9999999999.\n\nTerminas cuando: pasa.'
+const ventana = (estado: string | null, dias: number | null, aqui = false) =>
+  ({ estado, dias, fuente: estado === 'activa' || estado === 'sin actividad' ? 'transcripcion' : 'proceso', aqui })
+const plan = (slug: string, v: ReturnType<typeof ventana>, extra: Record<string, unknown> = {}) => ({
+  ficha: `memory/sessions/${slug}.md`, slug, fecha: slug.slice(0, 10), desde: slug.slice(0, 10),
+  proximo_paso: `Proximo paso: seguir ${slug}.`, snippet: `Retomamos: ${slug}.`, session_id: 's',
+  ventana: v, pendientes: [{ id: 'p-9999999999', prio: 'Media', texto: 'Paso sin pegar', titulo_auto: 'Paso sin pegar', revisar: null }],
+  ...extra,
+})
+const PLANES = [
+  plan('2026-10-16-uno', ventana('abierta', 0)),
+  plan('2026-10-15-dos', ventana('cerrada', 2), { snippet: SNIPPET }),
+  plan('2026-10-14-aqui', ventana('abierta', 0, true)),
+  plan('2026-10-13-viejo', ventana('sin actividad', 5)),
+  plan('2026-10-12-borrada', ventana(null, null), {
+    snippet: null, proximo_paso: null,
+    pendientes: [{ id: 'p-8888888888', prio: 'Alta', texto: 'Paso de ficha borrada', titulo_auto: 'Paso de ficha borrada', revisar: null }],
+  }),
+]
+
+test('planes activos: bloque propio arriba, ventana como texto, el clic pega el snippet', async ($, on) => {
   const reloj = mock.clock(on)
   mock.store(on)
-  const SNIPPET = 'Retomamos: demo.\n\nLee memory/sessions/2026-10-16-uno.md para el contexto completo.\n\nProximo paso: hacer p-9999999999.\n\nTerminas cuando: pasa.'
   const visto = motor(on, JSON.stringify({
     ...AHORA,
+    planes: PLANES,
     items: [
-      it('p-9999999999', 'vence', 'retomar desde 2026-10-12', {
-        texto: 'Paso sin pegar', titulo_auto: 'Paso sin pegar', dias: 1,
+      ...AHORA.items,
+      it('p-7777777777', 'vence', 'vencido 2026-10-06', {
+        texto: 'Paso que ademas vence', titulo_auto: 'Paso que ademas vence', dias: 7,
         retomar: '2026-10-12', retomar_ficha: 'memory/sessions/2026-10-16-uno.md', retomar_snippet: SNIPPET,
       }),
-      it('p-bbbbbbbbbb', 'vence', 'vencido 2026-09-26', { texto: 'Algo que vencio', titulo_auto: 'Algo que vencio', dias: 17 }),
     ],
-    resto: [],
-    quedan: 0,
   }))
   await $.command.run({ command: 'pendientes-ahora' })
   await reloj.advance(1)
-  const ui = await $.ui.mount({ ...pane(40), surface: 'terminal' })
-  expect(await ui.find({ text: '↻ 1 d' })).toBeDefined()
-  expect(await ui.find({ text: '● 17 d' })).toBeDefined()
-  await ui.press({ key: 'p-9999999999' })
-  await ui.press({ key: 'p-bbbbbbbbbb' })
-  expect(visto.fills).toEqual([SNIPPET, 'p-bbbbbbbbbb: Algo que vencio'])
+  const ui = await $.ui.mount({ ...pane(60), surface: 'terminal' })
+  expect((await ui.find({ key: 'h-planes' }))?.text).toMatch(/^PLANES ACTIVOS\s*5$/)
+  // Arriba de todo: antes que SIGUIENTE y VENCEN.
+  const cabeceras = (await ui.findAll({ type: 'Box' })).map(b => b.key).filter(k => k?.startsWith('h-'))
+  expect(cabeceras.slice(0, 2)).toEqual(['h-planes', 'h-paso'])
+  expect(await ui.find({ text: '◉ abierta' })).toBeDefined()
+  expect(await ui.find({ text: '○ cerrada 2 d' })).toBeDefined()
+  expect(await ui.find({ text: '◉ aquí' })).toBeDefined()
+  expect(await ui.find({ text: '○ sin actividad 5 d' })).toBeDefined()
+  // Titulo: el Proximo paso sin su etiqueta; sin ficha, el titulo de su pendiente.
+  expect(await ui.find({ text: /seguir 2026-10-16-uno/ })).toBeDefined()
+  expect(await ui.find({ text: /Proximo paso: seguir/ })).toBeUndefined()
+  expect(await ui.find({ text: /Paso de ficha borrada/ })).toBeDefined()
+  expect(await ui.find({ text: '2026-10-15 · 1 pendiente · dos' })).toBeDefined()
+  // VENCEN sigue con ●: ya no hay ↻ dentro de la lista.
+  expect(await ui.find({ text: '● 7 d' })).toBeDefined()
+  expect(await ui.find({ text: /^↻ \d+ d$/ })).toBeUndefined()
+  await ui.press({ key: 'plan-2026-10-15-dos' })
+  await ui.press({ key: 'plan-2026-10-12-borrada' })
+  await ui.press({ key: 'p-7777777777' })
+  expect(visto.fills).toEqual([SNIPPET, 'p-8888888888: Paso de ficha borrada', SNIPPET])
+})
+
+test('planes activos: van todos y no comen el tope; la lista se queda con lo que sobra', async ($, on) => {
+  const reloj = mock.clock(on)
+  mock.store(on)
+  motor(on, JSON.stringify({ ...AHORA, planes: PLANES.slice(0, 2) }))
+  await $.command.run({ command: 'pendientes-ahora' })
+  await reloj.advance(1)
+  // 20 filas: planes 2 + 2 x 2 = 6; quedan 14, como el panel de 14 de arriba: caben 3 de 10.
+  const ui = await $.ui.mount({ ...pane(20), surface: 'terminal' })
+  expect((await ui.findAll({ type: 'Button' })).filter(b => b.key?.startsWith('plan-'))).toHaveLength(2)
+  expect(await ui.find({ text: /\+7 más/ })).toBeDefined()
+})
+
+test('planes activos: la banda los cuenta y sale aunque la lista este vacia', async ($, on) => {
+  const reloj = mock.clock(on)
+  mock.store(on)
+  motor(on, JSON.stringify({ ...AHORA, items: [], resto: [], planes: PLANES.slice(0, 2),
+    resumen: { abiertos: 2, vencidos: 0, hoy: 0, alta: 0, bloqueados: 0, sin_id: 0, planes: 2 } }))
+  await $.command.run({ command: 'pendientes-ahora' })
+  await $.command.run({ command: 'pendientes-ahora' })
+  await reloj.advance(1)
+  const banda = await $.ui.mount({ ...BANDA, surface: 'terminal' })
+  expect(await banda.find({ text: /↻ 2 planes/ })).toBeDefined()
+  await banda.unmount()
+  const ui = await $.ui.mount({ ...pane(30), surface: 'terminal' })
+  expect(await ui.find({ text: /Nada urgente/ })).toBeUndefined()
+  expect((await ui.find({ key: 'h-planes' }))?.text).toMatch(/^PLANES ACTIVOS\s*2$/)
 })

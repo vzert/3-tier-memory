@@ -452,8 +452,8 @@ python3 "$JBIN/marcar-retomar.py" "$SESSION_FILE"
 
 Pone `_retomar: HOY sessions/<slug>_` en cada `p-…` abierto que cite el `Proximo paso:` (lo que va
 tras "ver tambien" no), por evento (`pendiente.retomar`) y compactando. El mod pendientes lo saca en
-VENCEN ("retomar hoy"; desde manana, "retomar desde FECHA") hasta que el pendiente se cierre, y el
-clic pega el snippet de esta ficha. Asi un snippet que no se pego —pane cerrado, olvido— no se
+PLANES ACTIVOS (una fila por ficha, con si su sesion sigue abierta; no en VENCEN, que es solo de
+`_revisar`) hasta que el pendiente se cierre, y el clic pega el snippet de esta ficha. Asi un snippet que no se pego —pane cerrado, olvido— no se
 pierde entre los demas pendientes (decision de Victor, 2026-10-16). Es un campo aparte de
 `_revisar` a proposito: 8e, el hilo y el calendario lo ignoran, asi que no sale como 🔔 en el cierre
 de otra sesion ni saca el pendiente del hilo. Si un id tiene `_revisar` futuro, no lo marca y lo

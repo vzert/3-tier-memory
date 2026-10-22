@@ -146,7 +146,7 @@ def main():
               == "commands/migrate.md 5c emite algo")
         check("titulo <= 61", all(len(i["titulo_auto"]) <= 61 for i in d["items"]))
         check("resumen", d["resumen"] == {"abiertos": 13, "vencidos": 3, "hoy": 1, "alta": 8,
-                                          "bloqueados": 1, "sin_id": 0})
+                                          "bloqueados": 1, "sin_id": 0, "planes": 0})
 
         # Con tope 3: el cupo del hilo (3) no deja sitio, pero el hilo sigue primero.
         d3 = correr(mem, lib, "--max", "3")
@@ -237,53 +237,114 @@ def main():
         dn = correr(mem, lib)
         check("sin pendientes", dn["ok"] is False and dn["error"].startswith("no hay "))
 
-    # `_retomar` (0.2.3, 3-tier-memory 2.62.8): el paso de un snippet que no se pego sale en vence
-    # desde su fecha hasta que se cierre, y trae el snippet de su ficha para el clic.
+    # `_retomar` (3-tier-memory 2.62.8): el paso de un snippet que no se pego. Desde 0.3.0 no sale en
+    # vence (se confundia con lo que vence de verdad): va a `planes`, una fila por ficha, fuera del
+    # tope, con el snippet para el clic y si la sesion que la escribio sigue abierta.
     with tempfile.TemporaryDirectory() as tmp:
         mem = os.path.join(tmp, "memory")
         os.makedirs(os.path.join(mem, "sessions"))
         with open(os.path.join(mem, "_pendientes.md"), "w", encoding="utf-8") as fh:
-            fh.write("# Pendientes\n\n## Media prioridad\n\n"
+            fh.write("# Pendientes\n\n## Alta prioridad\n\n"
+                     "- [ ] Alta del plan r — _creado: 2026-10-01_ — _id: p-1313131313_"
+                     " — _retomar: 2026-10-12 sessions/2026-10-12-r_\n"
+                     + "".join(f"- [ ] Alta libre {k} — _creado: 2026-10-01_ — _id: p-a{k}a{k}a{k}a{k}a{k}_\n"
+                               for k in range(5)) +
+                     "\n## Media prioridad\n\n"
                      "- [ ] Paso sin pegar — _creado: 2026-10-01_ — _id: p-1212121212_"
                      " — _retomar: 2026-10-12 sessions/2026-10-12-r_\n"
                      "- [ ] Paso de ficha borrada — _creado: 2026-10-01_ — _id: p-3434343434_"
                      " — _retomar: 2026-10-11 sessions/2026-10-11-borrada_\n"
-                     "- [ ] Paso de manana — _creado: 2026-10-01_ — _id: p-5656565656_"
-                     " — _retomar: 2026-10-14 sessions/2026-10-12-r_\n"
+                     "- [ ] Paso de otro dia — _creado: 2026-10-01_ — _id: p-5656565656_"
+                     " — _retomar: 2099-01-01 sessions/2026-10-12-r_\n"
                      "- [ ] Paso con revisar futuro — _creado: 2026-10-01_ — _id: p-7878787878_"
-                     " — _revisar: 2026-10-30_ — _retomar: 2026-10-12 sessions/2026-10-12-r_\n"
-                     "- [ ] Vencido normal — _creado: 2026-10-01_ — _id: p-9090909090_ — _revisar: 2026-10-05_\n")
+                     " — _revisar: 2099-01-01_ — _retomar: 2026-10-12 sessions/2026-10-12-r_\n"
+                     "- [ ] Paso que ademas vence — _creado: 2026-10-01_ — _id: p-6767676767_"
+                     " — _revisar: 2026-10-06_ — _retomar: 2026-10-13 sessions/2026-10-13-s_\n"
+                     + "".join(f"- [ ] Vencido {k} — _creado: 2026-10-01_ — _id: p-9{k}9{k}9{k}9{k}9{k}_"
+                               f" — _revisar: 2026-10-0{k + 1}_\n" for k in range(4)))
+        SID_R = "11111111-2222-3333-4444-555555555555"
+        SID_S = "66666666-7777-8888-9999-000000000000"
         with open(os.path.join(mem, "sessions", "2026-10-12-r.md"), "w", encoding="utf-8") as fh:
-            fh.write("# r\n\n## Como retomar\n\n```\nRetomamos: r.\n\nProximo paso: hacer p-1212121212.\n```\n"
-                     "\n## Commits\n\nnada\n")
+            fh.write(f"---\ntype: session\nsession_id: {SID_R}\n---\n# r\n\n## Como retomar\n\n"
+                     "```\nRetomamos: r.\n\nProximo paso: hacer p-1212121212.\n```\n\n## Commits\n\nnada\n")
+        with open(os.path.join(mem, "sessions", "2026-10-13-s.md"), "w", encoding="utf-8") as fh:
+            fh.write(f"---\nsession_id: {SID_S}\n---\n# s\n\n## Como retomar\n\n"
+                     "```\nRetomamos: s.\n\nProximo paso: hacer p-6767676767.\n```\n")
         # Otra sesion cerro despues con otro paso: es justo el caso que entierra el snippet.
-        with open(os.path.join(mem, "sessions", "2026-10-13-otra.md"), "w", encoding="utf-8") as fh:
+        with open(os.path.join(mem, "sessions", "2026-10-14-otra.md"), "w", encoding="utf-8") as fh:
             fh.write("# otra\n\n## Como retomar\n\nNinguno — cerro todo.\n")
-        dr = correr(mem, lib)
-        todos = {i["id"]: i for i in dr["items"] + dr["resto"]}
-        check("retomar: la ultima ficha es la de otra sesion", dr["ficha"] == "2026-10-13-otra.md")
-        r1 = todos.get("p-1212121212", {})
-        check("retomar: sale en vence", r1.get("grupo") == "vence")
-        check("retomar: motivo con su fecha", r1.get("motivo") == "retomar desde 2026-10-12")
-        check("retomar: dias desde la marca", r1.get("dias") == 1)
-        check("retomar: trae el snippet sin fence ni otras secciones",
-              r1.get("retomar_snippet") == "Retomamos: r.\n\nProximo paso: hacer p-1212121212.")
-        check("retomar: fecha y ficha", (r1.get("retomar"), r1.get("retomar_ficha")) ==
-              ("2026-10-12", "memory/sessions/2026-10-12-r.md"))
-        r2 = todos.get("p-3434343434", {})
-        check("retomar: ficha borrada sigue en vence, sin snippet",
-              r2.get("grupo") == "vence" and r2.get("retomar_snippet") is None)
-        check("retomar: fecha futura no sale", "p-5656565656" not in todos)
-        check("retomar: con _revisar futuro no sale", "p-7878787878" not in todos)
-        r5 = todos.get("p-9090909090", {})
-        check("sin _retomar, vence como antes y sin snippet",
-              r5.get("motivo") == "vencido 2026-10-05" and r5.get("retomar") is None)
-        check("retomar: el mas viejo primero", [i["id"] for i in dr["items"] + dr["resto"]][:3] ==
-              ["p-9090909090", "p-3434343434", "p-1212121212"])
-        check("retomar: cuenta en vencidos", dr["resumen"]["vencidos"] == 3)
-        dh = correr(mem, lib, "--hoy", "2026-10-12")
-        rh = {i["id"]: i for i in dh["items"] + dh["resto"]}.get("p-1212121212", {})
-        check("retomar: el mismo dia dice retomar hoy", (rh.get("motivo"), rh.get("dias")) == ("retomar hoy", 0))
+        # Registro de procesos: la sesion de "r" vive en este proceso; "s" no esta.
+        reg = os.path.join(tmp, "sessions-reg")
+        os.makedirs(reg)
+        with open(os.path.join(reg, f"{os.getpid()}.json"), "w", encoding="utf-8") as fh:
+            json.dump({"pid": os.getpid(), "sessionId": SID_R}, fh)
+        with open(os.path.join(reg, "999999.json"), "w", encoding="utf-8") as fh:
+            json.dump({"pid": 999999, "sessionId": SID_S}, fh)  # pid muerto: no cuenta
+        # Transcripcion de "s": ultima actividad hace 2 dias (respecto a hoy real del reloj del test).
+        proyectos = os.path.join(tmp, "projects")
+        carpeta = os.path.join(proyectos, re.sub(r"[^A-Za-z0-9]", "-", os.path.abspath(tmp)))
+        os.makedirs(carpeta)
+        tx_s = os.path.join(carpeta, SID_S + ".jsonl")
+        with open(tx_s, "w", encoding="utf-8") as fh:
+            fh.write("{}\n")
+        hace = time.time() - 2 * 86400 - 60
+        os.utime(tx_s, (hace, hace))
+        hoy_real = time.strftime("%Y-%m-%d")
+
+        dr = correr(mem, lib, "--hoy", hoy_real, "--sessions-dir", reg, "--projects-root", proyectos)
+        lista = {i["id"]: i for i in dr["items"] + dr["resto"]}
+        planes = {g["slug"]: g for g in dr["planes"]}
+        check("planes: una fila por ficha, la mas reciente arriba",
+              [g["slug"] for g in dr["planes"]] == ["2026-10-13-s", "2026-10-12-r", "2026-10-11-borrada"])
+        r = planes.get("2026-10-12-r", {})
+        check("planes: los pendientes de la ficha, en el orden del archivo",
+              [p["id"] for p in r.get("pendientes", [])] == ["p-1313131313", "p-1212121212"])
+        check("planes: trae el snippet sin fence ni otras secciones",
+              r.get("snippet") == "Retomamos: r.\n\nProximo paso: hacer p-1212121212.")
+        check("planes: proximo paso, ficha y desde", (r.get("proximo_paso"), r.get("ficha"), r.get("desde")) ==
+              ("Proximo paso: hacer p-1212121212.", "memory/sessions/2026-10-12-r.md", "2026-10-12"))
+        check("planes: session_id de la cabecera", r.get("session_id") == SID_R)
+        check("ventana: proceso vivo con ese id = abierta",
+              r.get("ventana") == {"estado": "abierta", "dias": 0, "fuente": "proceso", "aqui": False})
+        s_ = planes.get("2026-10-13-s", {})
+        check("ventana: pid muerto = cerrada, con los dias desde su transcripcion",
+              s_.get("ventana") == {"estado": "cerrada", "dias": 2, "fuente": "proceso", "aqui": False})
+        b = planes.get("2026-10-11-borrada", {})
+        check("planes: ficha borrada sigue, sin snippet ni ventana",
+              b.get("snippet") is None and b.get("ventana", {}).get("estado") is None)
+        check("planes: fecha futura y _revisar futuro no entran",
+              not ({"p-5656565656", "p-7878787878"} & {p["id"] for g in dr["planes"] for p in g["pendientes"]}))
+        check("planes: un paso de snippet no sale en la lista (ni vence ni alta)",
+              not ({"p-1212121212", "p-1313131313", "p-3434343434"} & set(lista)))
+        v = lista.get("p-6767676767", {})
+        check("planes: con _revisar pasado tambien vence (la fecha es real)",
+              v.get("grupo") == "vence" and v.get("motivo") == "vencido 2026-10-06")
+        check("vence: solo _revisar, motivo de siempre",
+              all(i["motivo"].startswith(("vence hoy", "vencido")) for i in lista.values() if i["grupo"] == "vence"))
+        # Tope: 4 vencidos + el que vence + 5 Alta libres = 10 candidatos; 7 en items, y los 3 planes
+        # aparte, todos.
+        check("tope: los planes no comen sitio de la lista",
+              len(dr["items"]) == 7 and dr["quedan"] == 3 and len(dr["planes"]) == 3)
+        check("resumen: cuenta planes", dr["resumen"].get("planes") == 3)
+        check("resumen: vencidos solo de _revisar", dr["resumen"]["vencidos"] == 5)
+        da = correr(mem, lib, "--hoy", hoy_real, "--sessions-dir", reg, "--projects-root", proyectos,
+                    "--session-id", SID_R)
+        check("ventana: la sesion actual dice aqui",
+              {g["slug"]: g for g in da["planes"]}["2026-10-12-r"]["ventana"]["aqui"] is True)
+        # Sin registro de procesos: solo la transcripcion. "s" lleva 2 dias sin actividad.
+        dt = correr(mem, lib, "--hoy", hoy_real, "--sessions-dir", os.path.join(tmp, "no-existe"),
+                    "--projects-root", proyectos)
+        st = {g["slug"]: g for g in dt["planes"]}
+        check("ventana sin registro: sin actividad N d",
+              st["2026-10-13-s"]["ventana"] == {"estado": "sin actividad", "dias": 2, "fuente": "transcripcion",
+                                                 "aqui": False})
+        os.utime(tx_s, None)
+        dt2 = correr(mem, lib, "--hoy", hoy_real, "--sessions-dir", os.path.join(tmp, "no-existe"),
+                     "--projects-root", proyectos)
+        check("ventana sin registro: actividad reciente = activa",
+              {g["slug"]: g for g in dt2["planes"]}["2026-10-13-s"]["ventana"]["estado"] == "activa")
+        dh = correr(mem, lib, "--hoy", "2026-10-11", "--sessions-dir", reg, "--projects-root", proyectos)
+        check("planes: antes de su fecha no hay plan", [g["slug"] for g in dh["planes"]] == ["2026-10-11-borrada"])
 
         # Sin `_id` la libreria no devuelve el item y el panel no puede mostrarlo. Medido 2026-10-18
         # en 39 proyectos: 1395 de 2987 abiertos sin id, y en 18 el panel decia "0 abiertos" sin

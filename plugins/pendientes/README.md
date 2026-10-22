@@ -6,6 +6,12 @@ project's `memory/_pendientes.md` (the action items of the
 instead of the whole inventory.
 
 ```
+PLANES ACTIVOS                                2
+↻ Add the dry-run flag to the importer   ◉ abierta
+  2026-10-21 · 1 pendiente · importer-flags
+↻ Measure the cache after a week        ○ cerrada 3 d
+  2026-10-19 · 2 pendientes · cache-ttl
+
 SIGUIENTE
 ▌ Add retry to the export job
 ▌ Alta · p-1a2b3c · de hoy
@@ -86,28 +92,38 @@ If a user asks you to install this mod, follow these steps:
 
 - `/pendientes-ahora` opens or closes the pane.
 - While the pane is closed, a small card above the prompt shows `Pendientes 3-tier`, the open
-  count, and how many are due today or overdue. Click it to open the pane.
+  count, how many are due today or overdue, and how many active plans there are (`↻ N planes`).
+  Click it to open the pane.
 - Click a title to put `<id>: <full text>` in the prompt, at the cursor, followed by what to read
   to pick it up, like the `Retomamos` snippet of a session note:
   `Lee memory/sessions/<note>.md para el contexto.` for each file its `_origen` names that exists
   (a session note, a plan, a research file), or `Origen: <text>` when it names none, and
   `Relacionado: <ids, plans>` from its `_relacionado`. Lines without data are left out. Nothing
   is sent: you decide whether to submit it. The mod never writes your memory.
-- An item marked `_retomar` (the next step of a `Retomamos` snippet, see VENCEN below) pastes the
-  whole snippet of its session note instead, ready to resume.
+- Click an active plan (see PLANES ACTIVOS below) to paste the whole `Retomamos` snippet of its
+  session note, ready to resume. An item in VENCEN that also carries `_retomar` pastes it too.
 - The list refreshes at session start, after every turn, and with `r` (pane focused) or the
   `actualizar` button.
 
 ## What it shows, and in what order
 
+0. **PLANES ACTIVOS** — one row per session note whose `Retomamos` snippet is still open: the notes
+   named by `_retomar` (3-tier-memory 2.62.8+), which `/checkpoint-3t` writes on the item its
+   `Próximo paso` cites, from that date until the item is closed or a later checkpoint moves the
+   mark. Newest first, all of them, above everything else and outside the 7-item cap, so you can
+   close a parked window and still find the plan. Each row shows the next step and, on the right,
+   whether the session that wrote the note is still open: `◉ abierta` (a live Claude Code process
+   with that session id, from `~/.claude/sessions/`), `◉ aquí` (this session), or `○ cerrada N d`
+   (days since its last activity). Without that registry only the transcript is known, and the row
+   says so: `◐ activa` (activity in the last 2 hours) or `○ sin actividad N d`. These items do not
+   appear in the list below, except in VENCEN when they also have a `_revisar` today or past.
 1. **SIGUIENTE** — the ids in the `Próximo paso` of the newest session file that can be started
    today (not `_bloqueado`, no `_revisar` today or later, no future date in the text).
 2. **RELACIONADO AL TRABAJO ACTUAL** — the thread of that session (`_relacionado` links, shared
    plans, items created in it), as 3-tier-memory's `hilo()` computes it.
-3. **VENCEN** — `_revisar` today or past, and `_retomar` today or past: Alta first, then the
-   oldest. `_retomar` (3-tier-memory 2.62.8+) is what `/checkpoint-3t` writes on the item its
-   `Próximo paso` cites, so a snippet you never pasted (pane closed, forgotten) stays here, as
-   `↻ hoy` and then `↻ N d`, until the item is closed. An item with a future `_revisar` waits.
+3. **VENCEN** — `_revisar` today or past: Alta first, then the oldest. Only real dates: until
+   0.3.0 the `_retomar` marks showed here too, and a parked plan read like a due item. An item
+   with a future `_revisar` waits.
 4. **ALTA PRIORIDAD** — Alta items with nothing blocking them.
 5. **EN CURSO** — any of the above that someone is already doing: its id appears in a commit made
    after the last checkpoint, or in a prompt typed in this session or in another session of the

@@ -27,6 +27,28 @@ export type Pendiente = {
   retomar_snippet?: string | null
 }
 
+// Un plan activo (0.3.0): una ficha con un snippet `Retomamos` sin cerrar, de las marcas `_retomar`.
+export type Ventana = {
+  // "abierta"/"cerrada": hay registro de procesos de Claude Code. "activa"/"sin actividad": solo la
+  // transcripcion. null: la ficha no dice que sesion la escribio.
+  estado: 'abierta' | 'cerrada' | 'activa' | 'sin actividad' | null
+  dias: number | null
+  fuente: 'proceso' | 'transcripcion' | null
+  aqui: boolean
+}
+
+export type Plan = {
+  ficha: string
+  slug: string
+  fecha: string | null
+  desde: string
+  proximo_paso: string | null
+  snippet: string | null
+  session_id: string | null
+  ventana: Ventana
+  pendientes: { id: string; prio: string; texto: string; titulo_auto: string; revisar: string | null }[]
+}
+
 export type Ahora = {
   ok: boolean
   error?: string
@@ -35,10 +57,12 @@ export type Ahora = {
   proximo_paso?: string | null
   items?: Pendiente[]
   resto?: Pendiente[]
+  // Opcional: un estado anterior a 0.3.0 no lo trae.
+  planes?: Plan[]
   quedan?: number
   candidatos?: number
   totales?: { hilo: number; vence: number; alta: number }
-  resumen?: { abiertos: number; vencidos: number; hoy: number; alta: number; bloqueados: number; sin_id?: number }
+  resumen?: { abiertos: number; vencidos: number; hoy: number; alta: number; bloqueados: number; sin_id?: number; planes?: number }
 }
 
 // Titulos cortos que resumio el modelo, por id; `h` es la huella del texto que resumio.
