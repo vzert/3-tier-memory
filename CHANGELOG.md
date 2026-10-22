@@ -1,5 +1,48 @@
 # Changelog
 
+## [2.63.32] - 2026-10-21
+Origen: Victor (via `/goalspec:interview`, bajo el supervisor lookout `supervisor-3-tier-memory`,
+d296-d301) reporto cierres que dejaban un pendiente `_bloqueado` sin fecha y snippet `Ninguno`, y
+pidio auditar en que casos pasa y cerrar el hueco. Caso real: claude-vzert, `p-98a561dc02`
+(espera a que la cuenta de infra instale un plugin y un dev mande un mensaje). Auditoria de solo
+lectura del mismo dia sobre los 39 proyectos 3-tier de la Mac: 7 tienen bloqueados, 54 abiertos,
+50 sin `_revisar`, y en los 7 hay fichas `Ninguno` que citan un bloqueado. Esos 50 se
+arreglaron el mismo dia con aprobacion de Victor (d303): 12 desbloqueados porque esperaban una
+decision o un comando suyo, 38 fechados al 2026-10-25.
+
+### Changed
+- **Todo bloqueado lleva fecha.** `journal-emit.py --bloqueado-por` sin `--revisar` nace con
+  `_revisar: hoy+5` (la regla 2 de Step 3b) y lo avisa por stderr. `pendiente.block` acepta
+  `--revisar` y, sin el, pone hoy+5 salvo que la linea ya traiga un `_revisar` futuro (lo conserva).
+  `--desbloquear` quita tambien el `_revisar` (era la fecha de mirar si llego la espera; con el
+  puesto, `Proximo paso: pedirle a <quien> …` salia rechazado como fecha futura), salvo que se de
+  `--revisar`, que queda como ventana nueva. Un evento `pendiente.block` anterior a 2.63.32 se
+  aplica como antes: el bloqueo sin ventana, y el desbloqueo sin tocar la que haya.
+- **Ese dia vuelve a salir.** `print-pendiente-opcional.py` (🔔 vence hoy, ➕ vencidos) ya no
+  descarta un bloqueado con `_revisar`; le anade "Espera a alguien de fuera: mira si ya llego".
+  `pendientes_afines.hacible` (hilo y afines) y `checkpoint-audit.py` (`snippet.proximo_paso`)
+  tratan como accionable un bloqueado cuyo `_revisar` ya paso: el paso es mirar si llego. Antes
+  de su fecha sigue fuera. Un bloqueado sin `_revisar` sigue fuera de todo, como antes.
+- **`expire-pendientes.py` nunca caduca un bloqueado.** Su `_revisar` vencido significa "mira si
+  ya llego", no "dejo de ser compromiso"; sin esto, /triage-3t habria caducado cada espera viva al
+  dia siguiente de su fecha. Lo cuenta en `excluidos: _bloqueado N`.
+- **La pregunta al cerrar.** Si para que un bloqueado se mueva hace falta que el usuario le pida
+  algo a alguien, el agente le pregunta si lo pedira el (AskUserQuestion, o SendMessage al
+  supervisor): si dice que si, no es bloqueo y el paso es `pedirle a <quien> <que> (p-…)`; si no,
+  queda bloqueado con su fecha. Va en Step 3b de `checkpoint-3t.md`, en Step 8, y en el aviso
+  `snippet.ninguno_bloqueo` de la revision del cierre.
+- Plantillas: se quita la regla que prohibia `--revisar` en un pendiente que espera a un tercero
+  (Step 3b) y la que mandaba el seguimiento a `routine-followup` (Step 8). /triage-3t fecha los
+  bloqueados viejos con `pendiente.window`.
+
+### Added
+- **`pendientes.bloqueado_sin_fecha` en `checkpoint-audit.py`.** SALTADO si `## Pendientes` de la
+  ficha lista un `_bloqueado` sin `_revisar` (corre tambien en `--solo-snippet`, asi que el hook
+  de cierre lo rechaza); POR-DISEÑO con el conteo si los sin fecha estan solo en el indice. Fichas
+  anteriores al 2026-10-20 no se miden. Sobre la ficha real del caso (claude-vzert, commit
+  `1281555`) sale SALTADO; con 2.63.22 salia solo el aviso `snippet.ninguno_bloqueo`.
+- Prueba: `bin/test-bloqueado-fecha.sh`; `bin/test-flags-sin-lector.sh` suma `--revisar` a `pendiente.block`.
+
 ## [2.63.31] - 2026-10-20
 Origen: `p-e1799cd04c`. El Step 8b real imprime el snippet con
 `python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"`, y `resolver()` descarta toda ruta con `$`.
