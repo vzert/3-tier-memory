@@ -154,6 +154,10 @@ DESDE_NINGUNO_BLOQUEO = "2026-10-16"
 # Desde 2.63.22 un `Proximo paso` que otra ficha del mismo dia ya deja como el suyo sale como aviso
 # (snippet.paso_compartido). Incluye el caso real del 2026-10-20.
 DESDE_PASO_COMPARTIDO = "2026-10-20"
+# Desde 2.63.33 (p-7fd6a82eaa) un snippet `ninguno` con un plan `active` enlazado en `## Plans` y
+# ningun pendiente abierto `_relacionado` a ese plan sale como SALTADO (snippet.ninguno_plan_activo).
+# Corte al dia siguiente de la medicion (d284): las fichas de antes no tenian la regla del Step 5.
+DESDE_NINGUNO_PLAN = "2026-10-21"
 # Desde 2.63.32 un pendiente `_bloqueado` sin `_revisar` en `## Pendientes` de la ficha es SALTADO
 # (pendientes.bloqueado_sin_fecha). Fichas anteriores: sin cambio al re-auditarlas.
 DESDE_BLOQUEADO_FECHA = "2026-10-20"
@@ -1690,6 +1694,45 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         else:
             h.append(Hallazgo(HECHO, "snippet.paso_compartido",
                               "ninguna otra ficha de hoy deja el mismo `Proximo paso`"))
+
+    # 8-sexies-quater. `ninguno` no puede enterrar un plan `active` (2.63.33, p-7fd6a82eaa). Medido
+    # el 2026-10-20 en 54 planes de 4 proyectos: las fases y los disparadores de un plan vivian solo
+    # en su prosa, y un cierre `ninguno` con el plan enlazado dejaba a la siguiente sesion sin hilo.
+    # Desde aqui el Step 5 emite cada fase abierta como `pendiente.add --relacionado plan-<slug>`.
+    # Se mide el CAMPO `_relacionado` de un pendiente abierto (regla 216), nunca la prosa del plan:
+    # un plan sin fases abiertas que sigue `active` tambien sale, porque su estado es el defecto.
+    if fecha_ficha and fecha_ficha >= DESDE_NINGUNO_PLAN and "<filled in Step 8>" not in sec_retomar \
+            and es_ninguno_snip:
+        # planes_laxo (el de plan.mencionado_no_enlazado) acepta `../`, `.md` y `#ancla`: el mismo
+        # plan escrito de otra forma no puede escapar del chequeo (adversario externo de 2.63.33).
+        enlazados = sorted({p[:-3] if p.endswith(".md") else p for p in planes_laxo})
+        vivos_plan = [p for p in enlazados if plan_activo(memory_dir, p)]
+        ruta_pend = os.path.join(memory_dir, "_pendientes.md")
+        ligados = set()
+        if vivos_plan and os.path.exists(ruta_pend):
+            for pe in _afines_mod().pendientes(ruta_pend):
+                ligados |= pe["rel"]
+        # `_relacionado` solo admite `plan-<slug>` (journal-emit RELACIONADO_RE): un plan cuyo
+        # fichero no empieza por `plan-` (hay planes viejos asi) se liga con `plan-<su nombre>`.
+        planes_sin_hilo = [p for p in vivos_plan if p not in ligados and "plan-" + p not in ligados]
+        if planes_sin_hilo:
+            h.append(Hallazgo(SALTADO, "snippet.ninguno_plan_activo",
+                              f"el snippet dice `ninguno` y {len(planes_sin_hilo)} plan(es) `active` de "
+                              "`## Plans` no tienen ningun pendiente abierto ligado",
+                              [f"plans/{p}.md" for p in planes_sin_hilo],
+                              corrige="por cada fase abierta o disparador del plan: `journal-emit.py "
+                                      "--type pendiente.add --relacionado plan-<slug> ...` (el nombre "
+                                      "del fichero sin `.md`, con `plan-` delante si no lo trae; con "
+                                      "`--revisar AAAA-MM-DD` si espera una fecha) y rehaz el snippet "
+                                      "con esa fase como `Proximo paso`; si el plan ya no tiene nada "
+                                      "abierto, cierralo con `plan.upsert` (status completed)"))
+        else:
+            h.append(Hallazgo(HECHO, "snippet.ninguno_plan_activo",
+                              f"`ninguno` sin plan `active` huerfano ({len(vivos_plan)} activo(s) "
+                              "enlazado(s), todos con pendiente ligado)"))
+    else:
+        h.append(Hallazgo(HECHO, "snippet.ninguno_plan_activo",
+                          "no aplica: el snippet no es `ninguno` o la ficha es anterior al corte"))
 
     # 8-quater. `Sigue abierto:` solo nombra pendientes VIVOS (2.33.1, p-c72a33ae7a). Medido en vivo
     # en la sesion que construyo 2.33.0: tras el checkpoint se resolvio `p-477bb60303` (el push) y
