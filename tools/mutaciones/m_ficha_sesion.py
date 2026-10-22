@@ -16,6 +16,10 @@ M = {
         ("                    con_variable = True", "                    pass")],
     "asigna-ignorada": [
         ("                e = expandir(a, asigna) if a else a", "                e = a")],
+    # p-0c334693d4: sin la conversion con cygpath caen en Git Bash los asertos "ruta Git Bash"; fuera
+    # de Git Bash la suite imprime su SKIP y el caso sale "no evaluable aqui".
+    "sin-nativa": [
+        ("    ruta = nativa(ruta)", "    pass")],
 }
 
 p, nombre = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""

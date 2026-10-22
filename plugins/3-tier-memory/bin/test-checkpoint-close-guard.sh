@@ -1611,6 +1611,8 @@ TX_CRUDO=1 txcmd "$T/m.jsonl" "python3 \"$PR\" \"$F\""
 chk "ruta Git Bash /tmp/... sin convertir dentro del comando: dispara" "1" "$(bloquea "$(corre "$T/m.jsonl" false -)")"
 TX_CRUDO=1 txcmd "$T/m.jsonl" "python3 \"$PR\" \"$FU\""
 chk "ruta Git Bash /c/... sin convertir dentro del comando: dispara" "1" "$(bloquea "$(corre "$T/m.jsonl" false -)")"
+# La mutacion `sin-nativa` solo puede caer donde hay cygpath (Git Bash): fuera, estos asertos no la miden.
+command -v cygpath >/dev/null 2>&1 || echo "  SKIP ruta Git Bash: sin cygpath el guard no convierte rutas aqui"
 menciones=(
   "git diff HEAD~1 -- $PR $F"
   "grep -n Retomamos $PR $F"
