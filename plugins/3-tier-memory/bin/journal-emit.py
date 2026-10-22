@@ -51,7 +51,7 @@ Tipos de evento:
   pendiente.window  --id ID --revisar YYYY-MM-DD                  (pone/actualiza la ventana)
   pendiente.retomar --id ID --retomar YYYY-MM-DD --ficha sessions/<slug>
                     Pone o cambia `_retomar: FECHA sessions/<slug>_`: el pendiente que cita el
-                    `Proximo paso` de esa ficha, para que el mod pendientes lo saque en VENCEN.
+                    `Proximo paso` de esa ficha, para que el mod pendientes lo saque en PLANES ACTIVOS.
                     Solo lo lee el mod; 8e, el hilo y el calendario lo ignoran (2.62.8).
   pendiente.block   --id ID (--bloqueado-por "QUE" | --desbloquear) [--revisar YYYY-MM-DD]
                     Pone, cambia o quita `_bloqueado: QUE_` en un pendiente VIVO. Existe para

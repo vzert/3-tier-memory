@@ -1,5 +1,38 @@
 # Changelog
 
+## [2.63.41] - 2026-10-22
+Origen: Victor (via `/goalspec:interview`, bajo el supervisor lookout `supervisor-3-tier-memory`,
+decisiones d372 y d373). Con varias ventanas del mismo proyecto aparcadas tras su checkpoint, las
+marcas `_retomar` salian en VENCEN como `retomar hoy` / `retomar desde FECHA`, igual que lo que vence
+de verdad, y no se distinguia un plan a medias de un pendiente con fecha. 3-tier-memory solo cambia
+textos; el bump acompana al mod.
+
+### Changed
+- **Mod `pendientes` 0.3.0: PLANES ACTIVOS, una seccion propia para los snippets sin cerrar.**
+  `pendientes-ahora.py` devuelve `planes`: una fila por ficha que nombran las marcas `_retomar`
+  vigentes (de hoy o pasado, sin `_revisar` futuro), la mas reciente arriba, todas y fuera del tope
+  de 7. Cada fila trae la ficha, su `Proximo paso`, el snippet `## Como retomar` (el clic lo pega),
+  los pendientes que la citan y `ventana`: `abierta` si un proceso vivo de Claude Code tiene el
+  `session_id` de la cabecera de la ficha (el registro de procesos de Claude Code, un `<pid>.json` por
+  sesion abierta, con la hora de arranque
+  comparada para no contar un pid reusado), o `abierta` con `retomada` si otra ventana viva del
+  proyecto o de un worktree suyo recibio su paso: pegado por la persona, o en el system prompt de un
+  relevo de lookout (`prompt_snapshot`, que se lee hasta 2 MB porque llega tras la cabeza de 256 KB;
+  medido en el byte 279397). Si no, `cerrada` con los dias desde la ultima actividad de su
+  transcripcion. Sin ese registro, solo la transcripcion: `activa` (2 h) o `sin actividad N d`. En
+  Windows el registro no se usa: alli `os.kill(pid, 0)` manda CTRL_C_EVENT en vez de preguntar si el
+  proceso vive, y sin `ps` un pid reusado pasaria por vivo (lo vio platforms.yml en windows-latest).
+  VENCEN queda solo para `_revisar`, y `resumen.vencidos`/`hoy` ya no cuentan `_retomar`; un paso de
+  snippet tampoco sale en SIGUIENTE ni en ALTA, salvo en VENCEN si ademas tiene `_revisar` vencido.
+  El panel pinta el bloque arriba (`↻` titulo, `◉ abierta` / `◉ retomada` / `◉ aquí` /
+  `○ cerrada N d`), descuenta
+  sus filas del alto de la lista, y la tarjeta sobre el prompt anade `↻ N planes`.
+
+### Docs
+- `marcar-retomar.py`, `journal-emit.py` (`pendiente.retomar`), `test-marcar-retomar.sh` y
+  `checkpoint-3t-step8.md` (8a2) dicen PLANES ACTIVOS en vez de VENCEN. README del mod: la seccion
+  nueva y VENCEN solo con `_revisar`.
+
 ## [2.63.40] - 2026-10-22
 Origen: `p-47b5252196` (Known de 2.63.31). Cuando Step 8b imprime la ficha con una variable
 (`"$SESSION_FILE"`), `checkpoint-close-guard.sh` toma la ultima ficha que la sesion escribio. Solo la

@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Ahora, Pendiente, Titulos } from '../types'
+import type { Ahora, Pendiente, Plan, Titulos } from '../types'
 
 const PANE = 'pendientes-ahora'
 const TITULO = 'Qué hago ahora'
@@ -67,9 +67,32 @@ export function insignia(p: Pendiente): { texto: string; color: 'warning' | 'err
     return { texto: `◐ ${[donde, commits].filter(Boolean).join(' · ')}`, color: 'suggestion' }
   }
   if (p.dias === null || p.dias === undefined) return null
-  // Un snippet sin pegar (`_retomar`) lleva ↻ en vez de ●: no vencio una fecha, quedo un paso.
-  const marca = p.grupo === 'vence' && p.motivo.startsWith('retomar') ? '↻' : '●'
-  return p.dias === 0 ? { texto: `${marca} hoy`, color: 'warning' } : { texto: `${marca} ${p.dias} d`, color: 'error' }
+  return p.dias === 0 ? { texto: '● hoy', color: 'warning' } : { texto: `● ${p.dias} d`, color: 'error' }
+}
+
+// La ventana de un plan, en texto: si sigue abierta la sesion que dejo el snippet, o otra que lo pego
+// ("retomada": un relevo, un snippet pegado a mano en otra ventana). Sin registro de
+// procesos solo se sabe la actividad de la transcripcion, y lo dice asi (no "cerrada").
+export function insigniaPlan(v: Plan['ventana'] | undefined): { texto: string; color?: 'suggestion' } | null {
+  if (!v || !v.estado) return null
+  const hace = v.dias === null ? '' : v.dias === 0 ? ' hoy' : ` ${v.dias} d`
+  if (v.estado === 'abierta')
+    return { texto: v.aqui ? '◉ aquí' : v.retomada ? '◉ retomada' : '◉ abierta', color: 'suggestion' }
+  if (v.estado === 'activa') return { texto: v.aqui ? '◐ aquí' : '◐ activa', color: 'suggestion' }
+  if (v.estado === 'cerrada') return { texto: `○ cerrada${hace}` }
+  return { texto: `○ sin actividad${hace}` }
+}
+
+// Lo que pega el clic en un plan: su snippet; sin el (ficha borrada), su primer pendiente.
+export function textoDePlan(g: Plan): string {
+  if (g.snippet) return g.snippet
+  const p = g.pendientes[0]
+  return p ? `${p.id}: ${p.texto}` : g.ficha
+}
+
+// Filas del bloque de planes: cabecera, linea en blanco y dos por plan. 0 sin planes.
+export function filasPlanes(planes: Plan[]): number {
+  return planes.length === 0 ? 0 : 2 + planes.length * 2
 }
 
 // Filas que ocupa una lista: por seccion su cabecera y la linea en blanco, por tarjeta dos.
@@ -207,7 +230,11 @@ export function textoAlPrompt(p: Pendiente): string {
 }
 
 async function rellenar($: EngineInterface, p: Pendiente): Promise<void> {
-  const hecho = await $.prompt.fill({ text: textoAlPrompt(p), mode: 'insert' })
+  await rellenarTexto($, textoAlPrompt(p))
+}
+
+async function rellenarTexto($: EngineInterface, text: string): Promise<void> {
+  const hecho = await $.prompt.fill({ text, mode: 'insert' })
   if (!hecho.isFilled) $.ui.toast(`No pude escribir en el prompt (${hecho.cause ?? 'sin motivo'}).`)
 }
 
@@ -266,14 +293,17 @@ export const register: Register = on => {
     // Con pendientes sin `_id` la tarjeta sale aunque no haya nada que mostrar: en un proyecto
     // donde ninguno tiene id es el unico sitio donde la persona se entera sin abrir el panel.
     const sinIdBanda = a?.ok ? (a.resumen?.sin_id ?? 0) : 0
-    if (e.props.hasSurvey || (await read($, abierto)) || (items.length === 0 && sinIdBanda === 0)) return next(e)
+    const nPlanes = a?.ok ? (a.planes ?? []).length : 0
+    if (e.props.hasSurvey || (await read($, abierto)) || (items.length === 0 && sinIdBanda === 0 && nPlanes === 0))
+      return next(e)
 
     const { Box, Text, Button } = $.ui.resolve(e)
     const r = a?.resumen
-    const avisos: { texto: string; color: 'warning' | 'error' }[] = []
+    const avisos: { texto: string; color: 'warning' | 'error' | 'suggestion' }[] = []
     if (r && r.hoy > 0) avisos.push({ texto: `● ${r.hoy} hoy`, color: 'warning' })
     if (r && r.vencidos > 0) avisos.push({ texto: `● ${r.vencidos} vencidos`, color: 'error' })
     if (r && (r.sin_id ?? 0) > 0) avisos.push({ texto: `● ${r.sin_id} sin id`, color: 'warning' })
+    if (nPlanes > 0) avisos.push({ texto: `↻ ${nPlanes} plan${nPlanes === 1 ? '' : 'es'}`, color: 'suggestion' })
     // Tarjeta compacta pegada a la derecha: marco redondeado tenue que se ilumina al pasar el
     // raton. Arriba el nombre y los abiertos; abajo los avisos y "abrir".
     const ancho = Math.min(BANDA_ANCHO, Math.max(24, e.props.bodyColumns))
@@ -336,7 +366,9 @@ export const register: Register = on => {
     // Pendientes sin `_id`: el script no los puede devolver (resumen.sin_id). Se dicen en una fila
     // propia sobre el pie, que se descuenta del alto.
     const sinId = a.resumen?.sin_id ?? 0
-    const filas = (e.props.scroll?.bodyRows ?? 24) - (sinId > 0 ? 1 : 0)
+    // Los planes activos van todos, arriba y fuera del tope: lo que queda del alto es para la lista.
+    const planes = a.planes ?? []
+    const filas = (e.props.scroll?.bodyRows ?? 24) - (sinId > 0 ? 1 : 0) - filasPlanes(planes)
     const elegidos = verTodo ? candidatos : queCabe(candidatos, filas)
     const ids = new Set(elegidos.map(p => p.id))
     // Los grupos se pintan en su orden aunque el relleno venga del resto.
@@ -373,7 +405,45 @@ export const register: Register = on => {
       )
     }
 
+    // Un plan: el Proximo paso de su ficha (clic = el snippet al prompt), la ventana a la derecha, y
+    // debajo la fecha de la ficha, cuantos pendientes cita y su nombre.
+    const tarjetaPlan = (g: Plan) => {
+      const ins = insigniaPlan(g.ventana)
+      const sitio = ancho - 2 - (ins ? ins.texto.length + 1 : 0)
+      const titulo = (g.proximo_paso ?? '').replace(/^Pr[oó]ximo paso:\s*/i, '') || g.pendientes[0]?.titulo_auto || g.slug
+      const n = g.pendientes.length
+      const meta = [g.fecha, `${n} pendiente${n === 1 ? '' : 's'}`, g.slug.replace(/^\d{4}-\d{2}-\d{2}-/, '')]
+        .filter(Boolean)
+        .join(' · ')
+      return (
+        <Box key={`c-${g.ficha}`} flexDirection="column" width={ancho}>
+          <Box flexDirection="row" justifyContent="space-between">
+            <Button key={`plan-${g.slug}`} plain onPress={() => rellenarTexto($, textoDePlan(g))}>
+              <Text color="claude">{'↻ '}</Text>
+              <Text>{corta(titulo, sitio)}</Text>
+            </Button>
+            {ins ? <Text color={ins.color} dimColor={!ins.color}>{ins.texto}</Text> : null}
+          </Box>
+          <Text>
+            <Text>{'  '}</Text>
+            <Text dimColor>{corta(meta, ancho - 2)}</Text>
+          </Text>
+        </Box>
+      )
+    }
+
     const bloques: unknown[] = []
+    if (planes.length > 0) {
+      bloques.push(
+        <Box key="s-planes" flexDirection="column" marginBottom={1}>
+          <Box key="h-planes" flexDirection="row" justifyContent="space-between" width={ancho}>
+            <Text bold>PLANES ACTIVOS</Text>
+            <Text dimColor>{`${planes.length}`}</Text>
+          </Box>
+          {planes.map(tarjetaPlan)}
+        </Box>,
+      )
+    }
     for (const { clave, titulo } of SECCIONES) {
       const del = items.filter(p => seccion(p) === clave)
       if (del.length === 0) continue
@@ -398,7 +468,7 @@ export const register: Register = on => {
     const plegable = verTodo || fuera > 0
     return (
       <Box flexDirection="column" paddingX={1}>
-        {items.length === 0
+        {items.length === 0 && planes.length === 0
           ? <Text>{sinId > 0 ? 'Nada que mostrar de los pendientes con id.' : 'Nada urgente en este proyecto.'}</Text>
           : bloques}
         {sinId > 0

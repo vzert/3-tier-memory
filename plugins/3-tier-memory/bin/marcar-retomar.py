@@ -6,9 +6,9 @@
 Por que existe: el snippet `Retomamos:` de Step 8 se copia y se pega a mano. Si el pane se cierra o
 el snippet se olvida, el paso queda enterrado entre los demas pendientes: el mod pendientes solo ve
 el `Proximo paso` de la ULTIMA ficha, y otra sesion que cierre despues lo desplaza. Con la marca, el
-mod saca ese pendiente en VENCEN ("retomar hoy"; al dia siguiente, "retomar desde FECHA") hasta
+mod saca ese pendiente en PLANES ACTIVOS (una fila por ficha, con si su sesion sigue abierta) hasta
 que se cierre, y el clic pega el snippet de la ficha nombrada en la marca. Decision de Victor
-(d65-d68, 2026-10-16).
+(d65-d68, 2026-10-16; seccion propia y no VENCEN desde el mod 0.3.0, d372).
 
 Por que un campo aparte y no `_revisar`: con `_revisar` = hoy, el 🔔 de 8e de CUALQUIER cierre del
 dia sacaba el paso de otra sesion, y `hacible()` dejaba de proponerlo en el hilo de una sesion que
@@ -164,7 +164,7 @@ def main(argv):
                   file=sys.stderr)
             return 1
         emitidos += 1
-        print(f"📌 {pid}: retomar {hoy} (sale en VENCEN del mod pendientes hasta que se cierre)")
+        print(f"📌 {pid}: retomar {hoy} (sale en PLANES ACTIVOS del mod pendientes hasta que se cierre)")
     if emitidos:
         r = subprocess.run([sys.executable, os.path.join(BIN, "journal-compact.py"),
                             "--memory-dir", memory_dir, "--quiet"],
