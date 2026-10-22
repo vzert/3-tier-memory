@@ -13,7 +13,8 @@ textos; el bump acompana al mod.
   vigentes (de hoy o pasado, sin `_revisar` futuro), la mas reciente arriba, todas y fuera del tope
   de 7. Cada fila trae la ficha, su `Proximo paso`, el snippet `## Como retomar` (el clic lo pega),
   los pendientes que la citan y `ventana`: `abierta` si un proceso vivo de Claude Code tiene el
-  `session_id` de la cabecera de la ficha (`~/.claude/sessions/<pid>.json`, con la hora de arranque
+  `session_id` de la cabecera de la ficha (el registro de procesos de Claude Code, un `<pid>.json` por
+  sesion abierta, con la hora de arranque
   comparada para no contar un pid reusado), o `abierta` con `retomada` si otra ventana viva del
   proyecto o de un worktree suyo recibio su paso: pegado por la persona, o en el system prompt de un
   relevo de lookout (`prompt_snapshot`, que se lee hasta 2 MB porque llega tras la cabeza de 256 KB;

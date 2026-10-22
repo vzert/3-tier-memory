@@ -25,7 +25,7 @@ Planes activos (0.3.0): `planes` es una fila por ficha que nombran las marcas `_
 la mas reciente arriba, todas, fuera del tope. Cada una trae la ficha, su `Proximo paso`, el
 snippet `## Como retomar` (el clic lo pega), los pendientes que la citan y `ventana`: si sigue
 abierta la sesion que escribio la ficha (`session_id:` de su cabecera) u otra que pego su paso.
-"abierta" sale de un proceso vivo de Claude Code (~/.claude/sessions/<pid>.json) con ese id o, con
+"abierta" sale de un proceso vivo de Claude Code (SESIONES_DIR, un <pid>.json por proceso) con ese id o, con
 `retomada`, de una ventana viva del proyecto (o de un worktree suyo) cuya persona pego el paso, o
 cuyo system prompt lo trae (el relevo de lookout); si no hay, "cerrada" con los dias desde la
 ultima actividad de su transcripcion. Sin ese registro (otra plataforma, otra version), solo queda
@@ -64,6 +64,9 @@ for _flujo in (sys.stdout, sys.stderr):
         _flujo.reconfigure(encoding="utf-8")
 
 FICHA_FECHA = re.compile(r"^(\d{4}-\d{2}-\d{2})")
+# Transcripciones y registro de procesos vivos de Claude Code (un <pid>.json por sesion abierta).
+PROYECTOS_DIR = os.path.join(os.path.expanduser("~"), ".claude", "projects")
+SESIONES_DIR = os.path.join(os.path.expanduser("~"), ".claude", "sessions")
 
 
 def version(path):
@@ -390,7 +393,7 @@ def ids_del_texto(texto, pa):
 def ids_en_sesiones(proyecto, session_id, ahora, projects_root=None, pa=None):
     """({id}, {id: minutos}): ids que la persona cito en ESTA sesion, y en otras sesiones vivas
     (actividad en las ultimas 2 h) del proyecto con los minutos desde su ultima actividad."""
-    raiz = projects_root or os.path.expanduser("~/.claude/projects")
+    raiz = projects_root or PROYECTOS_DIR
     carpeta = os.path.join(raiz, re.sub(r"[^A-Za-z0-9]", "-", os.path.abspath(proyecto)))
     aqui, otras = set(), {}
     for f in glob.glob(os.path.join(carpeta, "*.jsonl")):
@@ -537,7 +540,7 @@ def del_proyecto(cwd, proyecto):
 def transcripcion(sid, cwd, projects_root):
     """La transcripcion de una sesion: la carpeta de su cwd y, si no esta (un worktree, cwd
     desconocido), la que la tenga."""
-    raiz = projects_root or os.path.expanduser("~/.claude/projects")
+    raiz = projects_root or PROYECTOS_DIR
     if cwd:
         f = os.path.join(raiz, re.sub(r"[^A-Za-z0-9]", "-", os.path.abspath(cwd)), sid + ".jsonl")
         if os.path.isfile(f):
@@ -624,7 +627,7 @@ def planes_activos(pa, todos, ctx, memory_dir, hoy, session_id=None, projects_ro
     if not por_ficha:
         return []
     proyecto = os.path.dirname(os.path.abspath(memory_dir))
-    abiertas = sesiones_abiertas(sessions_dir or os.path.expanduser("~/.claude/sessions"))
+    abiertas = sesiones_abiertas(sessions_dir or SESIONES_DIR)
     ahora = time.time()
     vistos_en = ids_de_ventanas(pa, proyecto, abiertas, session_id, projects_root)
     out = []

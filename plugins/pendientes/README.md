@@ -113,7 +113,7 @@ If a user asks you to install this mod, follow these steps:
    mark. Newest first, all of them, above everything else and outside the 7-item cap, so you can
    close a parked window and still find the plan. Each row shows the next step and, on the right,
    whether a window is still working on it: `◉ abierta` (the session that wrote the note is a live
-   Claude Code process, from `~/.claude/sessions/`), `◉ retomada` (another live window of the
+   Claude Code process, from Claude Code's own registry of open sessions), `◉ retomada` (another live window of the
    project or of one of its worktrees got its next step, pasted by you or handed over by a
    supervisor in its system prompt), `◉ aquí` (this session), or `○ cerrada N d` (days since its
    last activity). Without that registry only the transcript is known, and the row
