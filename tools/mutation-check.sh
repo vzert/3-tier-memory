@@ -285,6 +285,10 @@ caso "retomar: mencion no dispara"  checkpoint-close-guard.sh m_invocacion_retom
 caso "retomar: python3 cuenta"       checkpoint-close-guard.sh m_invocacion_retomar.py test-checkpoint-close-guard.sh "invocacion real sigue disparando: python3" python-no-cuenta
 caso "retomar: valor tras opcion"   checkpoint-close-guard.sh m_invocacion_retomar.py test-checkpoint-close-guard.sh "invocacion real sigue disparando: python3 -W ignore" opcion-sin-valor
 caso "ficha: ruta Git Bash"       checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "ruta Git Bash" sin-nativa
+caso "ficha: escrita por Bash"    checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "forma Bash: la ficha" bash-ignorado
+caso "ficha: sin sello"           checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "forma sin sello: la ficha" sin-sello-ignorado
+caso "ficha: sin sello ni retomar" checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "forma sin sello y sin Como retomar despues" sin-sello-sin-retomar
+caso "ficha: barras invertidas"   checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "forma barras invertidas" barras-solo-slash
 caso "arnes: cygpath en Git Bash"  test-checkpoint-close-guard.sh m_arnes_cygpath.py test-checkpoint-close-guard.sh "arnes Git Bash" sin-cygpath
 caso "extras: citado en Terminas" pendientes_afines.py m_hilo.py $T "el citado en Terminas cuando no va de extra" extras-sin-citados
 caso "extras: citado en No repitas" pendientes_afines.py m_hilo.py $T "el citado en No repitas no va de extra" extras-sin-no-repitas

@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.63.38] - 2026-10-22
+Origen: `p-47b5252196` (Known de 2.63.31). Cuando Step 8b imprime la ficha con una variable
+(`"$SESSION_FILE"`), `checkpoint-close-guard.sh` toma la ultima ficha que la sesion escribio. Solo la
+encontraba si la escribio un Write o Edit con `/` en la ruta y llevaba el sello `session_id` de la
+sesion. En los otros casos callaba.
+
+### Fixed
+- **Ficha escrita por Bash**: cuenta una redireccion `>`, `>>` o `tee [-a]` a `memory/sessions/*.md`
+  (`escritas_por_bash()`), con las variables asignadas en el mismo comando y su `cd`. No cuentan `2>`,
+  `&>` ni `>&`.
+- **Ficha sin sello**: si ninguna ficha escrita lleva el sello de la sesion, vale la ultima que no
+  tiene ninguna linea `session_id:` y trae `## Como retomar`. `/backfill-3t` no escribe esa seccion
+  y sella con el id de la sesion de origen; un sello distinto nunca se toma. La ficha sellada va
+  primero: una ficha vieja editada despues no la tapa.
+- **Ruta con barras invertidas** (Windows): la busqueda de fichas escritas acepta `\` como `/`.
+
+### Added
+- Cinco casos en `test-checkpoint-close-guard.sh` (seccion p-47b5252196). Con el guard de 2.63.35
+  caen los cuatro que esperan un bloqueo; el quinto (Bash con el sello de otra sesion) calla en los
+  dos. El de barras invertidas, fuera de Windows, usa un archivo cuyo nombre lleva las barras: mide la
+  busqueda de la ruta, no al productor real; en Windows usa la ruta nativa de `cygpath -w`.
+- Mutaciones `bash-ignorado`, `sin-sello-ignorado`, `sin-sello-sin-retomar` y `barras-solo-slash`
+  (`tools/mutaciones/m_ficha_sesion.py`), cada una con su aserto en `tools/mutation-check.sh`.
+
+### Known
+- Una ficha escrita por Bash con una variable asignada en OTRA llamada Bash no se resuelve: el estado
+  del shell no pasa de una llamada a otra.
+
 ## [2.63.35] - 2026-10-21
 Origen: `p-0c334693d4`. En Windows (Git Bash) una ruta POSIX escrita dentro del texto de un comando
 (el argumento de `print-como-retomar.py` como ruta de unidad tipo `/<letra>/<dir>`, o la ruta
