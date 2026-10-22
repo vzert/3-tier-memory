@@ -1726,6 +1726,8 @@ import json, sys
 out, modo, ruta = sys.argv[1:4]
 if modo == "bash":
     w = {"name": "Bash", "input": {"command": "cat > " + ruta + " <<'EOF'\n## Como retomar\n...\nEOF"}}
+elif modo == "cmd":   # RUTA es el comando entero
+    w = {"name": "Bash", "input": {"command": ruta}}
 else:
     w = {"name": "Write", "input": {"file_path": ruta, "content": "## Como retomar\n..."}}
 w.update({"type": "tool_use", "id": "w"})
@@ -1754,6 +1756,15 @@ import sys; p = sys.argv[1]; t = open(p, encoding="utf-8").read()
 open(p, "w", encoding="utf-8").write(t.replace("session_id: sesion-8b", "session_id: otra-sesion"))
 PYO2
 chk "forma Bash con el sello de otra sesion: silencio" "" "$(corre_sid "$T/f.jsonl")"
+rm -r "$CWV/memory"
+# Un `cd dir;` delante (sin espacio antes del `;`): el directorio no lleva el `;` (adversario externo de
+# 2.63.38). Vale para la escritura por Bash y para la invocacion de print-como-retomar.py.
+armar "$M" "$FX/snippet-2120.txt"; fecha30 "$F"; sellar sesion-8b
+mkdir -p "$CWV/memory/sessions"; cp "$F" "$CWV/memory/sessions/2026-09-22-cd.md"
+txforma "$T/f.jsonl" cmd "cd memory; printf x | tee -a sessions/2026-09-22-cd.md"
+chk "forma Bash tras cd dir; se toma y bloquea" "1" "$(bloquea "$(corre_sid "$T/f.jsonl")")"
+txvar "$T/v.jsonl" 'cd memory; python3 "$JBIN/print-como-retomar.py" sessions/2026-09-22-cd.md'
+chk "print-como-retomar.py tras cd dir; toma la ficha y bloquea" "1" "$(bloquea "$(corre_sid "$T/v.jsonl")")"
 rm -r "$CWV/memory"
 # (b) Sin sello: Step 5c-bis no corrio. La ficha la escribio esta sesion y trae `## Como retomar`, que
 # /backfill-3t no escribe.

@@ -29,6 +29,9 @@ M = {
     "sin-sello-sin-retomar": [
         ('    return not re.search(r"(?m)^session_id:", texto[:2000]) and seccion(texto, "Como retomar") is not None',
          '    return not re.search(r"(?m)^session_id:", texto[:2000])')],
+    "cd-con-punto-y-coma": [
+        ('''_RE_CD = re.compile(r"(?:^|[;&|\\n]\\s*)cd\\s+(\\"[^\\"]+\\"|'[^']+'|[^\\s;&|)]+)")''',
+         '''_RE_CD = re.compile(r"(?:^|[;&|\\n]\\s*)cd\\s+(\\"[^\\"]+\\"|'[^']+'|\\S+)")''')],
     "barras-solo-slash": [
         ('SESION_RE_G = re.compile(r"(?:^|[/\\\\])memory[/\\\\]sessions[/\\\\][^/\\\\]+\\.md$")',
          'SESION_RE_G = re.compile(r"(?:^|/)memory/sessions/[^/]+\\.md$")')],

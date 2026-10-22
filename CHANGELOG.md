@@ -15,14 +15,18 @@ sesion. En los otros casos callaba.
   y sella con el id de la sesion de origen; en esta busqueda un sello distinto nunca se toma. La
   ficha sellada va primero: una ficha vieja editada despues no la tapa.
 - **Ruta con barras invertidas** (Windows): la busqueda de fichas escritas acepta `\` como `/`.
+- **`cd dir;` delante del comando**: el directorio de un `cd` sin comillas ya no se lleva el `;`, `&`,
+  `|` o `)` que lo sigue. Vale para la escritura por Bash y para el `cd` que ya resolvia el argumento
+  de `print-como-retomar.py` (los dos usan ahora `_RE_CD`); antes `cd memory; …` tomaba `memory;`.
 
 ### Added
-- Cinco casos en `test-checkpoint-close-guard.sh` (seccion p-47b5252196). Con el guard de 2.63.35
-  caen los cuatro que esperan un bloqueo; el quinto (Bash con el sello de otra sesion) calla en los
+- Siete casos en `test-checkpoint-close-guard.sh` (seccion p-47b5252196). Con el guard de 2.63.35
+  caen los seis que esperan un bloqueo; el septimo (Bash con el sello de otra sesion) calla en los
   dos. El de barras invertidas, fuera de Windows, usa un archivo cuyo nombre lleva las barras: mide la
   busqueda de la ruta, no al productor real; en Windows usa la ruta nativa de `cygpath -w`.
-- Mutaciones `bash-ignorado`, `sin-sello-ignorado`, `sin-sello-sin-retomar` y `barras-solo-slash`
-  (`tools/mutaciones/m_ficha_sesion.py`), cada una con su aserto en `tools/mutation-check.sh`.
+- Mutaciones `bash-ignorado`, `sin-sello-ignorado`, `sin-sello-sin-retomar`, `barras-solo-slash` y
+  `cd-con-punto-y-coma` (`tools/mutaciones/m_ficha_sesion.py`), cada una con su aserto en
+  `tools/mutation-check.sh`.
 
 ### Known
 - Una ficha escrita por Bash con una variable asignada en OTRA llamada Bash no se resuelve: el estado

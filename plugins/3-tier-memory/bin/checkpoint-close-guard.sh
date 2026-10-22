@@ -325,7 +325,9 @@ def resolver(ruta, base):
     return ruta if os.path.isabs(ruta) else os.path.normpath(os.path.join(base, ruta))
 
 
-_RE_CD = re.compile(r"(?:^|[;&|\n]\s*)cd\s+(\"[^\"]+\"|'[^']+'|\S+)")
+# El directorio de un `cd` sin comillas termina en `;`, `&`, `|` o `)` (adversario externo de 2.63.38:
+# `cd memory; … tee -a sessions/x.md` tomaba `memory;` y el guard callaba).
+_RE_CD = re.compile(r"(?:^|[;&|\n]\s*)cd\s+(\"[^\"]+\"|'[^']+'|[^\s;&|)]+)")
 # Destino de `>`, `>>` o `tee [-a]`; no `2>`, `&>` ni `>&` (las formas que mide pendientes_afines.py).
 _RE_REDIRIGE = re.compile(r"(?:(?<![<>&\d])>{1,2}(?!&)|\btee\s+(?:-a\s+)?)\s*(\"[^\"]+\"|'[^']+'|[^\s;&|()<>]+)")
 
@@ -546,7 +548,7 @@ for r in turno:
                 continue
             disparo = True
             base = cwd
-            m_cd = re.search(r"(?:^|[;&|\n]\s*)cd\s+(\"[^\"]+\"|'[^']+'|\S+)", cmd)
+            m_cd = _RE_CD.search(cmd)
             if m_cd:
                 base = resolver(m_cd.group(1).strip("\"'"), cwd) or cwd
             # TODAS las invocaciones del comando, no la primera: dos `print-como-retomar.py` en
