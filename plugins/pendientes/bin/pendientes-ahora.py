@@ -494,10 +494,12 @@ def proceso_vivo(pid, inicio):
 
 
 def sesiones_abiertas(sessions_dir):
-    """{session_id: cwd} de los procesos vivos de Claude Code, o None si no hay registro que leer."""
+    """{session_id: cwd} de los procesos vivos de Claude Code, o None si no hay registro que leer: sin
+    la carpeta, o sin ninguna entrada legible (vacia, rota). Un registro asi no prueba que una ventana
+    este cerrada; con None manda la transcripcion ("activa" / "sin actividad")."""
     if not os.path.isdir(sessions_dir):
         return None
-    abiertas = {}
+    abiertas, legibles = {}, 0
     for f in glob.glob(os.path.join(sessions_dir, "*.json")):
         try:
             with open(f, encoding="utf-8") as fh:
@@ -506,9 +508,11 @@ def sesiones_abiertas(sessions_dir):
         except (OSError, ValueError, TypeError, AttributeError):
             continue
         sid = d.get("sessionId")
+        if sid:
+            legibles += 1
         if sid and proceso_vivo(pid, d.get("procStart")):
             abiertas[sid] = d.get("cwd") or ""
-    return abiertas
+    return abiertas if legibles else None
 
 
 def del_proyecto(cwd, proyecto):

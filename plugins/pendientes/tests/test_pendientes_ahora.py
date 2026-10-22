@@ -396,6 +396,19 @@ def main():
         check("retomada: la que escribio la ficha sigue mandando si vive",
               px["2026-10-12-r"]["ventana"]["retomada"] is False)
 
+        # Un registro que existe pero no tiene ninguna entrada legible (vacio, roto) no prueba nada:
+        # manda la transcripcion, como sin registro (hallazgo del revisor externo de 0.3.0).
+        for nombre, contenido in (("vacio", None), ("roto", "{no-json")):
+            r_ = os.path.join(tmp, "reg-" + nombre)
+            os.makedirs(r_)
+            if contenido:
+                with open(os.path.join(r_, "malo.json"), "w", encoding="utf-8") as fh:
+                    fh.write(contenido)
+            dv = correr(mem, lib, "--hoy", hoy_real, "--sessions-dir", r_, "--projects-root", proyectos)
+            check(f"registro {nombre}: manda la transcripcion (activa), no cerrada",
+                  {g["slug"]: g for g in dv["planes"]}["2026-10-13-s"]["ventana"]["fuente"] == "transcripcion"
+                  and {g["slug"]: g for g in dv["planes"]}["2026-10-13-s"]["ventana"]["estado"] == "activa")
+
         dh = correr(mem, lib, "--hoy", "2026-10-11", "--sessions-dir", reg, "--projects-root", proyectos)
         check("planes: antes de su fecha no hay plan", [g["slug"] for g in dh["planes"]] == ["2026-10-11-borrada"])
 
