@@ -1206,8 +1206,12 @@ else:
                 "alguien que no es el usuario? Una decision del usuario no es bloqueo: la toma el en "
                 "la sesion siguiente, con el agente. Si es eso, desbloquealo (`journal-emit.py --type "
                 "pendiente.block --id p-… --desbloquear`) y rehaz el snippet con `Proximo paso: "
-                "decidir con el usuario <que> (p-…)`. Si espera a alguien de fuera, di a quien en la "
-                "linea " + str(len(REVISION_ITEMS)) + " de la revision:\n"
+                "decidir con el usuario <que> (p-…)`. Si para que se mueva hace falta que el usuario "
+                "le pida algo a alguien (2.63.32), preguntale si lo va a pedir el (AskUserQuestion; "
+                "en una sesion supervisada, SendMessage al supervisor): si dice que si, desbloquealo "
+                "y el paso es `pedirle a <quien> <que> (p-…)`; si ya lo pidio o no le toca, queda "
+                "bloqueado con su `_revisar` (sale ese dia en el recordatorio). Si espera a alguien "
+                "de fuera, di a quien en la linea " + str(len(REVISION_ITEMS)) + " de la revision:\n"
                 + "\n".join(f"- {a}" for a in avisos_bloqueo))
         if avisos_compartido:
             partes.append(

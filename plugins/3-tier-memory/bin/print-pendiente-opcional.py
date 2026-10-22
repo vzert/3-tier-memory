@@ -18,9 +18,10 @@ Por que capas: hasta 2.43.0 el prompt opcional salia en cada cierre y los mismos
 repetian sesion tras sesion. Las dos capas nunca coinciden (la opcional exige que no venza
 ninguno hoy), asi que el cierre lleva a lo sumo un bloque de pendiente, justo despues del snippet.
 
-Nunca propone un pendiente con `_bloqueado:` (espera a algo fuera de la sesion), uno con
-`_revisar` futuro (ya tiene su recordatorio de calendario) ni el que ya cita `Proximo paso:` de la
-ficha. Todo sale de campos estructurados de `_pendientes.md` y de la forma de `## Como retomar`:
+Nunca propone un pendiente con `_bloqueado:` sin `_revisar` (espera a algo fuera de la sesion y no
+dice cuando mirar), uno con `_revisar` futuro (ya tiene su recordatorio de calendario) ni el que ya
+cita `Proximo paso:` de la ficha. Un `_bloqueado:` con `_revisar` de hoy o vencido SI sale (2.63.32):
+ese dia toca mirar si ya llego lo que esperaba; sin esto el bloqueo lo escondia tambien aqui. Todo sale de campos estructurados de `_pendientes.md` y de la forma de `## Como retomar`:
 nada se decide leyendo el texto (regla 216). Si no hay candidato no imprime nada y sale con 0.
 
 Se genera EN VIVO desde `_pendientes.md`, no se guarda en la ficha: asi el hook de cierre, que lo
@@ -117,7 +118,7 @@ def main():
         return 1
 
     fuera = proximo_paso_ids(ficha_texto)
-    vivos = [p for p in todos if not p[5] and p[0] not in fuera]
+    vivos = [p for p in todos if not (p[5] and not p[4]) and p[0] not in fuera]
     hoy_ = sorted([p for p in vivos if p[4] == hoy], key=lambda p: (PRIORIDAD.get(p[2], 3), p[7]))
     if hoy_:
         cabecera, elegidos = CABECERA_HOY, hoy_[:1]
@@ -133,7 +134,7 @@ def main():
 
     nombre = os.path.basename(proyecto_dir)
     print(cabecera)
-    for i, (pid, texto, prio, creado, rev, _, origen, _) in enumerate(elegidos):
+    for i, (pid, texto, prio, creado, rev, bloq, origen, _) in enumerate(elegidos):
         if i:
             print()
         print(f"Proyecto: {nombre} — {proyecto_dir}")
@@ -142,6 +143,8 @@ def main():
             print(f"Contexto: memory/{origen}.md")
         if cabecera == CABECERA_OPCIONAL:
             print(f"Motivo: vencido desde {rev}")
+        if bloq:
+            print("Espera a alguien de fuera: mira si ya llego; si no, dale otra fecha.")
         print("Si ya no aplica, cierralo con /checkpoint-3t en vez de dejarlo abierto.")
     return 0
 

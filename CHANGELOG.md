@@ -26,6 +26,121 @@ resolvia contra la unidad actual, no encontraba la ficha y `checkpoint-close-gua
   guard encuentra la ficha aunque el arnes no convierta las rutas. `tools/mutation-check.sh` no corre
   en Windows (`RUN_MUTATION=0` en platforms), asi que hoy no da un falso aviso.
 
+## [2.63.34] - 2026-10-21
+Origen: p-4c4f8274a6. `test-journal-race.sh` fallaba de vez en cuando en macos-latest (p. ej. CI
+38756506567, trial 4: `open=9 rows=19 quarantine=2`) y nadie sabia por que: la prueba solo imprimia
+contadores.
+
+### Fixed
+- **Un evento se perdia si el compactador leia su archivo mientras `journal-emit.py` lo escribia.**
+  `write_event` creaba `pending/<evento>.json` con O_EXCL y escribia el contenido despues. Un
+  compactador que listaba `pending/` en ese hueco leia un archivo vacio, lo mandaba a cuarentena con
+  `malformed: Expecting value: line 1 column 1 (char 0)` y el evento no volvia nunca (`malformed` no
+  se rescata). Quien lo emitio ya tenia su id y creia que estaba guardado. Medido en una Mac con 4
+  corridas de `test-journal-race.sh` en paralelo: 2 de 1000 trials, los dos con la firma de CI. En
+  uso real puede pasar cuando una sesion compacta (session-start, recall) justo en ese instante en
+  que otra emite.
+  - `journal-emit.py` escribe el evento en `pending/.<evento>.json.tmp` (O_EXCL) y lo renombra al
+    `.json`: un compactador solo ve el evento entero o no lo ve. El temporal va en `pending/` y no en
+    una carpeta nueva porque el rename tiene que quedar en el mismo sistema de archivos y porque
+    `.journal/.gitignore` no se reescribe en instalaciones viejas: una carpeta nueva se versionaria.
+  - `journal-compact.py` deja en `pending/` un `.json` ilegible si su mtime esta a menos de
+    `STALE_SECONDS` (60 s) de ahora, para la pasada siguiente. Protege a los `journal-emit.py`
+    anteriores a 2.63.34 que siguen instalados en otras sesiones. 60 s es la vida que el lock ya le
+    da a un proceso vivo: un emit que no escribio en ese plazo murio, y su evento va a cuarentena
+    como antes. Una mtime en el futuro lejano cuenta como vieja: nada se queda en `pending/` para
+    siempre. Tambien borra el `.json.tmp` de mas de 60 s que deja un emit que murio a medias.
+    Si ese emit solo estaba parado (una Mac que se durmio a mitad) y no muerto, su rename falla y
+    `journal-emit.py` reescribe el evento con el seq siguiente: no se pierde (revisor externo).
+    Limite: un compactador anterior a 2.63.34 no lo borra; hasta que corra uno nuevo, ese `.tmp`
+    hace que `ls -A pending/` lance el compactador en cada arranque de sesion (no aplica nada).
+- **`test-journal-race.sh` imprime el `.reason` y el evento de cada cuarentena (y lo que haya en
+  `failed/`) cuando un trial sale rojo.** Nota: su contador `quarantine=` cuenta archivos, y cada
+  evento apartado deja dos (el `.json` y su `.reason`): `quarantine=2` es un evento.
+
+### Added
+- `bin/test-journal-hueco.sh` (12 casos): abre el hueco a proposito, sin depender del azar. Corre un
+  compactador entre la creacion y la escritura del evento (rojo en 2.63.25: el evento era visible y
+  acababa en cuarentena; verde ahora), y prueba el `.json` vacio de un emisor viejo (reciente se
+  espera; 120 s o una hora en el futuro, cuarentena) y el temporal huerfano (reciente se respeta;
+  120 s se borra; si era de un emit parado, el evento se reescribe). `test-journal-race.sh` con el arreglo: 60 de 60 corridas, 600 trials, 0
+  cuarentenas, con 4 en paralelo (de 2 en 1000 antes; esta cifra sola no lo probaria).
+- Cuatro mutaciones en `tools/mutation-check.sh` que esta suite tumba: el emit vuelve a escribir
+  directo el `.json` (`m_emit_directo.py`), el compactador deja de esperar al ilegible reciente, y
+  lo espera para siempre (`m_compact_espera.py`), y el emit no reescribe cuando le borraron el
+  temporal (`m_emit_sin_reintento.py`).
+- Las plantillas que mandan compactar (`checkpoint-3t`, `save-learning`, `backfill-3t`,
+  `consolidate-3t`, `migrate`) dicen que hacer con `pending_left>0`: otro agente esta emitiendo en
+  ese momento (o un emisor anterior a 2.63.34 a medio escribir); se vuelve a correr en unos segundos,
+  como con `JOURNAL busy`.
+
+## [2.63.33] - 2026-10-20
+Origen: p-7fd6a82eaa, el gap que dejo abierto la auditoria de hilos de 2.63.22 (decision d284 del
+usuario: chequeo SALTADO con fecha de corte; plan aprobado en d305).
+
+### Added
+- **Un cierre `ninguno` ya no entierra un plan `active`.** Nuevo chequeo
+  `snippet.ninguno_plan_activo` en `bin/checkpoint-audit.py`: si el snippet de `Como retomar` es
+  `ninguno` (con bloque o colapsado), `## Plans` enlaza un plan `active` (tambien con `../`, `.md`
+  o `#ancla`; fila del indice o, sin fila, su frontmatter) y ningun pendiente ABIERTO de
+  `_pendientes.md` lo cita en `_relacionado:`, sale SALTADO y el hook de cierre lo rechaza. Lee el
+  campo `_relacionado`, nunca la prosa del plan ni del pendiente (regla 216). Un plan cuyo fichero
+  no empieza por `plan-` se liga con `plan-<nombre del fichero>`. Solo fichas con fecha 2026-10-21
+  o posterior.
+- **Step 5 de `/checkpoint-3t`: cada fase abierta o disparador de un plan tocado es un pendiente
+  ligado** (`pendiente.add --relacionado plan-<slug>`, con `--revisar` si espera una fecha),
+  propuesto como candidato en Step 3b. Un plan sin nada abierto se cierra con `plan.upsert`.
+- Prueba `bin/test-ninguno-plan-activo.sh` (19 asertos; los 19 caen con el checkpoint-audit.py de
+  2.63.22) y 7 mutaciones nuevas (`tools/mutaciones/m_ninguno_plan.py`).
+
+### Limites
+- No lee el texto viejo de un plan: un plan `active` con fases solo en su prosa sale SALTADO hasta
+  que alguien registra la fase como pendiente o cierra el plan. Un pendiente ligado falso (que no
+  es la fase real) lo pasa: el chequeo vigila la omision, no la calidad del enlace.
+
+## [2.63.32] - 2026-10-21
+Origen: Victor (via `/goalspec:interview`, bajo el supervisor lookout `supervisor-3-tier-memory`,
+d296-d301) reporto cierres que dejaban un pendiente `_bloqueado` sin fecha y snippet `Ninguno`, y
+pidio auditar en que casos pasa y cerrar el hueco. Caso real: claude-vzert, `p-98a561dc02`
+(espera a que la cuenta de infra instale un plugin y un dev mande un mensaje). Auditoria de solo
+lectura del mismo dia sobre los 39 proyectos 3-tier de la Mac: 7 tienen bloqueados, 54 abiertos,
+50 sin `_revisar`, y en los 7 hay fichas `Ninguno` que citan un bloqueado. Esos 50 se
+arreglaron el mismo dia con aprobacion de Victor (d303): 12 desbloqueados porque esperaban una
+decision o un comando suyo, 38 fechados al 2026-10-25.
+
+### Changed
+- **Todo bloqueado lleva fecha.** `journal-emit.py --bloqueado-por` sin `--revisar` nace con
+  `_revisar: hoy+5` (la regla 2 de Step 3b) y lo avisa por stderr. `pendiente.block` acepta
+  `--revisar` y, sin el, pone hoy+5 salvo que la linea ya traiga un `_revisar` futuro (lo conserva).
+  `--desbloquear` quita tambien el `_revisar` (era la fecha de mirar si llego la espera; con el
+  puesto, `Proximo paso: pedirle a <quien> …` salia rechazado como fecha futura), salvo que se de
+  `--revisar`, que queda como ventana nueva. Un evento `pendiente.block` anterior a 2.63.32 se
+  aplica como antes: el bloqueo sin ventana, y el desbloqueo sin tocar la que haya.
+- **Ese dia vuelve a salir.** `print-pendiente-opcional.py` (🔔 vence hoy, ➕ vencidos) ya no
+  descarta un bloqueado con `_revisar`; le anade "Espera a alguien de fuera: mira si ya llego".
+  `pendientes_afines.hacible` (hilo y afines) y `checkpoint-audit.py` (`snippet.proximo_paso`)
+  tratan como accionable un bloqueado cuyo `_revisar` ya paso: el paso es mirar si llego. Antes
+  de su fecha sigue fuera. Un bloqueado sin `_revisar` sigue fuera de todo, como antes.
+- **`expire-pendientes.py` nunca caduca un bloqueado.** Su `_revisar` vencido significa "mira si
+  ya llego", no "dejo de ser compromiso"; sin esto, /triage-3t habria caducado cada espera viva al
+  dia siguiente de su fecha. Lo cuenta en `excluidos: _bloqueado N`.
+- **La pregunta al cerrar.** Si para que un bloqueado se mueva hace falta que el usuario le pida
+  algo a alguien, el agente le pregunta si lo pedira el (AskUserQuestion, o SendMessage al
+  supervisor): si dice que si, no es bloqueo y el paso es `pedirle a <quien> <que> (p-…)`; si no,
+  queda bloqueado con su fecha. Va en Step 3b de `checkpoint-3t.md`, en Step 8, y en el aviso
+  `snippet.ninguno_bloqueo` de la revision del cierre.
+- Plantillas: se quita la regla que prohibia `--revisar` en un pendiente que espera a un tercero
+  (Step 3b) y la que mandaba el seguimiento a `routine-followup` (Step 8). /triage-3t fecha los
+  bloqueados viejos con `pendiente.window`.
+
+### Added
+- **`pendientes.bloqueado_sin_fecha` en `checkpoint-audit.py`.** SALTADO si `## Pendientes` de la
+  ficha lista un `_bloqueado` sin `_revisar` (corre tambien en `--solo-snippet`, asi que el hook
+  de cierre lo rechaza); POR-DISEÑO con el conteo si los sin fecha estan solo en el indice. Fichas
+  anteriores al 2026-10-20 no se miden. Sobre la ficha real del caso (claude-vzert, commit
+  `1281555`) sale SALTADO; con 2.63.22 salia solo el aviso `snippet.ninguno_bloqueo`.
+- Prueba: `bin/test-bloqueado-fecha.sh`; `bin/test-flags-sin-lector.sh` suma `--revisar` a `pendiente.block`.
+
 ## [2.63.31] - 2026-10-20
 Origen: `p-e1799cd04c`. El Step 8b real imprime el snippet con
 `python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"`, y `resolver()` descarta toda ruta con `$`.

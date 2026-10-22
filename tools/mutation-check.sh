@@ -190,6 +190,10 @@ caso "CONTROL del resolutor"    test-plugin-bin-resolver.sh m_control.py     tes
 caso "canon / cabecera_crlf"    normalize-pendientes.py m_crlf_normalize.py  test-normalize-pendientes.sh "crlf"
 caso "cr_lineas (mensual)"      journal-compact.py      m_crlf_compact.py    test-monthly-rows.sh        "lineas CRLF no cambia"
 caso "huella / md5"             journal-compact.py      m_compact.py         test-expire-reopen.sh       "byte a byte"
+caso "emit atomico (2.63.34)"   journal-emit.py         m_emit_directo.py    test-journal-hueco.sh       "el evento ya era visible"
+caso "espera del ilegible"      journal-compact.py      m_compact_espera.py  test-journal-hueco.sh       "reciente: el .json vacio fue a cuarentena"
+caso "espera eterna"            journal-compact.py      m_compact_espera.py  test-journal-hueco.sh       "120 s: no fue a cuarentena" viejo
+caso "emit sin reintento"       journal-emit.py         m_emit_sin_reintento.py test-journal-hueco.sh    "el emit fallo al perder su temporal"
 caso "norm + SYSTEMROOT"        resolve-project-dir.sh  m_projdir.py         test-resolve-project-dir.sh "el respaldo de python3"
 caso "publicacion del .gitignore" journal-compact.py    m_gitignore_publicacion.py test-expire-reopen.sh "fichero ENTERO"
 caso "deriva sin lector"        journal-compact.py      m_drift_humano.py    test-expire-reopen.sh       "no se consume"
@@ -404,6 +408,16 @@ caso "cierre sin paso compartido" checkpoint-audit.py m_paso_vigente.py test-pas
 caso "paso compartido otro dia" checkpoint-audit.py m_paso_vigente.py test-paso-compartido.sh "otro dia" audit-compartido-cualquier-dia
 caso "guard sin paso compartido" checkpoint-close-guard.sh m_paso_vigente.py test-checkpoint-close-guard.sh "la revision trae el aviso del paso compartido" guard-sin-compartido
 caso "opcional con Alta"        print-pendiente-opcional.py m_paso_vigente.py test-print-pendiente-opcional.sh "nada" opcional-con-alta
+
+# 2.63.33: `ninguno` con un plan `active` sin pendiente ligado (p-7fd6a82eaa). Cada caso nombra su
+# suite (sin $T), igual que los de 2.63.22.
+caso "ninguno plan sin rechazo"  checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "rechaza y nombra el plan" plan-sin-rechazo
+caso "ninguno plan liga prosa"   checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "la prosa no liga" plan-liga-prosa
+caso "ninguno plan cualquiera"   checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "plan cerrado" plan-cualquier-estado
+caso "ninguno plan sin prefijo"  checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "ligado con plan-<nombre>" plan-sin-prefijo
+caso "ninguno plan enlace"       checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "forma \[\[\.\./plans" plan-enlace-estricto
+caso "ninguno plan sin corte"    checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "antes de 2.63.33" plan-sin-corte
+caso "ninguno plan con paso"     checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "paso real" plan-cualquier-snippet
 caso "sin identidad"           journal-emit.py m_learning_dedup.py test-learning-dedup.sh "mismo texto sin --decision: rc 0" sin-identidad
 caso "decision fuera"          journal-emit.py m_learning_dedup.py test-learning-dedup.sh "la decision viaja en el payload" decision-fuera-del-payload
 caso "reemplaza sin supersedes" journal-emit.py m_learning_dedup.py test-learning-dedup.sh "reemplaza:2 lleva supersedes 2" reemplaza-sin-supersedes

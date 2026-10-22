@@ -1386,7 +1386,7 @@ def apply_window(mem, p):
     return True
 
 
-BLOQUEADO_RE = re.compile(r"\s*—\s*_bloqueado:[^—]*")
+BLOQUEADO_RE = re.compile(r"\s*—\s*_bloqueado:[^—]*?(?=\s*—|$)")
 RETOMAR_RE = re.compile(r"\s*—\s*_retomar:[^—]*")
 # La misma expresion que journal-emit.py: sessions/<slug> sin espacios, `—` ni `_` final.
 FICHA_RETOMAR_RE = re.compile(r"^sessions/[A-Za-z0-9][A-Za-z0-9._-]*(?<!_)$")
@@ -1428,8 +1428,24 @@ def apply_block(mem, p):
         log(f"WARN block: no hay linea abierta con id {p['id']}")
         return False
     nueva = BLOQUEADO_RE.sub("", lines[i].rstrip("\n"))
+    if not p.get("bloqueado") and p.get("quita_revisar"):
+        # 2.63.32: desbloquear quita la fecha de mirar si llego la espera; un `revisar` dado queda
+        # como la ventana nueva. Un desbloqueo anterior (sin `quita_revisar`) no toca la ventana.
+        nueva = re.sub(r"\s*—\s*_revisar: \d{4}-\d{2}-\d{2}_", "", nueva)
+        if p.get("revisar"):
+            nueva = f"{nueva} — _revisar: {p['revisar']}_"
     if p.get("bloqueado"):
         nueva = f"{nueva} — _bloqueado: {p['bloqueado']}_"
+        # 2.63.32: el bloqueo trae su ventana (`revisar`). Un evento anterior no la trae y se
+        # aplica como antes. La ventana por defecto (`revisar_defecto`) no pisa un `_revisar` que
+        # la linea ya tenga y no haya vencido el dia del evento; una fecha dada si lo reemplaza.
+        rev = p.get("revisar")
+        if rev:
+            m = re.search(r"_revisar: (\d{4}-\d{2}-\d{2})_", nueva)
+            vigente = m and m.group(1) > str(p.get("fecha") or "")
+            if not (p.get("revisar_defecto") and vigente):
+                nueva = re.sub(r"\s*—\s*_revisar: \d{4}-\d{2}-\d{2}_", "", nueva)
+                nueva = f"{nueva} — _revisar: {rev}_"
     if nueva == lines[i]:
         return False                      # idempotente
     lines[i] = nueva
@@ -4372,6 +4388,11 @@ def validate(ev):
             raise Quarantine("malformed: pendiente.block sin 'id'")
         if "—" in str(p.get("bloqueado", "")) or "\n" in str(p.get("bloqueado", "")):
             raise Quarantine("malformed: pendiente.block con '—' o salto de linea en 'bloqueado'")
+        if p.get("revisar"):
+            try:
+                fecha_iso(str(p["revisar"]))
+            except (ValueError, TypeError):
+                raise Quarantine("malformed: pendiente.block con 'revisar' sin fecha real")
     elif t == "pendiente.relate":
         if not p.get("id"):
             raise Quarantine("malformed: pendiente.relate sin 'id'")
@@ -5275,6 +5296,34 @@ def rescatar_cuarentena(journal):
     return n
 
 
+def es_reciente(path):
+    """True si la mtime de `path` esta a menos de STALE_SECONDS de ahora, hacia atras o hacia
+    adelante. False si no se puede leer (el archivo ya no esta: que siga el camino de siempre)."""
+    try:
+        return abs(time.time() - os.path.getmtime(path)) < STALE_SECONDS
+    except OSError:
+        return False
+
+
+def limpiar_temporales(pending):
+    """Borra los `.<evento>.json.tmp` de pending/ con mas de STALE_SECONDS: los deja un
+    journal-emit.py que murio entre escribir el temporal y renombrarlo. Uno reciente puede ser
+    un emit en curso y no se toca. Sin esto, un huerfano haria que `ls -A pending/` (fast path de
+    session-start.sh y recall.sh) lance el compactador en cada sesion, y se versionaria."""
+    if not os.path.isdir(pending):
+        return
+    for n in os.listdir(pending):
+        if not (n.startswith(".") and n.endswith(".json.tmp")):
+            continue
+        p = os.path.join(pending, n)
+        if not es_reciente(p):
+            try:
+                os.remove(p)
+                log(f"TMP-REMOVED {n}")
+            except OSError:
+                pass
+
+
 def compact(mem, budget, quiet):
     global _DESHACER, _ANOTADAS, _DIRS_NUEVOS
     journal = os.path.join(mem, ".journal")
@@ -5328,6 +5377,7 @@ def compact(mem, budget, quiet):
     try:
         # Bajo el lock y antes de re-listar: lo rescatado entra en ESTA pasada.
         rescued = rescatar_cuarentena(journal)
+        limpiar_temporales(pending)
         # Re-listar bajo lock: entre el listado y el mkdir pudieron entrar eventos.
         names = sorted(n for n in os.listdir(pending) if n.endswith(".json")) \
             if os.path.isdir(pending) else []
@@ -5337,6 +5387,18 @@ def compact(mem, budget, quiet):
                 with open(src, encoding="utf-8") as fh:
                     ev = json.load(fh)
             except (OSError, ValueError) as e:
+                # Un journal-emit.py anterior a 2.63.34 (sigue instalado en otras sesiones) crea el
+                # .json y lo escribe despues: leido en ese hueco esta vacio o cortado, y mandarlo a
+                # cuarentena perdia el evento (p-4c4f8274a6). Si es reciente se deja en pending/
+                # para la pasada siguiente. "Reciente" = STALE_SECONDS, la vida que el lock ya le
+                # da a un proceso vivo: un emit que no termino de escribir en ese plazo murio, y su
+                # evento va a cuarentena como siempre. Una mtime en el futuro lejano cuenta como
+                # vieja, para que nada se quede aqui para siempre. Saltarlo no adelanta a nada que
+                # dependa de el: un resolve de este add solo se emite cuando el emit del add
+                # devolvio, o sea despues de escribirlo, y este listado es anterior a esta lectura.
+                if es_reciente(src):
+                    log(f"WAIT {n} ilegible y reciente: {e}")
+                    continue
                 move_to(src, os.path.join(journal, "quarantine"), f"malformed: {e}")
                 quarantined += 1
                 log(f"QUARANTINE {n} malformed")

@@ -119,7 +119,7 @@ python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"
 
 It must print `JOURNAL applied=N quarantined=0 pending_left=0` (a `rescued=N` there is fine: events an older version quarantined for a missing anchor, applied now). If `quarantined>0`, read
 `memory/.journal/quarantine/*.reason`, apply that change by hand, delete the `.json`/`.reason` pair
-and report it in Step 5. If it prints `JOURNAL busy`, retry after a few seconds.
+and report it in Step 5. If it prints `JOURNAL busy`, retry after a few seconds. A `pending_left` above 0 means an agent was still writing an event when the pass ran (since 2.63.34 the compactor waits for it instead of quarantining it): run it again after a few seconds.
 
 What the compactor writes — **Tier 3**: the rule appended to `memory/learnings/<topic>.md` with the
 next number (or as a bullet if the file only uses bullets); a new topic file gets frontmatter

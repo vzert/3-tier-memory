@@ -45,7 +45,7 @@ LEE = {
     "pendiente.reopen": "id prioridad",
     "pendiente.window": "id revisar",
     "pendiente.retomar": "id retomar ficha",
-    "pendiente.block": "id bloqueado-por desbloquear",
+    "pendiente.block": "id bloqueado-por desbloquear revisar",
     "pendiente.relate": "id relacionado sin-relacion",
     "pendiente.adopt": "todas line id text-prefix colapsar",
     "session.add": "slug date status summary commit",

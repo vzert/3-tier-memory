@@ -3,7 +3,8 @@
 3-tier-memory plugin: emisor de eventos del journal (v2.12.0, Fases 1 y 2).
 
 Los agentes NO editan los indices compartidos de memory/ a mano. Cada cambio entra como un
-evento: un archivo JSON propio en memory/.journal/pending/, creado con O_CREAT|O_EXCL, que
+evento: un archivo JSON propio en memory/.journal/pending/ (escrito en un temporal creado con
+O_CREAT|O_EXCL y renombrado al .json ya completo, desde 2.63.34; ver write_event), que
 un unico compactador (journal-compact.py) aplica bajo lock. Asi N agentes en la misma
 maquina pueden escribir "a la vez" sin pisarse: cada uno solo crea archivos nuevos.
 
@@ -17,7 +18,10 @@ Tipos de evento:
                     [--bloqueado-por "QUE"]  (espera a algo FUERA de la sesion: otra
                     instalacion, un peer, un PR ajeno; nunca una decision del usuario,
                     que va en el `Proximo paso`; checkpoint-audit.py rechaza un
-                    `Proximo paso:` que cite un id con `_bloqueado:`)
+                    `Proximo paso:` que cite un id con `_bloqueado:` y `_revisar` futuro)
+                    (2.63.32) Con --bloqueado-por y sin --revisar, la ventana es hoy+5: un
+                    bloqueado sin fecha no volvia a salir nunca (medido 2026-10-20: 50 de 54
+                    bloqueados abiertos en 7 proyectos). Lo avisa por stderr.
                     [--relacionado p-<10 hex>|plan-<slug>]...  (repetible, 2.55.0: otro
                     pendiente o un plan con el que este va junto; lo lee pendientes_afines.py,
                     que print-como-retomar.py usa para sumar afines al `Proximo paso`)
@@ -49,9 +53,13 @@ Tipos de evento:
                     Pone o cambia `_retomar: FECHA sessions/<slug>_`: el pendiente que cita el
                     `Proximo paso` de esa ficha, para que el mod pendientes lo saque en VENCEN.
                     Solo lo lee el mod; 8e, el hilo y el calendario lo ignoran (2.62.8).
-  pendiente.block   --id ID (--bloqueado-por "QUE" | --desbloquear)
+  pendiente.block   --id ID (--bloqueado-por "QUE" | --desbloquear) [--revisar YYYY-MM-DD]
                     Pone, cambia o quita `_bloqueado: QUE_` en un pendiente VIVO. Existe para
                     marcar en Step 3a uno que nacio sin el campo; no cambia el id.
+                    (2.63.32) Al bloquear pone tambien `_revisar`: la fecha dada, o hoy+5 si la
+                    linea no trae ya un `_revisar` futuro (ese se conserva). Al desbloquear quita
+                    `_revisar` (era la fecha de mirar si llego la espera), salvo que se de
+                    --revisar, que queda como la ventana nueva.
                     [--text-prefix P]  (si no se da, se toma del archivo si la linea existe)
   pendiente.relate  --id ID (--relacionado X [--relacionado Y ...] | --sin-relacion)
                     Pone (reemplaza) o quita `_relacionado: X, Y_` en un pendiente VIVO
@@ -200,7 +208,7 @@ import sys
 import time
 import unicodedata
 import uuid
-from datetime import date
+from datetime import date, timedelta
 
 for _flujo in (sys.stdout, sys.stderr):
     if hasattr(_flujo, "reconfigure"):
@@ -349,8 +357,34 @@ def agent_id():
     return f"{os.environ.get('USER') or os.environ.get('USERNAME') or 'user'}@{host}"
 
 
+def publicar(tmp, path):
+    """Renombra el temporal al .json final. Reintenta ante PermissionError como
+    replace_with_retry del compactador (Windows: antivirus o indexador con el archivo abierto un
+    instante); otro error propaga. No puede pisar un evento ajeno: el destino lleva el mismo
+    ts+session+pid+seq que el temporal, que se creo con O_EXCL."""
+    for attempt in range(5):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == 4:
+                raise
+            time.sleep(0.05 * (attempt + 1))
+
+
 def write_event(memory_dir, event):
-    """Crea pending/<utc-ns>-<session>-<pid>-<seq>.json con O_EXCL. Devuelve la ruta.
+    """Crea pending/<utc-ns>-<session>-<pid>-<seq>.json entero de una vez. Devuelve la ruta.
+
+    Se escribe en `pending/.<nombre>.tmp` (O_EXCL) y despues se renombra al .json: un
+    compactador que lista pending/ solo ve el evento completo o no lo ve. Antes se creaba el
+    .json con O_EXCL y se escribia despues; un compactador que lo leia en ese hueco lo
+    encontraba vacio, lo mandaba a cuarentena `malformed` y el evento se perdia (p-4c4f8274a6:
+    2 de 1000 trials de test-journal-race.sh, y una vez en macos-latest). El temporal queda en
+    pending/ y no en otra carpeta porque el rename tiene que ser en el mismo sistema de archivos
+    y porque .journal/.gitignore no se reescribe en instalaciones viejas: una carpeta nueva se
+    versionaria. Ningun lector toma un `.tmp` (todos filtran `*.json`), y el compactador borra
+    el de un emit que murio a medias (`limpiar_temporales`). Si borro el de un emit que solo
+    estaba parado, el rename falla y el evento se reescribe con el seq siguiente.
 
     El nombre ya es unico por construccion (session_id completo + pid + seq). Si aun asi
     O_EXCL falla, se reintenta con seq+1 hasta MAX_EXCL_RETRIES; si se agota, el evento se
@@ -367,8 +401,12 @@ def write_event(memory_dir, event):
     for seq in range(MAX_EXCL_RETRIES):
         name = f"{ts_ns}-{sid}-{pid}-{seq}.json"
         path = os.path.join(pending, name)
+        tmp = os.path.join(pending, f".{name}.tmp")
+        if os.path.exists(path):
+            last_err = FileExistsError(path)
+            continue
         try:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
         except FileExistsError as e:
             last_err = e
             continue
@@ -376,6 +414,14 @@ def write_event(memory_dir, event):
         # en cualquier sistema, y asi el hash de un evento no depende de donde se emitio.
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
             fh.write(payload)
+        try:
+            publicar(tmp, path)
+        except FileNotFoundError as e:
+            # El temporal ya no esta: este proceso quedo parado mas de STALE_SECONDS (una Mac que
+            # se durmio a mitad) y un compactador lo tomo por huerfano y lo borro. Se reescribe
+            # con el seq siguiente; agotados los intentos, la copia de failed/ de abajo.
+            last_err = e
+            continue
         return path
     failed = os.path.join(journal, "failed")
     os.makedirs(failed, exist_ok=True)
@@ -472,6 +518,15 @@ def fecha_real(v):
         return True
     except ValueError:
         return False
+
+
+# 2.63.32: ventana de un bloqueado que nace sin fecha. Es la regla 2 de Step 3b de /checkpoint-3t
+# ("en cualquier otro caso, 5 dias"), el mismo numero, para que dos agentes lleguen a la misma fecha.
+DIAS_BLOQUEADO = 5
+
+
+def revisar_por_defecto():
+    return (date.today() + timedelta(days=DIAS_BLOQUEADO)).isoformat()
 
 
 def limpiar_bloqueado(valor):
@@ -927,7 +982,7 @@ FLAGS_DE = {
     "pendiente.reopen": {"id", "prioridad"},
     "pendiente.window": {"id", "revisar"},
     "pendiente.retomar": {"id", "retomar", "ficha"},
-    "pendiente.block": {"id", "bloqueado_por", "desbloquear"},
+    "pendiente.block": {"id", "bloqueado_por", "desbloquear", "revisar"},
     "pendiente.relate": {"id", "relacionado", "sin_relacion"},
     "pendiente.adopt": {"todas", "line", "id", "text_prefix", "colapsar"},
     "session.add": {"slug", "date", "status", "summary", "commit"},
@@ -1099,6 +1154,12 @@ def main():
         # `bloqueado` tampoco entra en el hash, por lo mismo que `revisar`: es un estado del
         # pendiente, no su identidad.
         bloqueado = limpiar_bloqueado(a.bloqueado_por)
+        # 2.63.32: un bloqueado sin ventana no volvia a salir en ningun cierre (ni recordatorio, ni
+        # hilo, ni `Proximo paso`). La ventana por defecto es la regla 2 de Step 3b (5 dias).
+        if bloqueado and not revisar:
+            revisar = revisar_por_defecto()
+            print(f"journal-emit: bloqueado sin --revisar: ventana por defecto {revisar} "
+                  f"(hoy+{DIAS_BLOQUEADO})", file=sys.stderr)
         # `relacionado` tampoco: es un enlace, no la identidad.
         relacionado = limpiar_relacionados(a.relacionado, pid)
         # Pieza 1 del hilo: se suma el paso recibido a lo que el agente haya pasado.
@@ -1478,7 +1539,29 @@ def main():
         if bool(bloqueado) == bool(a.desbloquear):
             sys.exit("journal-emit: pendiente.block necesita --bloqueado-por \"QUE\" o "
                      "--desbloquear (uno de los dos)")
+        rev = (a.revisar or "").strip()
+        if rev and not fecha_real(rev):
+            sys.exit("journal-emit: --revisar debe ser una fecha real YYYY-MM-DD")
         base["payload"] = {"id": pid, "bloqueado": bloqueado}
+        if not bloqueado:
+            # 2.63.32: el `_revisar` de un bloqueado es la fecha de mirar si llego la espera; sin
+            # espera sobra, y con el puesto el paso "pedirle a X (p-…)" salia rechazado como
+            # `_revisar` futuro (adversario, ronda 1). Un --revisar dado queda como ventana nueva.
+            # `quita_revisar` distingue este evento de un desbloqueo anterior a 2.63.32, que no
+            # tocaba la ventana y se sigue aplicando igual.
+            base["payload"]["quita_revisar"] = True
+            if rev:
+                base["payload"]["revisar"] = rev
+        if bloqueado:
+            # 2.63.32: el bloqueo trae su ventana. `revisar_defecto` le dice al compactador que
+            # conserve un `_revisar` futuro que la linea ya tenga; una fecha dada lo reemplaza.
+            base["payload"]["revisar"] = rev or revisar_por_defecto()
+            base["payload"]["revisar_defecto"] = not rev
+            base["payload"]["fecha"] = date.today().isoformat()
+            if not rev:
+                print(f"journal-emit: bloqueado sin --revisar: ventana por defecto "
+                      f"{base['payload']['revisar']} (hoy+{DIAS_BLOQUEADO}) si la linea no trae "
+                      "ya un `_revisar` futuro", file=sys.stderr)
         write_event(memory_dir, base)
         print(pid)
         return

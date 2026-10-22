@@ -424,6 +424,10 @@ Para los pendientes DENTRO del alcance, clasifica cada uno en exactamente uno de
   next session takes with the agent) and its line has no `_bloqueado:`, mark it:
   `journal-emit.py --type pendiente.block --id p-… --bloqueado-por "<what it waits for>"`.
   Without the field, Step 8 can promote it to `Proximo paso` (see Step 3b, `--bloqueado-por`).
+  The event also sets `_revisar` (today+5, or `--revisar YYYY-MM-DD` when the date to look is
+  known) so the item comes back that day (2.63.32). A still-open `_bloqueado` line this session
+  lists that has no `_revisar` gets one: `journal-emit.py --type pendiente.window --id p-…
+  --revisar YYYY-MM-DD` — the audit marks it `SALTADO` otherwise (`pendientes.bloqueado_sin_fecha`).
   If a still-open item clearly goes with a pendiente or plan this session touched and its line
   has no `_relacionado:`, link it: `journal-emit.py --type pendiente.relate --id p-…
   --relacionado <p-… | plan-slug>` (2.55.0). That is what brings it back in the next snippet
@@ -667,7 +671,8 @@ python3 "$JBIN/journal-emit.py" --type pendiente.add --text "<texto del pendient
 sin preguntar al usuario (es un dato, no una decision):
 - el pendiente sale del mismo trabajo que otro que esta sesion guarda o retomo: emite PRIMERO el de
   mayor prioridad, toma el id que imprime y pasalo como `--relacionado` en los demas;
-- el pendiente es un paso de un plan: `--relacionado plan-<slug>`;
+- el pendiente es un paso de un plan: `--relacionado plan-<slug>` (la fase siguiente de un plan
+  `active` va siempre así; ver Step 5, "Cada fase abierta");
 - el pendiente continua uno que ya existe (otra sesion): `--relacionado <su id>`.
 **La liga al paso recibido la pone `journal-emit.py` solo (2.57.0, p-b282a8cfc4)**: si esta sesion
 arranco con un snippet `Retomamos:`, todo `pendiente.add` queda ligado a los ids de su `Proximo
@@ -703,7 +708,7 @@ tome?". Desde 2.62.11 `checkpoint-audit.py` avisa (`snippet.ninguno_bloqueo`, PO
 snippet dice `ninguno` y la ficha deja un pendiente `_bloqueado`, y el hook de cierre pregunta en la
 revision si ese bloqueo espera a alguien que no es el usuario. El compactador anade `— _bloqueado: <que>_` a la linea de Tier 2. Ese campo tiene un
 consumidor: `checkpoint-audit.py` rechaza (`snippet.proximo_paso`) un `Proximo paso:` que cite
-ese id. El pendiente sigue en `## Pendientes` de la ficha. No cambia el id. Para un pendiente que ya
+ese id mientras su `_revisar` no haya pasado. El pendiente sigue en `## Pendientes` de la ficha. No cambia el id. Para un pendiente que ya
 existe: `journal-emit.py --type pendiente.block --id p-… --bloqueado-por "…"` (o
 `--desbloquear` cuando ya no espera). Caso real (2026-09-22, sesion 5790b9f2): `p-a4439fa8fd`
 ("verificar... una vez esa instalacion actualice a 2.32.0") llego a `Proximo paso` porque nada
@@ -713,6 +718,22 @@ sale como aviso `POR-DISEÑO` en `snippet.marco`. Es una red de formato que no b
 sigue siendo la via que el audit hace cumplir. `decidir con el usuario` dejo de ser senal en
 2.62.11: es la forma del paso que pone delante una decision del usuario (`decidir con <otro>`
 sigue avisando: puede ser un tercero).
+
+**Todo bloqueado lleva fecha (2.63.32).** `--bloqueado-por` sin `--revisar` nace con `_revisar:
+hoy+5` (la regla 2 de abajo), y `pendiente.block` hace lo mismo si la linea no trae ya un
+`_revisar` futuro. Si se sabe cuando mirar ("infra instala el lunes"), pasa esa fecha con
+`--revisar`. Ese dia el pendiente sale en el aviso 🔔 del cierre y, pasada la fecha, vuelve al hilo
+y puede ser `Proximo paso` ("mirar si X ya llego"); `expire-pendientes.py` nunca caduca un
+bloqueado. Antes un bloqueado sin fecha no volvia a salir en ningun lado: medido 2026-10-20, 50 de
+54 bloqueados abiertos en 7 proyectos, y el caso real `p-98a561dc02` de claude-vzert (espera a que
+infra instale un plugin y un dev mande un mensaje) cerro con snippet `Ninguno`.
+`checkpoint-audit.py` marca `SALTADO` (`pendientes.bloqueado_sin_fecha`) un `_bloqueado` sin
+`_revisar` listado en `## Pendientes` de la ficha. **Si para que se mueva hace falta que el usuario
+le pida algo a alguien** (mandar un mensaje, pedir un acceso, avisar a otro equipo), preguntale al
+cerrar si lo va a pedir el (AskUserQuestion; en una sesion supervisada, SendMessage al supervisor).
+Si dice que si, el pendiente espera al usuario y no a un tercero: `pendiente.block --id p-…
+--desbloquear` (quita tambien su `_revisar`) y `Proximo paso: pedirle a <quien> <que> (p-…)`. Si ya lo pidio o no le toca, queda bloqueado con su
+`_revisar`.
 
 **`--revisar` cuando el pendiente nombra una fecha futura** (`revisar el 2026-09-22`, `target
 2026-10-01`, `T+7` resuelto a fecha). Escribe la fecha **como campo**, no solo en prosa: el
@@ -761,8 +782,9 @@ reapareciendo dateless en `Sigue abierto` de una sesion posterior
 (`2026-09-16-verificar-backfill-tier3-no-aplicado`) sin que nada lo corrigiera; el usuario eligio 5
 dias (`_revisar: 2026-09-21`) al fecharlo a mano. Si el pendiente de verdad no depende del tiempo
 sino de una condicion o decision, no le pongas `--revisar` — esta regla es solo para el que su
-unico bloqueo real es "que pase tiempo o actividad", nunca para el que espera una decision ajena
-(ver la advertencia contra "revisar si X respondio" en Step 8, mas abajo).
+unico bloqueo real es "que pase tiempo o actividad". Un pendiente que espera a un tercero lleva
+`--bloqueado-por` y tambien su `_revisar` (2.63.32, parrafo "Todo bloqueado lleva fecha"): la
+fecha no lo vuelve `Proximo paso` antes de tiempo, solo dice que dia mirar si ya llego.
 
 It prints the id. Do NOT also edit the files. The compactor (Step 3c) writes both tiers:
 **Tier 2** the line `- [ ] <texto> — _origen: [[sessions/DATE-SLUG]]_ — _creado: <today>_ — _id: p-…_`
@@ -788,7 +810,7 @@ restored the indexes it had touched, and the reason says so or names what it cou
 Step 7. Since 2.22.0 a **missing priority header is not one of those cases** — the compactor creates
 the header and applies the event — so a quarantined event really does need a person: do not report it
 as "something the new version does the first time". If it prints `JOURNAL busy`, another agent holds
-the lock right now: run it again after a few seconds. This
+the lock right now: run it again after a few seconds. A `pending_left` above 0 means an agent was still writing an event when the pass ran (since 2.63.34 the compactor waits for it instead of quarantining it): run it again after a few seconds. This
 runs now so the reconciliation report is fresh; Steps 2, 4 and 5 emit more events, and Step 5a
 compacts everything again before the commit.
 
@@ -1049,6 +1071,21 @@ fecha en formato `AAAA-MM-DD` (`El 2026-10-14 después de las 11:51 UTC: …`) y
 con `--revisar <fecha>` en Step 3b. Step 8 la manda al recordatorio de calendario de ese día, no al
 snippet de la sesión siguiente (2.56.0).
 
+**Cada fase abierta o disparador de un plan tocado es un pendiente ligado al plan (2.63.33,
+p-7fd6a82eaa).** Medido el 2026-10-20 en 54 planes de 4 proyectos: las fases vivían solo en la
+prosa del plan (22 % con criterio de cierre, 35 % de los disparadores con fecha citaban un `p-…`),
+y un cierre `ninguno` con el plan `active` dejaba a la sesión siguiente sin hilo. Antes de cerrar
+este paso, por cada plan `active` que enlazas en `## Plans`: la fase siguiente (y cada disparador
+que espera una fecha o un evento) tiene que existir como pendiente ABIERTO con
+`_relacionado: plan-<slug>` (`<slug>` = el nombre del fichero del plan sin `.md`; si no empieza
+por `plan-`, ponle `plan-` delante). Si falta, vuelve a Step 3b (punto 1, item 4: pasos de plan sin
+ejecutar) y propónlo como candidato (el usuario decide, como todo pendiente nuevo):
+`pendiente.add --relacionado plan-<slug>`, con `--revisar AAAA-MM-DD` si espera una fecha. Si el
+plan ya no tiene nada abierto, o el usuario no quiere guardar su fase siguiente, no es `active`:
+ciérralo con `plan.upsert --status completed` (o `abandoned`), o deja un `Proximo paso` real. Step 7a rechaza
+(`snippet.ninguno_plan_activo`) un `Como retomar` `ninguno` con un plan `active` de `## Plans` sin
+pendiente abierto ligado; se mide el campo `_relacionado`, no la prosa del plan.
+
 Actualízalo en CADA checkpoint que toque este plan — es el único campo de todo el plan que se
 reescribe en vez de acumularse; el historial de cómo llegó ahí ya vive en la narrativa de abajo,
 que sigue creciendo como siempre. Si `Próxima acción` no cambia respecto al último checkpoint,
@@ -1227,8 +1264,8 @@ python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"
 ```
 
 It must print `JOURNAL applied=N quarantined=0 pending_left=0`. Same handling as Step 3c for
-`quarantined>0` (read each `.reason`, apply by hand, delete the pair, report) and for `JOURNAL busy`
-(retry after a few seconds). This MUST run before Step 5d and Step 6: the secrets scan and the
+`quarantined>0` (read each `.reason`, apply by hand, delete the pair, report) and for `JOURNAL busy` or
+`pending_left>0` (retry after a few seconds). This MUST run before Step 5d and Step 6: the secrets scan and the
 commit have to see the applied rows. Skip if `JBIN=NONE`.
 
 ## Step 5b: Prune indexes
