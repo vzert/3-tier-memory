@@ -326,7 +326,7 @@ unless the user changes it.
 ```
 
 Applies the events of Steps 1-4 and anything other agents emitted while you were working. It must
-print `quarantined=0 pending_left=0`. If an event was quarantined (an anchor moved: for example
+print `quarantined=0 pending_left=0` (a `pending_left` above 0 means an agent was still writing an event when the pass ran (since 2.63.34 the compactor waits for it instead of quarantining it): run it again after a few seconds.). If an event was quarantined (an anchor moved: for example
 you anchored on M's old text after updating M), read `memory/.journal/quarantine/*.reason`, emit
 the event again with the anchor of today, compact, and only then delete the quarantined
 `.json`/`.reason` pair. Do not apply it by hand: a hand edit is the one thing the replay from

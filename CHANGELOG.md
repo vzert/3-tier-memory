@@ -1,5 +1,53 @@
 # Changelog
 
+## [2.63.34] - 2026-10-21
+Origen: p-4c4f8274a6. `test-journal-race.sh` fallaba de vez en cuando en macos-latest (p. ej. CI
+38756506567, trial 4: `open=9 rows=19 quarantine=2`) y nadie sabia por que: la prueba solo imprimia
+contadores.
+
+### Fixed
+- **Un evento se perdia si el compactador leia su archivo mientras `journal-emit.py` lo escribia.**
+  `write_event` creaba `pending/<evento>.json` con O_EXCL y escribia el contenido despues. Un
+  compactador que listaba `pending/` en ese hueco leia un archivo vacio, lo mandaba a cuarentena con
+  `malformed: Expecting value: line 1 column 1 (char 0)` y el evento no volvia nunca (`malformed` no
+  se rescata). Quien lo emitio ya tenia su id y creia que estaba guardado. Medido en una Mac con 4
+  corridas de `test-journal-race.sh` en paralelo: 2 de 1000 trials, los dos con la firma de CI. En
+  uso real puede pasar cuando una sesion compacta (session-start, recall) justo en ese instante en
+  que otra emite.
+  - `journal-emit.py` escribe el evento en `pending/.<evento>.json.tmp` (O_EXCL) y lo renombra al
+    `.json`: un compactador solo ve el evento entero o no lo ve. El temporal va en `pending/` y no en
+    una carpeta nueva porque el rename tiene que quedar en el mismo sistema de archivos y porque
+    `.journal/.gitignore` no se reescribe en instalaciones viejas: una carpeta nueva se versionaria.
+  - `journal-compact.py` deja en `pending/` un `.json` ilegible si su mtime esta a menos de
+    `STALE_SECONDS` (60 s) de ahora, para la pasada siguiente. Protege a los `journal-emit.py`
+    anteriores a 2.63.34 que siguen instalados en otras sesiones. 60 s es la vida que el lock ya le
+    da a un proceso vivo: un emit que no escribio en ese plazo murio, y su evento va a cuarentena
+    como antes. Una mtime en el futuro lejano cuenta como vieja: nada se queda en `pending/` para
+    siempre. Tambien borra el `.json.tmp` de mas de 60 s que deja un emit que murio a medias.
+    Si ese emit solo estaba parado (una Mac que se durmio a mitad) y no muerto, su rename falla y
+    `journal-emit.py` reescribe el evento con el seq siguiente: no se pierde (revisor externo).
+    Limite: un compactador anterior a 2.63.34 no lo borra; hasta que corra uno nuevo, ese `.tmp`
+    hace que `ls -A pending/` lance el compactador en cada arranque de sesion (no aplica nada).
+- **`test-journal-race.sh` imprime el `.reason` y el evento de cada cuarentena (y lo que haya en
+  `failed/`) cuando un trial sale rojo.** Nota: su contador `quarantine=` cuenta archivos, y cada
+  evento apartado deja dos (el `.json` y su `.reason`): `quarantine=2` es un evento.
+
+### Added
+- `bin/test-journal-hueco.sh` (12 casos): abre el hueco a proposito, sin depender del azar. Corre un
+  compactador entre la creacion y la escritura del evento (rojo en 2.63.25: el evento era visible y
+  acababa en cuarentena; verde ahora), y prueba el `.json` vacio de un emisor viejo (reciente se
+  espera; 120 s o una hora en el futuro, cuarentena) y el temporal huerfano (reciente se respeta;
+  120 s se borra; si era de un emit parado, el evento se reescribe). `test-journal-race.sh` con el arreglo: 60 de 60 corridas, 600 trials, 0
+  cuarentenas, con 4 en paralelo (de 2 en 1000 antes; esta cifra sola no lo probaria).
+- Cuatro mutaciones en `tools/mutation-check.sh` que esta suite tumba: el emit vuelve a escribir
+  directo el `.json` (`m_emit_directo.py`), el compactador deja de esperar al ilegible reciente, y
+  lo espera para siempre (`m_compact_espera.py`), y el emit no reescribe cuando le borraron el
+  temporal (`m_emit_sin_reintento.py`).
+- Las plantillas que mandan compactar (`checkpoint-3t`, `save-learning`, `backfill-3t`,
+  `consolidate-3t`, `migrate`) dicen que hacer con `pending_left>0`: otro agente esta emitiendo en
+  ese momento (o un emisor anterior a 2.63.34 a medio escribir); se vuelve a correr en unos segundos,
+  como con `JOURNAL busy`.
+
 ## [2.63.33] - 2026-10-20
 Origen: p-7fd6a82eaa, el gap que dejo abierto la auditoria de hilos de 2.63.22 (decision d284 del
 usuario: chequeo SALTADO con fecha de corte; plan aprobado en d305).

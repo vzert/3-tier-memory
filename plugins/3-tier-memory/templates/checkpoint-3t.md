@@ -810,7 +810,7 @@ restored the indexes it had touched, and the reason says so or names what it cou
 Step 7. Since 2.22.0 a **missing priority header is not one of those cases** — the compactor creates
 the header and applies the event — so a quarantined event really does need a person: do not report it
 as "something the new version does the first time". If it prints `JOURNAL busy`, another agent holds
-the lock right now: run it again after a few seconds. This
+the lock right now: run it again after a few seconds. A `pending_left` above 0 means an agent was still writing an event when the pass ran (since 2.63.34 the compactor waits for it instead of quarantining it): run it again after a few seconds. This
 runs now so the reconciliation report is fresh; Steps 2, 4 and 5 emit more events, and Step 5a
 compacts everything again before the commit.
 
@@ -1264,8 +1264,8 @@ python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"
 ```
 
 It must print `JOURNAL applied=N quarantined=0 pending_left=0`. Same handling as Step 3c for
-`quarantined>0` (read each `.reason`, apply by hand, delete the pair, report) and for `JOURNAL busy`
-(retry after a few seconds). This MUST run before Step 5d and Step 6: the secrets scan and the
+`quarantined>0` (read each `.reason`, apply by hand, delete the pair, report) and for `JOURNAL busy` or
+`pending_left>0` (retry after a few seconds). This MUST run before Step 5d and Step 6: the secrets scan and the
 commit have to see the applied rows. Skip if `JBIN=NONE`.
 
 ## Step 5b: Prune indexes
