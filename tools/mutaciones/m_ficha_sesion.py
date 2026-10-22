@@ -20,6 +20,23 @@ M = {
     # de Git Bash la suite imprime su SKIP y el caso sale "no evaluable aqui".
     "sin-nativa": [
         ("    ruta = nativa(ruta)", "    pass")],
+    # p-47b5252196: las tres formas de la ficha de Step 8b con variable, cada una con su aserto.
+    "bash-ignorado": [
+        ('    fichas_sesion.extend(escritas_por_bash(_v) if _tipo == "bash" else [_v])',
+         '    fichas_sesion.extend([] if _tipo == "bash" else [_v])')],
+    "sin-sello-ignorado": [
+        ("        or next((f for f in _propias if sin_sello_con_retomar(f)), None)", "        or None")],
+    "sin-sello-sin-retomar": [
+        ('    return not re.search(r"(?m)^session_id:", texto[:2000]) and seccion(texto, "Como retomar") is not None',
+         '    return not re.search(r"(?m)^session_id:", texto[:2000])')],
+    "cd-con-punto-y-coma": [
+        ('''_RE_CD = re.compile(r"(?:^|[;&|\\n(]\\s*)cd\\s+(\\"[^\\"]+\\"|'[^']+'|[^\\s;&|)]+)")''',
+         '''_RE_CD = re.compile(r"(?:^|[;&|\\n(]\\s*)cd\\s+(\\"[^\\"]+\\"|'[^']+'|\\S+)")''')],
+    "cd-sin-subshell": [
+        ('''_RE_CD = re.compile(r"(?:^|[;&|\\n(]\\s*)cd\\s+''', '''_RE_CD = re.compile(r"(?:^|[;&|\\n]\\s*)cd\\s+''')],
+    "barras-solo-slash": [
+        ('SESION_RE_G = re.compile(r"(?:^|[/\\\\])memory[/\\\\]sessions[/\\\\][^/\\\\]+\\.md$")',
+         'SESION_RE_G = re.compile(r"(?:^|/)memory/sessions/[^/]+\\.md$")')],
 }
 
 p, nombre = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""
