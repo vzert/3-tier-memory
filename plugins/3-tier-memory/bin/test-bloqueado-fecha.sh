@@ -97,13 +97,13 @@ type: index
 ## Baja prioridad
 EOF
 }
-# ficha FECHA RETOMAR
+# ficha FECHA RETOMAR [BUGS] — BUGS es la linea de `## Bugs fixed` (por defecto `- Ninguno`)
 ficha() {
-  python3 - "$M/sessions/$SLUG.md" "$1" "$2" <<'PY'
+  python3 - "$M/sessions/$SLUG.md" "$1" "$2" "${3:-- Ninguno}" <<'PY'
 import sys
-p, fecha, retomar = sys.argv[1], sys.argv[2], sys.argv[3].replace("\\n", "\n")
+p, fecha, retomar, bugs = sys.argv[1], sys.argv[2], sys.argv[3].replace("\\n", "\n"), sys.argv[4]
 open(p, "w", encoding="utf-8").write(
-    f"---\ntype: session\ndate: {fecha}\n---\n# Canal\n\n## Contexto\nalgo\n\n## Bugs fixed\n- Ninguno\n\n"
+    f"---\ntype: session\ndate: {fecha}\n---\n# Canal\n\n## Contexto\nalgo\n\n## Bugs fixed\n{bugs}\n\n"
     "## Plans\n- Ninguno\n\n## Research\n- Ninguno\n\n## Learnings generados\n- Ninguno\n\n"
     "## Pendientes\n- [ ] Cerrar la Fase 4 con una prueba real de infra — `p-98a561dc02`\n\n"
     f"## Commits\n- `abc1234`\n\n## Como retomar\n\n{retomar}\n\n## Related\n- [[_pendientes]]\n")
@@ -141,6 +141,15 @@ chk "con la fecha aun futura, el colapso no lo reclama" "HECHO" "$(estado snippe
 memoria " — _revisar: 2026-10-19_" " — _revisar: 2026-10-25_"
 ficha 2026-10-20 "$(paso 'nada accionable hoy — espera a infra (p-98a561dc02).')"
 chk "ninguno en bloque con un bloqueado propio ya vencido: SALTADO" "SALTADO" "$(estado snippet.proximo_paso)"
+# snippet.ninguno_defecto (8-sexies): `## Bugs fixed` cita el bloqueado como `_pendiente:`. Vencido es
+# un defecto abierto e inmediato; con fecha futura sigue esperando. Sin este par, revertir esa guardia
+# a `i not in bloqueados` no hacia caer nada (p-ff21920a7e).
+BUG='- La bandeja perdia el mensaje de infra _pendiente: p-98a561dc02_'
+memoria " — _revisar: 2026-10-19_" " — _revisar: 2026-10-25_"
+ficha 2026-10-20 "$NINGUNO" "$BUG"
+chk "Ninguno con un defecto bloqueado ya vencido: snippet.ninguno_defecto SALTADO" "SALTADO" "$(estado snippet.ninguno_defecto)"
+memoria " — _revisar: 2026-10-25_" " — _revisar: 2026-10-25_"
+chk "el mismo defecto con _revisar futuro: snippet.ninguno_defecto HECHO" "HECHO" "$(estado snippet.ninguno_defecto)"
 
 echo "== 3b. pregunta al cerrar: el usuario lo pedira -> desbloquear y \`pedirle a X\` es el paso =="
 M="$T/m3"; mkdir -p "$M/sessions" "$M/pendientes"

@@ -27,6 +27,24 @@ sesion. En los otros casos callaba.
 ### Known
 - Una ficha escrita por Bash con una variable asignada en OTRA llamada Bash no se resuelve: el estado
   del shell no pasa de una llamada a otra.
+## [2.63.36] - 2026-10-21
+Origen: dos pendientes de la sesion de 2.63.32 (`p-ff21920a7e`, `p-8b64173d39`), hechos por la
+sesion `pendientes-a-futuro` bajo el supervisor lookout `supervisor-3-tier-memory` (d354). Solo
+pruebas y comentarios: ninguna conducta cambia.
+
+### Tests
+- **Aserto propio de `snippet.ninguno_defecto` con un bloqueado vencido.** `test-bloqueado-fecha.sh`
+  arma una ficha `Ninguno` cuyo `## Bugs fixed` cita un bloqueado con `_pendiente:`. Con su
+  `_revisar` ya pasado espera SALTADO (es un defecto abierto e inmediato); con `_revisar` futuro,
+  HECHO. Antes, revertir esa guardia a `i not in bloqueados` dejaba la prueba en verde (nota MINOR
+  del revisor de 2.63.32); ahora la prueba cae con esa reversion.
+
+### Docs
+- `checkpoint-audit.py`: el comentario de `DESDE_BLOQUEADO_FECHA` decia que las fichas anteriores no
+  cambian al re-auditarlas; eso vale solo para `pendientes.bloqueado_sin_fecha`, porque
+  `espera_viva` no tiene corte. Los puntos (c) y (d) de las reglas de `Proximo paso` decian que todo
+  `_bloqueado` queda fuera; ahora dicen que un bloqueado con `_revisar` pasado es inmediato, como ya
+  hacia el codigo.
 
 ## [2.63.35] - 2026-10-21
 Origen: `p-0c334693d4`. En Windows (Git Bash) una ruta POSIX escrita dentro del texto de un comando
