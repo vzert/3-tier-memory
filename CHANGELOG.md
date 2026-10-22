@@ -31,6 +31,13 @@ textos; el bump acompana al mod.
   `checkpoint-3t-step8.md` (8a2) dicen PLANES ACTIVOS en vez de VENCEN. README del mod: la seccion
   nueva y VENCEN solo con `_revisar`.
 
+## [2.63.37] - 2026-10-21
+Origen: p-9979f998bf.
+
+### Fixed
+- **La frase de `pending_left` en `/consolidate-3t` Step 4b terminaba en `seconds.).`** Sobraba el
+  punto antes del parentesis de cierre. Ahora lee `run it again after a few seconds).`
+
 ## [2.63.36] - 2026-10-21
 Origen: dos pendientes de la sesion de 2.63.32 (`p-ff21920a7e`, `p-8b64173d39`), hechos por la
 sesion `pendientes-a-futuro` bajo el supervisor lookout `supervisor-3-tier-memory` (d354). Solo
