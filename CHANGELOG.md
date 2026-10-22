@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.63.37] - 2026-10-21
+Origen: p-9979f998bf.
+
+### Fixed
+- **La frase de `pending_left` en `/consolidate-3t` Step 4b terminaba en `seconds.).`** Sobraba el
+  punto antes del parentesis de cierre. Ahora lee `run it again after a few seconds).`
+
 ## [2.63.34] - 2026-10-21
 Origen: p-4c4f8274a6. `test-journal-race.sh` fallaba de vez en cuando en macos-latest (p. ej. CI
 38756506567, trial 4: `open=9 rows=19 quarantine=2`) y nadie sabia por que: la prueba solo imprimia
