@@ -2,7 +2,8 @@
 
 ## [2.63.35] - 2026-10-21
 Origen: `p-0c334693d4`. En Windows (Git Bash) una ruta POSIX escrita dentro del texto de un comando
-(`python3 print-como-retomar.py /c/Users/.../sessions/x.md`, o `/tmp/...`) llega tal cual al guard:
+(el argumento de `print-como-retomar.py` como ruta de unidad tipo `/<letra>/<dir>`, o la ruta
+temporal de mktemp) llega tal cual al guard:
 MSYS solo convierte argumentos sueltos y variables de entorno. El Python nativo de Windows la
 resolvia contra la unidad actual, no encontraba la ficha y `checkpoint-close-guard.sh` callaba.
 
@@ -14,7 +15,7 @@ resolvia contra la unidad actual, no encontraba la ficha y `checkpoint-close-gua
 
 ### Added
 - Dos casos en `test-checkpoint-close-guard.sh` con la ruta de la ficha sin convertir dentro del
-  comando: forma `/tmp/...` y forma `/c/...`. Con el guard de 2.63.31 caen los dos en windows-latest
+  comando: la ruta temporal de mktemp y la de unidad `/<letra>/<dir>`. Con el guard de 2.63.31 caen los dos en windows-latest
   (platforms run 39695484855 sobre 52cad3a: 282/2, el resto de suites verdes). Fuera de Git Bash
   pasan siempre y la suite imprime un SKIP.
 - Mutacion `sin-nativa` (`tools/mutaciones/m_ficha_sesion.py`): quita la conversion; solo puede caer

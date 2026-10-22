@@ -297,8 +297,9 @@ _NATIVAS = {}
 
 
 def nativa(ruta):
-    """En Windows (Git Bash) una ruta POSIX escrita DENTRO de un comando (/c/..., /tmp/...) llega tal
-    cual: MSYS solo convierte argumentos y variables de entorno, y el Python nativo la resolvia contra
+    """En Windows (Git Bash) una ruta POSIX escrita DENTRO de un comando (de unidad, /<letra>/<dir>, o la
+    temporal de mktemp) llega tal cual: MSYS solo convierte argumentos y variables de entorno, y el
+    Python nativo la resolvia contra
     la unidad actual, no encontraba la ficha y el guard callaba (p-0c334693d4, run 39443101444).
     cygpath -w la pasa a la forma nativa; si falta o falla, la ruta queda como estaba."""
     if os.name != "nt" or not ruta.startswith("/") or ruta.startswith("//"):

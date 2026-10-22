@@ -1598,19 +1598,19 @@ PR="$BIN/print-como-retomar.py"
 txcmd "$T/m.jsonl" "python3 \"$PR\" \"$F\""
 chk "arnes Git Bash: con las rutas dentro del comando, la invocacion dispara" "1" "$(bloquea "$(corre "$T/m.jsonl" false -)")"
 command -v cygpath >/dev/null 2>&1 || echo "  SKIP arnes Git Bash: sin cygpath, la conversion de rutas no aplica aqui"
-# p-0c334693d4: la ruta de la ficha tal como la escribe un agente en Git Bash, SIN convertir: la forma
-# /tmp/... del mktemp y la forma de unidad /c/... El guard corre en el Python nativo de Windows, que no
+# p-0c334693d4: la ruta de la ficha tal como la escribe un agente en Git Bash, SIN convertir: la ruta
+# temporal de mktemp y la de unidad /<letra>/<dir>. El guard corre en el Python nativo de Windows, que no
 # entiende ninguna de las dos: no encontraba la ficha y callaba (run 39443101444). Fuera de Git Bash
 # las dos son la ruta POSIX de siempre.
 FU="$F"
 if command -v cygpath >/dev/null 2>&1; then
   w=$(cygpath -m "$F"); FU="/$(printf '%s' "${w:0:1}" | tr '[:upper:]' '[:lower:]')${w:2}"
-  echo "  (ruta /c/...: $FU)"
+  echo "  (ruta de unidad: $FU)"
 fi
 TX_CRUDO=1 txcmd "$T/m.jsonl" "python3 \"$PR\" \"$F\""
-chk "ruta Git Bash /tmp/... sin convertir dentro del comando: dispara" "1" "$(bloquea "$(corre "$T/m.jsonl" false -)")"
+chk "ruta Git Bash temporal de mktemp sin convertir dentro del comando: dispara" "1" "$(bloquea "$(corre "$T/m.jsonl" false -)")"
 TX_CRUDO=1 txcmd "$T/m.jsonl" "python3 \"$PR\" \"$FU\""
-chk "ruta Git Bash /c/... sin convertir dentro del comando: dispara" "1" "$(bloquea "$(corre "$T/m.jsonl" false -)")"
+chk "ruta Git Bash de unidad sin convertir dentro del comando: dispara" "1" "$(bloquea "$(corre "$T/m.jsonl" false -)")"
 # La mutacion `sin-nativa` solo puede caer donde hay cygpath (Git Bash): fuera, estos asertos no la miden.
 command -v cygpath >/dev/null 2>&1 || echo "  SKIP ruta Git Bash: sin cygpath el guard no convierte rutas aqui"
 menciones=(
