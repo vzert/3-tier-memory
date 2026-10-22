@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.63.38] - 2026-10-22
+## [2.63.40] - 2026-10-22
 Origen: `p-47b5252196` (Known de 2.63.31). Cuando Step 8b imprime la ficha con una variable
 (`"$SESSION_FILE"`), `checkpoint-close-guard.sh` toma la ultima ficha que la sesion escribio. Solo la
 encontraba si la escribio un Write o Edit con `/` en la ruta y llevaba el sello `session_id` de la
@@ -18,15 +18,16 @@ sesion. En los otros casos callaba.
 - **`cd dir;` delante del comando**: el directorio de un `cd` sin comillas ya no se lleva el `;`, `&`,
   `|` o `)` que lo sigue. Vale para la escritura por Bash y para el `cd` que ya resolvia el argumento
   de `print-como-retomar.py` (los dos usan ahora `_RE_CD`); antes `cd memory; …` tomaba `memory;`.
+- **`(cd dir; …)` en un subshell**: un `(` delante del `cd` tambien abre el comando (decision d383).
 
 ### Added
-- Siete casos en `test-checkpoint-close-guard.sh` (seccion p-47b5252196). Con el guard de 2.63.35
-  caen los seis que esperan un bloqueo; el septimo (Bash con el sello de otra sesion) calla en los
+- Ocho casos en `test-checkpoint-close-guard.sh` (seccion p-47b5252196). Con el guard de 2.63.35
+  caen los siete que esperan un bloqueo; el octavo (Bash con el sello de otra sesion) calla en los
   dos. El de barras invertidas, fuera de Windows, usa un archivo cuyo nombre lleva las barras: mide la
   busqueda de la ruta, no al productor real; en Windows usa la ruta nativa de `cygpath -w`.
-- Mutaciones `bash-ignorado`, `sin-sello-ignorado`, `sin-sello-sin-retomar`, `barras-solo-slash` y
-  `cd-con-punto-y-coma` (`tools/mutaciones/m_ficha_sesion.py`), cada una con su aserto en
-  `tools/mutation-check.sh`.
+- Mutaciones `bash-ignorado`, `sin-sello-ignorado`, `sin-sello-sin-retomar`, `barras-solo-slash`,
+  `cd-con-punto-y-coma` y `cd-sin-subshell` (`tools/mutaciones/m_ficha_sesion.py`), cada una con su
+  aserto en `tools/mutation-check.sh`.
 
 ### Known
 - Una ficha escrita por Bash con una variable asignada en OTRA llamada Bash no se resuelve: el estado

@@ -290,6 +290,7 @@ caso "ficha: sin sello"           checkpoint-close-guard.sh m_ficha_sesion.py te
 caso "ficha: sin sello ni retomar" checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "forma sin sello y sin Como retomar despues" sin-sello-sin-retomar
 caso "ficha: barras invertidas"   checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "forma barras invertidas" barras-solo-slash
 caso "ficha: cd dir;"             checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "tras cd dir;" cd-con-punto-y-coma
+caso "ficha: (cd dir; ...)"       checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "en subshell" cd-sin-subshell
 caso "arnes: cygpath en Git Bash"  test-checkpoint-close-guard.sh m_arnes_cygpath.py test-checkpoint-close-guard.sh "arnes Git Bash" sin-cygpath
 caso "extras: citado en Terminas" pendientes_afines.py m_hilo.py $T "el citado en Terminas cuando no va de extra" extras-sin-citados
 caso "extras: citado en No repitas" pendientes_afines.py m_hilo.py $T "el citado en No repitas no va de extra" extras-sin-no-repitas
