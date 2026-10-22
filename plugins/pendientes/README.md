@@ -112,9 +112,11 @@ If a user asks you to install this mod, follow these steps:
    `Próximo paso` cites, from that date until the item is closed or a later checkpoint moves the
    mark. Newest first, all of them, above everything else and outside the 7-item cap, so you can
    close a parked window and still find the plan. Each row shows the next step and, on the right,
-   whether the session that wrote the note is still open: `◉ abierta` (a live Claude Code process
-   with that session id, from `~/.claude/sessions/`), `◉ aquí` (this session), or `○ cerrada N d`
-   (days since its last activity). Without that registry only the transcript is known, and the row
+   whether a window is still working on it: `◉ abierta` (the session that wrote the note is a live
+   Claude Code process, from `~/.claude/sessions/`), `◉ retomada` (another live window of the
+   project or of one of its worktrees got its next step, pasted by you or handed over by a
+   supervisor in its system prompt), `◉ aquí` (this session), or `○ cerrada N d` (days since its
+   last activity). Without that registry only the transcript is known, and the row
    says so: `◐ activa` (activity in the last 2 hours) or `○ sin actividad N d`. These items do not
    appear in the list below, except in VENCEN when they also have a `_revisar` today or past.
 1. **SIGUIENTE** — the ids in the `Próximo paso` of the newest session file that can be started

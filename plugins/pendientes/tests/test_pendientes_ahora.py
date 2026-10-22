@@ -305,10 +305,12 @@ def main():
               ("Proximo paso: hacer p-1212121212.", "memory/sessions/2026-10-12-r.md", "2026-10-12"))
         check("planes: session_id de la cabecera", r.get("session_id") == SID_R)
         check("ventana: proceso vivo con ese id = abierta",
-              r.get("ventana") == {"estado": "abierta", "dias": 0, "fuente": "proceso", "aqui": False})
+              r.get("ventana") == {"estado": "abierta", "dias": 0, "fuente": "proceso", "aqui": False,
+                                    "retomada": False})
         s_ = planes.get("2026-10-13-s", {})
         check("ventana: pid muerto = cerrada, con los dias desde su transcripcion",
-              s_.get("ventana") == {"estado": "cerrada", "dias": 2, "fuente": "proceso", "aqui": False})
+              s_.get("ventana") == {"estado": "cerrada", "dias": 2, "fuente": "proceso", "aqui": False,
+                                     "retomada": False})
         b = planes.get("2026-10-11-borrada", {})
         check("planes: ficha borrada sigue, sin snippet ni ventana",
               b.get("snippet") is None and b.get("ventana", {}).get("estado") is None)
@@ -337,12 +339,63 @@ def main():
         st = {g["slug"]: g for g in dt["planes"]}
         check("ventana sin registro: sin actividad N d",
               st["2026-10-13-s"]["ventana"] == {"estado": "sin actividad", "dias": 2, "fuente": "transcripcion",
-                                                 "aqui": False})
+                                                 "aqui": False, "retomada": False})
         os.utime(tx_s, None)
         dt2 = correr(mem, lib, "--hoy", hoy_real, "--sessions-dir", os.path.join(tmp, "no-existe"),
                      "--projects-root", proyectos)
         check("ventana sin registro: actividad reciente = activa",
               {g["slug"]: g for g in dt2["planes"]}["2026-10-13-s"]["ventana"]["estado"] == "activa")
+        # Retomada en otra ventana viva (hallazgo del revisor de 0.3.0): la sesion que escribio la
+        # ficha cerro, pero otra pego su paso. Medido: el relevo de lookout lo trae en el system prompt
+        # (`prompt_snapshot`, en el byte 279397 de una transcripcion real, tras la cabeza de 256 KB);
+        # un snippet pegado a mano llega como prompt de la persona. Solo cuentan ventanas del proyecto
+        # o de un worktree suyo; un pid reusado (procStart que no cuadra) no es una ventana viva.
+        SID_X, SID_Y, SID_Z, SID_W = ("aaaaaaaa-0000-0000-0000-00000000000" + c for c in "xyzw")
+        relleno = "".join(json.dumps({"type": "progress", "n": k, "pad": "x" * 200}) + "\n" for k in range(1500))
+
+        def tx_de(cwd, sid, lineas):
+            d = os.path.join(proyectos, re.sub(r"[^A-Za-z0-9]", "-", os.path.abspath(cwd)))
+            os.makedirs(d, exist_ok=True)
+            with open(os.path.join(d, sid + ".jsonl"), "w", encoding="utf-8") as fh:
+                fh.write(lineas)
+
+        def registra(nombre, sid, cwd, **extra):
+            with open(os.path.join(reg, nombre), "w", encoding="utf-8") as fh:
+                json.dump({"pid": os.getpid(), "sessionId": sid, "cwd": cwd, **extra}, fh)
+
+        snap = json.dumps({"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": [
+            "You are...", "## Relevo\nLa sesion anterior termino.\n\n```\nRetomamos: s.\n\n"
+            "Proximo paso: hacer p-6767676767.\n```\n"]}}) + "\n"
+        otro = os.path.join(tmp, "otro-proyecto")
+        os.makedirs(otro)
+        tx_de(otro, SID_Z, snap)
+        registra("z.json", SID_Z, otro)
+        registra("w.json", SID_W, tmp, procStart="Mon Jan  1 00:00:00 2001")
+        tx_de(tmp, SID_W, snap)
+        dz = correr(mem, lib, "--hoy", hoy_real, "--sessions-dir", reg, "--projects-root", proyectos)
+        check("retomada: una ventana de otro proyecto o con pid reusado no cuenta",
+              {g["slug"]: g for g in dz["planes"]}["2026-10-13-s"]["ventana"]["estado"] == "cerrada")
+        tx_de(tmp, SID_X, relleno + snap)
+        registra("x.json", SID_X, tmp)
+        wt = os.path.join(tmp, "wt")
+        os.makedirs(wt)
+        with open(os.path.join(wt, ".git"), "w", encoding="utf-8") as fh:
+            fh.write(f"gitdir: {os.path.join(tmp, '.git', 'worktrees', 'wt')}\n")
+        tx_de(wt, SID_Y, json.dumps({"type": "user", "origin": {"kind": "human"}, "message": {
+            "content": "Retomamos: borrada.\n\nProximo paso: hacer p-3434343434."}}) + "\n")
+        registra("y.json", SID_Y, wt)
+        dx = correr(mem, lib, "--hoy", hoy_real, "--sessions-dir", reg, "--projects-root", proyectos,
+                    "--session-id", SID_Y)
+        px = {g["slug"]: g for g in dx["planes"]}
+        check("retomada: el snippet del system prompt, tras la cabeza, abre el plan",
+              px["2026-10-13-s"]["ventana"] == {"estado": "abierta", "dias": 0, "fuente": "proceso",
+                                                "aqui": False, "retomada": True})
+        check("retomada: un snippet pegado en un worktree, sin session_id en la ficha; aqui",
+              px["2026-10-11-borrada"]["ventana"] == {"estado": "abierta", "dias": 0, "fuente": "proceso",
+                                                      "aqui": True, "retomada": True})
+        check("retomada: la que escribio la ficha sigue mandando si vive",
+              px["2026-10-12-r"]["ventana"]["retomada"] is False)
+
         dh = correr(mem, lib, "--hoy", "2026-10-11", "--sessions-dir", reg, "--projects-root", proyectos)
         check("planes: antes de su fecha no hay plan", [g["slug"] for g in dh["planes"]] == ["2026-10-11-borrada"])
 

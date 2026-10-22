@@ -14,11 +14,15 @@ textos; el bump acompana al mod.
   de 7. Cada fila trae la ficha, su `Proximo paso`, el snippet `## Como retomar` (el clic lo pega),
   los pendientes que la citan y `ventana`: `abierta` si un proceso vivo de Claude Code tiene el
   `session_id` de la cabecera de la ficha (`~/.claude/sessions/<pid>.json`, con la hora de arranque
-  comparada para no contar un pid reusado), si no `cerrada` con los dias desde la ultima actividad de
-  su transcripcion. Sin ese registro, solo la transcripcion: `activa` (2 h) o `sin actividad N d`.
+  comparada para no contar un pid reusado), o `abierta` con `retomada` si otra ventana viva del
+  proyecto o de un worktree suyo recibio su paso: pegado por la persona, o en el system prompt de un
+  relevo de lookout (`prompt_snapshot`, que se lee hasta 2 MB porque llega tras la cabeza de 256 KB;
+  medido en el byte 279397). Si no, `cerrada` con los dias desde la ultima actividad de su
+  transcripcion. Sin ese registro, solo la transcripcion: `activa` (2 h) o `sin actividad N d`.
   VENCEN queda solo para `_revisar`, y `resumen.vencidos`/`hoy` ya no cuentan `_retomar`; un paso de
   snippet tampoco sale en SIGUIENTE ni en ALTA, salvo en VENCEN si ademas tiene `_revisar` vencido.
-  El panel pinta el bloque arriba (`↻` titulo, `◉ abierta` / `◉ aquí` / `○ cerrada N d`), descuenta
+  El panel pinta el bloque arriba (`↻` titulo, `◉ abierta` / `◉ retomada` / `◉ aquí` /
+  `○ cerrada N d`), descuenta
   sus filas del alto de la lista, y la tarjeta sobre el prompt anade `↻ N planes`.
 
 ### Docs

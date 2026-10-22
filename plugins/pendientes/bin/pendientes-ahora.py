@@ -23,11 +23,13 @@ el Proximo paso.
 
 Planes activos (0.3.0): `planes` es una fila por ficha que nombran las marcas `_retomar` vigentes,
 la mas reciente arriba, todas, fuera del tope. Cada una trae la ficha, su `Proximo paso`, el
-snippet `## Como retomar` (el clic lo pega), los pendientes que la citan y `ventana`: si la sesion
-que escribio la ficha (`session_id:` de su cabecera) sigue abierta. "abierta" sale de un proceso
-vivo de Claude Code con ese id (~/.claude/sessions/<pid>.json); si no hay, "cerrada" con los dias
-desde la ultima actividad de su transcripcion. Sin ese registro (otra plataforma, otra version),
-solo queda la transcripcion: "activa" (actividad en 2 h) o "sin actividad" con los dias. Un plan
+snippet `## Como retomar` (el clic lo pega), los pendientes que la citan y `ventana`: si sigue
+abierta la sesion que escribio la ficha (`session_id:` de su cabecera) u otra que pego su paso.
+"abierta" sale de un proceso vivo de Claude Code (~/.claude/sessions/<pid>.json) con ese id o, con
+`retomada`, de una ventana viva del proyecto (o de un worktree suyo) cuya persona pego el paso, o
+cuyo system prompt lo trae (el relevo de lookout); si no hay, "cerrada" con los dias desde la
+ultima actividad de su transcripcion. Sin ese registro (otra plataforma, otra version), solo queda
+la transcripcion: "activa" (actividad en 2 h) o "sin actividad" con los dias. Un plan
 sale de la lista cuando se cierra su pendiente o cuando otro checkpoint mueve la marca.
 
 Contexto del clic: cada elegido lleva `origen` (rutas memory/... que existen, de su `_origen`),
@@ -265,6 +267,7 @@ ID_SUELTO = re.compile(r"(?<![0-9A-Za-z-])p-[0-9a-f]{10}(?![0-9a-f])")
 VIVA_SEGUNDOS = 2 * 60 * 60  # una sesion que espera respuesta sigue viva
 CABEZA_BYTES = 256 * 1024
 COLA_BYTES = 512 * 1024
+SISTEMA_BYTES = 2 * 1024 * 1024
 
 
 def ids_en_commits(proyecto, desde):
@@ -284,10 +287,8 @@ def ids_en_commits(proyecto, desde):
     return cuenta
 
 
-def textos_de_persona(ruta):
-    """Lo que escribio la persona en una transcripcion: prompts, no salidas de herramientas (que
-    citan ids a montones) ni mensajes meta. Lee la cabeza (el "Retomamos:" con que arranca una
-    sesion retomada) y la cola (lo ultimo que pidio); el medio de un archivo de MB no."""
+def lineas_de(ruta):
+    """Las lineas de la cabeza y la cola de una transcripcion (el medio de un archivo de MB no)."""
     try:
         with open(ruta, "rb") as fh:
             fh.seek(0, os.SEEK_END)
@@ -308,8 +309,48 @@ def textos_de_persona(ruta):
         if len(partes) == 2:
             ls = ls[:-1] if i == 0 else ls[1:]
         lineas.extend(ls)
+    return lineas
+
+
+def snippet_de_sistema(ruta):
+    """El `Retomamos:` que una sesion recibio en sus instrucciones de sistema (el relevo de lookout lo
+    pone ahi, no en un prompt): el texto desde `Retomamos:` de cada `prompt_snapshot`, o []. Lee linea
+    a linea los primeros SISTEMA_BYTES: el snapshot llega tras el system prompt y los primeros
+    recordatorios, mas alla de la cabeza que lee textos_de_persona (medido: en el byte 279397)."""
+    out, leidos = [], 0
+    try:
+        fh = open(ruta, "rb")
+    except OSError:
+        return out
+    with fh:
+        for crudo in fh:
+            leidos += len(crudo)
+            if leidos > SISTEMA_BYTES:
+                break
+            if b'"prompt_snapshot"' not in crudo:
+                continue
+            try:
+                a = json.loads(crudo.decode("utf-8", "replace")).get("attachment") or {}
+            except ValueError:
+                continue
+            sp = a.get("systemPrompt") if isinstance(a, dict) and a.get("type") == "prompt_snapshot" else None
+            # Una lista de partes (texto o bloques {"text": ...}) o, en otra version, un texto.
+            if isinstance(sp, list):
+                sp = "\n".join(x if isinstance(x, str) else str(x.get("text", "")) if isinstance(x, dict)
+                               else "" for x in sp)
+            if isinstance(sp, str):
+                i = sp.find("Retomamos:")
+                if i >= 0:
+                    out.append(sp[i:])
+    return out
+
+
+def textos_de_persona(ruta):
+    """Lo que escribio la persona en una transcripcion: prompts, no salidas de herramientas (que
+    citan ids a montones) ni mensajes meta. Lee la cabeza (el "Retomamos:" con que arranca una
+    sesion retomada) y la cola (lo ultimo que pidio); el medio de un archivo de MB no."""
     textos = []
-    for linea in lineas:
+    for linea in lineas_de(ruta):
         try:
             d = json.loads(linea)
         except ValueError:
@@ -453,10 +494,10 @@ def proceso_vivo(pid, inicio):
 
 
 def sesiones_abiertas(sessions_dir):
-    """{session_id} de los procesos vivos de Claude Code, o None si no hay registro que leer."""
+    """{session_id: cwd} de los procesos vivos de Claude Code, o None si no hay registro que leer."""
     if not os.path.isdir(sessions_dir):
         return None
-    abiertas = set()
+    abiertas = {}
     for f in glob.glob(os.path.join(sessions_dir, "*.json")):
         try:
             with open(f, encoding="utf-8") as fh:
@@ -466,21 +507,60 @@ def sesiones_abiertas(sessions_dir):
             continue
         sid = d.get("sessionId")
         if sid and proceso_vivo(pid, d.get("procStart")):
-            abiertas.add(sid)
+            abiertas[sid] = d.get("cwd") or ""
     return abiertas
 
 
-def ventana(sid, ficha_real, proyecto, abiertas, hoy, ahora, session_id=None, projects_root=None):
-    """{"estado", "dias", "fuente", "aqui"} de la sesion que escribio la ficha."""
+def del_proyecto(cwd, proyecto):
+    """True si `cwd` es el proyecto o un worktree suyo (su `.git` es un archivo que apunta a
+    <proyecto>/.git/worktrees/...)."""
+    if not cwd:
+        return False
+    real, raiz = os.path.realpath(cwd), os.path.realpath(proyecto)
+    if real == raiz:
+        return True
+    try:
+        with open(os.path.join(real, ".git"), encoding="utf-8") as fh:
+            m = re.match(r"gitdir:\s*(.+)", fh.read().strip())
+    except (OSError, UnicodeDecodeError):
+        return False
+    if not m:
+        return False
+    gitdir = os.path.realpath(os.path.join(real, m.group(1)))
+    return gitdir.startswith(os.path.join(raiz, ".git") + os.sep)
+
+
+def transcripcion(sid, cwd, projects_root):
+    """La transcripcion de una sesion: la carpeta de su cwd y, si no esta (un worktree, cwd
+    desconocido), la que la tenga."""
+    raiz = projects_root or os.path.expanduser("~/.claude/projects")
+    if cwd:
+        f = os.path.join(raiz, re.sub(r"[^A-Za-z0-9]", "-", os.path.abspath(cwd)), sid + ".jsonl")
+        if os.path.isfile(f):
+            return f
+    hallados = glob.glob(os.path.join(raiz, "*", sid + ".jsonl"))
+    return hallados[0] if hallados else None
+
+
+def ventana(sid, ficha_real, proyecto, abiertas, hoy, ahora, session_id=None, projects_root=None,
+            retomada_en=None):
+    """{"estado", "dias", "fuente", "aqui", "retomada"} de un plan: abierto si sigue viva la sesion
+    que escribio la ficha o una que pego su paso (`retomada_en`, el id de esa sesion). Sin registro
+    de procesos, `retomada_en` sale de las sesiones con actividad en 2 h."""
+    if retomada_en and retomada_en != sid:
+        return {"estado": "abierta" if abiertas is not None else "activa", "dias": 0,
+                "fuente": "proceso" if abiertas is not None else "transcripcion",
+                "aqui": bool(session_id) and retomada_en == session_id, "retomada": True}
     if not sid:
-        return {"estado": None, "dias": None, "fuente": None, "aqui": False}
+        return {"estado": None, "dias": None, "fuente": None, "aqui": False, "retomada": False}
     aqui = bool(session_id) and sid == session_id
     if abiertas is not None and sid in abiertas:
-        return {"estado": "abierta", "dias": 0, "fuente": "proceso", "aqui": aqui}
-    raiz = projects_root or os.path.expanduser("~/.claude/projects")
-    tx = os.path.join(raiz, re.sub(r"[^A-Za-z0-9]", "-", os.path.abspath(proyecto)), sid + ".jsonl")
+        return {"estado": "abierta", "dias": 0, "fuente": "proceso", "aqui": aqui, "retomada": False}
+    tx = transcripcion(sid, proyecto, projects_root)
     try:
-        ultima = os.path.getmtime(tx)
+        ultima = os.path.getmtime(tx) if tx else None
+        if ultima is None:
+            raise OSError
     except OSError:
         try:
             ultima = os.path.getmtime(ficha_real)
@@ -491,10 +571,34 @@ def ventana(sid, ficha_real, proyecto, abiertas, hoy, ahora, session_id=None, pr
         dia = datetime.date.fromtimestamp(ultima).isoformat()
         dias = max(0, (datetime.date.fromisoformat(hoy) - datetime.date.fromisoformat(dia)).days)
     if abiertas is not None:
-        return {"estado": "cerrada", "dias": dias, "fuente": "proceso", "aqui": aqui}
+        return {"estado": "cerrada", "dias": dias, "fuente": "proceso", "aqui": aqui, "retomada": False}
     activa = ultima is not None and ahora - ultima <= VIVA_SEGUNDOS
     return {"estado": "activa" if activa else "sin actividad", "dias": dias,
-            "fuente": "transcripcion", "aqui": aqui}
+            "fuente": "transcripcion", "aqui": aqui, "retomada": False}
+
+
+def ids_de_ventanas(pa, proyecto, abiertas, session_id, projects_root):
+    """{session_id: {ids}} que la persona pego en cada ventana viva del proyecto (de un `Retomamos:`,
+    solo el Proximo paso). Con registro: todas las vivas, aunque lleven dias quietas. Sin el: las
+    transcripciones con actividad en 2 h (y esta sesion)."""
+    out = {}
+    if abiertas is not None:
+        for sid, cwd in abiertas.items():
+            if not del_proyecto(cwd, proyecto):
+                continue
+            tx = transcripcion(sid, cwd, projects_root)
+            if tx:
+                ids = set()
+                for t in textos_de_persona(tx) + snippet_de_sistema(tx):
+                    ids |= ids_del_texto(t, pa)
+                out[sid] = ids
+        return out
+    aqui, otras = ids_en_sesiones(proyecto, session_id, time.time(), projects_root, pa)
+    if session_id:
+        out[session_id] = aqui
+    for i in otras:
+        out.setdefault("otra sesion", set()).add(i)
+    return out
 
 
 def planes_activos(pa, todos, ctx, memory_dir, hoy, session_id=None, projects_root=None,
@@ -518,6 +622,7 @@ def planes_activos(pa, todos, ctx, memory_dir, hoy, session_id=None, projects_ro
     proyecto = os.path.dirname(os.path.abspath(memory_dir))
     abiertas = sesiones_abiertas(sessions_dir or os.path.expanduser("~/.claude/sessions"))
     ahora = time.time()
+    vistos_en = ids_de_ventanas(pa, proyecto, abiertas, session_id, projects_root)
     out = []
     for g in por_ficha.values():
         real = os.path.join(os.path.dirname(os.path.abspath(memory_dir)), g["ficha"])
@@ -533,7 +638,12 @@ def planes_activos(pa, todos, ctx, memory_dir, hoy, session_id=None, projects_ro
         g["fecha"] = (FICHA_FECHA.match(g["slug"]) or [None])[0]
         g["proximo_paso"] = " ".join(paso.split()) if paso else None
         g["session_id"] = sid
-        g["ventana"] = ventana(sid, real, proyecto, abiertas, hoy, ahora, session_id, projects_root)
+        ids = {p["id"] for p in g["pendientes"]}
+        # La ventana que lo retomo: esta sesion primero, luego cualquiera (no la que escribio la ficha).
+        en = [v for v, vi in vistos_en.items() if v != sid and ids & vi]
+        en.sort(key=lambda v: v != session_id)
+        g["ventana"] = ventana(sid, real, proyecto, abiertas, hoy, ahora, session_id, projects_root,
+                               en[0] if en else None)
         out.append(g)
     out.sort(key=lambda g: (g["fecha"] or "", g["desde"], g["slug"]), reverse=True)
     return out

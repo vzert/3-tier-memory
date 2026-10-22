@@ -373,6 +373,7 @@ const PLANES = [
   plan('2026-10-15-dos', ventana('cerrada', 2), { snippet: SNIPPET }),
   plan('2026-10-14-aqui', ventana('abierta', 0, true)),
   plan('2026-10-13-viejo', ventana('sin actividad', 5)),
+  plan('2026-10-13-relevo', { ...ventana('abierta', 0), retomada: true }),
   plan('2026-10-12-borrada', ventana(null, null), {
     snippet: null, proximo_paso: null,
     pendientes: [{ id: 'p-8888888888', prio: 'Alta', texto: 'Paso de ficha borrada', titulo_auto: 'Paso de ficha borrada', revisar: null }],
@@ -396,7 +397,7 @@ test('planes activos: bloque propio arriba, ventana como texto, el clic pega el 
   await $.command.run({ command: 'pendientes-ahora' })
   await reloj.advance(1)
   const ui = await $.ui.mount({ ...pane(60), surface: 'terminal' })
-  expect((await ui.find({ key: 'h-planes' }))?.text).toMatch(/^PLANES ACTIVOS\s*5$/)
+  expect((await ui.find({ key: 'h-planes' }))?.text).toMatch(/^PLANES ACTIVOS\s*6$/)
   // Arriba de todo: antes que SIGUIENTE y VENCEN.
   const cabeceras = (await ui.findAll({ type: 'Box' })).map(b => b.key).filter(k => k?.startsWith('h-'))
   expect(cabeceras.slice(0, 2)).toEqual(['h-planes', 'h-paso'])
@@ -404,6 +405,7 @@ test('planes activos: bloque propio arriba, ventana como texto, el clic pega el 
   expect(await ui.find({ text: '○ cerrada 2 d' })).toBeDefined()
   expect(await ui.find({ text: '◉ aquí' })).toBeDefined()
   expect(await ui.find({ text: '○ sin actividad 5 d' })).toBeDefined()
+  expect(await ui.find({ text: '◉ retomada' })).toBeDefined()
   // Titulo: el Proximo paso sin su etiqueta; sin ficha, el titulo de su pendiente.
   expect(await ui.find({ text: /seguir 2026-10-16-uno/ })).toBeDefined()
   expect(await ui.find({ text: /Proximo paso: seguir/ })).toBeUndefined()

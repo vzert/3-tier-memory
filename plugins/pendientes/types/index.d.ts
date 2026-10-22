@@ -35,6 +35,9 @@ export type Ventana = {
   dias: number | null
   fuente: 'proceso' | 'transcripcion' | null
   aqui: boolean
+  // Abierta porque otra ventana viva pego su paso (un relevo, un snippet pegado a mano), no porque
+  // siga la que escribio la ficha. Opcional: el primer estado de 0.3.0 no lo traia.
+  retomada?: boolean
 }
 
 export type Plan = {

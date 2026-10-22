@@ -70,12 +70,14 @@ export function insignia(p: Pendiente): { texto: string; color: 'warning' | 'err
   return p.dias === 0 ? { texto: '● hoy', color: 'warning' } : { texto: `● ${p.dias} d`, color: 'error' }
 }
 
-// La ventana de un plan, en texto: si la sesion que dejo el snippet sigue abierta. Sin registro de
+// La ventana de un plan, en texto: si sigue abierta la sesion que dejo el snippet, o otra que lo pego
+// ("retomada": un relevo, un snippet pegado a mano en otra ventana). Sin registro de
 // procesos solo se sabe la actividad de la transcripcion, y lo dice asi (no "cerrada").
 export function insigniaPlan(v: Plan['ventana'] | undefined): { texto: string; color?: 'suggestion' } | null {
   if (!v || !v.estado) return null
   const hace = v.dias === null ? '' : v.dias === 0 ? ' hoy' : ` ${v.dias} d`
-  if (v.estado === 'abierta') return { texto: v.aqui ? '◉ aquí' : '◉ abierta', color: 'suggestion' }
+  if (v.estado === 'abierta')
+    return { texto: v.aqui ? '◉ aquí' : v.retomada ? '◉ retomada' : '◉ abierta', color: 'suggestion' }
   if (v.estado === 'activa') return { texto: v.aqui ? '◐ aquí' : '◐ activa', color: 'suggestion' }
   if (v.estado === 'cerrada') return { texto: `○ cerrada${hace}` }
   return { texto: `○ sin actividad${hace}` }
