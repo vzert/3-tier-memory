@@ -12,8 +12,8 @@ sesion. En los otros casos callaba.
   `&>` ni `>&`.
 - **Ficha sin sello**: si ninguna ficha escrita lleva el sello de la sesion, vale la ultima que no
   tiene ninguna linea `session_id:` y trae `## Como retomar`. `/backfill-3t` no escribe esa seccion
-  y sella con el id de la sesion de origen; un sello distinto nunca se toma. La ficha sellada va
-  primero: una ficha vieja editada despues no la tapa.
+  y sella con el id de la sesion de origen; en esta busqueda un sello distinto nunca se toma. La
+  ficha sellada va primero: una ficha vieja editada despues no la tapa.
 - **Ruta con barras invertidas** (Windows): la busqueda de fichas escritas acepta `\` como `/`.
 
 ### Added
@@ -27,6 +27,9 @@ sesion. En los otros casos callaba.
 ### Known
 - Una ficha escrita por Bash con una variable asignada en OTRA llamada Bash no se resuelve: el estado
   del shell no pasa de una llamada a otra.
+- La regla del sello vale solo en la busqueda de Step 8b con variable. El respaldo anterior a esta
+  version (si nada nombro la ficha, vale el ultimo Write del turno que trae `## Como retomar`) sigue
+  sin mirar el sello: un Write de una ficha con el sello de otra sesion en ese turno se toma.
 
 ## [2.63.37] - 2026-10-21
 Origen: p-9979f998bf.
