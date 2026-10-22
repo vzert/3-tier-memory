@@ -188,8 +188,11 @@ def invocaciones_retomar(cmd):
 # cambio de estado (abajo).
 SID = str(d.get("session_id") or "")
 impresas = []
-SESION_RE_G = re.compile(r"(?:^|/)memory/sessions/[^/]+\.md$")
-fichas_sesion = []
+# `\` vale como `/`: en Windows el Write lleva la ruta nativa (p-47b5252196).
+SESION_RE_G = re.compile(r"(?:^|[/\\])memory[/\\]sessions[/\\][^/\\]+\.md$")
+# Escrituras de ficha en orden: ("ruta", file_path) de un Write/Edit, ("bash", comando) de un Bash. Los
+# Bash se resuelven despues de resolver() (abajo), que necesita las asignaciones y el `cd` del comando.
+escrituras = []
 for r in recs:
     if r.get("type") != "assistant":
         continue
@@ -199,9 +202,10 @@ for r in recs:
         inp = b.get("input") or {}
         ruta = inp.get("file_path") or ""
         if b.get("name") in ("Write", "Edit", "MultiEdit") and SESION_RE_G.search(ruta):
-            fichas_sesion.append(ruta)
+            escrituras.append(("ruta", ruta))
         elif b.get("name") == "Bash":
             impresas.extend(a for a in invocaciones_retomar(inp.get("command") or "") if a)
+            escrituras.append(("bash", inp.get("command") or ""))
 
 # Ultimo veredicto del adversario de goalspec en TODA la sesion (2.34.0, p-272254efc5). Desde
 # 2.42.0 cuenta tambien el que llega en un tool_result (el subagente `goal-adversary` o
@@ -266,7 +270,7 @@ con_error = set()      # tool_use_id cuyo tool_result vino con is_error
 # en los transcripts locales: mas de 200 tool_result que empiezan asi (215-219 segun como se cuente), de cualquier herramienta. Un error con
 # otro texto (InputValidationError, herramienta no disponible sin pantalla) no llego a nadie.
 RECHAZO_USUARIO = re.compile(r"The user doesn't want to proceed with this tool use")
-SESION_RE = re.compile(r"(?:^|/)memory/sessions/[^/]+\.md$")
+SESION_RE = SESION_RE_G
 # Argumento de print-como-retomar.py. Acepta `\`: en Windows resolver() (normpath) deja la ruta con
 # barras invertidas.
 FICHA_RE = re.compile(r"(?:^|[/\\])sessions[/\\][^/\\]+\.md$")
@@ -319,6 +323,37 @@ def resolver(ruta, base):
         return None
     ruta = nativa(ruta)
     return ruta if os.path.isabs(ruta) else os.path.normpath(os.path.join(base, ruta))
+
+
+# El directorio de un `cd` sin comillas termina en `;`, `&`, `|` o `)` (adversario externo de 2.63.40:
+# `cd memory; … tee -a sessions/x.md` tomaba `memory;` y el guard callaba). Un `(` delante tambien abre
+# el comando: `(cd memory; … tee …)` en un subshell (decision d383).
+_RE_CD = re.compile(r"(?:^|[;&|\n(]\s*)cd\s+(\"[^\"]+\"|'[^']+'|[^\s;&|)]+)")
+# Destino de `>`, `>>` o `tee [-a]`; no `2>`, `&>` ni `>&` (las formas que mide pendientes_afines.py).
+_RE_REDIRIGE = re.compile(r"(?:(?<![<>&\d])>{1,2}(?!&)|\btee\s+(?:-a\s+)?)\s*(\"[^\"]+\"|'[^']+'|[^\s;&|()<>]+)")
+
+
+def escritas_por_bash(cmd):
+    """Fichas sessions/*.md que un comando de Bash escribe con una redireccion o `tee` (p-47b5252196): un
+    agente puede escribir la ficha con `cat > … <<EOF` en vez de Write. Expande las variables asignadas
+    en el mismo comando y resuelve contra su `cd`; una variable de otra llamada queda sin resolver y no
+    cuenta (el estado del shell no pasa de una llamada Bash a otra)."""
+    if "sessions" not in cmd:
+        return []
+    m_cd = _RE_CD.search(cmd)
+    base = (resolver(m_cd.group(1).strip("\"'"), cwd) or cwd) if m_cd else cwd
+    asigna = asignaciones(cmd)
+    out = []
+    for m in _RE_REDIRIGE.finditer(cmd):
+        f = resolver(expandir(m.group(1).strip("\"'"), asigna), base)
+        if f and SESION_RE_G.search(f):
+            out.append(f)
+    return out
+
+
+fichas_sesion = []
+for _tipo, _v in escrituras:
+    fichas_sesion.extend(escritas_por_bash(_v) if _tipo == "bash" else [_v])
 
 
 # Sesion supervisada por lookout (p-1d0f012aa9): el supervisor bloquea AskUserQuestion y manda
@@ -514,7 +549,7 @@ for r in turno:
                 continue
             disparo = True
             base = cwd
-            m_cd = re.search(r"(?:^|[;&|\n]\s*)cd\s+(\"[^\"]+\"|'[^']+'|\S+)", cmd)
+            m_cd = _RE_CD.search(cmd)
             if m_cd:
                 base = resolver(m_cd.group(1).strip("\"'"), cwd) or cwd
             # TODAS las invocaciones del comando, no la primera: dos `print-como-retomar.py` en
@@ -611,12 +646,24 @@ fichas = [f for f in fichas if f and os.path.isfile(f)]
 # del usuario), el turno de Step 8b quedaba sin ficha y el guard entero callaba (el pendiente cita 9
 # turnos reales del 2026-09-28 y la sesion 8ef6459e del 2026-09-29, con "$SF"). Vale la ULTIMA ficha que esta sesion escribio o edito, en cualquier turno,
 # y solo si su frontmatter lleva el session_id de esta sesion (lo sella Step 5c-bis antes de Step 8):
-# un /backfill-3t escribe fichas de otras sesiones. Limite declarado: una ficha sin sellar no se toma.
+# un /backfill-3t escribe fichas de otras sesiones. Desde p-47b5252196, si ninguna lleva ese sello vale
+# la ultima SIN sello (ninguna linea `session_id:`) que trae `## Como retomar`: Step 5c-bis pudo no
+# correr, y /backfill-3t no escribe esa seccion y sella con el id de la sesion de origen. Un sello
+# distinto nunca se toma. Va despues de las selladas: una ficha vieja editada mas tarde no tapa la propia.
+def sin_sello_con_retomar(ruta):
+    try:
+        texto = open(ruta, encoding="utf-8").read()
+    except Exception:
+        return False
+    return not re.search(r"(?m)^session_id:", texto[:2000]) and seccion(texto, "Como retomar") is not None
+
+
 if con_variable:
-    for f in reversed([resolver(r, cwd) for r in fichas_sesion]):
-        if f and os.path.isfile(f) and de_esta_sesion(f):
-            fichas.append(f)
-            break
+    _propias = [f for f in (resolver(r, cwd) for r in reversed(fichas_sesion)) if f and os.path.isfile(f)]
+    f = next((f for f in _propias if de_esta_sesion(f)), None) \
+        or next((f for f in _propias if sin_sello_con_retomar(f)), None)
+    if f:
+        fichas.append(f)
 if not fichas:
     fichas = [f for f in escritas[-1:] if f and os.path.isfile(f)]
 if not disparo or not fichas:

@@ -1715,5 +1715,87 @@ chk "triage: la ficha asignada se revisa como la literal, no la propia" "$LIT" "
 chk "triage: la ruta literal no nombra la ficha propia" "0" "$LIT"
 rm -r "$CWV/memory"
 
+echo "== p-47b5252196: Step 8b con variable, ficha escrita por Bash, sin sello o con barras invertidas =="
+# Known de 2.63.31: la ficha de la sesion solo se tomaba si la escribio un Write o Edit con `/` en la
+# ruta y llevaba el sello. txforma TRANSCRIPT MODO RUTA: como txvar, pero el turno anterior escribe
+# la ficha RUTA con `bash` (un `cat >` con heredoc, la forma que ya mide pendientes_afines.py) o
+# `write` (la herramienta Write, con la ruta tal cual).
+txforma() {   # $4.. opcionales: rutas que un Write escribe DESPUES de la ficha
+  python3 - "$@" <<'PYF'
+import json, sys
+out, modo, ruta = sys.argv[1:4]
+if modo == "bash":
+    w = {"name": "Bash", "input": {"command": "cat > " + ruta + " <<'EOF'\n## Como retomar\n...\nEOF"}}
+elif modo == "cmd":   # RUTA es el comando entero
+    w = {"name": "Bash", "input": {"command": ruta}}
+else:
+    w = {"name": "Write", "input": {"file_path": ruta, "content": "## Como retomar\n..."}}
+w.update({"type": "tool_use", "id": "w"})
+mas = [{"type": "tool_use", "id": "w%d" % i, "name": "Write", "input": {"file_path": r, "content": "..."}}
+       for i, r in enumerate(sys.argv[4:])]
+R = [{"type": "user", "message": {"role": "user", "content": "guarda el checkpoint"}},
+     {"type": "assistant", "message": {"content": [w] + mas}},
+     {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "w", "content": "ok"}]}},
+     {"type": "assistant", "message": {"content": [{"type": "text", "text": "Candidatos: guardo p-x?"}]}},
+     {"type": "user", "message": {"role": "user", "content": "si, guardalo"}},
+     {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "b", "name": "Bash",
+        "input": {"command": 'python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"'}}]}},
+     {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "b", "content": "(salida)"}]}},
+     {"type": "assistant", "message": {"content": [{"type": "text", "text": "Visto."}]}}]
+open(out, "w", encoding="utf-8").write("\n".join(json.dumps(r) for r in R) + "\n")
+PYF
+}
+# (a) Bash. La ruta va relativa al cwd: dentro del texto del comando Git Bash no convierte una absoluta.
+armar "$M" "$FX/snippet-2120.txt"; fecha30 "$F"; sellar sesion-8b
+mkdir -p "$CWV/memory/sessions"; cp "$F" "$CWV/memory/sessions/2026-09-22-bash.md"
+txforma "$T/f.jsonl" bash memory/sessions/2026-09-22-bash.md
+chk "forma Bash: la ficha escrita con cat > se toma y bloquea" "1" "$(bloquea "$(corre_sid "$T/f.jsonl")")"
+# El sello de OTRA sesion sigue mandando tambien con Bash: un /backfill-3t puede escribir asi.
+python3 - "$CWV/memory/sessions/2026-09-22-bash.md" <<'PYO2'
+import sys; p = sys.argv[1]; t = open(p, encoding="utf-8").read()
+open(p, "w", encoding="utf-8").write(t.replace("session_id: sesion-8b", "session_id: otra-sesion"))
+PYO2
+chk "forma Bash con el sello de otra sesion: silencio" "" "$(corre_sid "$T/f.jsonl")"
+rm -r "$CWV/memory"
+# Un `cd dir;` delante (sin espacio antes del `;`): el directorio no lleva el `;` (adversario externo de
+# 2.63.40). Vale para la escritura por Bash y para la invocacion de print-como-retomar.py.
+armar "$M" "$FX/snippet-2120.txt"; fecha30 "$F"; sellar sesion-8b
+mkdir -p "$CWV/memory/sessions"; cp "$F" "$CWV/memory/sessions/2026-09-22-cd.md"
+txforma "$T/f.jsonl" cmd "cd memory; printf x | tee -a sessions/2026-09-22-cd.md"
+chk "forma Bash tras cd dir; se toma y bloquea" "1" "$(bloquea "$(corre_sid "$T/f.jsonl")")"
+txvar "$T/v.jsonl" 'cd memory; python3 "$JBIN/print-como-retomar.py" sessions/2026-09-22-cd.md'
+chk "print-como-retomar.py tras cd dir; toma la ficha y bloquea" "1" "$(bloquea "$(corre_sid "$T/v.jsonl")")"
+txforma "$T/f.jsonl" cmd "(cd memory; printf x | tee -a sessions/2026-09-22-cd.md)"
+chk "forma Bash con (cd dir; ...) en subshell se toma y bloquea" "1" "$(bloquea "$(corre_sid "$T/f.jsonl")")"
+rm -r "$CWV/memory"
+# (b) Sin sello: Step 5c-bis no corrio. La ficha la escribio esta sesion y trae `## Como retomar`, que
+# /backfill-3t no escribe.
+armar "$M" "$FX/snippet-2120.txt"; fecha30 "$F"
+txvar "$T/v.jsonl" 'python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"'
+chk "forma sin sello: la ficha escrita por esta sesion se toma y bloquea" "1" "$(bloquea "$(corre_sid "$T/v.jsonl")")"
+# Una ficha sin sello y sin `## Como retomar` (lo que deja un backfill antes de sellar) escrita DESPUES
+# no tapa la propia: si se tomara, no habria snippet que exigir y el guard callaria.
+mkdir -p "$CWV/memory/sessions"; cp "$F" "$CWV/memory/sessions/2026-09-22-propia.md"
+python3 - "$F" "$CWV/memory/sessions/2026-09-22-backfill.md" <<'PYO3'
+import sys; t = open(sys.argv[1], encoding="utf-8").read()
+open(sys.argv[2], "w", encoding="utf-8").write(t.replace("## Como retomar", "## Otra seccion"))
+PYO3
+txforma "$T/f.jsonl" write memory/sessions/2026-09-22-propia.md memory/sessions/2026-09-22-backfill.md
+chk "forma sin sello y sin Como retomar despues: se toma la propia y bloquea" "1" "$(bloquea "$(corre_sid "$T/f.jsonl")")"
+rm -r "$CWV/memory"
+# (c) Barras invertidas. En Windows, la ruta nativa absoluta (cygpath -w), la que escribe ahi el Write.
+# Fuera de Windows una ruta con `\` no existe: se crea un archivo cuyo NOMBRE lleva las barras, lo que
+# mide la busqueda de la ruta en el guard, no al productor real.
+armar "$M" "$FX/snippet-2120.txt"; fecha30 "$F"; sellar sesion-8b
+if command -v cygpath >/dev/null 2>&1; then
+  mkdir -p "$CWV/memory/sessions"; cp "$F" "$CWV/memory/sessions/2026-09-22-barras.md"
+  RB=$(cygpath -w "$CWV/memory/sessions/2026-09-22-barras.md")
+else
+  RB='memory\sessions\2026-09-22-barras.md'; cp "$F" "$CWV/$RB"
+fi
+txforma "$T/f.jsonl" write "$RB"
+chk "forma barras invertidas: el Write se toma y bloquea" "1" "$(bloquea "$(corre_sid "$T/f.jsonl")")"
+command -v cygpath >/dev/null 2>&1 && rm -r "$CWV/memory" || rm "$CWV/$RB"
+
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
