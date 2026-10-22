@@ -1,5 +1,31 @@
 # Changelog
 
+## [2.63.35] - 2026-10-21
+Origen: `p-0c334693d4`. En Windows (Git Bash) una ruta POSIX escrita dentro del texto de un comando
+(el argumento de `print-como-retomar.py` como ruta de unidad tipo `/<letra>/<dir>`, o la ruta
+temporal de mktemp) llega tal cual al guard:
+MSYS solo convierte argumentos sueltos y variables de entorno. El Python nativo de Windows la
+resolvia contra la unidad actual, no encontraba la ficha y `checkpoint-close-guard.sh` callaba.
+
+### Fixed
+- **El guard convierte con `cygpath -w` una ruta que empieza por `/` cuando corre en Windows**
+  (`nativa()`, dentro de `resolver()`): vale para el argumento de `print-como-retomar.py` y para el
+  `cd` del mismo comando. Si `cygpath` falta o falla, la ruta queda como estaba. Fuera de Windows no
+  cambia nada.
+
+### Added
+- Dos casos en `test-checkpoint-close-guard.sh` con la ruta de la ficha sin convertir dentro del
+  comando: la ruta temporal de mktemp y la de unidad `/<letra>/<dir>`. Con el guard de 2.63.31 caen los dos en windows-latest
+  (platforms run 39695484855 sobre 52cad3a: 282/2, el resto de suites verdes). Fuera de Git Bash
+  pasan siempre y la suite imprime un SKIP.
+- Mutacion `sin-nativa` (`tools/mutaciones/m_ficha_sesion.py`): quita la conversion; solo puede caer
+  en Git Bash, y en ubuntu sale "no evaluable aqui".
+
+### Known
+- La mutacion `sin-cygpath` del arnes (2.63.18) deja de medir algo en Git Bash: con este arreglo el
+  guard encuentra la ficha aunque el arnes no convierta las rutas. `tools/mutation-check.sh` no corre
+  en Windows (`RUN_MUTATION=0` en platforms), asi que hoy no da un falso aviso.
+
 ## [2.63.34] - 2026-10-21
 Origen: p-4c4f8274a6. `test-journal-race.sh` fallaba de vez en cuando en macos-latest (p. ej. CI
 38756506567, trial 4: `open=9 rows=19 quarantine=2`) y nadie sabia por que: la prueba solo imprimia
