@@ -155,7 +155,9 @@ DESDE_NINGUNO_BLOQUEO = "2026-10-16"
 # (snippet.paso_compartido). Incluye el caso real del 2026-10-20.
 DESDE_PASO_COMPARTIDO = "2026-10-20"
 # Desde 2.63.32 un pendiente `_bloqueado` sin `_revisar` en `## Pendientes` de la ficha es SALTADO
-# (pendientes.bloqueado_sin_fecha). Fichas anteriores: sin cambio al re-auditarlas.
+# (pendientes.bloqueado_sin_fecha). Fichas anteriores: ese chequeo no las mide. La otra regla de
+# 2.63.32 (espera_viva: un bloqueado con `_revisar` pasado es accionable) no tiene corte: re-auditar
+# una ficha vieja cuyo bloqueado ya vencio puede cambiar las guardias de `ninguno` y `Proximo paso`.
 DESDE_BLOQUEADO_FECHA = "2026-10-20"
 # Tercer cierre de un defecto (2.53.0): el usuario decidio en Step 3b no abrirle pendiente.
 DESCARTADO_BUG = re.compile(r"_descartado:\s*(.*?)_(?=\s|$|[.,;:)\]—])", re.S)
@@ -1289,11 +1291,13 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     #       caso 5 (`ninguno — …`), el paso es un pendiente de los casos 2-3, y un pendiente tiene
     #       id. Un paso sin id es trabajo que NUNCA se registro — el mismo hueco que dejo el
     #       defecto hallado en vivo fuera de la escalera. Exigir el id obliga a registrarlo.
-    #   (c) no inmediato: un id citado que en `_pendientes.md` trae `_bloqueado:` (espera a algo
-    #       fuera de la sesion) o `_revisar` futuro (ya tiene su recordatorio de calendario). La
-    #       deteccion es SOLO por esos campos estructurados, nunca por el texto (regla 216).
-    #   (d) `ninguno` teniendo trabajo propio: un pendiente de esta ficha abierto, sin
-    #       `_bloqueado` y sin `_revisar` futuro, es un candidato real de los casos 2-3.
+    #   (c) no inmediato: un id citado que en `_pendientes.md` trae `_bloqueado:` con su `_revisar`
+    #       sin pasar (espera_viva: espera a algo fuera de la sesion) o `_revisar` futuro (ya tiene
+    #       su recordatorio de calendario). Un bloqueado con `_revisar` pasado SI es inmediato
+    #       (2.63.32): el paso es mirar si ya llego lo que esperaba. La deteccion es SOLO por esos
+    #       campos estructurados, nunca por el texto (regla 216).
+    #   (d) `ninguno` teniendo trabajo propio: un pendiente de esta ficha abierto, sin espera viva
+    #       y sin `_revisar` futuro, es un candidato real de los casos 2-3.
     #   (e) 2.56.0: una fecha `AAAA-MM-DD` posterior a la ficha en la linea (casos 1-3): ese trabajo
     #       es del recordatorio de calendario. Chequeo de FORMATO, compartido con la linea de
     #       afines (pendientes_afines.fecha_futura); y el caso 1 ya no empieza por `Fase actual:`.
