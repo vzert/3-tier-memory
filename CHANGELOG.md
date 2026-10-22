@@ -19,7 +19,9 @@ textos; el bump acompana al mod.
   proyecto o de un worktree suyo recibio su paso: pegado por la persona, o en el system prompt de un
   relevo de lookout (`prompt_snapshot`, que se lee hasta 2 MB porque llega tras la cabeza de 256 KB;
   medido en el byte 279397). Si no, `cerrada` con los dias desde la ultima actividad de su
-  transcripcion. Sin ese registro, solo la transcripcion: `activa` (2 h) o `sin actividad N d`.
+  transcripcion. Sin ese registro, solo la transcripcion: `activa` (2 h) o `sin actividad N d`. En
+  Windows el registro no se usa: alli `os.kill(pid, 0)` manda CTRL_C_EVENT en vez de preguntar si el
+  proceso vive, y sin `ps` un pid reusado pasaria por vivo (lo vio platforms.yml en windows-latest).
   VENCEN queda solo para `_revisar`, y `resumen.vencidos`/`hoy` ya no cuentan `_retomar`; un paso de
   snippet tampoco sale en SIGUIENTE ni en ALTA, salvo en VENCEN si ademas tiene `_revisar` vencido.
   El panel pinta el bloque arriba (`↻` titulo, `◉ abierta` / `◉ retomada` / `◉ aquí` /

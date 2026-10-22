@@ -499,8 +499,10 @@ def proceso_vivo(pid, inicio):
 def sesiones_abiertas(sessions_dir):
     """{session_id: cwd} de los procesos vivos de Claude Code, o None si no hay registro que leer: sin
     la carpeta, o sin ninguna entrada legible (vacia, rota). Un registro asi no prueba que una ventana
-    este cerrada; con None manda la transcripcion ("activa" / "sin actividad")."""
-    if not os.path.isdir(sessions_dir):
+    este cerrada; con None manda la transcripcion ("activa" / "sin actividad"). En Windows tambien
+    None: alli os.kill(pid, 0) no pregunta si el proceso vive (0 es CTRL_C_EVENT: se lo manda) y no
+    hay `ps` para comparar la hora de arranque, asi que un pid reusado pasaria por vivo."""
+    if os.name == "nt" or not os.path.isdir(sessions_dir):
         return None
     abiertas, legibles = {}, 0
     for f in glob.glob(os.path.join(sessions_dir, "*.json")):

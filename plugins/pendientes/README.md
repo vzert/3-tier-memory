@@ -116,8 +116,8 @@ If a user asks you to install this mod, follow these steps:
    Claude Code process, from Claude Code's own registry of open sessions), `◉ retomada` (another live window of the
    project or of one of its worktrees got its next step, pasted by you or handed over by a
    supervisor in its system prompt), `◉ aquí` (this session), or `○ cerrada N d` (days since its
-   last activity). Without that registry only the transcript is known, and the row
-   says so: `◐ activa` (activity in the last 2 hours) or `○ sin actividad N d`. These items do not
+   last activity). Without that registry (and always on Windows, where a live process cannot be
+   checked safely) only the transcript is known, and the row says so: `◐ activa` (activity in the last 2 hours) or `○ sin actividad N d`. These items do not
    appear in the list below, except in VENCEN when they also have a `_revisar` today or past.
 1. **SIGUIENTE** — the ids in the `Próximo paso` of the newest session file that can be started
    today (not `_bloqueado`, no `_revisar` today or later, no future date in the text).

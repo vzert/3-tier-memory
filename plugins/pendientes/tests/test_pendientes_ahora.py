@@ -292,6 +292,12 @@ def main():
         hoy_real = time.strftime("%Y-%m-%d")
 
         dr = correr(mem, lib, "--hoy", hoy_real, "--sessions-dir", reg, "--projects-root", proyectos)
+        # Windows no usa el registro de procesos (os.kill(pid, 0) manda CTRL_C_EVENT y no hay `ps`):
+        # alli manda la transcripcion y las pruebas del registro no aplican.
+        REGISTRO = os.name != "nt"
+        check("windows: con registro, manda la transcripcion" if not REGISTRO else "registro: fuente proceso",
+              {g["slug"]: g for g in dr["planes"]}["2026-10-13-s"]["ventana"]["fuente"] ==
+              ("proceso" if REGISTRO else "transcripcion"))
         lista = {i["id"]: i for i in dr["items"] + dr["resto"]}
         planes = {g["slug"]: g for g in dr["planes"]}
         check("planes: una fila por ficha, la mas reciente arriba",
@@ -304,11 +310,11 @@ def main():
         check("planes: proximo paso, ficha y desde", (r.get("proximo_paso"), r.get("ficha"), r.get("desde")) ==
               ("Proximo paso: hacer p-1212121212.", "memory/sessions/2026-10-12-r.md", "2026-10-12"))
         check("planes: session_id de la cabecera", r.get("session_id") == SID_R)
-        check("ventana: proceso vivo con ese id = abierta",
+        REGISTRO and check("ventana: proceso vivo con ese id = abierta",
               r.get("ventana") == {"estado": "abierta", "dias": 0, "fuente": "proceso", "aqui": False,
                                     "retomada": False})
         s_ = planes.get("2026-10-13-s", {})
-        check("ventana: pid muerto = cerrada, con los dias desde su transcripcion",
+        REGISTRO and check("ventana: pid muerto = cerrada, con los dias desde su transcripcion",
               s_.get("ventana") == {"estado": "cerrada", "dias": 2, "fuente": "proceso", "aqui": False,
                                      "retomada": False})
         b = planes.get("2026-10-11-borrada", {})
@@ -373,7 +379,7 @@ def main():
         registra("w.json", SID_W, tmp, procStart="Mon Jan  1 00:00:00 2001")
         tx_de(tmp, SID_W, snap)
         dz = correr(mem, lib, "--hoy", hoy_real, "--sessions-dir", reg, "--projects-root", proyectos)
-        check("retomada: una ventana de otro proyecto o con pid reusado no cuenta",
+        REGISTRO and check("retomada: una ventana de otro proyecto o con pid reusado no cuenta",
               {g["slug"]: g for g in dz["planes"]}["2026-10-13-s"]["ventana"]["estado"] == "cerrada")
         tx_de(tmp, SID_X, relleno + snap)
         registra("x.json", SID_X, tmp)
@@ -387,10 +393,10 @@ def main():
         dx = correr(mem, lib, "--hoy", hoy_real, "--sessions-dir", reg, "--projects-root", proyectos,
                     "--session-id", SID_Y)
         px = {g["slug"]: g for g in dx["planes"]}
-        check("retomada: el snippet del system prompt, tras la cabeza, abre el plan",
+        REGISTRO and check("retomada: el snippet del system prompt, tras la cabeza, abre el plan",
               px["2026-10-13-s"]["ventana"] == {"estado": "abierta", "dias": 0, "fuente": "proceso",
                                                 "aqui": False, "retomada": True})
-        check("retomada: un snippet pegado en un worktree, sin session_id en la ficha; aqui",
+        REGISTRO and check("retomada: un snippet pegado en un worktree, sin session_id en la ficha; aqui",
               px["2026-10-11-borrada"]["ventana"] == {"estado": "abierta", "dias": 0, "fuente": "proceso",
                                                       "aqui": True, "retomada": True})
         check("retomada: la que escribio la ficha sigue mandando si vive",
