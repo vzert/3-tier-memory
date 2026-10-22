@@ -284,7 +284,8 @@ caso "ficha: variable asignada"  checkpoint-close-guard.sh m_ficha_sesion.py tes
 caso "retomar: mencion no dispara"  checkpoint-close-guard.sh m_invocacion_retomar.py test-checkpoint-close-guard.sh "mencion en silencio: git" mencion-cuenta
 caso "retomar: python3 cuenta"       checkpoint-close-guard.sh m_invocacion_retomar.py test-checkpoint-close-guard.sh "invocacion real sigue disparando: python3" python-no-cuenta
 caso "retomar: valor tras opcion"   checkpoint-close-guard.sh m_invocacion_retomar.py test-checkpoint-close-guard.sh "invocacion real sigue disparando: python3 -W ignore" opcion-sin-valor
-caso "arnes: cygpath en Git Bash"   test-checkpoint-close-guard.sh m_arnes_cygpath.py test-checkpoint-close-guard.sh "arnes Git Bash" sin-cygpath
+caso "ficha: ruta Git Bash"       checkpoint-close-guard.sh m_ficha_sesion.py test-checkpoint-close-guard.sh "ruta Git Bash" sin-nativa
+caso "arnes: cygpath en Git Bash"  test-checkpoint-close-guard.sh m_arnes_cygpath.py test-checkpoint-close-guard.sh "arnes Git Bash" sin-cygpath
 caso "extras: citado en Terminas" pendientes_afines.py m_hilo.py $T "el citado en Terminas cuando no va de extra" extras-sin-citados
 caso "extras: citado en No repitas" pendientes_afines.py m_hilo.py $T "el citado en No repitas no va de extra" extras-sin-no-repitas
 caso "extras: prueba en vivo" pendientes_afines.py m_hilo.py $T "pruebas en vivo y esperas de OK fuera: el unico extra es la tarea de codigo" extras-sin-vivo

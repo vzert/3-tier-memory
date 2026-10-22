@@ -293,10 +293,31 @@ def expandir(arg, asigna):
     return arg
 
 
+_NATIVAS = {}
+
+
+def nativa(ruta):
+    """En Windows (Git Bash) una ruta POSIX escrita DENTRO de un comando (de unidad, /<letra>/<dir>, o la
+    temporal de mktemp) llega tal cual: MSYS solo convierte argumentos y variables de entorno, y el
+    Python nativo la resolvia contra
+    la unidad actual, no encontraba la ficha y el guard callaba (p-0c334693d4, run 39443101444).
+    cygpath -w la pasa a la forma nativa; si falta o falla, la ruta queda como estaba."""
+    if os.name != "nt" or not ruta.startswith("/") or ruta.startswith("//"):
+        return ruta
+    if ruta not in _NATIVAS:
+        try:
+            p = subprocess.run(["cygpath", "-w", ruta], capture_output=True, text=True, timeout=10)
+            _NATIVAS[ruta] = p.stdout.strip() if p.returncode == 0 and p.stdout.strip() else ruta
+        except (OSError, subprocess.SubprocessError):
+            _NATIVAS[ruta] = ruta
+    return _NATIVAS[ruta]
+
+
 def resolver(ruta, base):
     ruta = os.path.expanduser(ruta)
     if "$" in ruta:
         return None
+    ruta = nativa(ruta)
     return ruta if os.path.isabs(ruta) else os.path.normpath(os.path.join(base, ruta))
 
 
