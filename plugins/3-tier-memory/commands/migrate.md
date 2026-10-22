@@ -253,7 +253,7 @@ exists in the project index is a no-op.
    Items with the same text, origin and creation date as one already in the project are written once.
 4. Compact, then delete the auto-memory index file:
    ```bash
-   python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"   # must print quarantined=0 pending_left=0
+   python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"   # must print quarantined=0 pending_left=0 (pending_left>0: an agent was mid-write; rerun in a few seconds)
    ```
    A missing priority header in the project index is NOT a quarantine case since 2.22.0: the compactor
    creates the header and applies the event, and a `rescued=N` in that line means events an older version

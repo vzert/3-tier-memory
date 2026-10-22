@@ -671,7 +671,8 @@ python3 "$JBIN/journal-emit.py" --type pendiente.add --text "<texto del pendient
 sin preguntar al usuario (es un dato, no una decision):
 - el pendiente sale del mismo trabajo que otro que esta sesion guarda o retomo: emite PRIMERO el de
   mayor prioridad, toma el id que imprime y pasalo como `--relacionado` en los demas;
-- el pendiente es un paso de un plan: `--relacionado plan-<slug>`;
+- el pendiente es un paso de un plan: `--relacionado plan-<slug>` (la fase siguiente de un plan
+  `active` va siempre así; ver Step 5, "Cada fase abierta");
 - el pendiente continua uno que ya existe (otra sesion): `--relacionado <su id>`.
 **La liga al paso recibido la pone `journal-emit.py` solo (2.57.0, p-b282a8cfc4)**: si esta sesion
 arranco con un snippet `Retomamos:`, todo `pendiente.add` queda ligado a los ids de su `Proximo
@@ -809,7 +810,7 @@ restored the indexes it had touched, and the reason says so or names what it cou
 Step 7. Since 2.22.0 a **missing priority header is not one of those cases** — the compactor creates
 the header and applies the event — so a quarantined event really does need a person: do not report it
 as "something the new version does the first time". If it prints `JOURNAL busy`, another agent holds
-the lock right now: run it again after a few seconds. This
+the lock right now: run it again after a few seconds. A `pending_left` above 0 means an agent was still writing an event when the pass ran (since 2.63.34 the compactor waits for it instead of quarantining it): run it again after a few seconds. This
 runs now so the reconciliation report is fresh; Steps 2, 4 and 5 emit more events, and Step 5a
 compacts everything again before the commit.
 
@@ -1070,6 +1071,21 @@ fecha en formato `AAAA-MM-DD` (`El 2026-10-14 después de las 11:51 UTC: …`) y
 con `--revisar <fecha>` en Step 3b. Step 8 la manda al recordatorio de calendario de ese día, no al
 snippet de la sesión siguiente (2.56.0).
 
+**Cada fase abierta o disparador de un plan tocado es un pendiente ligado al plan (2.63.33,
+p-7fd6a82eaa).** Medido el 2026-10-20 en 54 planes de 4 proyectos: las fases vivían solo en la
+prosa del plan (22 % con criterio de cierre, 35 % de los disparadores con fecha citaban un `p-…`),
+y un cierre `ninguno` con el plan `active` dejaba a la sesión siguiente sin hilo. Antes de cerrar
+este paso, por cada plan `active` que enlazas en `## Plans`: la fase siguiente (y cada disparador
+que espera una fecha o un evento) tiene que existir como pendiente ABIERTO con
+`_relacionado: plan-<slug>` (`<slug>` = el nombre del fichero del plan sin `.md`; si no empieza
+por `plan-`, ponle `plan-` delante). Si falta, vuelve a Step 3b (punto 1, item 4: pasos de plan sin
+ejecutar) y propónlo como candidato (el usuario decide, como todo pendiente nuevo):
+`pendiente.add --relacionado plan-<slug>`, con `--revisar AAAA-MM-DD` si espera una fecha. Si el
+plan ya no tiene nada abierto, o el usuario no quiere guardar su fase siguiente, no es `active`:
+ciérralo con `plan.upsert --status completed` (o `abandoned`), o deja un `Proximo paso` real. Step 7a rechaza
+(`snippet.ninguno_plan_activo`) un `Como retomar` `ninguno` con un plan `active` de `## Plans` sin
+pendiente abierto ligado; se mide el campo `_relacionado`, no la prosa del plan.
+
 Actualízalo en CADA checkpoint que toque este plan — es el único campo de todo el plan que se
 reescribe en vez de acumularse; el historial de cómo llegó ahí ya vive en la narrativa de abajo,
 que sigue creciendo como siempre. Si `Próxima acción` no cambia respecto al último checkpoint,
@@ -1248,8 +1264,8 @@ python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"
 ```
 
 It must print `JOURNAL applied=N quarantined=0 pending_left=0`. Same handling as Step 3c for
-`quarantined>0` (read each `.reason`, apply by hand, delete the pair, report) and for `JOURNAL busy`
-(retry after a few seconds). This MUST run before Step 5d and Step 6: the secrets scan and the
+`quarantined>0` (read each `.reason`, apply by hand, delete the pair, report) and for `JOURNAL busy` or
+`pending_left>0` (retry after a few seconds). This MUST run before Step 5d and Step 6: the secrets scan and the
 commit have to see the applied rows. Skip if `JBIN=NONE`.
 
 ## Step 5b: Prune indexes

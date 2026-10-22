@@ -3,7 +3,8 @@
 3-tier-memory plugin: emisor de eventos del journal (v2.12.0, Fases 1 y 2).
 
 Los agentes NO editan los indices compartidos de memory/ a mano. Cada cambio entra como un
-evento: un archivo JSON propio en memory/.journal/pending/, creado con O_CREAT|O_EXCL, que
+evento: un archivo JSON propio en memory/.journal/pending/ (escrito en un temporal creado con
+O_CREAT|O_EXCL y renombrado al .json ya completo, desde 2.63.34; ver write_event), que
 un unico compactador (journal-compact.py) aplica bajo lock. Asi N agentes en la misma
 maquina pueden escribir "a la vez" sin pisarse: cada uno solo crea archivos nuevos.
 
@@ -356,8 +357,34 @@ def agent_id():
     return f"{os.environ.get('USER') or os.environ.get('USERNAME') or 'user'}@{host}"
 
 
+def publicar(tmp, path):
+    """Renombra el temporal al .json final. Reintenta ante PermissionError como
+    replace_with_retry del compactador (Windows: antivirus o indexador con el archivo abierto un
+    instante); otro error propaga. No puede pisar un evento ajeno: el destino lleva el mismo
+    ts+session+pid+seq que el temporal, que se creo con O_EXCL."""
+    for attempt in range(5):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == 4:
+                raise
+            time.sleep(0.05 * (attempt + 1))
+
+
 def write_event(memory_dir, event):
-    """Crea pending/<utc-ns>-<session>-<pid>-<seq>.json con O_EXCL. Devuelve la ruta.
+    """Crea pending/<utc-ns>-<session>-<pid>-<seq>.json entero de una vez. Devuelve la ruta.
+
+    Se escribe en `pending/.<nombre>.tmp` (O_EXCL) y despues se renombra al .json: un
+    compactador que lista pending/ solo ve el evento completo o no lo ve. Antes se creaba el
+    .json con O_EXCL y se escribia despues; un compactador que lo leia en ese hueco lo
+    encontraba vacio, lo mandaba a cuarentena `malformed` y el evento se perdia (p-4c4f8274a6:
+    2 de 1000 trials de test-journal-race.sh, y una vez en macos-latest). El temporal queda en
+    pending/ y no en otra carpeta porque el rename tiene que ser en el mismo sistema de archivos
+    y porque .journal/.gitignore no se reescribe en instalaciones viejas: una carpeta nueva se
+    versionaria. Ningun lector toma un `.tmp` (todos filtran `*.json`), y el compactador borra
+    el de un emit que murio a medias (`limpiar_temporales`). Si borro el de un emit que solo
+    estaba parado, el rename falla y el evento se reescribe con el seq siguiente.
 
     El nombre ya es unico por construccion (session_id completo + pid + seq). Si aun asi
     O_EXCL falla, se reintenta con seq+1 hasta MAX_EXCL_RETRIES; si se agota, el evento se
@@ -374,8 +401,12 @@ def write_event(memory_dir, event):
     for seq in range(MAX_EXCL_RETRIES):
         name = f"{ts_ns}-{sid}-{pid}-{seq}.json"
         path = os.path.join(pending, name)
+        tmp = os.path.join(pending, f".{name}.tmp")
+        if os.path.exists(path):
+            last_err = FileExistsError(path)
+            continue
         try:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
         except FileExistsError as e:
             last_err = e
             continue
@@ -383,6 +414,14 @@ def write_event(memory_dir, event):
         # en cualquier sistema, y asi el hash de un evento no depende de donde se emitio.
         with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
             fh.write(payload)
+        try:
+            publicar(tmp, path)
+        except FileNotFoundError as e:
+            # El temporal ya no esta: este proceso quedo parado mas de STALE_SECONDS (una Mac que
+            # se durmio a mitad) y un compactador lo tomo por huerfano y lo borro. Se reescribe
+            # con el seq siguiente; agotados los intentos, la copia de failed/ de abajo.
+            last_err = e
+            continue
         return path
     failed = os.path.join(journal, "failed")
     os.makedirs(failed, exist_ok=True)

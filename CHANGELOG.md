@@ -19,6 +19,104 @@ pruebas y comentarios: ninguna conducta cambia.
   `_bloqueado` queda fuera; ahora dicen que un bloqueado con `_revisar` pasado es inmediato, como ya
   hacia el codigo.
 
+## [2.63.35] - 2026-10-21
+Origen: `p-0c334693d4`. En Windows (Git Bash) una ruta POSIX escrita dentro del texto de un comando
+(el argumento de `print-como-retomar.py` como ruta de unidad tipo `/<letra>/<dir>`, o la ruta
+temporal de mktemp) llega tal cual al guard:
+MSYS solo convierte argumentos sueltos y variables de entorno. El Python nativo de Windows la
+resolvia contra la unidad actual, no encontraba la ficha y `checkpoint-close-guard.sh` callaba.
+
+### Fixed
+- **El guard convierte con `cygpath -w` una ruta que empieza por `/` cuando corre en Windows**
+  (`nativa()`, dentro de `resolver()`): vale para el argumento de `print-como-retomar.py` y para el
+  `cd` del mismo comando. Si `cygpath` falta o falla, la ruta queda como estaba. Fuera de Windows no
+  cambia nada.
+
+### Added
+- Dos casos en `test-checkpoint-close-guard.sh` con la ruta de la ficha sin convertir dentro del
+  comando: la ruta temporal de mktemp y la de unidad `/<letra>/<dir>`. Con el guard de 2.63.31 caen los dos en windows-latest
+  (platforms run 39695484855 sobre 52cad3a: 282/2, el resto de suites verdes). Fuera de Git Bash
+  pasan siempre y la suite imprime un SKIP.
+- Mutacion `sin-nativa` (`tools/mutaciones/m_ficha_sesion.py`): quita la conversion; solo puede caer
+  en Git Bash, y en ubuntu sale "no evaluable aqui".
+
+### Known
+- La mutacion `sin-cygpath` del arnes (2.63.18) deja de medir algo en Git Bash: con este arreglo el
+  guard encuentra la ficha aunque el arnes no convierta las rutas. `tools/mutation-check.sh` no corre
+  en Windows (`RUN_MUTATION=0` en platforms), asi que hoy no da un falso aviso.
+
+## [2.63.34] - 2026-10-21
+Origen: p-4c4f8274a6. `test-journal-race.sh` fallaba de vez en cuando en macos-latest (p. ej. CI
+38756506567, trial 4: `open=9 rows=19 quarantine=2`) y nadie sabia por que: la prueba solo imprimia
+contadores.
+
+### Fixed
+- **Un evento se perdia si el compactador leia su archivo mientras `journal-emit.py` lo escribia.**
+  `write_event` creaba `pending/<evento>.json` con O_EXCL y escribia el contenido despues. Un
+  compactador que listaba `pending/` en ese hueco leia un archivo vacio, lo mandaba a cuarentena con
+  `malformed: Expecting value: line 1 column 1 (char 0)` y el evento no volvia nunca (`malformed` no
+  se rescata). Quien lo emitio ya tenia su id y creia que estaba guardado. Medido en una Mac con 4
+  corridas de `test-journal-race.sh` en paralelo: 2 de 1000 trials, los dos con la firma de CI. En
+  uso real puede pasar cuando una sesion compacta (session-start, recall) justo en ese instante en
+  que otra emite.
+  - `journal-emit.py` escribe el evento en `pending/.<evento>.json.tmp` (O_EXCL) y lo renombra al
+    `.json`: un compactador solo ve el evento entero o no lo ve. El temporal va en `pending/` y no en
+    una carpeta nueva porque el rename tiene que quedar en el mismo sistema de archivos y porque
+    `.journal/.gitignore` no se reescribe en instalaciones viejas: una carpeta nueva se versionaria.
+  - `journal-compact.py` deja en `pending/` un `.json` ilegible si su mtime esta a menos de
+    `STALE_SECONDS` (60 s) de ahora, para la pasada siguiente. Protege a los `journal-emit.py`
+    anteriores a 2.63.34 que siguen instalados en otras sesiones. 60 s es la vida que el lock ya le
+    da a un proceso vivo: un emit que no escribio en ese plazo murio, y su evento va a cuarentena
+    como antes. Una mtime en el futuro lejano cuenta como vieja: nada se queda en `pending/` para
+    siempre. Tambien borra el `.json.tmp` de mas de 60 s que deja un emit que murio a medias.
+    Si ese emit solo estaba parado (una Mac que se durmio a mitad) y no muerto, su rename falla y
+    `journal-emit.py` reescribe el evento con el seq siguiente: no se pierde (revisor externo).
+    Limite: un compactador anterior a 2.63.34 no lo borra; hasta que corra uno nuevo, ese `.tmp`
+    hace que `ls -A pending/` lance el compactador en cada arranque de sesion (no aplica nada).
+- **`test-journal-race.sh` imprime el `.reason` y el evento de cada cuarentena (y lo que haya en
+  `failed/`) cuando un trial sale rojo.** Nota: su contador `quarantine=` cuenta archivos, y cada
+  evento apartado deja dos (el `.json` y su `.reason`): `quarantine=2` es un evento.
+
+### Added
+- `bin/test-journal-hueco.sh` (12 casos): abre el hueco a proposito, sin depender del azar. Corre un
+  compactador entre la creacion y la escritura del evento (rojo en 2.63.25: el evento era visible y
+  acababa en cuarentena; verde ahora), y prueba el `.json` vacio de un emisor viejo (reciente se
+  espera; 120 s o una hora en el futuro, cuarentena) y el temporal huerfano (reciente se respeta;
+  120 s se borra; si era de un emit parado, el evento se reescribe). `test-journal-race.sh` con el arreglo: 60 de 60 corridas, 600 trials, 0
+  cuarentenas, con 4 en paralelo (de 2 en 1000 antes; esta cifra sola no lo probaria).
+- Cuatro mutaciones en `tools/mutation-check.sh` que esta suite tumba: el emit vuelve a escribir
+  directo el `.json` (`m_emit_directo.py`), el compactador deja de esperar al ilegible reciente, y
+  lo espera para siempre (`m_compact_espera.py`), y el emit no reescribe cuando le borraron el
+  temporal (`m_emit_sin_reintento.py`).
+- Las plantillas que mandan compactar (`checkpoint-3t`, `save-learning`, `backfill-3t`,
+  `consolidate-3t`, `migrate`) dicen que hacer con `pending_left>0`: otro agente esta emitiendo en
+  ese momento (o un emisor anterior a 2.63.34 a medio escribir); se vuelve a correr en unos segundos,
+  como con `JOURNAL busy`.
+
+## [2.63.33] - 2026-10-20
+Origen: p-7fd6a82eaa, el gap que dejo abierto la auditoria de hilos de 2.63.22 (decision d284 del
+usuario: chequeo SALTADO con fecha de corte; plan aprobado en d305).
+
+### Added
+- **Un cierre `ninguno` ya no entierra un plan `active`.** Nuevo chequeo
+  `snippet.ninguno_plan_activo` en `bin/checkpoint-audit.py`: si el snippet de `Como retomar` es
+  `ninguno` (con bloque o colapsado), `## Plans` enlaza un plan `active` (tambien con `../`, `.md`
+  o `#ancla`; fila del indice o, sin fila, su frontmatter) y ningun pendiente ABIERTO de
+  `_pendientes.md` lo cita en `_relacionado:`, sale SALTADO y el hook de cierre lo rechaza. Lee el
+  campo `_relacionado`, nunca la prosa del plan ni del pendiente (regla 216). Un plan cuyo fichero
+  no empieza por `plan-` se liga con `plan-<nombre del fichero>`. Solo fichas con fecha 2026-10-21
+  o posterior.
+- **Step 5 de `/checkpoint-3t`: cada fase abierta o disparador de un plan tocado es un pendiente
+  ligado** (`pendiente.add --relacionado plan-<slug>`, con `--revisar` si espera una fecha),
+  propuesto como candidato en Step 3b. Un plan sin nada abierto se cierra con `plan.upsert`.
+- Prueba `bin/test-ninguno-plan-activo.sh` (19 asertos; los 19 caen con el checkpoint-audit.py de
+  2.63.22) y 7 mutaciones nuevas (`tools/mutaciones/m_ninguno_plan.py`).
+
+### Limites
+- No lee el texto viejo de un plan: un plan `active` con fases solo en su prosa sale SALTADO hasta
+  que alguien registra la fase como pendiente o cierra el plan. Un pendiente ligado falso (que no
+  es la fase real) lo pasa: el chequeo vigila la omision, no la calidad del enlace.
+
 ## [2.63.32] - 2026-10-21
 Origen: Victor (via `/goalspec:interview`, bajo el supervisor lookout `supervisor-3-tier-memory`,
 d296-d301) reporto cierres que dejaban un pendiente `_bloqueado` sin fecha y snippet `Ninguno`, y

@@ -25,6 +25,18 @@ M=$(mktemp -d) && [ -d "$M" ] || { echo "mktemp fallo: sin directorio temporal, 
 export MEMORY_DIR=$M; FAIL=0
 trap 'rm -rf "$M"' EXIT
 
+# Un trial rojo sin esto solo deja contadores (p-4c4f8274a6: CI dio quarantine=2 y no se supo por
+# que). quarantine/ guarda el evento y su .reason, asi que quarantine=2 es UN evento: se imprime
+# cada motivo con el evento que lo produjo, y lo que quedo en failed/.
+show_journal() {
+  for r in $M/.journal/quarantine/*.reason; do
+    [ -f "$r" ] || continue
+    echo "  quarantine $(basename "$r" .reason): $(cat "$r")"
+    echo "    evento: $(cat "${r%.reason}" 2>/dev/null)"
+  done
+  for f in $M/.journal/failed/*; do [ -f "$f" ] && echo "  failed $(basename "$f"): $(cat "$f")"; done
+}
+
 for t in 1 2 3 4 5; do
   rm -r $M/.journal 2>/dev/null
   rm -r $M/pendientes 2>/dev/null
@@ -47,7 +59,7 @@ for t in 1 2 3 4 5; do
   LOCK=$(ls -d $M/.journal/.lock 2>/dev/null | wc -l | tr -d ' ')      # esperado: 0
   RES=$(cat $M/pendientes/*.md | grep -c '| resolved |')               # esperado: 10 (5 por worker)
   echo "trial $t: open=$OPEN dupids=$DUP rows=$ROWS dupids_monthly=$DUPM dupnums=$DUPN pending=$PEND quarantine=$QUAR failed=$FAILED lock=$LOCK resolved=$RES"
-  [ "$OPEN" = 10 ] && [ "$DUP" = 0 ] && [ "$ROWS" = 20 ] && [ "$DUPM" = 0 ] && [ "$DUPN" = 0 ] && [ "$PEND" = 0 ] && [ "$QUAR" = 0 ] && [ "$FAILED" = 0 ] && [ "$LOCK" = 0 ] && [ "$RES" = 10 ] || FAIL=1
+  [ "$OPEN" = 10 ] && [ "$DUP" = 0 ] && [ "$ROWS" = 20 ] && [ "$DUPM" = 0 ] && [ "$DUPN" = 0 ] && [ "$PEND" = 0 ] && [ "$QUAR" = 0 ] && [ "$FAILED" = 0 ] && [ "$LOCK" = 0 ] && [ "$RES" = 10 ] || { FAIL=1; show_journal; }
 done
 
 # Complementaria 1: un solo agente, 10 eventos secuenciales, sin lock residual, < 1 s
@@ -205,7 +217,7 @@ for t in 1 2 3 4 5; do
   echo "f2 trial $t: rules=$RULES max=$RMAX dupnums=$RDUPN duptext=$RDUPT qr=$QR qrdup=$QRDUP topic=$TOPIC sessions=$SESS oldest_left=$SOLD dupslugs=$SDUP pipe_ok=$SPIPE plan=$PLAN plan_status=$PSTAT r_active=$RACT r_done=$RDONE pending=$PEND quarantine=$QUAR failed=$FAILED lock=$LOCK"
   [ "$RULES" = 12 ] && [ "$RMAX" = 12 ] && [ "$RDUPN" = 0 ] && [ "$RDUPT" = 0 ] && [ "$QR" = 12 ] && [ "$QRDUP" = 0 ] && [ "$TOPIC" = 1 ] \
     && [ "$SESS" = 10 ] && [ "$SOLD" = 0 ] && [ "$SDUP" = 0 ] && [ "$SPIPE" = 10 ] && [ "$PLAN" = 1 ] && [ "$PSTAT" = 1 ] \
-    && [ "$RACT" = 0 ] && [ "$RDONE" = 1 ] && [ "$PEND" = 0 ] && [ "$QUAR" = 0 ] && [ "$FAILED" = 0 ] && [ "$LOCK" = 0 ] || FAIL=1
+    && [ "$RACT" = 0 ] && [ "$RDONE" = 1 ] && [ "$PEND" = 0 ] && [ "$QUAR" = 0 ] && [ "$FAILED" = 0 ] && [ "$LOCK" = 0 ] || { FAIL=1; show_journal; }
 done
 
 # Fase 2, replay: volver a aplicar todos los eventos ya aplicados no cambia ningun archivo
