@@ -13,6 +13,8 @@
 #  5. Hasta 2 extras (la Baja solo sin Alta ni Media) y `quedan N en el hilo: <ids>`.
 #  8. (2.62.0) El hilo no cruza por ids cerrados ni a otro tema: caso real de otro proyecto.
 #  9. (2.62.0) El sello lee el id de `Retomamos:` en el prompt de un recordatorio de calendario.
+# 10. (2.63.45) El evento lleva el session_id de CLAUDE_CODE_SESSION_ID; THREET_SESSION_ID y
+#     --session siguen ganando.
 #
 # Uso: test-hilo-pendientes.sh   (exit 0 = todo verde)
 set -u
@@ -415,6 +417,31 @@ ficha 2026-10-14-hoy "Proximo paso: x." "hilo_paso: p-aaaaaaaaaa\nhilo_heredados
 pend Alta p-aaaaaaaaaa "el paso recibido, espera" 2026-10-13-ayer " — _bloqueado: otra instalacion_"
 colapsa "Ninguno — lo recibido espera a otra instalacion."
 chk "colapsado y el hilo sin nada hacible: HECHO" "1" "$(audit | grep -c 'HECHO .*snippet.hilo.*no tiene nada')"
+
+echo "== 10. (2.63.45) el evento lleva el session_id de la sesion de Claude Code =="
+evento_sid() {   # el session_id del unico evento en pending/
+  python3 - "$M/.journal/pending" <<'PY'
+import json, os, sys
+d = sys.argv[1]
+for n in sorted(os.listdir(d)):
+    if n.endswith(".json"):
+        print(json.load(open(os.path.join(d, n), encoding="utf-8"))["session_id"])
+PY
+}
+emite() { python3 "$BIN/journal-emit.py" --memory-dir "$M" --type pendiente.window --id p-aaaaaaaaaa \
+  --revisar 2026-10-20 "$@" >/dev/null 2>&1; }
+memoria
+CLAUDE_CODE_SESSION_ID=$SID emite
+chk "solo CLAUDE_CODE_SESSION_ID: el evento lleva ese id" "$SID" "$(evento_sid)"
+rm -rf "$M/.journal"
+THREET_SESSION_ID=explicito CLAUDE_CODE_SESSION_ID=$SID emite
+chk "THREET_SESSION_ID gana a CLAUDE_CODE_SESSION_ID" "explicito" "$(evento_sid)"
+rm -rf "$M/.journal"
+CLAUDE_CODE_SESSION_ID=$SID emite --session flag
+chk "--session gana a CLAUDE_CODE_SESSION_ID" "flag" "$(evento_sid)"
+rm -rf "$M/.journal"
+emite
+chk "sin ninguna: un uuid nuevo (32 hex)" "1" "$(evento_sid | grep -cE '^[0-9a-f]{32}$')"
 
 echo
 echo "pass=$pass fail=$fail"

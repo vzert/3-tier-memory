@@ -268,6 +268,8 @@ caso "hilo: la sesion escribio la ficha" pendientes_afines.py m_hilo.py $T "fich
 caso "hilo: sessions/ es un componente entero" pendientes_afines.py m_hilo.py $T "escribir not-sessions/<ficha> no es escribir la ficha" ruta-por-sufijo
 caso "hilo: leer no es escribir" pendientes_afines.py m_hilo.py $T "no sella una ficha del mismo dia que la sesion solo leyo" leer-cuenta-como-escribir
 caso "hilo: --transcript con guardia" journal-emit.py m_hilo.py $T "--transcript a mano pasa por la misma guardia de fecha" liga-sin-guardia
+caso "sid: lee CLAUDE_CODE_SESSION_ID" journal-emit.py m_hilo.py $T "solo CLAUDE_CODE_SESSION_ID: el evento lleva ese id" sid-sin-claude-code
+caso "sid: lo explicito gana" journal-emit.py m_hilo.py $T "THREET_SESSION_ID gana a CLAUDE_CODE_SESSION_ID" sid-claude-code-gana
 caso "marco: espera de Victor" pendientes_afines.py m_hilo.py $T "espera de Victor sin _bloqueado: POR-DISENO" marco-sin-espera
 caso "marco: varios ids" pendientes_afines.py m_hilo.py $T "dos pendientes, el segundo en otra linea del campo: POR-DISENO" marco-sin-ids
 caso "marco: ver tambien" pendientes_afines.py m_hilo.py $T "ver tambien no cuenta como segundo objetivo: HECHO" marco-con-ver-tambien

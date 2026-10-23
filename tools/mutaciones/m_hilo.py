@@ -13,6 +13,11 @@ M = {
     "liga-sin-auto": [("auto = [x for x in paso_recibido(origen, memory_dir, a.transcript)",
                        "auto = [x for x in []")],
     "liga-sin-guardia": [("if transcript and not af.ficha_de_la_sesion(", "if False and not af.ficha_de_la_sesion(")],
+    # 2.63.45 (p-857fadfbd1): el session_id del evento sale de CLAUDE_CODE_SESSION_ID, despues de las
+    # dos explicitas.
+    "sid-sin-claude-code": [('           or os.environ.get("CLAUDE_CODE_SESSION_ID"))', "           or None)")],
+    "sid-claude-code-gana": [('    sid = (os.environ.get("CLAUDE_SESSION_ID") or os.environ.get("THREET_SESSION_ID")',
+                              '    sid = (os.environ.get("CLAUDE_CODE_SESSION_ID") or os.environ.get("THREET_SESSION_ID")')],
     # pendientes_afines.py
     "campo-una-linea": [("if not sig.strip() or ETIQUETA.match(sig):", "if True:")],
     "pasted-sin-quitar": [('texto = PASTED.sub("", texto).strip()', "texto = texto.strip()")],

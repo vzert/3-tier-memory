@@ -4,11 +4,14 @@
 `trabajo_propio(transcript, ids)`: que hizo ESTA sesion con cada `p-…` del `Proximo paso`.
 `otras_ventanas(transcript, ids)`: que otras sesiones del mismo proyecto actuaron sobre ellos.
 
-Por que el transcript y no el journal: el `session_id` de un evento sale de `--session` o de
-`CLAUDE_SESSION_ID`/`THREET_SESSION_ID` (`journal-emit.py session_id()`), y sin ellos es un uuid
-nuevo en cada llamada. El cierre no pasa `--session` y Claude Code exporta `CLAUDE_CODE_SESSION_ID`,
-que esa funcion no lee; medido en otro proyecto: block, relate y retomar de una misma sesion con 3
-ids distintos. Asi, hoy, el journal no dice que sesion toco un pendiente. El transcript si.
+Por que el transcript y no el journal: hasta 2.63.44 el `session_id` de un evento salia de
+`--session` o de `CLAUDE_SESSION_ID`/`THREET_SESSION_ID`, y sin ellos era un uuid nuevo en cada
+llamada; el cierre no pasa `--session` y Claude Code exporta `CLAUDE_CODE_SESSION_ID`, que esa
+funcion no leia (medido en otro proyecto: block, relate y retomar de una misma sesion con 3 ids
+distintos). Desde 2.63.45 el orden es `--session` > `CLAUDE_SESSION_ID` > `THREET_SESSION_ID` >
+`CLAUDE_CODE_SESSION_ID`, y sin ninguna, un uuid por llamada. Aun asi los eventos ya compactados no
+guardan su sesion en el indice.
+El transcript si dice que sesion toco un pendiente.
 
 Caso real que mide esto (otro proyecto, 2026-10-22): la sesion solo desbloqueo, ligo y marco un
 pendiente ajeno y lo dejo como `Proximo paso`; otra ventana corria comandos con ese id desde 2

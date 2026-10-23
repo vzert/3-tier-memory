@@ -344,7 +344,11 @@ def check_date(value, what, default=None):
 
 # ----------------------------------------------------------------------------- escritura
 def session_id():
-    sid = os.environ.get("CLAUDE_SESSION_ID") or os.environ.get("THREET_SESSION_ID")
+    # CLAUDE_CODE_SESSION_ID (2.63.45, p-857fadfbd1): es la que exporta Claude Code a su Bash, con
+    # el nombre del .jsonl de la sesion. Sin ella cada evento llevaba un uuid nuevo y el journal no
+    # decia que sesion toco un pendiente. Va despues de las dos explicitas: quien las pone, manda.
+    sid = (os.environ.get("CLAUDE_SESSION_ID") or os.environ.get("THREET_SESSION_ID")
+           or os.environ.get("CLAUDE_CODE_SESSION_ID"))
     if sid:
         return re.sub(r"[^A-Za-z0-9_-]", "-", sid)[:64]
     return uuid.uuid4().hex
