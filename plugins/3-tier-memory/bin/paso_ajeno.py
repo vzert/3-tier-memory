@@ -21,12 +21,18 @@ trabaja sin escribir su id en un comando no sale. Solo ve las ventanas del mismo
 transcripts y de los que empiezan por su nombre (worktrees dentro del proyecto). Falla abierto:
 un transcript ilegible no produce aviso.
 """
+# sella-huellas: no (solo lee transcripts; no escribe nada)
 import datetime
 import glob
 import json
 import os
 import re
+import sys
 import time
+
+for _flujo in (sys.stdout, sys.stderr):
+    if hasattr(_flujo, "reconfigure"):
+        _flujo.reconfigure(encoding="utf-8")
 
 # Eventos que no son trabajo sobre el pendiente: ordenarlo, ligarlo, fecharlo o marcarlo.
 MANTENIMIENTO = re.compile(r"--type[\s=]+pendiente\.(relate|block|window|retomar)\b|marcar-retomar\.py")

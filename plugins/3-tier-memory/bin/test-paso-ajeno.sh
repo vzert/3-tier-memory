@@ -192,5 +192,5 @@ chk "transcript inexistente: sin aviso" "HECHO|" \
   "$(estado snippet.paso_no_trabajado --transcript "$P/no-existe.jsonl")"
 
 echo
-echo "test-paso-ajeno: $pass ok, $fail fallas"
+echo "RESULTADO: $pass ok, $fail fallas"
 [ "$fail" -eq 0 ]
