@@ -11,6 +11,51 @@ p-2c810e5d71. Bajo el supervisor lookout `supervisor-3-tier-memory` (d425).
   raya siguiente. Ahora se para antes de ese espacio, como la de `_bloqueado`. Prueba:
   `test-marcar-retomar.sh` caso 17 (roja con 2.63.42, verde ahora).
 
+## [2.63.43] - 2026-10-22
+Origen: Victor (via `/goalspec:interview`, bajo el supervisor lookout `supervisor-3-tier-memory`,
+decisiones d408-d414). Un snippet de otro proyecto se titulaba con un pendiente y mandaba a
+otro que la sesion solo habia desbloqueado y ligado en su cierre "para que
+entre al hilo del snippet", mientras otra ventana ya lo trabajaba. Auditoria de 101 fichas de 4
+proyectos (2026-10-20 a 2026-10-22, solo lectura): en 18 de unos 70 snippets con paso, el `p-…` era
+uno que la sesion no trabajo; 5 de ellos dieron trabajo doble o un arranque perdido; 11 titulos no
+cuadraban con su paso.
+
+### Added
+- **Tres avisos del snippet en la revision del cierre** (`checkpoint-audit.py`, POR-DISEÑO: viajan
+  en la revision y no suman rechazo):
+  - `snippet.titulo_paso`: el `p-…` de `Retomamos:` y el del `Proximo paso` difieren y ninguno
+    tiene al otro en `_relacionado`.
+  - `snippet.paso_no_trabajado`: la sesion no recibio el `p-…` del paso (prompt o snippet), no lo
+    creo, y fuera del turno de `/checkpoint-3t` no lo corrigio, cerro ni edito fuera de `memory/`.
+    Ligarlo, desbloquearlo, fecharlo, marcarlo o corregirlo en el cierre no cuenta.
+  - `snippet.paso_otra_ventana`: otro transcript del proyecto (mismo directorio de Claude Code o uno
+    que empieza por su nombre, sin subagentes) corrio Bash, Edit o Write con ese `p-…` en las
+    ultimas 2 h y no corrio `/checkpoint-3t` despues; su turno de cierre y sus ediciones a `memory/`
+    no cuentan. Medido sobre 22 cierres reales del 2026-10-22: avisa en 1, el caso real; con 24 h
+    y contando todo, la primera version avisaba en 12 de 21, casi todo sesiones ya cerradas del
+    mismo hilo.
+  Los dos ultimos leen transcripts (`bin/paso_ajeno.py`), no el journal: el `session_id` de un
+  evento sale de `--session` o de `CLAUDE_SESSION_ID`/`THREET_SESSION_ID`, y el cierre no pasa
+  ninguno (Claude Code exporta `CLAUDE_CODE_SESSION_ID`, que `journal-emit.py` no lee), asi que
+  cada evento lleva un uuid nuevo y el journal no dice que sesion toco un pendiente. `checkpoint-audit.py`
+  acepta `--transcript`; `checkpoint-close-guard.sh` le pasa el suyo. Sin transcript legible, no hay
+  aviso y el audit dice "no aplica". Corte: fichas desde el 2026-10-22.
+- Pruebas: `test-paso-ajeno.sh` (31, fixture inventado `bin/fixtures/paso-ajeno/` con la forma del
+  caso real: memoria y dos transcripts, el de la sesion y el de otra ventana sin cerrar) y 4 casos en
+  `test-checkpoint-close-guard.sh`; 14 mutaciones (`m_paso_ajeno.py`).
+
+### Changed
+- El `corrige` de `snippet.ninguno_plan_activo` ya no pide hacer de la fase del plan el `Proximo
+  paso`: lo es solo si la sesion la trabajo; si no, `ninguno — <plan> espera <que>`.
+- `checkpoint-3t.md` Step 3a: ligar un pendiente es para que vuelva en el hilo, nunca para hacer el
+  `Proximo paso` de algo que la sesion no trabajo; ligarlo, desbloquearlo, fecharlo o corregirlo en
+  el cierre no lo hace trabajo de la sesion. `checkpoint-3t-step8.md` nombra los tres avisos nuevos.
+
+### Limite declarado
+Los avisos leen ids, no trabajo: una sesion que trabajo un pendiente sin nombrar su id ni emitir
+`update`/`resolve` sale como "no lo trabajo", y una ventana que lo trabaja sin escribir su id en un
+comando, o lo nombro hace mas de 2 h, no sale. Un worktree fuera de la carpeta del proyecto no se ve.
+
 ## [2.63.42] - 2026-10-22
 Origen: Victor (via `/goalspec:interview`, bajo el supervisor lookout `supervisor-3-tier-memory`,
 decisiones d403-d406). Probando el mod `pendientes` 0.3.0 en cloudflare-expert: el clic en un

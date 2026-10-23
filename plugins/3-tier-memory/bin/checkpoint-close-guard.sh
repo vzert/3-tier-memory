@@ -708,6 +708,10 @@ avisos_bloqueo = []
 # Mismo camino: viajan en la revision y no suman un rechazo (decision de Victor, d267; caso real:
 # otro proyecto, 2026-10-20, dos cierres con 23 s de diferencia sobre el mismo `p-…`).
 avisos_compartido = []
+# Avisos `snippet.titulo_paso`, `paso_no_trabajado` y `paso_otra_ventana` (2.63.43): el paso no es
+# trabajo de esta sesion, o otra ventana corre comandos con el. Mismo camino, sin rechazo (d414;
+# auditoria de 101 fichas del 2026-10-22, caso real: una ficha de otro proyecto).
+avisos_ajeno = []
 presentes = []      # (orden, lineas, texto) de cada bloque del cierre, para medir orden y cola
 # Texto tolerado DESPUES del ultimo bloque del cierre: los separadores `───` que imprimen los
 # scripts y una linea corta. Mas que eso ya empuja el cierre hacia arriba (adversario de 2.43.0:
@@ -967,7 +971,8 @@ def revisar(ficha):
                   json.dumps([e for i in llegaron for e in encab.get(i, [])], ensure_ascii=False)]
     try:
         r = subprocess.run([sys.executable, os.path.join(BIN, "checkpoint-audit.py"), memory_dir,
-                            "--session-file", ficha, "--solo-snippet", "--json", "--no-git"] + extra,
+                            "--session-file", ficha, "--solo-snippet", "--json", "--no-git"] + extra
+                           + (["--transcript", tpath] if tpath else []),
                            capture_output=True, text=True, timeout=60)
         for x in json.loads(r.stdout or "[]"):
             if x.get("estado") == "SALTADO":
@@ -979,6 +984,10 @@ def revisar(ficha):
                 avisos_bloqueo.extend(pref + l for l in (x.get("lineas") or [x.get("detalle", "")]))
             elif x.get("clave") == "snippet.paso_compartido" and x.get("estado") != "HECHO":
                 avisos_compartido.extend(pref + l for l in (x.get("lineas") or [x.get("detalle", "")]))
+            elif x.get("clave") in ("snippet.titulo_paso", "snippet.paso_no_trabajado",
+                                    "snippet.paso_otra_ventana") and x.get("estado") != "HECHO":
+                avisos_ajeno.extend(pref + x["clave"].split(".")[1] + ": " + l
+                                    for l in (x.get("lineas") or [x.get("detalle", "")]))
     except Exception:
         pass
 
@@ -1268,6 +1277,16 @@ else:
                 "lo lleva ella, rehaz tu snippet con otro paso o `ninguno — lo lleva <ficha>`; si lo "
                 "tomas tu, dilo en la linea " + str(len(REVISION_ITEMS)) + " de la revision:\n"
                 + "\n".join(f"- {a}" for a in avisos_compartido))
+        if avisos_ajeno:
+            partes.append(
+                "El `Proximo paso` puede no ser trabajo de esta sesion (checkpoint-audit.py "
+                "snippet.titulo_paso / paso_no_trabajado / paso_otra_ventana; no bloquean, leen ids y "
+                "no trabajo). Quien pegue el snippet hara ese paso: si no es de tu hilo o otra ventana "
+                "lo lleva, duplica trabajo. Ligar, desbloquear o marcar un pendiente en el cierre no "
+                "lo hace tuyo. Si otra ventana lo nombra, preguntale por SendMessage (ListAgents) si "
+                "lo lleva. Rehaz el paso con el siguiente de tu hilo o `ninguno — <motivo>`, o di en "
+                "la linea " + str(len(REVISION_ITEMS)) + " de la revision por que se queda:\n"
+                + "\n".join(f"- {a}" for a in avisos_ajeno))
         if cierre_final:
             # Al final y una sola vez: se generan DESPUES de la revision, asi que ya reflejan lo que
             # corregiste en ella, y quedan como lo ultimo que ve el usuario.
