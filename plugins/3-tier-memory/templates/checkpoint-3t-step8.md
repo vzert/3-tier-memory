@@ -461,6 +461,11 @@ avisa con `⚠`: el `Proximo paso` no debe ser trabajo de fecha futura (regla de
 Un paso sin `p-…` (un plan, `ninguno — …`) no marca nada y no imprime nada. Su salida (`📌`, `·`,
 `⚠`) no va en el cierre; si sale `⚠`, arregla el paso antes de 8b. La marca entra en el commit de
 8f con lo demas. Si reescribes el snippet despues, vuelve a correrlo: la marca nombra esta ficha.
+Tambien quita la marca que esta sesion consumio (2.63.42): si arranco con el snippet de otra ficha
+(`hilo_retoma`, del sello de stamp-hilo) y el pendiente de ese paso sigue con `_retomar` a esa
+ficha sin quedar marcado ahora, emite `pendiente.retomar --quitar` (`🧹`). Asi el mod no vuelve a
+pegar un snippet ya hecho cuando el paso nuevo cae en otro pendiente. Una marca que otra sesion ya
+movio a su ficha no se toca.
 
 **8b. Imprimir al terminal — corre el script, no redactes el bloque otra vez**:
 

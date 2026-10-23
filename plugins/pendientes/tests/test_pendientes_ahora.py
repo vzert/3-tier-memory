@@ -41,7 +41,8 @@ PEND = """# Pendientes
 """
 
 FICHA_VIEJA = "# a\n\n## Como retomar\n\nProximo paso: hacer p-5555555555\n"
-FICHA = "# b\n\n## Como retomar\n\n```\nRetomamos: x\nProximo paso: implementar p-aaaaaaaaaa ya\n```\n"
+# 0.3.1: el hilo es el de la ficha de ESTA ventana; la b la escribio la sesion "sb".
+FICHA = "---\nsession_id: sb\n---\n# b\n\n## Como retomar\n\n```\nRetomamos: x\nProximo paso: implementar p-aaaaaaaaaa ya\n```\n"
 
 
 def correr(mem, lib, *extra):
@@ -77,7 +78,7 @@ def main():
             with open(os.path.join(mem, "sessions", nombre), "w", encoding="utf-8") as fh:
                 fh.write(texto)
 
-        d = correr(mem, lib)
+        d = correr(mem, lib, "--session-id", "sb")
         ids = [i["id"] for i in d["items"]]
         check("ok", d["ok"] is True)
         # Contexto del clic (0.2.1): no depende de la version de la biblioteca.
@@ -149,7 +150,7 @@ def main():
                                           "bloqueados": 1, "sin_id": 0, "planes": 0})
 
         # Con tope 3: el cupo del hilo (3) no deja sitio, pero el hilo sigue primero.
-        d3 = correr(mem, lib, "--max", "3")
+        d3 = correr(mem, lib, "--session-id", "sb", "--max", "3")
         check("tope 3", [i["id"] for i in d3["items"]] == ["p-aaaaaaaaaa", "p-bbbbbbbbbb", "p-7777777777"])
 
         # En curso: commits posteriores a la ficha, prompts de esta sesion y de otra viva.
@@ -211,15 +212,43 @@ def main():
         check("no cuentan: tool_result, meta, sesion vieja, commit anterior a la ficha",
               all(ec.get(i) is None for i in ("p-9999999999", "p-0000000000", "p-6666666666")))
         sin = correr(mem, lib, "--projects-root", os.path.join(tmp, "nada"))
+
+        # 0.3.1: una ventana nueva (sin ficha propia y sin prompt) no tiene "trabajo actual", aunque
+        # la ficha mas nueva del proyecto tenga hilo: esa es de otra ventana (caso real de
+        # cloudflare-expert, 2026-10-22).
+        transcripcion("nueva", [], hace=0)
+        dv = correr(mem, lib, "--session-id", "nueva", "--projects-root", raiz)
+        check("ventana nueva: sin SIGUIENTE ni RELACIONADO",
+              dv["ficha"] is None and all(i["grupo"] != "hilo" for i in dv["items"] + dv["resto"]))
+        check("ventana nueva: vence y alta siguen", any(i["grupo"] == "vence" for i in dv["items"]))
+        check("sin --session-id: sin hilo",
+              sin["ficha"] is None and all(i["grupo"] != "hilo" for i in sin["items"] + sin["resto"]))
+        transcripcion("solo-ids", [u("mira p-7777777777")], hace=0)
+        di = correr(mem, lib, "--session-id", "solo-ids", "--projects-root", raiz)
+        check("ventana con un id suelto: sin hilo (el id sale en curso)",
+              di["ficha"] is None and all(i["grupo"] != "hilo" for i in di["items"] + di["resto"]))
+        # La ventana que pego el Retomamos de la b trabaja su hilo.
+        transcripcion("pegada", [u("Retomamos: x\n\nLee memory/sessions/2026-10-13-b.md para el contexto "
+                                   "completo.\n\nProximo paso: implementar p-aaaaaaaaaa ya")], hace=0)
+        dg = correr(mem, lib, "--session-id", "pegada", "--projects-root", raiz, "--max", "20")
+        gp = {i["id"]: i for i in dg["items"] + dg["resto"]}
+        check("ventana que pego el snippet: su ficha y su hilo",
+              dg["ficha"] == "2026-10-13-b.md" and (gp.get("p-bbbbbbbbbb") or {}).get("grupo") == "hilo")
+        # El relevo de lookout trae el snippet en el system prompt, no en un prompt.
+        snap = {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt":
+                "Eres un relevo.\nRetomamos: x\n\nLee memory/sessions/2026-10-13-b.md para el contexto."}}
+        transcripcion("relevo", [snap], hace=0)
+        dr = correr(mem, lib, "--session-id", "relevo", "--projects-root", raiz)
+        check("relevo con el snippet en el system prompt: su ficha", dr["ficha"] == "2026-10-13-b.md")
         check("sin sesion ni transcripciones: solo commits",
               all((i["en_curso"] or {}).get("donde") in (None, "commits") for i in sin["items"]))
 
         # Un paso que cita lo bloqueado, lo de revisar futuro, lo de fecha futura y lo que vence
         # hoy: nada de eso es "proximo paso"; la Baja libre si.
         with open(os.path.join(mem, "sessions", "2026-10-14-c.md"), "w", encoding="utf-8") as fh:
-            fh.write("# c\n\n## Como retomar\n\nProximo paso: p-1111111111 p-2222222222 "
+            fh.write("---\nsession_id: sc\n---\n# c\n\n## Como retomar\n\nProximo paso: p-1111111111 p-2222222222 "
                      "p-3333333333 p-7777777777 p-cccccccccc\n")
-        dp = correr(mem, lib)
+        dp = correr(mem, lib, "--session-id", "sc")
         hilo_ids = [i["id"] for i in dp["items"] if i["grupo"] == "hilo"]
         check("paso filtrado como hilo()", dp["ficha"] == "2026-10-14-c.md" and hilo_ids == ["p-cccccccccc"])
         check("lo de hoy sigue en vence", any(i["id"] == "p-7777777777" and i["grupo"] == "vence"

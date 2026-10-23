@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.63.42] - 2026-10-22
+Origen: Victor (via `/goalspec:interview`, bajo el supervisor lookout `supervisor-3-tier-memory`,
+decisiones d403-d406). Probando el mod `pendientes` 0.3.0 en cloudflare-expert: el clic en un
+pendiente pego el `Retomamos` de la Fase 3 de respaldos, que otra sesion (la de la Fase 4) ya habia
+retomado y avanzado; y una ventana nueva, sin ningun prompt, mostraba RELACIONADO AL TRABAJO ACTUAL
+con pendientes del plan de otra ventana abierta.
+
+### Fixed
+- **`/checkpoint-3t` quita la marca `_retomar` que la sesion consumio.** `stamp-hilo.py` sella
+  ademas `hilo_retoma: <slug>` (la ficha que el snippet mandaba leer), y `marcar-retomar.py`
+  (Step 8a2), tras poner sus marcas, emite `pendiente.retomar --quitar --ficha sessions/<slug>` para
+  cada id de `hilo_paso` que siga con `_retomar` a esa ficha y no haya quedado marcado ahora. Antes
+  la marca solo se movia si el paso nuevo citaba el mismo pendiente; si caia en otro (la Fase 4
+  marco el de Bitbucket) o era `ninguno`, la marca vieja seguia en PLANES ACTIVOS y el clic pegaba un
+  snippet ya hecho. El compactador quita la marca solo si todavia apunta a esa ficha: si otra sesion
+  ya la movio a la suya, no la toca. Una ficha sellada antes de esta version no trae `hilo_retoma` y
+  no quita nada.
+- **Mod `pendientes` 0.3.1: SIGUIENTE y RELACIONADO salen del trabajo de esta ventana.** El hilo
+  sale de la ficha que escribio esta sesion (`session_id:`) o, si aun no escribio ninguna, de la que
+  manda leer el `Retomamos:` que recibio (prompt o system prompt del relevo). Una ventana nueva sin
+  prompt, o con solo ids sueltos, no muestra esas dos secciones. Hasta 0.3.0 salian de la ficha mas
+  nueva del proyecto, que suele ser de otra ventana viva. El campo `ficha` del JSON es ahora esa
+  ficha (o null).
+
 ## [2.63.41] - 2026-10-22
 Origen: Victor (via `/goalspec:interview`, bajo el supervisor lookout `supervisor-3-tier-memory`,
 decisiones d372 y d373). Con varias ventanas del mismo proyecto aparcadas tras su checkpoint, las

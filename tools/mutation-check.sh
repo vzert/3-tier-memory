@@ -385,6 +385,8 @@ T=test-marcar-retomar.sh
 caso "--hoy sin forma ancha"    marcar-retomar.py m_marcar_retomar.py $T "marcar-retomar --hoy 20261016 sale 0" sin-forma-ancha
 caso "--hoy sin semana ISO"     marcar-retomar.py m_marcar_retomar.py $T "marcar-retomar --hoy 2026-W42-5 sale 0" sin-semana
 caso "--hoy guiones sueltos"    marcar-retomar.py m_marcar_retomar.py $T "marcar-retomar --hoy 2026-1016 sale 2" guiones-sueltos
+caso "retomar consumido"        marcar-retomar.py m_marcar_retomar.py $T "A ya no tiene _retomar" sin-quitar
+caso "quitar sin guardia"       journal-compact.py m_marcar_retomar.py $T "un --quitar con otra ficha tampoco la toca" quitar-sin-guardia
 T=test-fecha-iso.sh
 caso "emisor sin regex de fecha" journal-emit.py m_fecha_iso.py $T "pendiente.add --creado 20261016: error" sin-regex
 caso "compactador sin regex"    journal-compact.py m_fecha_iso.py $T "creado ancho: la cuarentena es por la fecha, no error-interno" sin-regex

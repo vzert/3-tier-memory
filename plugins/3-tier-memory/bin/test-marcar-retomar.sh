@@ -222,6 +222,83 @@ chk "los tres a cuarentena" "3" "$(cuarentena)"
 chk "la linea no cambio" "0" "$(linea "$A" | grep -c '_retomar:')"
 chk "y no se partio (sin una linea suelta '_')" "0" "$(grep -c '^_$' "$M/_pendientes.md" || true)"
 
+# 2.63.42: la sesion que retomo el snippet de otra ficha consume su marca, aunque su paso nuevo
+# caiga en otro pendiente (caso real de cloudflare-expert, 2026-10-22: la ficha de la Fase 4 retomo
+# la de la Fase 3, marco otro pendiente y la marca vieja siguio en PLANES ACTIVOS del mod).
+sellar() {  # sellar SLUG "hilo_paso" "hilo_retoma" — agrega el sello de stamp-hilo.py
+  python3 -I - "$M/sessions/$1.md" "$2" "$3" <<'PY'
+import sys
+ruta, paso, retoma = sys.argv[1], sys.argv[2], sys.argv[3]
+t = open(ruta, encoding="utf-8").read()
+extra = f"hilo_paso: {paso}\n" + (f"hilo_retoma: {retoma}\n" if retoma else "")
+open(ruta, "w", encoding="utf-8").write(t.replace("\n---\n", "\n" + extra + "---\n", 1))
+PY
+}
+
+echo "== 11. la sesion que retomo el snippet quita la marca vieja si su paso cae en otro pendiente =="
+fixture
+ficha 2026-10-16-uno "hacer $A (el paso A)."
+marcar "$M/sessions/2026-10-16-uno.md" >/dev/null
+ficha 2026-10-17-dos "medir $B."
+sellar 2026-10-17-dos "$A" 2026-10-16-uno
+OUT=$(python3 "$BIN/marcar-retomar.py" "$M/sessions/2026-10-17-dos.md" --hoy 2026-10-17)
+chk "A ya no tiene _retomar" "0" "$(linea "$A" | grep -c '_retomar:' || true)"
+chk "B queda marcado con la ficha nueva" "1" "$(linea "$B" | grep -c '_retomar: 2026-10-17 sessions/2026-10-17-dos_')"
+chk "lo dice en una linea" "1" "$(printf '%s\n' "$OUT" | grep -c "🧹 $A: sin _retomar")"
+chk "A sigue abierto, con su texto" "1" "$(linea "$A" | grep -c '^- \[ \] .*anadir el paso A')"
+chk "sin cuarentena" "0" "$(cuarentena)"
+OUT=$(python3 "$BIN/marcar-retomar.py" "$M/sessions/2026-10-17-dos.md" --hoy 2026-10-17)
+chk "otra pasada no emite nada nuevo para A" "0" "$(printf '%s\n' "$OUT" | grep -c "🧹" || true)"
+
+echo "== 12. si el paso nuevo vuelve a citar el pendiente, la marca se mueve, no se borra =="
+fixture
+ficha 2026-10-16-uno "hacer $A (el paso A)."
+marcar "$M/sessions/2026-10-16-uno.md" >/dev/null
+ficha 2026-10-17-dos "seguir con $A."
+sellar 2026-10-17-dos "$A" 2026-10-16-uno
+python3 "$BIN/marcar-retomar.py" "$M/sessions/2026-10-17-dos.md" --hoy 2026-10-17 >/dev/null
+chk "A apunta a la ficha nueva" "1" "$(linea "$A" | grep -c '_retomar: 2026-10-17 sessions/2026-10-17-dos_')"
+chk "con un solo campo" "1" "$(linea "$A" | grep -o '_retomar:' | wc -l | tr -d ' ')"
+
+echo "== 13. una marca que otra sesion ya movio a su ficha no se toca =="
+fixture
+ficha 2026-10-16-uno "hacer $A (el paso A)."
+marcar "$M/sessions/2026-10-16-uno.md" >/dev/null
+ficha 2026-10-17-otra "hacer $A otra vez."
+python3 "$BIN/marcar-retomar.py" "$M/sessions/2026-10-17-otra.md" --hoy 2026-10-17 >/dev/null
+ficha 2026-10-17-dos "medir $B."
+sellar 2026-10-17-dos "$A" 2026-10-16-uno
+python3 "$BIN/marcar-retomar.py" "$M/sessions/2026-10-17-dos.md" --hoy 2026-10-17 >/dev/null
+chk "A conserva la marca de la otra sesion" "1" "$(linea "$A" | grep -c '_retomar: 2026-10-17 sessions/2026-10-17-otra_')"
+emit --type pendiente.retomar --id "$A" --quitar --ficha sessions/2026-10-16-uno >/dev/null
+compact --quiet >/dev/null
+chk "un --quitar con otra ficha tampoco la toca" "1" "$(linea "$A" | grep -c '_retomar: 2026-10-17 sessions/2026-10-17-otra_')"
+chk "sin cuarentena" "0" "$(cuarentena)"
+
+echo "== 14. sin hilo_retoma (ficha anterior a 2.63.42, o no arranco con un snippet) no quita nada =="
+fixture
+ficha 2026-10-16-uno "hacer $A (el paso A)."
+marcar "$M/sessions/2026-10-16-uno.md" >/dev/null
+ficha 2026-10-17-dos "medir $B."
+sellar 2026-10-17-dos "$A" ""
+python3 "$BIN/marcar-retomar.py" "$M/sessions/2026-10-17-dos.md" --hoy 2026-10-17 >/dev/null
+chk "A conserva su marca" "1" "$(linea "$A" | grep -c '_retomar: 2026-10-16 sessions/2026-10-16-uno_')"
+
+echo "== 15. un paso nuevo sin p-… (ninguno, un plan) tambien consume la marca =="
+fixture
+ficha 2026-10-16-uno "hacer $A (el paso A)."
+marcar "$M/sessions/2026-10-16-uno.md" >/dev/null
+ficha 2026-10-17-dos "ninguno — esperar al lunes."
+sellar 2026-10-17-dos "$A" 2026-10-16-uno
+python3 "$BIN/marcar-retomar.py" "$M/sessions/2026-10-17-dos.md" --hoy 2026-10-17 >/dev/null
+chk "A ya no tiene _retomar" "0" "$(linea "$A" | grep -c '_retomar:' || true)"
+
+echo "== 16. el emisor: --quitar exige --ficha y no admite --retomar =="
+RC=0; emit --type pendiente.retomar --id "$A" --quitar >/dev/null 2>&1 || RC=$?
+chk "sin --ficha sale con error" "1" "$([ "$RC" -ne 0 ] && echo 1 || echo 0)"
+RC=0; emit --type pendiente.retomar --id "$A" --quitar --ficha sessions/x --retomar 2026-10-17 >/dev/null 2>&1 || RC=$?
+chk "con --retomar sale con error" "1" "$([ "$RC" -ne 0 ] && echo 1 || echo 0)"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

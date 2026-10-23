@@ -1356,7 +1356,9 @@ fi
 Lee el primer mensaje de la transcripcion; si es un snippet `Retomamos:`, escribe en el
 frontmatter `hilo_paso`, `hilo_heredados` (los ids del paso, de la linea de extras y
 de `quedan N en el hilo`) y `hilo_saltos` (cuantas sesiones seguidas lleva cada heredado sin ser el
-paso). Es lo que leen `print-como-retomar.py` y `checkpoint-audit.py` (`snippet.hilo`) en el Step 8:
+paso), y `hilo_retoma` (la ficha que el snippet mandaba leer; con ella 8a2 quita la marca
+`_retomar` que esta sesion consumio, 2.63.42). Es lo que leen `print-como-retomar.py`,
+`checkpoint-audit.py` (`snippet.hilo`) y `marcar-retomar.py` en el Step 8:
 una sola lectura de la transcripcion, para que el hook de cierre, que vuelve a correr esos scripts,
 vea lo mismo. Sin `Retomamos:` no sella nada (`sellado=0`), y no pisa un sello ya puesto.
 

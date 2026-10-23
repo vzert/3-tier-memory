@@ -5,8 +5,13 @@ Uso: pendientes-ahora.py --memory-dir DIR [--hoy AAAA-MM-DD] [--max N] [--lib DI
                          [--session-id ID] [--projects-root DIR] [--sessions-dir DIR]
 
 Orden (tres grupos, sin repetir un id):
-  1. hilo  — los ids del `Proximo paso` de la ultima ficha que sigan abiertos, y luego el hilo
-             de esa ficha (pendientes_afines.hilo: _relacionado, planes, nuevos de la sesion).
+  1. hilo  — los ids del `Proximo paso` de la ficha de ESTA ventana que sigan abiertos, y luego el
+             hilo de esa ficha (pendientes_afines.hilo: _relacionado, planes, nuevos de la sesion).
+             La ficha de esta ventana (0.3.1): la que escribio esta sesion (`session_id:` de su
+             cabecera) o, si aun no escribio ninguna, la que manda leer el `Retomamos:` que la
+             persona pego (o que trajo el system prompt). Sin `--session-id`, o en una ventana que
+             no hizo nada de eso, no hay hilo: la ficha mas nueva del proyecto suele ser de otra
+             ventana viva (ya sale en `planes`), y su hilo no es "el trabajo actual" de esta.
   2. vence — `_revisar` de hoy o pasado: el mas viejo arriba.
   3. alta  — Alta sin `_bloqueado`, sin `_revisar` futuro y sin fecha futura en el texto.
 Un pendiente con `_retomar` de hoy o pasado (y sin `_revisar` futuro) no entra en hilo ni en alta:
@@ -109,6 +114,32 @@ def ultima_ficha(memory_dir):
         return None
     return max(fichas, key=lambda f: (FICHA_FECHA.match(os.path.basename(f)).group(1),
                                       os.path.getmtime(f)))
+
+
+def ficha_de_esta_ventana(memory_dir, session_id, projects_root=None, pa=None):
+    """La ficha cuyo hilo es el trabajo de esta ventana, o None (0.3.1). Primero la que escribio esta
+    sesion (la mas nueva con su `session_id:`); si no escribio ninguna, la que manda leer el ultimo
+    `Retomamos:` que recibio (prompt de la persona o system prompt del relevo)."""
+    if not session_id:
+        return None
+    propias = [f for f in glob.glob(os.path.join(memory_dir, "sessions", "*.md"))
+               if FICHA_FECHA.match(os.path.basename(f)) and session_id_de(f) == session_id]
+    if propias:
+        return max(propias, key=lambda f: (FICHA_FECHA.match(os.path.basename(f)).group(1),
+                                           os.path.getmtime(f)))
+    if pa is None or not hasattr(pa, "recibido"):
+        return None
+    proyecto = os.path.dirname(os.path.abspath(memory_dir))
+    tx = transcripcion(session_id, proyecto, projects_root)
+    if not tx:
+        return None
+    retoma = None
+    for t in snippet_de_sistema(tx) + textos_de_persona(tx):
+        if re.search(r"retomamos:", t, re.I):
+            slug = pa.recibido(t).get("retoma")
+            if slug and os.path.isfile(os.path.join(memory_dir, "sessions", slug + ".md")):
+                retoma = slug
+    return os.path.join(memory_dir, "sessions", retoma + ".md") if retoma else None
 
 
 def fecha_futura(pa, texto, hoy):
@@ -701,11 +732,12 @@ def calcular(memory_dir, hoy, maximo, lib=None, session_id=None, projects_root=N
             elegidos.append(item(p, grupo, motivo, pa, hoy, ctx, vence))
 
     ficha = ultima_ficha(memory_dir)
+    propia = ficha_de_esta_ventana(memory_dir, session_id, projects_root, pa)
     paso_texto = None
-    if ficha:
-        with open(ficha, encoding="utf-8") as fh:
+    if propia:
+        with open(propia, encoding="utf-8") as fh:
             texto = fh.read()
-        slug = os.path.splitext(os.path.basename(ficha))[0]
+        slug = os.path.splitext(os.path.basename(propia))[0]
         paso_texto = pa.proximo_paso(texto)
         ids_paso = sorted(pa.anclas(paso_texto)[0], key=lambda i: (paso_texto or "").find(i))
         # El paso solo entra si se puede hacer hoy: el mismo filtro que hilo() (sin _bloqueado,
@@ -751,7 +783,7 @@ def calcular(memory_dir, hoy, maximo, lib=None, session_id=None, projects_root=N
     return {
         "ok": True,
         "hoy": hoy,
-        "ficha": os.path.basename(ficha) if ficha else None,
+        "ficha": os.path.basename(propia) if propia else None,
         "proximo_paso": " ".join(paso_texto.split()) if paso_texto else None,
         "items": mostrados,
         "planes": planes,

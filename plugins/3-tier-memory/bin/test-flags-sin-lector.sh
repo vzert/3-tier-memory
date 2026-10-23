@@ -44,7 +44,7 @@ LEE = {
     "pendiente.expire": "id dias prioridad line",
     "pendiente.reopen": "id prioridad",
     "pendiente.window": "id revisar",
-    "pendiente.retomar": "id retomar ficha",
+    "pendiente.retomar": "id retomar ficha quitar",
     "pendiente.block": "id bloqueado-por desbloquear revisar",
     "pendiente.relate": "id relacionado sin-relacion",
     "pendiente.adopt": "todas line id text-prefix colapsar",
@@ -68,7 +68,7 @@ m = re.search(r"--type \{([^}]*)\}", HELP)
 tipos = m.group(1).split(",") if m else []
 flags = sorted(set(re.findall(r"(?<![\w-])--[a-z][a-z-]*", HELP)) - COMUNES)
 chk("el --help trae los 19 tipos", len(tipos) == 19, f"{len(tipos)}: {tipos}")
-chk("el --help trae los 55 flags", len(flags) == 55, f"{len(flags)}")
+chk("el --help trae los 56 flags", len(flags) == 56, f"{len(flags)}")
 chk("LEE cubre los mismos tipos que el emisor", set(tipos) == set(LEE),
     f"sobran {set(LEE) - set(tipos)}, faltan {set(tipos) - set(LEE)}")
 fuera = sorted({f for v in LEE.values() for f in v} - set(flags))
@@ -83,7 +83,7 @@ VAL = {"--text": "**Regla nueva** — cuerpo de prueba", "--prioridad": "Alta",
        "--por": "1", "--supersedes": "1", "--decision": "nueva", "--last-verified": "2026-10-03",
        "--quickref-regla": "ninguna", "--topic": "uno",
        "--disparadores": "frases=uno dos tres | cuatro cinco seis | siete ocho nueve"}
-BOOL = {"--desbloquear", "--sin-relacion", "--todas", "--colapsar", "--inline", "--promote",
+BOOL = {"--desbloquear", "--quitar", "--sin-relacion", "--todas", "--colapsar", "--inline", "--promote",
         "--solo-vecinos", "--sin-disparadores"}
 
 BASE = {
@@ -180,6 +180,8 @@ DISP = VAL["--disparadores"]
 CONTROL = {
     ("pendiente.block", "--desbloquear"): ["--id", "p-1111111111", "--desbloquear"],
     ("pendiente.relate", "--sin-relacion"): ["--id", "p-1111111111", "--sin-relacion"],
+    ("pendiente.retomar", "--quitar"): ["--id", "p-1111111111", "--quitar",
+                                        "--ficha", "sessions/2026-10-17-demo"],
     ("learning.add", "--nota"): BASE["learning.add"] + ["--supersedes", "1", "--nota", "nota"],
     ("learning.add", "--quickref-prefix"): BASE["learning.add"] + ["--supersedes", "1",
                                                                    "--quickref-prefix", "qp"],

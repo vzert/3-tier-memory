@@ -119,10 +119,16 @@ If a user asks you to install this mod, follow these steps:
    last activity). Without that registry (and always on Windows, where a live process cannot be
    checked safely) only the transcript is known, and the row says so: `◐ activa` (activity in the last 2 hours) or `○ sin actividad N d`. These items do not
    appear in the list below, except in VENCEN when they also have a `_revisar` today or past.
-1. **SIGUIENTE** — the ids in the `Próximo paso` of the newest session file that can be started
-   today (not `_bloqueado`, no `_revisar` today or later, no future date in the text).
-2. **RELACIONADO AL TRABAJO ACTUAL** — the thread of that session (`_relacionado` links, shared
-   plans, items created in it), as 3-tier-memory's `hilo()` computes it.
+1. **SIGUIENTE** — the ids in the `Próximo paso` of **this window's** session file that can be
+   started today (not `_bloqueado`, no `_revisar` today or later, no future date in the text).
+   This window's session file (0.3.1) is the one this session wrote (its `session_id:` header) or,
+   before it writes one, the file named by the `Retomamos` snippet you pasted (or that a supervisor
+   put in its system prompt). A new window with no prompt yet, or one where you only typed loose
+   ids, has none, and SIGUIENTE and RELACIONADO do not show: until 0.3.0 they came from the newest
+   session file of the project, which is usually another live window's (it shows in PLANES
+   ACTIVOS).
+2. **RELACIONADO AL TRABAJO ACTUAL** — the thread of that session file (`_relacionado` links,
+   shared plans, items created in it), as 3-tier-memory's `hilo()` computes it.
 3. **VENCEN** — `_revisar` today or past: Alta first, then the oldest. Only real dates: until
    0.3.0 the `_retomar` marks showed here too, and a parked plan read like a due item. An item
    with a future `_revisar` waits.
