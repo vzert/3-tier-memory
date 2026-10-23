@@ -1406,6 +1406,14 @@ def apply_retomar(mem, p):
     if i is None:
         log(f"WARN retomar: no hay linea abierta con id {p['id']}")
         return False
+    if p.get("quitar"):
+        # 2.63.42: solo si la marca todavia apunta a esa ficha; si otra sesion ya la movio, se queda.
+        m = re.search(r"_retomar:\s*\S+\s+(\S+?)_\s*(?=—|$)", lines[i])
+        if not m or m.group(1) != p["ficha"]:
+            return False
+        lines[i] = RETOMAR_RE.sub("", lines[i].rstrip("\n"))
+        atomic_write(path, lines)
+        return True
     nueva = RETOMAR_RE.sub("", lines[i].rstrip("\n"))
     nueva = f"{nueva} — _retomar: {p['retomar']} {p['ficha']}_"
     if nueva == lines[i]:
@@ -4267,6 +4275,19 @@ def validar_fecha_evento(p, tipo):
         raise Quarantine(f"malformed: {tipo} con fecha {f!r} invalida")
 
 
+def _validar_retomar_fecha(p):
+    """Fecha y ficha de un `pendiente.retomar` que pone la marca (no el que la quita)."""
+    ret = str(p.get("retomar", ""))
+    try:
+        date.fromisoformat(ret)
+    except (ValueError, TypeError):
+        raise Quarantine("malformed: pendiente.retomar sin 'retomar' con fecha real")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", ret):
+        raise Quarantine("malformed: pendiente.retomar sin 'retomar' AAAA-MM-DD")
+    if not FICHA_RETOMAR_RE.fullmatch(str(p.get("ficha", ""))):
+        raise Quarantine("malformed: pendiente.retomar sin 'ficha' sessions/<slug>")
+
+
 def validate(ev):
     if not isinstance(ev, dict) or ev.get("v") != 1:
         raise Quarantine("malformed: esquema desconocido (v != 1)")
@@ -4374,15 +4395,12 @@ def validate(ev):
         # fromisoformat solo no basta: desde Python 3.11 acepta `20261016` y `2026-W42-5`, que el mod
         # no lee (en 3.9 no los acepta; el regex hace igual las dos versiones).
         # fullmatch y no match: con `$`, `sessions/x\n` pasaba y partia la linea de Tier 2.
-        ret = str(p.get("retomar", ""))
-        try:
-            date.fromisoformat(ret)
-        except (ValueError, TypeError):
-            raise Quarantine("malformed: pendiente.retomar sin 'retomar' con fecha real")
-        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", ret):
-            raise Quarantine("malformed: pendiente.retomar sin 'retomar' AAAA-MM-DD")
-        if not FICHA_RETOMAR_RE.fullmatch(str(p.get("ficha", ""))):
-            raise Quarantine("malformed: pendiente.retomar sin 'ficha' sessions/<slug>")
+        if p.get("quitar"):
+            # 2.63.42: quitar la marca que la sesion que retomo el snippet ya consumio.
+            if not FICHA_RETOMAR_RE.fullmatch(str(p.get("ficha", ""))):
+                raise Quarantine("malformed: pendiente.retomar quitar sin 'ficha' sessions/<slug>")
+        else:
+            _validar_retomar_fecha(p)
     elif t == "pendiente.block":
         if not p.get("id"):
             raise Quarantine("malformed: pendiente.block sin 'id'")

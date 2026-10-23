@@ -1,6 +1,6 @@
 {
   "name": "pendientes",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A Claude Code mod: a 'what to do now' side pane with the project's 3-tier-memory pendientes, and a clickable band above the prompt. Needs the 3-tier-memory plugin and Claude Code mods (early access).",
   "author": {
     "name": "Will"

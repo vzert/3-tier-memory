@@ -15,6 +15,8 @@ salidas. Asi que se lee UNA vez, aqui, y se escribe en el frontmatter:
                              la ficha anterior (la que el snippet manda leer) + 1 si en este
                              snippet tampoco fue el paso. Con 2 o
                              mas, el heredado le gana el empate al nuevo (regla 3 de Victor).
+  hilo_retoma: <slug>        la ficha que el snippet mandaba leer (2.63.42): marcar-retomar.py
+                             quita el `_retomar` que la apunta, porque esta sesion ya lo consumio.
 
 Si la sesion no arranco con `Retomamos:` no se sella nada (exit 0, `sellado=0`). Si la ficha no
 es de esa transcripcion (la misma guardia que journal-emit: `ficha_de_la_sesion`), tampoco (exit 3). Si la ficha ya
@@ -104,6 +106,8 @@ def main(argv):
     lineas = ["hilo_paso: " + ", ".join(rec["paso"]),
               "hilo_heredados: " + ", ".join(rec["heredados"]),
               "hilo_saltos: " + ", ".join(f"{i}={n}" for i, n in sorted(salt.items()))]
+    if rec["retoma"]:
+        lineas.append("hilo_retoma: " + rec["retoma"])
     cabeza, cola = contenido[:fin + 1], contenido[fin + 1:]
     nueva = cabeza.rstrip("\n") + "\n" + "\n".join(l.rstrip() for l in lineas) + "\n" + cola
     tmp = ficha + ".stamp-tmp"

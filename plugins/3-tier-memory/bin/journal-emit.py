@@ -53,6 +53,10 @@ Tipos de evento:
                     Pone o cambia `_retomar: FECHA sessions/<slug>_`: el pendiente que cita el
                     `Proximo paso` de esa ficha, para que el mod pendientes lo saque en PLANES ACTIVOS.
                     Solo lo lee el mod; 8e, el hilo y el calendario lo ignoran (2.62.8).
+  pendiente.retomar --id ID --quitar --ficha sessions/<slug>                       (2.63.42)
+                    Quita `_retomar` si todavia apunta a esa ficha: la sesion que retomo su
+                    snippet ya lo consumio (marcar-retomar.py). Si la marca ya apunta a otra
+                    ficha (otra sesion la movio), no hace nada.
   pendiente.block   --id ID (--bloqueado-por "QUE" | --desbloquear) [--revisar YYYY-MM-DD]
                     Pone, cambia o quita `_bloqueado: QUE_` en un pendiente VIVO. Existe para
                     marcar en Step 3a uno que nacio sin el campo; no cambia el id.
@@ -981,7 +985,7 @@ FLAGS_DE = {
     "pendiente.expire": {"id", "dias", "prioridad", "line"},
     "pendiente.reopen": {"id", "prioridad"},
     "pendiente.window": {"id", "revisar"},
-    "pendiente.retomar": {"id", "retomar", "ficha"},
+    "pendiente.retomar": {"id", "retomar", "ficha", "quitar"},
     "pendiente.block": {"id", "bloqueado_por", "desbloquear", "revisar"},
     "pendiente.relate": {"id", "relacionado", "sin_relacion"},
     "pendiente.adopt": {"todas", "line", "id", "text_prefix", "colapsar"},
@@ -1041,6 +1045,7 @@ def main():
     ap.add_argument("--revisar")
     ap.add_argument("--retomar")                          # pendiente.retomar (2.62.8)
     ap.add_argument("--ficha")                            # pendiente.retomar
+    ap.add_argument("--quitar", action="store_true")      # pendiente.retomar (2.63.42)
     ap.add_argument("--bloqueado-por", dest="bloqueado_por",
                     help="que espera, FUERA de la sesion (otra instalacion, un peer, un PR ajeno); "
                          "nunca una decision del usuario, que va en el Proximo paso")
@@ -1515,6 +1520,19 @@ def main():
         pid = (a.id or "").strip()
         if not ID_RE.match(pid):
             sys.exit("journal-emit: --id debe tener la forma p-<10 hex>")
+        if a.quitar:
+            if a.retomar:
+                sys.exit("journal-emit: pendiente.retomar --quitar no lleva --retomar")
+            ficha = (a.ficha or "").strip()
+            if ficha.endswith(".md"):
+                ficha = ficha[:-3]
+            if not FICHA_RETOMAR_RE.fullmatch(ficha):
+                sys.exit("journal-emit: pendiente.retomar --quitar necesita --ficha sessions/<slug>")
+            base["payload"] = {"id": pid, "quitar": True, "ficha": ficha,
+                               "fecha": date.today().isoformat()}
+            write_event(memory_dir, base)
+            print(pid)
+            return
         ret = (a.retomar or "").strip()
         # fecha_real (fromisoformat) acepta `20261016` y `2026-W42-5` desde Python 3.11 (en 3.9 no):
         # el compactador los cuarentena y el mod no los lee. Aqui solo AAAA-MM-DD, en cualquier version.

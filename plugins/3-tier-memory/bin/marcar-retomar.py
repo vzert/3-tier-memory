@@ -21,6 +21,14 @@ tras "ver tambien"), y para cada uno que siga abierto en `_pendientes.md`:
   - si no: emite `pendiente.retomar` y, al final, compacta.
 Un `Proximo paso` sin `p-…` (un plan, `ninguno — …`) no marca nada. Nunca crea un pendiente.
 
+Despues quita la marca que esta sesion consumio (2.63.42): si la sesion arranco con el snippet de
+otra ficha F (`hilo_retoma: F` en su frontmatter, de stamp-hilo.py) y uno de los ids de ese paso
+(`hilo_paso`) sigue abierto con `_retomar … sessions/F_` y no quedo marcado ahora, emite
+`pendiente.retomar --quitar --ficha sessions/F`. Sin esto la marca vieja seguia en PLANES ACTIVOS
+y el clic del mod pegaba un snippet ya hecho cuando el paso nuevo caia en otro pendiente (caso real
+de cloudflare-expert, 2026-10-22: la ficha de la Fase 4 retomo la de la Fase 3 y marco otro
+pendiente). Si la marca ya apunta a otra ficha, el compactador no la toca.
+
 Salida: una linea por id. Codigo 0 salvo error de uso o de escritura.
 
 Uso:  marcar-retomar.py SESSION_FILE [--hoy YYYY-MM-DD] [--memory-dir DIR]
@@ -133,7 +141,10 @@ def main(argv):
         return 1
     pa = _afines()
     ids = ids_del_paso(pa.proximo_paso(texto), pa)
-    if not ids:
+    fm = pa.frontmatter(texto)
+    retoma = (fm.get("hilo_retoma") or "").strip()
+    consumidos = [i for i in pa.lista(fm.get("hilo_paso")) if i.startswith("p-")] if retoma else []
+    if not ids and not consumidos:
         return 0
     if not os.path.isfile(pend_path):
         print(f"⚠ marcar-retomar.py: no existe {pend_path}", file=sys.stderr)
@@ -141,6 +152,7 @@ def main(argv):
     ficha = "sessions/" + os.path.splitext(os.path.basename(path))[0]
     vivos = abiertos(pend_path)
     emitidos = 0
+    marcados = set()
     for pid in ids:
         linea = vivos.get(pid)
         if linea is None:
@@ -164,7 +176,26 @@ def main(argv):
                   file=sys.stderr)
             return 1
         emitidos += 1
+        marcados.add(pid)
         print(f"📌 {pid}: retomar {hoy} (sale en PLANES ACTIVOS del mod pendientes hasta que se cierre)")
+    vieja = "sessions/" + retoma
+    for pid in consumidos:
+        linea = vivos.get(pid)
+        if linea is None or pid in marcados or vieja == ficha:
+            continue
+        ret = RETOMAR.search(linea)
+        if not ret or ret.group(2) != vieja:
+            continue
+        r = subprocess.run([sys.executable, os.path.join(BIN, "journal-emit.py"),
+                            "--memory-dir", memory_dir, "--type", "pendiente.retomar",
+                            "--id", pid, "--quitar", "--ficha", vieja],
+                           capture_output=True, text=True, encoding="utf-8")
+        if r.returncode != 0:
+            print(f"⚠ marcar-retomar.py: journal-emit fallo con {pid}: {r.stderr.strip()}",
+                  file=sys.stderr)
+            return 1
+        emitidos += 1
+        print(f"🧹 {pid}: sin _retomar ({vieja} ya se retomo en esta sesion)")
     if emitidos:
         r = subprocess.run([sys.executable, os.path.join(BIN, "journal-compact.py"),
                             "--memory-dir", memory_dir, "--quiet"],

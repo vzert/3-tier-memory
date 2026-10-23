@@ -5,8 +5,14 @@ Uso: pendientes-ahora.py --memory-dir DIR [--hoy AAAA-MM-DD] [--max N] [--lib DI
                          [--session-id ID] [--projects-root DIR] [--sessions-dir DIR]
 
 Orden (tres grupos, sin repetir un id):
-  1. hilo  — los ids del `Proximo paso` de la ultima ficha que sigan abiertos, y luego el hilo
-             de esa ficha (pendientes_afines.hilo: _relacionado, planes, nuevos de la sesion).
+  1. hilo  — los ids del `Proximo paso` de la ficha de ESTA ventana que sigan abiertos, y luego el
+             hilo de esa ficha (pendientes_afines.hilo: _relacionado, planes, nuevos de la sesion).
+             La ficha de esta ventana (0.3.1): la que escribio esta sesion (`session_id:` de su
+             cabecera) o, si aun no escribio ninguna, la que manda leer el `Retomamos:` que la
+             persona pego (o que trajo el system prompt). Sin ficha, los `p-…` que la persona cito en
+             sus prompts de esta ventana hacen de paso, y el hilo sale de ellos. Sin `--session-id`,
+             o en una ventana sin prompt, no hay hilo: la ficha mas nueva del proyecto suele ser de
+             otra ventana viva (ya sale en `planes`), y su hilo no es "el trabajo actual" de esta.
   2. vence — `_revisar` de hoy o pasado: el mas viejo arriba.
   3. alta  — Alta sin `_bloqueado`, sin `_revisar` futuro y sin fecha futura en el texto.
 Un pendiente con `_retomar` de hoy o pasado (y sin `_revisar` futuro) no entra en hilo ni en alta:
@@ -30,7 +36,8 @@ abierta la sesion que escribio la ficha (`session_id:` de su cabecera) u otra qu
 cuyo system prompt lo trae (el relevo de lookout); si no hay, "cerrada" con los dias desde la
 ultima actividad de su transcripcion. Sin ese registro (otra plataforma, otra version), solo queda
 la transcripcion: "activa" (actividad en 2 h) o "sin actividad" con los dias. Un plan
-sale de la lista cuando se cierra su pendiente o cuando otro checkpoint mueve la marca.
+sale de la lista cuando se cierra su pendiente o cuando otro checkpoint mueve la marca o la quita
+(3-tier-memory 2.63.42: la sesion que retomo el snippet la consume).
 
 Contexto del clic: cada elegido lleva `origen` (rutas memory/... que existen, de su `_origen`),
 `origen_texto` (el `_origen` tal cual si no nombra ningun archivo que exista; si no, null) y
@@ -109,6 +116,49 @@ def ultima_ficha(memory_dir):
         return None
     return max(fichas, key=lambda f: (FICHA_FECHA.match(os.path.basename(f)).group(1),
                                       os.path.getmtime(f)))
+
+
+def ficha_de_esta_ventana(memory_dir, session_id, projects_root=None, pa=None):
+    """La ficha cuyo hilo es el trabajo de esta ventana, o None (0.3.1). Primero la que escribio esta
+    sesion (la mas nueva con su `session_id:`); si no escribio ninguna, la que manda leer el ultimo
+    `Retomamos:` que recibio (prompt de la persona o system prompt del relevo)."""
+    if not session_id:
+        return None
+    propias = [f for f in glob.glob(os.path.join(memory_dir, "sessions", "*.md"))
+               if FICHA_FECHA.match(os.path.basename(f)) and session_id_de(f) == session_id]
+    if propias:
+        return max(propias, key=lambda f: (FICHA_FECHA.match(os.path.basename(f)).group(1),
+                                           os.path.getmtime(f)))
+    if pa is None or not hasattr(pa, "recibido"):
+        return None
+    proyecto = os.path.dirname(os.path.abspath(memory_dir))
+    tx = transcripcion(session_id, proyecto, projects_root)
+    if not tx:
+        return None
+    retoma = None
+    for t in snippet_de_sistema(tx) + textos_de_persona(tx):
+        if re.search(r"retomamos:", t, re.I):
+            slug = pa.recibido(t).get("retoma")
+            if slug and os.path.isfile(os.path.join(memory_dir, "sessions", slug + ".md")):
+                retoma = slug
+    return os.path.join(memory_dir, "sessions", retoma + ".md") if retoma else None
+
+
+def ids_de_esta_ventana(memory_dir, session_id, projects_root=None, pa=None):
+    """Los `p-…` que la persona cito en los prompts de esta ventana, en orden de aparicion (0.3.1).
+    De un `Retomamos:` solo los del paso (ids_del_texto)."""
+    if not session_id:
+        return []
+    proyecto = os.path.dirname(os.path.abspath(memory_dir))
+    tx = transcripcion(session_id, proyecto, projects_root)
+    if not tx:
+        return []
+    vistos = []
+    for t in textos_de_persona(tx):
+        for i in sorted(ids_del_texto(t, pa), key=t.find):
+            if i not in vistos:
+                vistos.append(i)
+    return vistos
 
 
 def fecha_futura(pa, texto, hoy):
@@ -701,11 +751,19 @@ def calcular(memory_dir, hoy, maximo, lib=None, session_id=None, projects_root=N
             elegidos.append(item(p, grupo, motivo, pa, hoy, ctx, vence))
 
     ficha = ultima_ficha(memory_dir)
-    paso_texto = None
-    if ficha:
-        with open(ficha, encoding="utf-8") as fh:
+    propia = ficha_de_esta_ventana(memory_dir, session_id, projects_root, pa)
+    paso_texto = texto = slug = None
+    if propia:
+        with open(propia, encoding="utf-8") as fh:
             texto = fh.read()
-        slug = os.path.splitext(os.path.basename(ficha))[0]
+        slug = os.path.splitext(os.path.basename(propia))[0]
+    else:
+        # Sin ficha: los ids que la persona cito aqui hacen de paso (el hilo sale de ellos).
+        citados = [i for i in ids_de_esta_ventana(memory_dir, session_id, projects_root, pa)
+                   if i in por_id]
+        if citados:
+            texto = "## Como retomar\n\nProximo paso: " + " ".join(citados) + "\n"
+    if texto is not None:
         paso_texto = pa.proximo_paso(texto)
         ids_paso = sorted(pa.anclas(paso_texto)[0], key=lambda i: (paso_texto or "").find(i))
         # El paso solo entra si se puede hacer hoy: el mismo filtro que hilo() (sin _bloqueado,
@@ -751,7 +809,7 @@ def calcular(memory_dir, hoy, maximo, lib=None, session_id=None, projects_root=N
     return {
         "ok": True,
         "hoy": hoy,
-        "ficha": os.path.basename(ficha) if ficha else None,
+        "ficha": os.path.basename(propia) if propia else None,
         "proximo_paso": " ".join(paso_texto.split()) if paso_texto else None,
         "items": mostrados,
         "planes": planes,

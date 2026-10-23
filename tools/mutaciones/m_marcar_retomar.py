@@ -17,6 +17,12 @@ M = {
     "guiones-sueltos": [
         ('    if m and valor.count("-") in (0, 2):              # todos los guiones o ninguno',
          '    if m:')],
+    # 2.63.42: la marca que la sesion consumio se quita, y solo si aun apunta a la ficha retomada.
+    "sin-quitar": [
+        ("        if not ret or ret.group(2) != vieja:", "        if True:")],
+    # journal-compact.py
+    "quitar-sin-guardia": [
+        ('        if not m or m.group(1) != p["ficha"]:', "        if not m:")],
 }
 
 p, nombre = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""

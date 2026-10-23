@@ -155,6 +155,7 @@ FM=$(sed -n '1,/^---$/p' "$M/sessions/2026-10-14-hoy.md")
 chk "hilo_paso" "1" "$(printf '%s' "$FM" | grep -c '^hilo_paso: p-aaaaaaaaaa$')"
 chk "hilo_heredados: paso + extras + quedan" "1" "$(printf '%s' "$FM" | grep -c '^hilo_heredados: p-aaaaaaaaaa, p-bbbbbbbbbb, p-cccccccccc$')"
 chk "hilo_saltos: el de ayer mas 1; el paso no cuenta; uno que ya no vino se olvida" "1" "$(printf '%s' "$FM" | grep -c '^hilo_saltos: p-bbbbbbbbbb=2, p-cccccccccc=1$')"
+chk "hilo_retoma: la ficha que el snippet mandaba leer (2.63.42)" "1" "$(printf '%s' "$FM" | grep -c '^hilo_retoma: 2026-10-13-ayer$')"
 chk "no pisa un sello ya puesto" "sellado=0 motivo=ya-sellada" "$(python3 "$BIN/stamp-hilo.py" "$M/sessions/2026-10-14-hoy.md" --transcript "$T/t.jsonl")"
 ficha 2026-09-01-vieja "Proximo paso: z."
 chk "no sella una ficha de otra fecha" "sellado=0 motivo=la-ficha-no-es-de-esa-transcripcion" "$(python3 "$BIN/stamp-hilo.py" "$M/sessions/2026-09-01-vieja.md" --transcript "$T/t.jsonl")"
