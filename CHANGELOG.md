@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.63.45] - 2026-10-23
+Origen: pendiente p-857fadfbd1 (sesion de 2.63.43), aprobado por Victor bajo el supervisor lookout
+`supervisor-3-tier-memory` (d433). Claude Code exporta `CLAUDE_CODE_SESSION_ID` a su Bash, pero
+`journal-emit.py session_id()` solo leia `CLAUDE_SESSION_ID` y `THREET_SESSION_ID`: cada evento
+emitido desde una sesion llevaba un uuid nuevo, y el journal no decia que sesion toco un pendiente.
+
+### Fixed
+- `journal-emit.py session_id()` lee tambien `CLAUDE_CODE_SESSION_ID`. Orden: `--session`, luego
+  `CLAUDE_SESSION_ID`, `THREET_SESSION_ID` y al final `CLAUDE_CODE_SESSION_ID`; sin ninguna, un
+  uuid nuevo por evento, como antes. Medido en esta instalacion: un evento emitido desde el Bash de
+  Claude Code lleva el nombre del `.jsonl` de la sesion. `tools/run-tests.sh` ya quitaba la variable
+  antes de las suites.
+- Pruebas: seccion 10 de `test-hilo-pendientes.sh` (4 casos; el primero cae contra 2.63.43) y 2
+  mutaciones en `m_hilo.py` (`sid-sin-claude-code`, `sid-claude-code-gana`).
+
+### Changed
+- `paso_ajeno.py`, `checkpoint-audit.py` (6b) y `checkpoint-3t.md` (5c-bis) ya no dicen que el
+  journal ignora la variable. Los avisos de 2.63.43 siguen leyendo transcripts: el indice no guarda
+  la sesion de un evento, y una instalacion sin la variable sigue con un uuid por evento.
 ## [2.63.44] - 2026-10-22
 Origen: barrido de marcas `_retomar` consumidas (p-3e5f0b1ed9), nota del revisor; pendiente
 p-2c810e5d71. Bajo el supervisor lookout `supervisor-3-tier-memory` (d425).

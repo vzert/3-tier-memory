@@ -1370,7 +1370,9 @@ vea lo mismo. Sin `Retomamos:` no sella nada (`sellado=0`), y no pisa un sello y
 valor coincide con el nombre del `.jsonl` en curso) y no se ha comprobado en otras versiones, en
 modo SDK ni sin terminal. Por eso el sello nunca se da por bueno: `stamp-session-id.py` exige que
 ese id tenga `.jsonl` en `$JSONL_DIR` **y** que la fecha de la ficha caiga dentro del rango de esa
-transcripcion, y si algo no cuadra no sella.
+transcripcion, y si algo no cuadra no sella. Desde 2.63.45 `journal-emit.py` tambien la lee: el
+`session_id` de cada evento es esa variable (salvo `--session`, `CLAUDE_SESSION_ID` o
+`THREET_SESSION_ID`, que mandan), y sin ella es un uuid nuevo por evento, como antes.
 
 **Sin sello no pasa nada malo**: `match-session-file.py` tiene una segunda capa que reconstruye
 la union observando que ficha escribio cada transcripcion, asi que una instalacion donde
