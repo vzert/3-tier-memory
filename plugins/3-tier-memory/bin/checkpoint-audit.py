@@ -954,10 +954,10 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                               f"los {len(topicos)} topico(s) existen y estan en _learnings.md"))
 
     # 6b. Cada learning de la ficha lleva su decision de dedup (Step 4, paso 0; 2.47.0). El evento
-    # learning.add no deja la sesion en el topic (su session_id solo vive en el evento, y sin
-    # --session ni variable de sesion, CLAUDE_CODE_SESSION_ID incluida desde 2.63.45, es un id
-    # aleatorio por emision), asi que no se pueden contar los learning.add de ESTA sesion: se mira
-    # la ficha. Toda linea con
+    # learning.add no deja la sesion en el topic: su session_id solo vive en el evento. Sale, por
+    # orden, de --session > CLAUDE_SESSION_ID > THREET_SESSION_ID > CLAUDE_CODE_SESSION_ID (esta
+    # desde 2.63.45), y sin ninguna es un id aleatorio por emision. Asi que no se pueden contar los
+    # learning.add de ESTA sesion: se mira la ficha. Toda linea con
     # [[learnings/<topic>]] dice `decision: nueva|ya existe #N|corrige #N|reemplaza #N|retira #N`,
     # y la regla #N que cita existe en ese topic. Un titulo de la ficha no se compara con el del
     # topic: se resume a menudo, y exigirlo daria falsos SALTADO.
