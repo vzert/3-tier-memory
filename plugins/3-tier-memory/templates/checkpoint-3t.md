@@ -431,7 +431,11 @@ Para los pendientes DENTRO del alcance, clasifica cada uno en exactamente uno de
   If a still-open item clearly goes with a pendiente or plan this session touched and its line
   has no `_relacionado:`, link it: `journal-emit.py --type pendiente.relate --id p-…
   --relacionado <p-… | plan-slug>` (2.55.0). That is what brings it back in the next snippet
-  (see Step 3b, `--relacionado`).
+  (see Step 3b, `--relacionado`). Link only for that reason, never to make an item this session
+  did not work the `Proximo paso`: linking, unblocking, dating or rewording an item in the
+  checkpoint does not make it this session's work (2.63.43; real case 2026-10-22: a session linked
+  a foreign item "so it enters the snippet thread" while another window was working it). The
+  close review warns about it (`snippet.paso_no_trabajado`, `snippet.paso_otra_ventana`).
 - **corregido** — sigue abierto, pero su TEXTO quedo falso (parte del trabajo se adelanto, el
   alcance se ajusto) o su prioridad cambio. No es un cierre: se emite `pendiente.update`, abajo.
 - **superseded** — the item was absorbed by another pendiente or a scope change (reference the new owner/scope).

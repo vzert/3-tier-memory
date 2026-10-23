@@ -154,6 +154,9 @@ DESDE_NINGUNO_BLOQUEO = "2026-10-16"
 # Desde 2.63.22 un `Proximo paso` que otra ficha del mismo dia ya deja como el suyo sale como aviso
 # (snippet.paso_compartido). Incluye el caso real del 2026-10-20.
 DESDE_PASO_COMPARTIDO = "2026-10-20"
+# snippet.paso_no_trabajado / paso_otra_ventana / titulo_paso (2.63.43): auditoria del 2026-10-22,
+# 101 fichas de 4 proyectos. Incluye el caso real (una ficha de otro proyecto del 2026-10-22).
+DESDE_PASO_AJENO = "2026-10-22"
 # Desde 2.63.33 (p-7fd6a82eaa) un snippet `ninguno` con un plan `active` enlazado en `## Plans` y
 # ningun pendiente abierto `_relacionado` a ese plan sale como SALTADO (snippet.ninguno_plan_activo).
 # Corte al dia siguiente de la medicion (d284): las fichas de antes no tenian la regla del Step 5.
@@ -518,6 +521,16 @@ def plan_activo(memory_dir, slug):
     return bool(m) and m.group(1).lower().startswith("active")
 
 
+def _paso_ajeno_mod():
+    """paso_ajeno.py como modulo (2.63.43): lee los transcripts para snippet.paso_*."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "_pa", os.path.join(os.path.dirname(os.path.abspath(__file__)), "paso_ajeno.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def _afines_mod():
     """pendientes_afines.py como modulo: la MISMA `fecha_futura` que filtra la linea de afines, para
     que el audit y el snippet no lean la fecha de dos formas (2.56.0)."""
@@ -663,7 +676,7 @@ def avisos_script_en_seco(h, memory_dir, nombre_script, claves_problema):
 
 
 def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=False, veredicto_adv=None,
-            preguntas_usuario=None, encabezados_usuario=None):
+            preguntas_usuario=None, encabezados_usuario=None, transcript=None):
     h = []
     texto = leer(session_file)
     secs = secciones(texto)
@@ -1699,6 +1712,77 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             h.append(Hallazgo(HECHO, "snippet.paso_compartido",
                               "ninguna otra ficha de hoy deja el mismo `Proximo paso`"))
 
+    # 8-sexies-quinquies. El `Proximo paso` es trabajo de esta sesion (2.63.43). Auditoria del
+    # 2026-10-22 (101 fichas, 4 proyectos): en 18 de ~70 snippets con paso, el `p-…` era uno que la
+    # sesion no trabajo (heredado, ligado o desbloqueado en el cierre), y en 3 otra ventana viva ya
+    # lo llevaba. Caso real: otro proyecto, 2026-10-22, un titulo con un pendiente y un paso con
+    # otro, que la sesion solo desbloqueo, ligo "para que entre al hilo del snippet" y marco,
+    # mientras otra ventana corria comandos con ese id. Los tres son
+    # POR-DISENO (aviso en la revision del cierre, no suman rechazo): leen ids, no trabajo.
+    if pp is not None and fecha_ficha and fecha_ficha >= DESDE_PASO_AJENO \
+            and "<filled in Step 8>" not in sec_retomar \
+            and not re.match(r"(ninguno|nada accionable)", pp, re.I):
+        ids_paso = list(dict.fromkeys(ID_PENDIENTE.findall(
+            re.sub(r"\bver\s+tambi[eé]n\b.*", "", pp, flags=re.I))))
+        ret = next((l.strip().strip("*").strip() for l in sec_retomar.splitlines()
+                    if l.strip().strip("*").strip().lower().startswith("retomamos:")), "")
+        ids_ret = list(dict.fromkeys(ID_PENDIENTE.findall(ret)))
+        # titulo_paso: el `Retomamos:` nombra un pendiente y el paso otro sin liga directa entre ellos.
+        if ids_ret and ids_paso and not set(ids_ret) & set(ids_paso):
+            rel = {}
+            ruta_pend = os.path.join(memory_dir, "_pendientes.md")
+            if os.path.exists(ruta_pend):
+                rel = {pe["id"]: set(pe["rel"]) for pe in _afines_mod().pendientes(ruta_pend)}
+            ligados = any(b in rel.get(a, set()) or a in rel.get(b, set())
+                          for a in ids_ret for b in ids_paso)
+            if ligados:
+                h.append(Hallazgo(HECHO, "snippet.titulo_paso",
+                                  "el `Retomamos:` y el `Proximo paso` citan pendientes ligados"))
+            else:
+                h.append(Hallazgo(DISENO, "snippet.titulo_paso",
+                                  "el `Retomamos:` y el `Proximo paso` hablan de pendientes distintos "
+                                  "y sin liga (aviso, no bloquea)",
+                                  [f"Retomamos: {', '.join(ids_ret)} — Proximo paso: {', '.join(ids_paso)}"],
+                                  corrige="el que retome lee un titulo y recibe otro trabajo: pon en "
+                                          "`Retomamos:` el pendiente del paso, o cambia el paso al "
+                                          "trabajo del titulo"))
+        else:
+            h.append(Hallazgo(HECHO, "snippet.titulo_paso",
+                              "no aplica: el titulo no cita pendiente, o cita el del paso"))
+        if transcript and ids_paso:
+            pa = _paso_ajeno_mod()
+            propio = pa.trabajo_propio(transcript, ids_paso)
+            ajenos = [f"{i}: {', '.join(propio[i][1]) or 'no aparece en ningun comando de la sesion'}"
+                      for i in ids_paso if propio and not propio[i][0]]
+            if propio is None:
+                # Transcript ilegible o vacio: falla abierto, sin aviso y sin afirmar que lo trabajo.
+                h.append(Hallazgo(HECHO, "snippet.paso_no_trabajado",
+                                  "no aplica: el transcript de la sesion no se pudo leer"))
+            elif ajenos:
+                h.append(Hallazgo(DISENO, "snippet.paso_no_trabajado",
+                                  f"{len(ajenos)} pendiente(s) del `Proximo paso` que esta sesion no "
+                                  "creo, no recibio y no trabajo fuera del cierre (aviso, no bloquea)",
+                                  ajenos,
+                                  corrige="el paso es el trabajo de este hilo: si no lo trabajaste, "
+                                          "usa el siguiente de tu hilo o `ninguno — <motivo>`; ligarlo, "
+                                          "desbloquearlo o marcarlo en el cierre no lo hace tuyo"))
+            else:
+                h.append(Hallazgo(HECHO, "snippet.paso_no_trabajado",
+                                  "esta sesion trabajo cada pendiente del `Proximo paso`"))
+            otras = pa.otras_ventanas(transcript, ids_paso)
+            choques = [f"{i}: {', '.join(v)}" for i, v in otras.items() if v]
+            if choques:
+                h.append(Hallazgo(DISENO, "snippet.paso_otra_ventana",
+                                  f"otra sesion del proyecto corrio comandos con {len(choques)} "
+                                  "pendiente(s) del `Proximo paso` en las ultimas 2 h y no ha cerrado (aviso, no bloquea)",
+                                  choques,
+                                  corrige="pregunta por SendMessage (ListAgents) si esa ventana lo "
+                                          "lleva; si lo lleva, `ninguno — lo lleva otra sesion` o el "
+                                          "siguiente de tu hilo"))
+            else:
+                h.append(Hallazgo(HECHO, "snippet.paso_otra_ventana",
+                                  "ninguna otra sesion del proyecto corrio comandos con el paso"))
+
     # 8-sexies-quater. `ninguno` no puede enterrar un plan `active` (2.63.33, p-7fd6a82eaa). Medido
     # el 2026-10-20 en 54 planes de 4 proyectos: las fases y los disparadores de un plan vivian solo
     # en su prosa, y un cierre `ninguno` con el plan enlazado dejaba a la siguiente sesion sin hilo.
@@ -1727,8 +1811,11 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                               corrige="por cada fase abierta o disparador del plan: `journal-emit.py "
                                       "--type pendiente.add --relacionado plan-<slug> ...` (el nombre "
                                       "del fichero sin `.md`, con `plan-` delante si no lo trae; con "
-                                      "`--revisar AAAA-MM-DD` si espera una fecha) y rehaz el snippet "
-                                      "con esa fase como `Proximo paso`; si el plan ya no tiene nada "
+                                      "`--revisar AAAA-MM-DD` si espera una fecha). Esa fase es el "
+                                      "`Proximo paso` solo si esta sesion la trabajo; si no, el "
+                                      "snippet se queda `ninguno — <plan> espera <que>` (2.63.43: "
+                                      "rellenar el paso con trabajo ajeno duplico trabajo en la "
+                                      "auditoria del 2026-10-22). Si el plan ya no tiene nada "
                                       "abierto, cierralo con `plan.upsert` (status completed)"))
         else:
             h.append(Hallazgo(HECHO, "snippet.ninguno_plan_activo",
@@ -2008,6 +2095,8 @@ def main():
                          "al usuario (respondidos o rechazados por el); lo pasa el hook Stop")
     ap.add_argument("--encabezados-usuario", default=None,
                     help="JSON: encabezados de esas preguntas; lo pasa el hook Stop (2.54.0)")
+    ap.add_argument("--transcript", default=None,
+                    help="transcript de la sesion; lo pasa el hook Stop (2.63.43, snippet.paso_*)")
     args = ap.parse_args()
 
     if not os.path.isdir(args.memory_dir):
@@ -2026,7 +2115,8 @@ def main():
     hallazgos = auditar(args.memory_dir, args.session_file, repo_root,
                         not args.no_git and not args.solo_snippet, hoy, args.solo_snippet,
                         args.veredicto_adversario, args.preguntas_usuario,
-                        json.loads(args.encabezados_usuario) if args.encabezados_usuario else None)
+                        json.loads(args.encabezados_usuario) if args.encabezados_usuario else None,
+                        args.transcript)
 
     if args.count:
         print(sum(1 for x in hallazgos if x.estado in (SALTADO, PARCIAL)))

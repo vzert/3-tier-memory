@@ -327,7 +327,13 @@ Reglas para llenar los slots:
   avisa tambien (`snippet.paso_compartido`, POR-DISEÑO, no suma un rechazo) si otra ficha del mismo
   dia ya deja tu mismo `p-…` como `Proximo paso`: pregunta a esa sesion por SendMessage si lo
   lleva; si lo lleva, rehaz tu paso o usa `ninguno — lo lleva <ficha>` (caso real de otro proyecto,
-  2026-10-20, dos cierres con 23 s de diferencia). **Desde 2.33.0 esta pregunta tiene respaldo mecanico, pero solo si el pendiente
+  2026-10-20, dos cierres con 23 s de diferencia). Desde 2.63.43 la revision del cierre avisa
+  tambien (POR-DISEÑO) si el `Retomamos:` y el `Proximo paso` citan pendientes distintos sin liga
+  (`snippet.titulo_paso`), si esta sesion no recibio, no creo y no trabajo el `p-…` del paso — solo
+  lo ligo, desbloqueo, fecho o corrigio en el cierre — (`snippet.paso_no_trabajado`), o si otra ventana del proyecto
+  corrio comandos con el en las ultimas 2 h y no ha cerrado (`snippet.paso_otra_ventana`). Rehaz el
+  paso con el siguiente de tu hilo o `ninguno — <motivo>`, o di en la revision por que se queda.
+  **Desde 2.33.0 esta pregunta tiene respaldo mecanico, pero solo si el pendiente
   lleva el campo**: nace con `--bloqueado-por "<que espera>"` (Step 3b) o se lo pone
   `pendiente.block` (Step 3a), y entonces el audit rechaza citarlo en `Proximo paso` hasta que
   pase su `_revisar`, que desde 2.63.32 todo bloqueado lleva (hoy+5 si nadie dijo otra fecha; ver

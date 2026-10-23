@@ -416,6 +416,21 @@ caso "cierre sin paso compartido" checkpoint-audit.py m_paso_vigente.py test-pas
 caso "paso compartido otro dia" checkpoint-audit.py m_paso_vigente.py test-paso-compartido.sh "otro dia" audit-compartido-cualquier-dia
 caso "guard sin paso compartido" checkpoint-close-guard.sh m_paso_vigente.py test-checkpoint-close-guard.sh "la revision trae el aviso del paso compartido" guard-sin-compartido
 caso "opcional con Alta"        print-pendiente-opcional.py m_paso_vigente.py test-print-pendiente-opcional.sh "nada" opcional-con-alta
+# 2.63.43: el Proximo paso no es trabajo de la sesion (auditoria del 2026-10-22).
+caso "ajeno: update en el cierre"  paso_ajeno.py m_paso_ajeno.py test-paso-ajeno.sh "paso no trabajado: solo lo ordeno en el cierre" ajeno-cierre-cuenta
+caso "ajeno: SendMessage cuenta"   paso_ajeno.py m_paso_ajeno.py test-paso-ajeno.sh "solo un SendMessage" ajeno-mensaje-cuenta
+caso "ajeno: comando viejo"        paso_ajeno.py m_paso_ajeno.py test-paso-ajeno.sh "un comando de hace 3 h" ajeno-sin-ventana
+caso "ajeno: la otra ya cerro"     paso_ajeno.py m_paso_ajeno.py test-paso-ajeno.sh "la otra sesion cerro despues" ajeno-cierre-no-libera
+caso "ajeno: cierre de la otra"    paso_ajeno.py m_paso_ajeno.py test-paso-ajeno.sh "su turno de cierre nombra el id" ajeno-cierre-otra-cuenta
+caso "ajeno: memoria de la otra"   paso_ajeno.py m_paso_ajeno.py test-paso-ajeno.sh "solo edita memory/" ajeno-memoria-otra-cuenta
+caso "ajeno: otro proyecto"        paso_ajeno.py m_paso_ajeno.py test-paso-ajeno.sh "otro proyecto" ajeno-cualquier-proyecto
+caso "audit sin paso no trabajado" checkpoint-audit.py m_paso_ajeno.py test-paso-ajeno.sh "paso no trabajado: solo lo ordeno" audit-sin-paso-no-trabajado
+caso "audit ilegible afirma"      checkpoint-audit.py m_paso_ajeno.py test-paso-ajeno.sh "y dice no aplica" audit-ilegible-afirma
+caso "audit sin otra ventana"      checkpoint-audit.py m_paso_ajeno.py test-paso-ajeno.sh "otra ventana corre comandos" audit-sin-otra-ventana
+caso "audit titulo sin liga"       checkpoint-audit.py m_paso_ajeno.py test-paso-ajeno.sh "ligados por _relacionado" audit-titulo-sin-liga
+caso "audit sin titulo paso"       checkpoint-audit.py m_paso_ajeno.py test-paso-ajeno.sh "titulo y paso de pendientes distintos" audit-sin-titulo-paso
+caso "guard sin paso ajeno"        checkpoint-close-guard.sh m_paso_ajeno.py test-checkpoint-close-guard.sh "la revision trae el aviso del paso ajeno" guard-sin-ajeno
+caso "guard sin transcript"        checkpoint-close-guard.sh m_paso_ajeno.py test-checkpoint-close-guard.sh "la revision trae el aviso del paso ajeno" guard-sin-transcript
 
 # 2.63.33: `ninguno` con un plan `active` sin pendiente ligado (p-7fd6a82eaa). Cada caso nombra su
 # suite (sin $T), igual que los de 2.63.22.

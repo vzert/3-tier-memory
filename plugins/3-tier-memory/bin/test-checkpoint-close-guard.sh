@@ -1538,6 +1538,28 @@ corre_en "$T/t.jsonl" false - "$RC" >/dev/null
 chk "la otra solo lo cita tras 'ver tambien': sin aviso" "1 0" "$([ -f "$AC" ] && echo 1 || echo 0) $(grep -c 'mismo `Proximo paso`' "$AC" 2>/dev/null)"
 rm -f "$M"/sessions/2026-10-20-*.md
 
+echo "== 2.63.43: el Proximo paso no es trabajo de la sesion: aviso en la revision, sin rechazo =="
+# La ficha demo con fecha 2026-10-22 y `Proximo paso` sobre p-daf3051915, que el transcript de la
+# sesion (tx) no nombra. Forma del caso real (otro proyecto, 2026-10-22).
+# El hook pasa su transcript_path al audit; sin eso no hay aviso.
+RJ="$T/repo-ajeno"; mkdir -p "$RJ"; git -C "$RJ" init -q
+AJ="$RJ/.git/3t-revision-cierre-sin-sesion.md"
+marco_ficha "ver en vivo la 0.13.41 (p-daf3051915)."
+python3 -c 'import sys;p=sys.argv[1];t=open(p,encoding="utf-8").read();open(p,"w",encoding="utf-8").write(t.replace("date: 2026-10-14","date: 2026-10-22",1))' "$F"
+tx "$T/t.jsonl" skill "$F" - -
+corre_en "$T/t.jsonl" false - "$RJ" >/dev/null
+chk "la revision trae el aviso del paso ajeno" "1" "$(grep -c '^El `Proximo paso` puede no ser trabajo de esta sesion' "$AJ" 2>/dev/null)"
+chk "y nombra el pendiente" "1" "$(grep -c '^- paso_no_trabajado: p-daf3051915: no aparece en ningun comando de la sesion' "$AJ" 2>/dev/null)"
+chk "y no lo cuenta como falta del cierre" "0" "$(grep -c 'checkpoint-audit.py snippet.paso_no_trabajado:' "$AJ" 2>/dev/null)"
+python3 - "$T/t.jsonl" <<'PY'
+import json, sys
+p = sys.argv[1]; R = [json.loads(l) for l in open(p, encoding="utf-8")]
+R.insert(1, {"type": "user", "message": {"role": "user", "content": "retoma p-daf3051915"}})
+open(p, "w", encoding="utf-8").write("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in R))
+PY
+corre_en "$T/t.jsonl" false - "$RJ" >/dev/null
+chk "el usuario lo pidio en la sesion: sin aviso" "1 0" "$([ -f "$AJ" ] && echo 1 || echo 0) $(grep -c 'puede no ser trabajo de esta sesion' "$AJ" 2>/dev/null)"
+
 echo "== 2.63.3: un sed que edita print-como-retomar.py y otro .py, con un break en la sesion y sin ficha: silencio =="
 # Forma real (sesion 4237bac9, p-bea9639b92): `sed -i` sobre el fuente de print-como-retomar.py
 # seguido de pendientes_afines.py, sin /checkpoint-3t ni ficha. El guard tomaba el .py como ficha,
