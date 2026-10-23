@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.63.46] - 2026-10-23
+Origen: p-1a69546329. `test-journal-race.sh` fallo en Windows en platforms 39984157994 (intento 1)
+solo por reloj: el caso "un solo agente" tardo 5933 ms contra un tope de 3000, con items=10 y
+lock=0. Bajo el supervisor lookout `supervisor-3-tier-memory` (d442). 2.63.45 queda para otro cambio.
+
+### Changed
+- **El tope de tiempo del caso "un solo agente" se mide contra la maquina.** Antes era fijo (1 s en
+  POSIX, 3 s en Git Bash y en CI). Ahora la suite mide en la misma corrida 11 arranques de
+  `journal-emit.py --help` (BASE) y exige `ms < 2 x BASE + 500`, en todas las plataformas. Medido en
+  macOS: BASE ~400 ms, caso ~450-600 ms, tope ~1300 ms. Sigue atrapando un compactador lento de
+  verdad: con `compact()` frenado 1 s el caso falla (1535 ms contra 1384); frenado 0.5 s pasa (en
+  macOS el tope local es algo mas laxo que el 1 s de antes). items=10 y lock=0 siguen igual.
+
 ## [2.63.45] - 2026-10-23
 Origen: pendiente p-857fadfbd1 (sesion de 2.63.43), aprobado por Victor bajo el supervisor lookout
 `supervisor-3-tier-memory` (d433). Claude Code exporta `CLAUDE_CODE_SESSION_ID` a su Bash, pero
