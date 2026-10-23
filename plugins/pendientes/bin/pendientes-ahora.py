@@ -36,7 +36,8 @@ abierta la sesion que escribio la ficha (`session_id:` de su cabecera) u otra qu
 cuyo system prompt lo trae (el relevo de lookout); si no hay, "cerrada" con los dias desde la
 ultima actividad de su transcripcion. Sin ese registro (otra plataforma, otra version), solo queda
 la transcripcion: "activa" (actividad en 2 h) o "sin actividad" con los dias. Un plan
-sale de la lista cuando se cierra su pendiente o cuando otro checkpoint mueve la marca.
+sale de la lista cuando se cierra su pendiente o cuando otro checkpoint mueve la marca o la quita
+(3-tier-memory 2.63.42: la sesion que retomo el snippet la consume).
 
 Contexto del clic: cada elegido lleva `origen` (rutas memory/... que existen, de su `_origen`),
 `origen_texto` (el `_origen` tal cual si no nombra ningun archivo que exista; si no, null) y

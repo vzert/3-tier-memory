@@ -110,7 +110,8 @@ If a user asks you to install this mod, follow these steps:
 0. **PLANES ACTIVOS** — one row per session note whose `Retomamos` snippet is still open: the notes
    named by `_retomar` (3-tier-memory 2.62.8+), which `/checkpoint-3t` writes on the item its
    `Próximo paso` cites, from that date until the item is closed or a later checkpoint moves the
-   mark. Newest first, all of them, above everything else and outside the 7-item cap, so you can
+   mark or, since 3-tier-memory 2.63.42, removes it (the session that resumed the snippet consumed
+   it). Newest first, all of them, above everything else and outside the 7-item cap, so you can
    close a parked window and still find the plan. Each row shows the next step and, on the right,
    whether a window is still working on it: `◉ abierta` (the session that wrote the note is a live
    Claude Code process, from Claude Code's own registry of open sessions), `◉ retomada` (another live window of the
