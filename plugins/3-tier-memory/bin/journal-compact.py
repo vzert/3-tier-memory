@@ -1387,7 +1387,9 @@ def apply_window(mem, p):
 
 
 BLOQUEADO_RE = re.compile(r"\s*—\s*_bloqueado:[^—]*?(?=\s*—|$)")
-RETOMAR_RE = re.compile(r"\s*—\s*_retomar:[^—]*")
+# Se para antes del espacio de la raya siguiente, como BLOQUEADO_RE: con `[^—]*` se comia ese
+# espacio y dejaba `_id: p-X_— _actualizado` (p-2c810e5d71).
+RETOMAR_RE = re.compile(r"\s*—\s*_retomar:[^—]*?(?=\s*—|$)")
 # La misma expresion que journal-emit.py: sessions/<slug> sin espacios, `—` ni `_` final.
 FICHA_RETOMAR_RE = re.compile(r"^sessions/[A-Za-z0-9][A-Za-z0-9._-]*(?<!_)$")
 

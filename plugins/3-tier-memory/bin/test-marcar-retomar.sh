@@ -299,6 +299,40 @@ chk "sin --ficha sale con error" "1" "$([ "$RC" -ne 0 ] && echo 1 || echo 0)"
 RC=0; emit --type pendiente.retomar --id "$A" --quitar --ficha sessions/x --retomar 2026-10-17 >/dev/null 2>&1 || RC=$?
 chk "con --retomar sale con error" "1" "$([ "$RC" -ne 0 ] && echo 1 || echo 0)"
 
+echo "== 17. quitar o mover _retomar con otro campo detras conserva el ' — ' entre los vecinos =="
+# p-2c810e5d71: el compactador 2.63.42 dejaba `_id: p-X_— _actualizado` (se comia el espacio de
+# la raya siguiente). El campo de detras se agrega a la linea del fixture: en la vida real llega
+# por un `pendiente.update` posterior a la marca.
+detras() {  # detras ID " — _campo: valor_" — agrega un campo al final de la linea del pendiente
+  python3 -I - "$M/_pendientes.md" "$1" "$2" <<'PY'
+import sys
+ruta, pid, extra = sys.argv[1], sys.argv[2], sys.argv[3]
+ls = open(ruta, encoding="utf-8").read().split("\n")
+ls = [l + extra if f"_id: {pid}_" in l else l for l in ls]
+open(ruta, "w", encoding="utf-8").write("\n".join(ls))
+PY
+}
+fixture
+ficha 2026-10-16-uno "hacer $A (el paso A)."
+marcar "$M/sessions/2026-10-16-uno.md" >/dev/null
+detras "$A" " — _actualizado: 2026-10-16_"
+emit --type pendiente.retomar --id "$A" --retomar 2026-10-17 --ficha sessions/2026-10-17-dos >/dev/null
+compact --quiet >/dev/null
+chk "al mover: el campo de detras sigue tras ' — '" "1" "$(linea "$A" | grep -c "_id: ${A}_ — _actualizado: 2026-10-16_ — _retomar: 2026-10-17 sessions/2026-10-17-dos_\$" || true)"
+detras "$A" " — _bloqueado: espera_"
+emit --type pendiente.retomar --id "$A" --quitar --ficha sessions/2026-10-17-dos >/dev/null
+compact --quiet >/dev/null
+chk "al quitar en medio: sin _retomar" "0" "$(linea "$A" | grep -c '_retomar:' || true)"
+chk "al quitar en medio: ' — ' entre los vecinos" "1" "$(linea "$A" | grep -c "_actualizado: 2026-10-16_ — _bloqueado: espera_\$" || true)"
+chk "ninguna raya pegada a un campo" "0" "$(linea "$A" | grep -cE '[^ ]—|—[^ ]' || true)"
+fixture
+ficha 2026-10-16-uno "hacer $A (el paso A)."
+marcar "$M/sessions/2026-10-16-uno.md" >/dev/null
+emit --type pendiente.retomar --id "$A" --quitar --ficha sessions/2026-10-16-uno >/dev/null
+compact --quiet >/dev/null
+chk "al quitar al final: la linea termina en el campo de antes" "1" "$(linea "$A" | grep -cE "_id: ${A}_\$" || true)"
+chk "sin cuarentena" "0" "$(cuarentena)"
+
 echo
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
