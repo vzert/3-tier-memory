@@ -123,8 +123,9 @@ If a user asks you to install this mod, follow these steps:
    started today (not `_bloqueado`, no `_revisar` today or later, no future date in the text).
    This window's session file (0.3.1) is the one this session wrote (its `session_id:` header) or,
    before it writes one, the file named by the `Retomamos` snippet you pasted (or that a supervisor
-   put in its system prompt). A new window with no prompt yet, or one where you only typed loose
-   ids, has none, and SIGUIENTE and RELACIONADO do not show: until 0.3.0 they came from the newest
+   put in its system prompt). Without either, the open `p-…` ids you typed in this window's prompts
+   act as the next step, and the thread comes from them. A new window with no prompt yet has none
+   of these, and SIGUIENTE and RELACIONADO do not show: until 0.3.0 they came from the newest
    session file of the project, which is usually another live window's (it shows in PLANES
    ACTIVOS).
 2. **RELACIONADO AL TRABAJO ACTUAL** — the thread of that session file (`_relacionado` links,

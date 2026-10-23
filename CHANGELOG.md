@@ -19,8 +19,9 @@ con pendientes del plan de otra ventana abierta.
   no quita nada.
 - **Mod `pendientes` 0.3.1: SIGUIENTE y RELACIONADO salen del trabajo de esta ventana.** El hilo
   sale de la ficha que escribio esta sesion (`session_id:`) o, si aun no escribio ninguna, de la que
-  manda leer el `Retomamos:` que recibio (prompt o system prompt del relevo). Una ventana nueva sin
-  prompt, o con solo ids sueltos, no muestra esas dos secciones. Hasta 0.3.0 salian de la ficha mas
+  manda leer el `Retomamos:` que recibio (prompt o system prompt del relevo). Sin ficha, los `p-…`
+  abiertos que la persona cito en sus prompts de esta ventana hacen de paso, y el hilo sale de
+  ellos. Una ventana nueva sin prompt no muestra esas dos secciones. Hasta 0.3.0 salian de la ficha mas
   nueva del proyecto, que suele ser de otra ventana viva. El campo `ficha` del JSON es ahora esa
   ficha (o null).
 

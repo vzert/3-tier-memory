@@ -223,10 +223,21 @@ def main():
         check("ventana nueva: vence y alta siguen", any(i["grupo"] == "vence" for i in dv["items"]))
         check("sin --session-id: sin hilo",
               sin["ficha"] is None and all(i["grupo"] != "hilo" for i in sin["items"] + sin["resto"]))
-        transcripcion("solo-ids", [u("mira p-7777777777")], hace=0)
-        di = correr(mem, lib, "--session-id", "solo-ids", "--projects-root", raiz)
-        check("ventana con un id suelto: sin hilo (el id sale en curso)",
-              di["ficha"] is None and all(i["grupo"] != "hilo" for i in di["items"] + di["resto"]))
+        # Una ventana sin ficha cuyos prompts citan un id: ese id hace de paso y su hilo sale
+        # (decision 2A de Victor: "ids en sus prompts o su ficha"). p-aaaaaaaaaa liga a p-bbbbbbbbbb.
+        transcripcion("solo-ids", [u("mira p-aaaaaaaaaa por favor")], hace=0)
+        di = correr(mem, lib, "--session-id", "solo-ids", "--projects-root", raiz, "--max", "20")
+        gi = {i["id"]: i for i in di["items"] + di["resto"]}
+        check("ventana con un id citado: el id es el paso y su ligado sale en el hilo",
+              di["ficha"] is None and (gi.get("p-aaaaaaaaaa") or {}).get("grupo") == "hilo"
+              and (gi.get("p-aaaaaaaaaa") or {}).get("motivo") == "proximo paso"
+              and (gi.get("p-bbbbbbbbbb") or {}).get("grupo") == "hilo")
+        check("ventana con un id citado: el id tambien sale en curso aqui",
+              ((gi.get("p-aaaaaaaaaa") or {}).get("en_curso") or {}).get("donde") == "aqui")
+        transcripcion("id-cerrado", [u("y p-fedcba9876 y p-0123456789, que no existen")], hace=0)
+        dz = correr(mem, lib, "--session-id", "id-cerrado", "--projects-root", raiz, "--max", "20")
+        check("ventana que solo cita ids que no existen: sin hilo",
+              all(i["grupo"] != "hilo" for i in dz["items"] + dz["resto"]))
         # La ventana que pego el Retomamos de la b trabaja su hilo.
         transcripcion("pegada", [u("Retomamos: x\n\nLee memory/sessions/2026-10-13-b.md para el contexto "
                                    "completo.\n\nProximo paso: implementar p-aaaaaaaaaa ya")], hace=0)

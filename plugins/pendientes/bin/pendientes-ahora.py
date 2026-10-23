@@ -9,9 +9,10 @@ Orden (tres grupos, sin repetir un id):
              hilo de esa ficha (pendientes_afines.hilo: _relacionado, planes, nuevos de la sesion).
              La ficha de esta ventana (0.3.1): la que escribio esta sesion (`session_id:` de su
              cabecera) o, si aun no escribio ninguna, la que manda leer el `Retomamos:` que la
-             persona pego (o que trajo el system prompt). Sin `--session-id`, o en una ventana que
-             no hizo nada de eso, no hay hilo: la ficha mas nueva del proyecto suele ser de otra
-             ventana viva (ya sale en `planes`), y su hilo no es "el trabajo actual" de esta.
+             persona pego (o que trajo el system prompt). Sin ficha, los `p-…` que la persona cito en
+             sus prompts de esta ventana hacen de paso, y el hilo sale de ellos. Sin `--session-id`,
+             o en una ventana sin prompt, no hay hilo: la ficha mas nueva del proyecto suele ser de
+             otra ventana viva (ya sale en `planes`), y su hilo no es "el trabajo actual" de esta.
   2. vence — `_revisar` de hoy o pasado: el mas viejo arriba.
   3. alta  — Alta sin `_bloqueado`, sin `_revisar` futuro y sin fecha futura en el texto.
 Un pendiente con `_retomar` de hoy o pasado (y sin `_revisar` futuro) no entra en hilo ni en alta:
@@ -140,6 +141,23 @@ def ficha_de_esta_ventana(memory_dir, session_id, projects_root=None, pa=None):
             if slug and os.path.isfile(os.path.join(memory_dir, "sessions", slug + ".md")):
                 retoma = slug
     return os.path.join(memory_dir, "sessions", retoma + ".md") if retoma else None
+
+
+def ids_de_esta_ventana(memory_dir, session_id, projects_root=None, pa=None):
+    """Los `p-…` que la persona cito en los prompts de esta ventana, en orden de aparicion (0.3.1).
+    De un `Retomamos:` solo los del paso (ids_del_texto)."""
+    if not session_id:
+        return []
+    proyecto = os.path.dirname(os.path.abspath(memory_dir))
+    tx = transcripcion(session_id, proyecto, projects_root)
+    if not tx:
+        return []
+    vistos = []
+    for t in textos_de_persona(tx):
+        for i in sorted(ids_del_texto(t, pa), key=t.find):
+            if i not in vistos:
+                vistos.append(i)
+    return vistos
 
 
 def fecha_futura(pa, texto, hoy):
@@ -733,11 +751,18 @@ def calcular(memory_dir, hoy, maximo, lib=None, session_id=None, projects_root=N
 
     ficha = ultima_ficha(memory_dir)
     propia = ficha_de_esta_ventana(memory_dir, session_id, projects_root, pa)
-    paso_texto = None
+    paso_texto = texto = slug = None
     if propia:
         with open(propia, encoding="utf-8") as fh:
             texto = fh.read()
         slug = os.path.splitext(os.path.basename(propia))[0]
+    else:
+        # Sin ficha: los ids que la persona cito aqui hacen de paso (el hilo sale de ellos).
+        citados = [i for i in ids_de_esta_ventana(memory_dir, session_id, projects_root, pa)
+                   if i in por_id]
+        if citados:
+            texto = "## Como retomar\n\nProximo paso: " + " ".join(citados) + "\n"
+    if texto is not None:
         paso_texto = pa.proximo_paso(texto)
         ids_paso = sorted(pa.anclas(paso_texto)[0], key=lambda i: (paso_texto or "").find(i))
         # El paso solo entra si se puede hacer hoy: el mismo filtro que hilo() (sin _bloqueado,
