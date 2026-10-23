@@ -8,10 +8,13 @@ lock=0. Bajo el supervisor lookout `supervisor-3-tier-memory` (d442). 2.63.45 qu
 ### Changed
 - **El tope de tiempo del caso "un solo agente" se mide contra la maquina.** Antes era fijo (1 s en
   POSIX, 3 s en Git Bash y en CI). Ahora la suite mide en la misma corrida 11 arranques de
-  `journal-emit.py --help` (BASE) y exige `ms < 2 x BASE + 500`, en todas las plataformas. Medido en
-  macOS: BASE ~400 ms, caso ~450-600 ms, tope ~1300 ms. Sigue atrapando un compactador lento de
-  verdad: con `compact()` frenado 1 s el caso falla (1535 ms contra 1384); frenado 0.5 s pasa (en
-  macOS el tope local es algo mas laxo que el 1 s de antes). items=10 y lock=0 siguen igual.
+  `journal-emit.py --help` (BASE) y exige `ms < 3/2 x BASE + 400`, en todas las plataformas. Medido en
+  macOS: BASE ~370-450 ms, caso ~450-500 ms, tope ~950-1080 ms (el 1 s de antes, mas o menos). Sigue
+  atrapando un compactador lento de verdad: con `compact()` frenado 1 s el caso fallo 5 de 5
+  (1465-1573 ms contra 959-1012) y 3 de 3 con la maquina cargada (1770-1862 contra 1433-1511, donde
+  las limpias pasaron con 842-916 contra 1412-1514); frenado 0.7 s fallo 2 de 2. Un primer intento
+  con `2 x BASE + 500` dejo pasar una vez el freno de 1 s (BASE alta). items=10 y lock=0 siguen igual.
+  Windows: no medido aun con este tope; lo dira el CI del PR.
 
 ## [2.63.45] - 2026-10-23
 Origen: pendiente p-857fadfbd1 (sesion de 2.63.43), aprobado por Victor bajo el supervisor lookout
