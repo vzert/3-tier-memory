@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.63.44] - 2026-10-22
+Origen: barrido de marcas `_retomar` consumidas (p-3e5f0b1ed9), nota del revisor; pendiente
+p-2c810e5d71. Bajo el supervisor lookout `supervisor-3-tier-memory` (d425).
+
+### Fixed
+- **Quitar o mover `_retomar` ya no pega la raya al campo de antes.** Con otro campo detras de la
+  marca, `pendiente.retomar` (con `--quitar` o con una ficha nueva) dejaba
+  `_id: p-X_— _actualizado: …_`: la expresion que borra el campo se comia tambien el espacio de la
+  raya siguiente. Ahora se para antes de ese espacio, como la de `_bloqueado`. Prueba:
+  `test-marcar-retomar.sh` caso 17 (roja con 2.63.42, verde ahora).
+
 ## [2.63.43] - 2026-10-22
 Origen: Victor (via `/goalspec:interview`, bajo el supervisor lookout `supervisor-3-tier-memory`,
 decisiones d408-d414). Un snippet de otro proyecto se titulaba con un pendiente y mandaba a
