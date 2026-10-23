@@ -1,0 +1,8 @@
+{"type": "user", "message": {"role": "user", "content": "revisa la bandeja de los repos viejos"}}
+{"type": "user", "message": {"role": "user", "content": "<command-name>/checkpoint-3t</command-name>"}}
+{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "c1", "name": "Bash", "input": {"command": "python3 journal-emit.py --type pendiente.block --id p-1c1c1c1c1c --desbloquear"}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "c1", "content": ""}]}}
+{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "c2", "name": "Bash", "input": {"command": "python3 journal-emit.py --type pendiente.relate --id p-1c1c1c1c1c --relacionado p-6b6b6b6b6b"}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "c2", "content": ""}]}}
+{"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "c3", "name": "Bash", "input": {"command": "python3 journal-emit.py --type pendiente.update --id p-1c1c1c1c1c --text y"}}]}}
+{"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "c3", "content": ""}]}}
