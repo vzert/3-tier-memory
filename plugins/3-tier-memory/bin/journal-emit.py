@@ -14,6 +14,9 @@ Ver memory/research/concurrent-memory-writes y plans/plan-journal-concurrencia-v
 
 Tipos de evento:
   pendiente.add     --text T --prioridad Alta|Media|Baja --origen O [--creado YYYY-MM-DD]
+                    [--titulo TT]   (2.63.47, p-206fd62e68) Tier 2 lleva SOLO TT (<=200 caracteres)
+                    y --text va entero a la fila mensual (Tier 3) como detalle. El id es el hash de
+                    TT. Sin --titulo y con --text de mas de 200 caracteres avisa por stderr.
                     [--revisar YYYY-MM-DD]   (ventana declarada; la lee expire-pendientes.py)
                     [--bloqueado-por "QUE"]  (espera a algo FUERA de la sesion: otra
                     instalacion, un peer, un PR ajeno; nunca una decision del usuario,
@@ -310,6 +313,23 @@ def una_linea(texto):
 def learning_id(topic, text):
     raw = "\n".join([topic.strip(), normalize_text(text)])
     return "l-" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10]
+
+
+# Limites de largo de lo que se escribe en los indices Tier 2 (p-206fd62e68, 2.63.47). Medido
+# 2026-10-21: pendientes de mas de 800 caracteres por linea (75 de 217 abiertos), Quick Reference de
+# ~440 por linea. Solo AVISAN —a stderr, el evento se escribe igual—: un rechazo romperia
+# /backfill-3t (reemite pendientes viejos largos) y a los agentes con una plantilla de cierre
+# anterior. Solo `--titulo` rechaza, y es un flag nuevo: nadie lo pasaba antes.
+TITULO_MAX = 200
+QUICKREF_MAX = 300
+RESEARCH_TEMA_MAX = 200
+RESEARCH_CAMPO_MAX = 300
+
+
+def avisar_largo(campo, valor, tope, remedio):
+    if len(valor) > tope:
+        print(f"journal-emit: AVISO {campo} tiene {len(valor)} caracteres (tope recomendado "
+              f"{tope}): {remedio}", file=sys.stderr)
 
 
 def cell(text):
@@ -983,7 +1003,7 @@ def dedup_al_emitir(memory_dir, topic, text, decision, solo_vecinos):
 # 2.62.10 (NOTA_LECTORES): leen --nota resolve, learning.retire y learning.add --supersedes.
 FLAGS_DE = {
     "pendiente.add": {"text", "prioridad", "origen", "creado", "revisar", "bloqueado_por",
-                      "relacionado", "transcript"},
+                      "relacionado", "transcript", "titulo"},
     "pendiente.resolve": {"id", "estado", "sesion", "nota", "text_prefix"},
     "pendiente.update": {"id", "text", "prioridad", "text_prefix", "nota"},
     "pendiente.expire": {"id", "dias", "prioridad", "line"},
@@ -1043,6 +1063,7 @@ def main():
     ap.add_argument("--session")
     # pendiente.add
     ap.add_argument("--text")
+    ap.add_argument("--titulo")                           # pendiente.add (2.63.47, p-206fd62e68)
     ap.add_argument("--prioridad")
     ap.add_argument("--origen")
     ap.add_argument("--creado")
@@ -1144,6 +1165,23 @@ def main():
         text = normalize_text(a.text or "")
         if not text:
             sys.exit("journal-emit: pendiente.add necesita --text")
+        # 2.63.47 (p-206fd62e68): con --titulo, Tier 2 lleva SOLO el titulo y el --text completo va
+        # a la fila mensual (Tier 3) como `detalle`. El id es el hash del TITULO, o sea del texto
+        # visible de la linea de Tier 2: `repair-dualwrite.ids_invented` rehashea esa linea y un id
+        # calculado sobre el detalle saldria como inventado en cada pendiente con titulo (regla 143).
+        detalle = ""
+        titulo = normalize_text(a.titulo or "")
+        if a.titulo is not None and not titulo:
+            sys.exit("journal-emit: --titulo no puede ir vacio")
+        if titulo:
+            if len(titulo) > TITULO_MAX:
+                sys.exit(f"journal-emit: --titulo de {len(titulo)} caracteres; el maximo es "
+                         f"{TITULO_MAX}. Resumelo: el detalle va en --text")
+            if titulo != text:
+                detalle, text = text, titulo
+        else:
+            avisar_largo("pendiente.add --text", text, TITULO_MAX,
+                         "pasa --titulo \"<resumen corto>\" y deja este texto como detalle (Tier 3)")
         prio = (a.prioridad or "").strip().capitalize()
         if prio not in PRIORIDADES:
             sys.exit(f"journal-emit: --prioridad debe ser una de {PRIORIDADES}")
@@ -1179,6 +1217,8 @@ def main():
             print("journal-emit: ligado al paso recibido: " + ", ".join(auto), file=sys.stderr)
         base["payload"] = {"id": pid, "text": text, "prioridad": prio,
                            "origen": origen, "creado": creado, "revisar": revisar}
+        if detalle:
+            base["payload"]["detalle"] = detalle
         if bloqueado:
             base["payload"]["bloqueado"] = bloqueado
         if relacionado:
@@ -1245,6 +1285,8 @@ def main():
         imp = (a.importance or "").strip()
         if imp and not (imp.isdigit() and 0 <= int(imp) <= 10):
             sys.exit("journal-emit: --importance debe ser un entero 0-10")
+        avisar_largo("learning.add --quickref", normalize_text(a.quickref), QUICKREF_MAX,
+                     "la linea del Quick Reference es un titulo: la regla entera va en --text")
         base["payload"] = {
             "topic": topic,
             "text": text,
@@ -1437,6 +1479,12 @@ def main():
         status = (a.status or "").strip().lower()
         if status not in RESEARCH_STATUS:
             sys.exit(f"journal-emit: --status debe ser uno de {RESEARCH_STATUS}")
+        avisar_largo("research.upsert --tema", cell(a.tema or ""), RESEARCH_TEMA_MAX,
+                     "el tema es un titulo; el detalle va en memory/research/<slug>.md")
+        avisar_largo("research.upsert --next-step", cell(a.next_step), RESEARCH_CAMPO_MAX,
+                     "una linea; el detalle va en memory/research/<slug>.md")
+        avisar_largo("research.upsert --resultado", cell(a.resultado), RESEARCH_CAMPO_MAX,
+                     "una linea; el detalle va en memory/research/<slug>.md")
         base["payload"] = {
             "slug": slug,
             "tema": cell(need(a.tema, "research.upsert necesita --tema")),
