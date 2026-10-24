@@ -835,6 +835,74 @@ def avisar_origen_colgante(origen, mem):
               f"Tier 2 queda roto.", file=sys.stderr)
 
 
+REFS_SOLAPE = re.compile(r"(?:[\w.-]+/)*[\w.-]+\.(?:md|php|py|sh|js|ts|sql|json|ya?ml)\b|\bplan-[a-z0-9][a-z0-9-]*", re.I)
+REFS_GENERICAS = {"readme.md", "changelog.md", "claude.md", "skill.md", "memory.md", "package.json"}
+
+
+def refs_de_solape(texto):
+    """Referencias EXPLICITAS de un texto: un `plan-<slug>`, un handoff/plan/research `.md`, o un
+    fichero de codigo/datos. Es lo unico que compara el aviso de solape (regla 216: nunca palabras).
+    Se comparan por su ultimo segmento (`module.php`, `PROMPT_x.md`), en minusculas."""
+    out = set()
+    for m in REFS_SOLAPE.findall(texto or ""):
+        base = m.rstrip(".").split("/")[-1].lower()
+        if base.startswith("_") or base in REFS_GENERICAS:
+            continue
+        if base.endswith(".md") and not re.search(r"(?:handoffs|plans|research)/", m, re.I) \
+                and not base.startswith(("plan-", "prompt")):
+            continue
+        out.add(base[:-3] if base.endswith(".md") and base.startswith("plan-") else base)
+    return out
+
+
+def avisar_solape_pendiente(texto, pid, mem, relacionado=()):
+    """Avisa —no bloquea— si el pendiente nuevo cita una referencia explicita (un plan, un handoff,
+    un fichero) que ya tiene un plan `active` o un pendiente abierto (2.64.0).
+
+    Caso real (otro proyecto, 2026-10-24): "auditar module.<x>.php" se guardo aunque el handoff de un
+    plan activo ya encargaba ese trabajo (workflows 6 y 23 sin el IIS). Mira solo referencias
+    explicitas, nunca palabras; un solape sin referencia compartida no se ve. Falla abierto."""
+    try:
+        refs = refs_de_solape(texto)
+        if not refs or not mem:
+            return
+        hallazgos = []
+        carpeta = os.path.join(mem, "plans")
+        if os.path.isdir(carpeta):
+            indice = ""
+            if os.path.isfile(os.path.join(mem, "_plans-index.md")):
+                indice = open(os.path.join(mem, "_plans-index.md"), encoding="utf-8").read()
+            for f in sorted(os.listdir(carpeta)):
+                nombre = f[:-3]
+                if not f.endswith(".md") or nombre.lower() not in refs:
+                    continue
+                fila = re.search(r"\[\[plans/" + re.escape(nombre) + r"(?:\|[^\]]*)?\]\]\s*\|\s*([^|]*)\|", indice)
+                if fila:
+                    activo = fila.group(1).strip().lower().startswith("active")
+                else:
+                    cabeza = open(os.path.join(carpeta, f), encoding="utf-8").read(2000)
+                    activo = bool(re.search(r"^status:\s*active\b", cabeza, re.M | re.I))
+                if activo:
+                    hallazgos.append(f"el plan activo {nombre}")
+        ruta = os.path.join(mem, "_pendientes.md")
+        if os.path.isfile(ruta):
+            for l in open(ruta, encoding="utf-8"):
+                if not l.lstrip().startswith("- [ ]"):
+                    continue
+                m = re.search(r"_id:\s*(p-[0-9a-f]{10})", l)
+                if not m or m.group(1) == pid or m.group(1) in relacionado:
+                    continue
+                comun = refs & refs_de_solape(l)
+                if comun:
+                    hallazgos.append(f"el pendiente abierto {m.group(1)} ({', '.join(sorted(comun))})")
+        if hallazgos:
+            print("journal-emit: AVISO — este pendiente cita lo mismo que " + "; ".join(hallazgos[:4])
+                  + ". Si es el mismo trabajo, no lo dupliques: `pendiente.update` sobre el existente "
+                  "o `--relacionado`. Si es otro, sigue.", file=sys.stderr)
+    except Exception:
+        return
+
+
 def prefijo_de_regla(memory_dir, topic, n):
     """Las primeras palabras (hasta ~40 caracteres) de la regla #n viva de un topic, o None.
 
@@ -1160,6 +1228,7 @@ def main():
         # `revisar` NO entra en el hash: es la ventana, no la identidad. Anadirla cambiaria el id
         # de un pendiente que ya existe y el compactador lo veria como uno nuevo.
         pid = pendiente_id(text, creado, origen)
+        avisar_solape_pendiente(text, pid, memory_dir_de(a), a.relacionado)
         # `bloqueado` tampoco entra en el hash, por lo mismo que `revisar`: es un estado del
         # pendiente, no su identidad.
         bloqueado = limpiar_bloqueado(a.bloqueado_por)
