@@ -38,7 +38,7 @@ def chk(et, cond, detalle=""):
 
 # Lo que lee cada tipo, medido con el emisor real (arnes del research) y confrontado con cada rama.
 LEE = {
-    "pendiente.add": "text prioridad origen creado revisar bloqueado-por relacionado transcript",
+    "pendiente.add": "text prioridad origen creado revisar bloqueado-por relacionado transcript titulo",
     "pendiente.resolve": "id estado sesion nota text-prefix",
     "pendiente.update": "id text prioridad text-prefix nota",
     "pendiente.expire": "id dias prioridad line",
@@ -68,7 +68,7 @@ m = re.search(r"--type \{([^}]*)\}", HELP)
 tipos = m.group(1).split(",") if m else []
 flags = sorted(set(re.findall(r"(?<![\w-])--[a-z][a-z-]*", HELP)) - COMUNES)
 chk("el --help trae los 19 tipos", len(tipos) == 19, f"{len(tipos)}: {tipos}")
-chk("el --help trae los 56 flags", len(flags) == 56, f"{len(flags)}")
+chk("el --help trae los 57 flags", len(flags) == 57, f"{len(flags)}")
 chk("LEE cubre los mismos tipos que el emisor", set(tipos) == set(LEE),
     f"sobran {set(LEE) - set(tipos)}, faltan {set(tipos) - set(LEE)}")
 fuera = sorted({f for v in LEE.values() for f in v} - set(flags))

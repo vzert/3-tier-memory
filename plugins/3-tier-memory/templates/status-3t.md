@@ -26,7 +26,17 @@ If no memory system found, tell the user to run setup-memory first and stop.
 
 ## Step 2: Gather metrics
 
-Read each file and collect:
+Do NOT read the Tier 2 indexes whole (p-206fd62e68: they reach 200-460 KB). Count with `grep -c`
+(e.g. `grep -c '^- \[ \]' memory/_pendientes.md`, `grep -c '_creado: ' ...`) and read only the first lines
+of each file (`head`). Collect:
+
+```bash
+python3 "$JBIN/print-tier2-tamano.py" "$MEMORY_DIR"
+```
+
+It prints `<index> bytes=N lineas=L largas=K[ GRANDE]` per index. A `GRANDE` index goes in the report
+(Step 4, line `Tier 2`) with the advice to trim it (`/triage-3t`; short title in Tier 2, detail in Tier 3).
+Locate `JBIN` as in /checkpoint-3t Step 0.
 
 **Pendientes** (`memory/_pendientes.md`):
 - Count items with `- [ ]` (open) grouped by priority section (Alta, Media, Baja)
@@ -96,6 +106,7 @@ Learnings:   N topics, M critical rules
 Plans:       N active, M completed
 Research:    N active, M completed
 Journal:     P pending, Q quarantine, A applied | lock: none | strict: off
+Tier 2:      <index> NNN KB GRANDE (only the ones flagged; omit the line if none)
 Structure:   X/11 checks passed
 ```
 

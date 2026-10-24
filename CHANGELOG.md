@@ -1,5 +1,30 @@
 # Changelog
 
+## [2.63.47] - 2026-10-23
+Origen: p-206fd62e68 (otro proyecto con el plugin, 2026-10-21). Los indices Tier 2 crecen sin limite y el plugin
+mandaba leerlos enteros: `_pendientes.md` 206 KB (217 abiertos, 75 lineas de mas de 800 caracteres),
+`_learnings.md` 71 KB, `_research-index.md` 39 KB; en un tercero 371 KB y 461 KB. Cubre las propuestas
+a-e del pendiente; la f (migracion con dry-run) queda abierta.
+
+### Added
+- **`pendiente.add --titulo`.** Tier 2 lleva solo el titulo (max 200 caracteres, mas largo se rechaza)
+  y `--text` va entero a la fila mensual (Tier 3) como `<titulo> — detalle: <texto>`. El id es el hash
+  del titulo (el texto visible de Tier 2), para que `repair-dualwrite.ids_invented` no lo tome por
+  inventado. El replay no duplica y `pendiente.update` conserva el detalle.
+- **`bin/print-pendientes-alcance.py`**: imprime solo los pendientes del alcance de Step 3a (`_revisar`
+  vencida o de hoy, mas los `--ids` tocados), recortados a 200 caracteres, con los conteos.
+- **`bin/print-tier2-tamano.py`**: tamano y lineas largas de cada indice Tier 2, con marca `GRANDE`.
+- Prueba: `bin/test-tier2-limites.sh`.
+
+### Changed
+- **Step 3-pre ya no manda leer `_pendientes.md` entero**: corre `print-pendientes-alcance.py`.
+- **El puente** (`/setup-memory`, `/migrate`) dice `/status-3t` + `grep` en vez de "Read" de los dos
+  indices. Solo aplica a puentes nuevos: los ya escritos no se tocan.
+- **`/status-3t` cuenta con `grep -c`** y corre `print-tier2-tamano.py` en vez de leer cada indice.
+- **`journal-emit.py` avisa por stderr (no rechaza)** cuando `pendiente.add --text` pasa de 200
+  caracteres sin `--titulo`, `learning.add --quickref` de 300, o `research.upsert` `--tema` de 200 /
+  `--next-step` y `--resultado` de 300. No rechaza para no romper `/backfill-3t` ni plantillas viejas.
+
 ## [2.63.46] - 2026-10-23
 Origen: p-1a69546329. `test-journal-race.sh` fallo en Windows en platforms 39984157994 (intento 1)
 solo por reloj: el caso "un solo agente" tardo 5933 ms contra un tope de 3000, con items=10 y

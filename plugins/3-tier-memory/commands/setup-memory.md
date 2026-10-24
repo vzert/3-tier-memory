@@ -218,8 +218,8 @@ Create/overwrite AUTO_MEMORY_DIR/MEMORY.md with the bridge template:
 This project uses project-local memory. Files live in `memory/` within the project directory.
 
 ## At session start
-1. Read `memory/_pendientes.md` — open action items
-2. Read `memory/_learnings.md` — consult before making changes
+1. Run `/status-3t` — counts of open action items, plus the ones due. Do NOT read `memory/_pendientes.md` or `memory/_learnings.md` whole: they grow without limit
+2. Look things up with `grep -i "<term>" memory/_pendientes.md memory/_learnings.md` — consult before making changes
 
 ## During execution
 Since v2.12.0 the shared indexes are written ONLY through journal events (`bin/journal-emit.py` +
