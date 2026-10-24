@@ -713,6 +713,7 @@ avisos_compartido = []
 # auditoria de 101 fichas del 2026-10-22, caso real: una ficha de otro proyecto).
 avisos_ajeno = []
 avisos_pendiente = []  # 2.64.0: lineas ⚠ del 🔔 (print-pendiente-opcional.py)
+avisos_hilo = []       # 2.64.0: plan/handoff/ficha editado con pendientes sin reconciliar
 avisos_prosa = []      # 2.64.0: el texto del turno termina en una pregunta en prosa
 presentes = []      # (orden, lineas, texto) de cada bloque del cierre, para medir orden y cola
 # Texto tolerado DESPUES del ultimo bloque del cierre: los separadores `───` que imprimen los
@@ -1014,6 +1015,8 @@ def revisar(ficha):
                                     "snippet.paso_otra_ventana") and x.get("estado") != "HECHO":
                 avisos_ajeno.extend(pref + x["clave"].split(".")[1] + ": " + l
                                     for l in (x.get("lineas") or [x.get("detalle", "")]))
+            elif x.get("clave") == "pendientes.hilo_sin_reconciliar" and x.get("estado") != "HECHO":
+                avisos_hilo.extend(pref + l for l in (x.get("lineas") or [x.get("detalle", "")]))
     except Exception:
         pass
 
@@ -1318,6 +1321,14 @@ else:
                 "lo lleva. Rehaz el paso con el siguiente de tu hilo o `ninguno — <motivo>`, o di en "
                 "la linea " + str(len(REVISION_ITEMS)) + " de la revision por que se queda:\n"
                 + "\n".join(f"- {a}" for a in avisos_ajeno))
+        if avisos_hilo:
+            partes.append(
+                "Editaste un plan, handoff o ficha con pendientes abiertos y no actualizaste ninguno "
+                "(checkpoint-audit.py pendientes.hilo_sin_reconciliar; no bloquea, cruza por ids). Un "
+                "pendiente cuyo hecho ya cambio sigue diciendo lo viejo y mandara a otra sesion a "
+                "repetirlo. Relee cada uno: `pendiente.update` si su texto quedo falso, "
+                "`pendiente.resolve` si ya se hizo, o di en la linea 4 de la revision por que sigue "
+                "cierto:\n" + "\n".join(f"- {a}" for a in avisos_hilo))
         if avisos_prosa:
             partes.append(
                 "Tu respuesta termina en una pregunta en prosa (checkpoint-close-guard.sh; no bloquea, "

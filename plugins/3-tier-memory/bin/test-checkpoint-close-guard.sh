@@ -1606,6 +1606,25 @@ printf 'Cambio: hecho.\n\nSe puede cerrar? sin duda.\nlisto?\n' > "$T/lam-q.txt"
 corre_en "$T/t.jsonl" false "$T/lam-q.txt" "$RQ" >/dev/null
 chk "una pregunta sin ¿ no cuenta (solo prosa en español)" "0" "$(grep -c 'pregunta en prosa' "$AQ" 2>/dev/null)"
 
+echo "== 2.64.0: un plan editado con pendientes sin reconciliar: aviso en la revision, sin rechazo =="
+RH="$T/repo-hilo"; mkdir -p "$RH"; git -C "$RH" init -q
+AH="$RH/.git/3t-revision-cierre-sin-sesion.md"
+marco_ficha "ver en vivo la 0.13.41 (p-daf3051915)."
+python3 -c 'import sys;p=sys.argv[1];t=open(p,encoding="utf-8").read();open(p,"w",encoding="utf-8").write(t.replace("date: 2026-10-14","date: 2026-10-24",1))' "$F"
+printf '\n- [ ] Dar por estable el servidor demo — _creado: 2026-10-20_ — _id: p-6f6f6f6f6f_ — _relacionado: plan-demo-fusion_\n' >> "$M/_pendientes.md"
+tx "$T/t.jsonl" skill "$F" - -
+python3 - "$T/t.jsonl" <<'PY'
+import json, sys
+p = sys.argv[1]; R = [json.loads(l) for l in open(p, encoding="utf-8")]
+R.insert(1, {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "hh1", "name": "Edit",
+             "input": {"file_path": "/p/memory/plans/plan-demo-fusion.md", "old_string": "a", "new_string": "b"}}]}})
+open(p, "w", encoding="utf-8").write("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in R))
+PY
+corre_en "$T/t.jsonl" false - "$RH" >/dev/null
+chk "la revision trae el aviso del hilo" "1" "$(grep -c '^Editaste un plan, handoff o ficha con pendientes abiertos' "$AH" 2>/dev/null)"
+chk "y nombra el plan y el pendiente" "1" "$(grep -c '^- plan plan-demo-fusion: p-6f6f6f6f6f' "$AH" 2>/dev/null)"
+chk "y no lo cuenta como falta del cierre" "0" "$(grep -c 'checkpoint-audit.py pendientes.hilo_sin_reconciliar:' "$AH" 2>/dev/null)"
+
 echo "== 2.63.3: un sed que edita print-como-retomar.py y otro .py, con un break en la sesion y sin ficha: silencio =="
 # Forma real (sesion 4237bac9, p-bea9639b92): `sed -i` sobre el fuente de print-como-retomar.py
 # seguido de pendientes_afines.py, sin /checkpoint-3t ni ficha. El guard tomaba el .py como ficha,
