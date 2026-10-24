@@ -434,6 +434,22 @@ caso "audit sin titulo paso"       checkpoint-audit.py m_paso_ajeno.py test-paso
 caso "guard sin paso ajeno"        checkpoint-close-guard.sh m_paso_ajeno.py test-checkpoint-close-guard.sh "la revision trae el aviso del paso ajeno" guard-sin-ajeno
 caso "guard sin transcript"        checkpoint-close-guard.sh m_paso_ajeno.py test-checkpoint-close-guard.sh "la revision trae el aviso del paso ajeno" guard-sin-transcript
 
+# 2.64.0: cuatro avisos del pendiente con texto falso (incidente real del 2026-10-24).
+caso "aviso sin comprobar hits"    print-pendiente-opcional.py m_avisos_pendiente.py test-aviso-pendiente-otra-ventana.sh "sin otras ventanas" aviso-siempre
+caso "aviso en el opcional"        print-pendiente-opcional.py m_avisos_pendiente.py test-aviso-pendiente-otra-ventana.sh "el ➕ opcional no lleva" aviso-en-opcional
+caso "guard sin aviso del 🔔"      checkpoint-close-guard.sh m_avisos_pendiente.py test-checkpoint-close-guard.sh "la revision trae el aviso del 🔔" guard-sin-aviso-pendiente
+caso "guard sin aviso del hilo"    checkpoint-close-guard.sh m_avisos_pendiente.py test-checkpoint-close-guard.sh "la revision trae el aviso del hilo" guard-sin-aviso-hilo
+caso "guard sin aviso de prosa"    checkpoint-close-guard.sh m_avisos_pendiente.py test-checkpoint-close-guard.sh "la revision trae el aviso de la pregunta" guard-sin-aviso-prosa
+caso "prosa sin corte de emoji"    checkpoint-close-guard.sh m_avisos_pendiente.py test-checkpoint-close-guard.sh "dentro de un fence o de los bloques" prosa-sin-corte-emoji
+caso "prosa sin signo de apertura" checkpoint-close-guard.sh m_avisos_pendiente.py test-checkpoint-close-guard.sh "una pregunta sin" prosa-sin-signo
+caso "hilo cuenta el update"       paso_ajeno.py m_avisos_pendiente.py test-aviso-hilo-sin-reconciliar.sh "actualizo un pendiente del grupo" hilo-sin-update
+caso "hilo cuenta el alta"         paso_ajeno.py m_avisos_pendiente.py test-aviso-hilo-sin-reconciliar.sh "creo uno nuevo" hilo-sin-alta
+caso "hilo y su propia ficha"      paso_ajeno.py m_avisos_pendiente.py test-aviso-hilo-sin-reconciliar.sh "solo edito su propia ficha" hilo-ficha-propia
+caso "audit sin hilo"              checkpoint-audit.py m_avisos_pendiente.py test-aviso-hilo-sin-reconciliar.sh "plan editado: aviso" audit-sin-hilo
+caso "solape sin aviso"            journal-emit.py m_avisos_pendiente.py test-aviso-solape-pendiente.sh "mismo fichero que un pendiente abierto" solape-sin-aviso
+caso "solape con plan completado"  journal-emit.py m_avisos_pendiente.py test-aviso-solape-pendiente.sh "un plan completado no avisa" solape-plan-completado
+caso "solape con generico"         journal-emit.py m_avisos_pendiente.py test-aviso-solape-pendiente.sh "generico" solape-generico
+
 # 2.63.33: `ninguno` con un plan `active` sin pendiente ligado (p-7fd6a82eaa). Cada caso nombra su
 # suite (sin $T), igual que los de 2.63.22.
 caso "ninguno plan sin rechazo"  checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "rechaza y nombra el plan" plan-sin-rechazo

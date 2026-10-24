@@ -333,6 +333,12 @@ Reglas para llenar los slots:
   lo ligo, desbloqueo, fecho o corrigio en el cierre — (`snippet.paso_no_trabajado`), o si otra ventana del proyecto
   corrio comandos con el en las ultimas 2 h y no ha cerrado (`snippet.paso_otra_ventana`). Rehaz el
   paso con el siguiente de tu hilo o `ninguno — <motivo>`, o di en la revision por que se queda.
+  Desde 2.64.0 la revision avisa tambien (todos no bloquean, cruzan por ids y campos): si el pendiente
+  del 🔔 lo toco otra ventana en las ultimas 2 h (linea `⚠` del 🔔, el hook no la exige pegar);
+  si editaste un plan, handoff o ficha ajena con pendientes abiertos y no actualizaste ni cerraste
+  ninguno (`pendientes.hilo_sin_reconciliar`: relee cada uno, `pendiente.update` si su texto quedo
+  falso); y si tu texto termina en una pregunta `¿…?` sin AskUserQuestion — una decision en prosa no
+  esta tomada: pregúntala o decide con un default.
   **Desde 2.33.0 esta pregunta tiene respaldo mecanico, pero solo si el pendiente
   lleva el campo**: nace con `--bloqueado-por "<que espera>"` (Step 3b) o se lo pone
   `pendiente.block` (Step 3a), y entonces el audit rechaza citarlo en `Proximo paso` hasta que

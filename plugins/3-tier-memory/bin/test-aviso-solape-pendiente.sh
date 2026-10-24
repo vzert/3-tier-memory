@@ -16,7 +16,7 @@ M="$T/memory"
 armar() {
   rm -rf "$M"; mkdir -p "$M/sessions" "$M/plans" "$M/journal"
   printf -- '---\ntype: session\n---\n# Demo\n' > "$M/sessions/2026-10-24-demo.md"
-  printf '# Pendientes\n\n## Alta prioridad\n\n- [ ] Pasar los flujos 6 y 23 sin el intermediario, con el prompt handoffs/infra/PROMPT_demo-sin-iis_2026-10-21.md — _origen: [[sessions/2026-10-24-demo]]_ — _creado: 2026-10-21_ — _id: p-4d4d4d4d4d_\n- [ ] Rotar la llave de module.factdemo.php — _origen: [[sessions/2026-10-24-demo]]_ — _creado: 2026-10-21_ — _id: p-5e5e5e5e5e_\n\n## Media prioridad\n## Baja prioridad\n' > "$M/_pendientes.md"
+  printf '# Pendientes\n\n## Alta prioridad\n\n- [ ] Pasar los flujos 6 y 23 sin el intermediario, con el prompt handoffs/infra/PROMPT_demo-sin-iis_2026-10-21.md — _origen: [[sessions/2026-10-24-demo]]_ — _creado: 2026-10-21_ — _id: p-4d4d4d4d4d_\n- [ ] Subir la version en package.json — _origen: [[sessions/2026-10-24-demo]]_ — _creado: 2026-10-21_ — _id: p-9c9c9c9c9c_\n- [ ] Rotar la llave de module.factdemo.php — _origen: [[sessions/2026-10-24-demo]]_ — _creado: 2026-10-21_ — _id: p-5e5e5e5e5e_\n\n## Media prioridad\n## Baja prioridad\n' > "$M/_pendientes.md"
   printf -- '---\nstatus: active\n---\n# Plan demo\n' > "$M/plans/plan-demo-sin-iis.md"
   printf -- '---\nstatus: completed\n---\n# Plan viejo\n' > "$M/plans/plan-viejo.md"
   printf '# Plans\n\n| Plan | Status |\n|---|---|\n| [[plans/plan-demo-sin-iis]] | active |\n| [[plans/plan-viejo]] | completed |\n' > "$M/_plans-index.md"
@@ -46,7 +46,7 @@ armar
 chk "texto parecido pero sin referencia" "0" "$(n_aviso "$(add "Auditar la rotacion de llaves del servidor")")"
 chk "un plan completado no avisa" "0" "$(n_aviso "$(add "Cerrar cosas de plan-viejo")")"
 chk "un fichero distinto" "0" "$(n_aviso "$(add "Revisar module.otro.php")")"
-chk "un .md generico (README.md) no cuenta" "0" "$(n_aviso "$(add "Actualizar README.md y CHANGELOG.md")")"
+chk "un fichero generico (package.json) no cuenta" "0" "$(n_aviso "$(add "Revisar package.json y README.md")")"
 armar; printf '# Pendientes\n' > "$M/_pendientes.md"; rm -rf "$M/plans" "$M/_plans-index.md"
 chk "sin pendientes ni planes: sin aviso y sin error" "0" "$(n_aviso "$(add "Auditar module.factdemo.php")")"
 

@@ -1,5 +1,42 @@
 # Changelog
 
+## [2.64.0] - 2026-10-24
+Origen: incidente real de un agente de otro proyecto (2026-10-24), via `/goalspec:interview` de Victor.
+El 🔔 del cierre mostro el texto viejo de un pendiente (un servidor que otra via ya habia parchado); el
+agente lo corrigio a mano, hallo que un pendiente suyo solapaba un encargo de un plan activo y cerro
+con una pregunta en prosa. Cuatro huecos, cuatro avisos; ninguno bloquea y ninguno decide por el texto
+(regla 216).
+
+### Added
+- **El 🔔 avisa si otra ventana toco su pendiente.** `print-pendiente-opcional.py` acepta
+  `--transcript` (o lee el de `CLAUDE_CODE_SESSION_ID`) y, si `paso_ajeno.otras_ventanas` ve que otra
+  sesion viva del proyecto corrio una herramienta de accion con el id en las ultimas 2 h, agrega
+  `⚠ tocado en otra ventana …: verifica que el texto siga siendo cierto antes de abrirlo`. El 🔔 sale
+  igual. El hook de cierre no exige pegar la linea (depende del transcript) y la lleva a la revision.
+- **`pendientes.hilo_sin_reconciliar` (POR-DISEÑO).** Si la sesion edito un plan, un handoff o una
+  ficha ajena que liga pendientes abiertos (`_relacionado`, `_origen`, la ruta del handoff en el texto)
+  y no actualizo, cerro ni creo ninguno, la revision del cierre lo avisa. `paso_ajeno.hilos_sin_reconciliar`.
+- **Aviso de solape en `pendiente.add`.** Si el texto cita un `plan-<slug>`, un handoff/plan/research
+  `.md` o un fichero que ya tiene un plan `active` o un pendiente abierto, `journal-emit.py` avisa por
+  stderr y escribe el evento igual.
+- **Aviso de pregunta en prosa.** Si el texto de la respuesta, antes de los bloques del cierre y fuera
+  de fences, termina en `¿…?`, la revision del cierre lo avisa (heuristica sobre prosa; un falso positivo
+  solo da un aviso de mas).
+
+### Tests
+- `test-aviso-pendiente-otra-ventana.sh` (10), `test-aviso-hilo-sin-reconciliar.sh` (11),
+  `test-aviso-solape-pendiente.sh` (11), tres bloques nuevos en `test-checkpoint-close-guard.sh`, y
+  14 mutaciones en `tools/mutaciones/m_avisos_pendiente.py`.
+
+### Limites declarados
+- Los cuatro leen ids, campos y rutas, no hechos: un pendiente que se vuelve falso porque pasaron cosas
+  en otra ventana que nunca nombro su id ni toco un plan/handoff/ficha ligado no se ve.
+- El aviso de pregunta en prosa solo mira el primer Stop de un `/checkpoint-3t` (el de la revision), no
+  la respuesta posterior a ella.
+- Replay sobre 45 cierres reales de este repo: 0 avisos de `hilo_sin_reconciliar` y 0 de pregunta en
+  prosa; solo 1 de 60 sesiones edito un plan (y actualizo sus pendientes), asi que la tasa de falsos
+  positivos de `hilo_sin_reconciliar` esta poco medida.
+
 ## [2.63.46] - 2026-10-23
 Origen: p-1a69546329. `test-journal-race.sh` fallo en Windows en platforms 39984157994 (intento 1)
 solo por reloj: el caso "un solo agente" tardo 5933 ms contra un tope de 3000, con items=10 y

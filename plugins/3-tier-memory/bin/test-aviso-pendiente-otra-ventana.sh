@@ -65,7 +65,7 @@ armar; otra "$TP/otra.jsonl" viva
 chk "sin transcript no avisa (falla abierto)" "0" "$(n_alerta "$(CLAUDE_CODE_SESSION_ID= out)")"
 chk "transcript inexistente" "0" "$(n_alerta "$(out --transcript "$TP/no-existe.jsonl")")"
 armar; otra "$TP/otra.jsonl" viva
-printf '# Pendientes\n\n## Alta prioridad\n\n- [ ] Vencido sin huellas — _creado: 2026-10-01_ — _revisar: 2026-10-20_ — _id: p-3b3b3b3b3b_\n' > "$M/_pendientes.md"
+printf '# Pendientes\n\n## Alta prioridad\n\n- [ ] Vencido sin huellas — _creado: 2026-10-01_ — _revisar: 2026-10-20_ — _id: p-2a2a2a2a2a_\n' > "$M/_pendientes.md"
 printf -- '---\ntype: session\ndate: 2026-10-24\n---\n# Demo\n\n## Como retomar\n\nNinguno — la sesion cerro sola.\n\n## Related\n' > "$F"
 O=$(out --transcript "$TP/propia.jsonl")
 chk "el ➕ opcional no lleva ⚠" "0" "$(n_alerta "$O")"

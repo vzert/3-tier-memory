@@ -18,7 +18,7 @@ armar() {
   rm -rf "$M"; mkdir -p "$M/sessions" "$M/plans"
   printf -- '---\ntype: session\ndate: 2026-10-24\n---\n# Demo\n\n## Como retomar\n\nNinguno — la sesion cerro sola.\n\n## Related\n' > "$M/sessions/$S.md"
   printf -- '---\ntype: session\ndate: 2026-10-20\n---\n# Origen\n' > "$M/sessions/2026-10-20-origen.md"
-  printf '# Pendientes\n\n## Alta prioridad\n\n- [ ] Dar por estable el servidor — _origen: [[sessions/2026-10-20-origen]]_ — _creado: 2026-10-20_ — _id: p-6f6f6f6f6f_ — _relacionado: plan-demo-fusion_\n- [ ] Auditar el modulo del handoff handoffs/infra/PROMPT_demo_2026-10-21.md — _origen: [[sessions/2026-10-20-origen]]_ — _creado: 2026-10-21_ — _id: p-7a7a7a7a7a_\n\n## Media prioridad\n## Baja prioridad\n' > "$M/_pendientes.md"
+  printf '# Pendientes\n\n## Alta prioridad\n\n- [ ] Dar por estable el servidor — _origen: [[sessions/2026-10-20-origen]]_ — _creado: 2026-10-20_ — _id: p-6f6f6f6f6f_ — _relacionado: plan-demo-fusion_\n- [ ] Auditar el modulo del handoff handoffs/infra/PROMPT_demo_2026-10-21.md — _origen: [[sessions/2026-10-20-origen]]_ — _creado: 2026-10-21_ — _id: p-7a7a7a7a7a_\n\n- [ ] Cerrar lo de esta ficha — _origen: [[sessions/2026-10-24-demo]]_ — _creado: 2026-10-24_ — _id: p-8b8b8b8b8b_\n\n## Media prioridad\n## Baja prioridad\n' > "$M/_pendientes.md"
 }
 # tx ARCHIVO MODO...: edita (plan|handoff|ficha-ajena|ficha-propia|codigo), update (pendiente.update del
 # id), alta (pendiente.add)
