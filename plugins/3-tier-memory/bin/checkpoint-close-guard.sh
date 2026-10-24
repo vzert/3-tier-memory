@@ -908,7 +908,7 @@ def revisar(ficha):
     if sec is not None and "<filled in Step 8>" not in sec and m_fecha and m_fecha.group(1) >= "2026-09-23":
         try:
             r = subprocess.run([sys.executable, os.path.join(BIN, "print-pendiente-opcional.py"), ficha]
-                               + (["--transcript", tpath] if tpath else []),
+                               + ([] if not tpath else ["--transcript", tpath]),
                                capture_output=True, text=True, timeout=20)
             salida = r.stdout if r.returncode == 0 else ""
         except Exception:
