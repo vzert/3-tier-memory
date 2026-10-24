@@ -1584,6 +1584,28 @@ printf '\n- [ ] Parchar el servidor demo — _creado: 2026-10-20_ — _revisar: 
 corre_en "$T/t.jsonl" false - "$RV" >/dev/null
 chk "sin la otra ventana: sin aviso" "0" "$(grep -c 'puede tener el texto viejo' "$AV" 2>/dev/null)"
 
+echo "== 2.64.0: el turno termina en una pregunta en prosa: aviso en la revision, sin rechazo =="
+# El incidente real (otro proyecto, 2026-10-24): '… ¿Cierro p-… y dejo solo la rotacion?' como ultima
+# linea, sin un AskUserQuestion. Solo cuenta el texto antes de los bloques del cierre, fuera de fences.
+RQ="$T/repo-prosa"; mkdir -p "$RQ"; git -C "$RQ" init -q
+AQ="$RQ/.git/3t-revision-cierre-sin-sesion.md"
+marco_ficha "ver en vivo la 0.13.41 (p-daf3051915)."
+python3 -c 'import sys;p=sys.argv[1];t=open(p,encoding="utf-8").read();open(p,"w",encoding="utf-8").write(t.replace("date: 2026-10-14","date: 2026-10-22",1))' "$F"
+tx "$T/t.jsonl" skill "$F" - -
+printf 'Cambio: hecho.\n\nTraslape con otro encargo. ¿Cierro p-ac18cde948 y dejo solo la rotacion de la llave?\n' > "$T/lam-q.txt"
+corre_en "$T/t.jsonl" false "$T/lam-q.txt" "$RQ" >/dev/null
+chk "la revision trae el aviso de la pregunta en prosa" "1" "$(grep -c '^Tu respuesta termina en una pregunta en prosa' "$AQ" 2>/dev/null)"
+chk "y cita la pregunta" "1" "$(grep -c '^- Traslape con otro encargo. ¿Cierro p-ac18cde948' "$AQ" 2>/dev/null)"
+printf 'Cambio: hecho.\n\nDecidi cerrar p-ac18cde948; queda la rotacion de la llave.\n' > "$T/lam-q.txt"
+corre_en "$T/t.jsonl" false "$T/lam-q.txt" "$RQ" >/dev/null
+chk "sin pregunta: sin aviso" "0" "$(grep -c 'pregunta en prosa' "$AQ" 2>/dev/null)"
+printf 'Cambio: hecho.\n\n```\nRetomamos: ¿que paso?\n```\n\n🔁 Siguiente sesion:\n¿Algo mas?\n' > "$T/lam-q.txt"
+corre_en "$T/t.jsonl" false "$T/lam-q.txt" "$RQ" >/dev/null
+chk "un ¿…? dentro de un fence o de los bloques del cierre no cuenta" "0" "$(grep -c 'pregunta en prosa' "$AQ" 2>/dev/null)"
+printf 'Cambio: hecho.\n\nSe puede cerrar? sin duda.\nlisto?\n' > "$T/lam-q.txt"
+corre_en "$T/t.jsonl" false "$T/lam-q.txt" "$RQ" >/dev/null
+chk "una pregunta sin ¿ no cuenta (solo prosa en español)" "0" "$(grep -c 'pregunta en prosa' "$AQ" 2>/dev/null)"
+
 echo "== 2.63.3: un sed que edita print-como-retomar.py y otro .py, con un break en la sesion y sin ficha: silencio =="
 # Forma real (sesion 4237bac9, p-bea9639b92): `sed -i` sobre el fuente de print-como-retomar.py
 # seguido de pendientes_afines.py, sin /checkpoint-3t ni ficha. El guard tomaba el .py como ficha,
