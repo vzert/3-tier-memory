@@ -8,7 +8,7 @@
 # Cuerpo tomado tal cual de memory/plans/plan-journal-concurrencia-v2.12.0.md. Cada corrida
 # lanza 2 workers (10 add + 5 resolve cada uno = 30 eventos concurrentes) contra 2
 # compactadores simultaneos, y un barrido final. Se exige 5/5 corridas limpias, mas:
-#   - un solo agente, 10 eventos secuenciales, sin lock residual, < 1 s
+#   - un solo agente, 10 eventos secuenciales, sin lock residual, < 3/2 x base de la maquina + 400 ms
 #   - lock huerfano (TTL vencido): 5 compactadores compiten, exactamente 1 lo roba
 #
 #   - Fase 2: 2 workers x (6 learning.add + 6 session.add + 2 plan.upsert + 2 research.upsert)
@@ -62,25 +62,29 @@ for t in 1 2 3 4 5; do
   [ "$OPEN" = 10 ] && [ "$DUP" = 0 ] && [ "$ROWS" = 20 ] && [ "$DUPM" = 0 ] && [ "$DUPN" = 0 ] && [ "$PEND" = 0 ] && [ "$QUAR" = 0 ] && [ "$FAILED" = 0 ] && [ "$LOCK" = 0 ] && [ "$RES" = 10 ] || { FAIL=1; show_journal; }
 done
 
-# Complementaria 1: un solo agente, 10 eventos secuenciales, sin lock residual, < 1 s
-rm -r $M/.journal 2>/dev/null; T0=$(python3 -c 'import time;print(time.time_ns())')
+# Complementaria 1: un solo agente, 10 eventos secuenciales, sin lock residual, en tiempo
+# relativo a la maquina (ver el umbral abajo)
+rm -r $M/.journal 2>/dev/null
+# Linea base de la MISMA maquina en la MISMA corrida: 11 arranques de journal-emit.py --help, los
+# mismos 11 procesos python (10 emit + 1 compact) con sus imports, sin tocar el journal.
+B0=$(python3 -c 'import time;print(time.time_ns())')
+for i in $(seq 1 11); do python3 bin/journal-emit.py --help >/dev/null 2>&1; done
+B1=$(python3 -c 'import time;print(time.time_ns())'); BASE=$(( (B1 - B0) / 1000000 ))
+T0=$(python3 -c 'import time;print(time.time_ns())')
 for i in $(seq 1 10); do python3 bin/journal-emit.py --type pendiente.add --text "solo item $i" --prioridad Baja --origen "[[sessions/test]]" >/dev/null || FAIL=1; done
 python3 bin/journal-compact.py --quiet || FAIL=1
 T1=$(python3 -c 'import time;print(time.time_ns())'); MS=$(( (T1 - T0) / 1000000 ))
 SOLO=$(grep -c '^- \[ \] solo item' $M/_pendientes.md); SLOCK=$(ls -d $M/.journal/.lock 2>/dev/null | wc -l | tr -d ' ')
-# Umbral de velocidad: <1 s en POSIX. En Git Bash (Windows) arrancar 10 procesos python es mas
-# lento (medido en windows-latest 2026-09-03: 967 y 1057 ms) — 3 s ahi; lo que se exige igual en
-# todas las plataformas es items=10 y lock=0.
-#
-# Y 3 s tambien en CI: el coste de arrancar 10 procesos depende de la MAQUINA, no solo del sistema,
-# y un runner compartido no es la maquina de nadie. Medido en macos-latest el 2026-09-12: 1465 ms,
-# con items=10 y lock=0 — o sea, lo que fallaba era el reloj del runner, no el codigo. Aflojar un
-# techo de RENDIMIENTO en hardware ajeno es declarar lo que ya no se puede medir ahi; las dos
-# comprobaciones de CORRECCION siguen igual de estrictas en todas partes.
-SOLO_MAX=1000
-case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) SOLO_MAX=3000;; esac
-[ -n "${CI:-}" ] && SOLO_MAX=3000
-echo "solo: items=$SOLO lock=$SLOCK ms=$MS max=$SOLO_MAX"   # esperado: items=10 lock=0 ms<max
+# Umbral de velocidad: 3/2 x BASE + 400 ms, en todas las plataformas (con 2 x BASE + 500 un
+# compact() frenado 1 s paso una vez con BASE alta; con este no, ni con la maquina cargada). Antes era un tope fijo (1 s en
+# POSIX, 3 s en Git Bash y en CI), y el coste de arrancar 11 procesos python depende de la MAQUINA:
+# windows-latest dio 967 y 1057 ms (2026-09-03), macos-latest 1465 ms (2026-09-12) y un windows lento
+# 5933 ms contra 3000 (platforms 39984157994, p-1a69546329), siempre con items=10 y lock=0. Lo que
+# fallaba era el reloj del runner, no el codigo. Medirlo contra BASE deja fuera el arranque y sigue
+# atrapando un compactador lento de verdad: lo que el compactador tarde de mas cuenta entero.
+# Las dos comprobaciones de CORRECCION (items=10, lock=0) siguen igual de estrictas en todas partes.
+SOLO_MAX=$(( 3 * BASE / 2 + 400 ))
+echo "solo: items=$SOLO lock=$SLOCK ms=$MS base=$BASE max=$SOLO_MAX"   # esperado: items=10 lock=0 ms<max
 [ "$SOLO" = 10 ] && [ "$SLOCK" = 0 ] && [ "$MS" -lt "$SOLO_MAX" ] || FAIL=1
 
 # Complementaria 2: lock huerfano (TTL vencido), 5 compactadores compiten, exactamente 1 lo roba
