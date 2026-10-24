@@ -27,7 +27,15 @@ nada se decide leyendo el texto (regla 216). Si no hay candidato no imprime nada
 Se genera EN VIVO desde `_pendientes.md`, no se guarda en la ficha: asi el hook de cierre, que lo
 vuelve a correr, siempre compara contra el estado real.
 
-Uso:  print-pendiente-opcional.py SESSION_FILE [--hoy YYYY-MM-DD]
+Aviso ⚠ (2.64.0): si el pendiente del 🔔 lo nombro, en las ultimas 2 h, una herramienta de accion
+de OTRA ventana viva del proyecto (`paso_ajeno.otras_ventanas`), el bloque lleva una linea
+`⚠ tocado en otra ventana …: verifica el texto antes de abrirlo`. Nace de un cierre real donde el
+🔔 mostro el texto viejo de un pendiente que otra sesion ya habia resuelto. La senal sale del
+transcript (ids), nunca del texto del pendiente (regla 216); no suprime ni bloquea el 🔔. Sin
+`--transcript` busca el de esta sesion por `CLAUDE_CODE_SESSION_ID`; sin transcript no avisa (falla
+abierto). El hook de cierre no exige esta linea (`exigidas` la salta): la reporta como aviso.
+
+Uso:  print-pendiente-opcional.py SESSION_FILE [--hoy YYYY-MM-DD] [--transcript RUTA]
 """
 # sella-huellas: no (solo lee _pendientes.md y la ficha; no escribe nada)
 import datetime
@@ -60,6 +68,40 @@ def _como_retomar():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
+
+
+def _paso_ajeno():
+    """paso_ajeno.py, junto a este script."""
+    ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paso_ajeno.py")
+    spec = importlib.util.spec_from_file_location("paso_ajeno", ruta)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def transcript_de_sesion(proyecto_dir):
+    """Transcript de esta sesion: `CLAUDE_CODE_SESSION_ID` bajo ~/.claude/projects/<ruta con - >."""
+    sid = os.environ.get("CLAUDE_CODE_SESSION_ID", "").strip()
+    if not re.fullmatch(r"[0-9a-fA-F-]{8,64}", sid):
+        return None
+    base = os.path.join(os.path.expanduser("~"), ".claude", "projects")
+    cod = re.sub(r"[^A-Za-z0-9]", "-", os.path.abspath(proyecto_dir))
+    ruta = os.path.join(base, cod, sid + ".jsonl")
+    return ruta if os.path.isfile(ruta) else None
+
+
+def aviso_otra_ventana(pid, transcript, horas=2):
+    """Linea ⚠ si otra ventana corrio una herramienta de accion con el id en las ultimas horas."""
+    if not transcript or not os.path.isfile(transcript):
+        return None
+    try:
+        hits = _paso_ajeno().otras_ventanas(transcript, [pid], horas=horas).get(pid) or []
+    except Exception:
+        return None
+    if not hits:
+        return None
+    return (f"⚠ tocado en otra ventana en las ultimas {horas} h ({len(hits)} sesion(es)): "
+            "verifica que el texto siga siendo cierto antes de abrirlo.")
 
 
 def proximo_paso_ids(ficha_texto):
@@ -99,12 +141,17 @@ def pendientes(path):
 def main():
     args = [a for a in sys.argv[1:]]
     hoy = datetime.date.today().isoformat()
+    transcript = None
+    if "--transcript" in args:
+        i = args.index("--transcript")
+        transcript = args[i + 1] if i + 1 < len(args) else None
+        del args[i:i + 2]
     if "--hoy" in args:
         i = args.index("--hoy")
         hoy = args[i + 1]
         del args[i:i + 2]
     if len(args) != 1:
-        print("uso: print-pendiente-opcional.py SESSION_FILE [--hoy YYYY-MM-DD]", file=sys.stderr)
+        print("uso: print-pendiente-opcional.py SESSION_FILE [--hoy YYYY-MM-DD] [--transcript RUTA]", file=sys.stderr)
         return 2
     ficha = os.path.abspath(args[0])
     memory_dir = os.path.dirname(os.path.dirname(ficha))
@@ -143,6 +190,10 @@ def main():
             print(f"Contexto: memory/{origen}.md")
         if cabecera == CABECERA_OPCIONAL:
             print(f"Motivo: vencido desde {rev}")
+        if cabecera == CABECERA_HOY:
+            av = aviso_otra_ventana(pid, transcript or transcript_de_sesion(proyecto_dir))
+            if av:
+                print(av)
         if bloq:
             print("Espera a alguien de fuera: mira si ya llego; si no, dale otra fecha.")
         print("Si ya no aplica, cierralo con /checkpoint-3t en vez de dejarlo abierto.")

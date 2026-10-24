@@ -1560,6 +1560,30 @@ PY
 corre_en "$T/t.jsonl" false - "$RJ" >/dev/null
 chk "el usuario lo pidio en la sesion: sin aviso" "1 0" "$([ -f "$AJ" ] && echo 1 || echo 0) $(grep -c 'puede no ser trabajo de esta sesion' "$AJ" 2>/dev/null)"
 
+echo "== 2.64.0: el 🔔 con un pendiente que otra ventana toco: aviso en la revision, sin rechazo =="
+# Misma ficha que arriba; el pendiente del 🔔 vence hoy y otra ventana viva (otro transcript del
+# mismo directorio) corrio un comando con su id. El texto del 🔔 sigue pegandose sin la linea ⚠
+# (exigidas la salta), y el aviso viaja en la revision.
+RV="$T/repo-vivo"; mkdir -p "$RV"; git -C "$RV" init -q
+AV="$RV/.git/3t-revision-cierre-sin-sesion.md"
+cp "$M/_pendientes.md" "$T/pendientes-antes.md"
+printf '\n- [ ] Parchar el servidor demo — _creado: 2026-10-20_ — _revisar: %s_ — _id: p-2a2a2a2a2a_\n' "$HOY" >> "$M/_pendientes.md"
+python3 - "$T/otra.jsonl" <<'PY'
+import datetime, json, sys
+ts = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+r = [{"type": "user", "timestamp": ts, "message": {"role": "user", "content": "trabaja el servidor"}},
+     {"type": "assistant", "timestamp": ts, "message": {"content": [
+         {"type": "tool_use", "id": "v1", "name": "Bash", "input": {"command": "ssh demo 'grep node p-2a2a2a2a2a'"}}]}}]
+open(sys.argv[1], "w", encoding="utf-8").write("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in r))
+PY
+corre_en "$T/t.jsonl" false - "$RV" >/dev/null
+chk "la revision trae el aviso del 🔔" "1" "$(grep -c '^El pendiente del 🔔 puede tener el texto viejo' "$AV" 2>/dev/null)"
+chk "y dice que se toco en otra ventana" "1" "$(grep -c '^- .*⚠ tocado en otra ventana' "$AV" 2>/dev/null)"
+rm -f "$T/otra.jsonl" "$AV"; cp "$T/pendientes-antes.md" "$M/_pendientes.md"
+printf '\n- [ ] Parchar el servidor demo — _creado: 2026-10-20_ — _revisar: %s_ — _id: p-2a2a2a2a2a_\n' "$HOY" >> "$M/_pendientes.md"
+corre_en "$T/t.jsonl" false - "$RV" >/dev/null
+chk "sin la otra ventana: sin aviso" "0" "$(grep -c 'puede tener el texto viejo' "$AV" 2>/dev/null)"
+
 echo "== 2.63.3: un sed que edita print-como-retomar.py y otro .py, con un break en la sesion y sin ficha: silencio =="
 # Forma real (sesion 4237bac9, p-bea9639b92): `sed -i` sobre el fuente de print-como-retomar.py
 # seguido de pendientes_afines.py, sin /checkpoint-3t ni ficha. El guard tomaba el .py como ficha,

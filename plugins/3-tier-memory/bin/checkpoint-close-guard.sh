@@ -712,6 +712,7 @@ avisos_compartido = []
 # trabajo de esta sesion, o otra ventana corre comandos con el. Mismo camino, sin rechazo (d414;
 # auditoria de 101 fichas del 2026-10-22, caso real: una ficha de otro proyecto).
 avisos_ajeno = []
+avisos_pendiente = []  # 2.64.0: lineas ⚠ del 🔔 (print-pendiente-opcional.py)
 presentes = []      # (orden, lineas, texto) de cada bloque del cierre, para medir orden y cola
 # Texto tolerado DESPUES del ultimo bloque del cierre: los separadores `───` que imprimen los
 # scripts y una linea corta. Mas que eso ya empuja el cierre hacia arriba (adversario de 2.43.0:
@@ -731,6 +732,8 @@ def exigidas(salida, nueva):
     for l in salida.splitlines():
         if not l.strip() or l.startswith("───") or l.startswith(("Copia y pega esto", "Si tienes tiempo")):
             continue
+        if l.startswith("⚠"):
+            continue  # aviso informativo (2.64.0): depende del transcript; no se exige pegarlo
         if not nueva:
             if re.fullmatch(r"\s*`{3,}\s*", l):
                 continue
@@ -882,11 +885,13 @@ def revisar(ficha):
     # pegar uno viejo. Solo para fichas desde el corte: una anterior no tenia Step 8e.
     if sec is not None and "<filled in Step 8>" not in sec and m_fecha and m_fecha.group(1) >= "2026-09-23":
         try:
-            r = subprocess.run([sys.executable, os.path.join(BIN, "print-pendiente-opcional.py"), ficha],
+            r = subprocess.run([sys.executable, os.path.join(BIN, "print-pendiente-opcional.py"), ficha]
+                               + (["--transcript", tpath] if tpath else []),
                                capture_output=True, text=True, timeout=20)
             salida = r.stdout if r.returncode == 0 else ""
         except Exception:
             salida = ""
+        avisos_pendiente.extend(pref + l.strip() for l in salida.splitlines() if l.startswith("⚠"))
         esperado = exigidas(salida, nueva)
         cmd8e = f"`python3 \"{BIN}/print-pendiente-opcional.py\" \"{ficha}\"`"
         if esperado and (diferido and not reentrante):
@@ -1287,6 +1292,14 @@ else:
                 "lo lleva. Rehaz el paso con el siguiente de tu hilo o `ninguno — <motivo>`, o di en "
                 "la linea " + str(len(REVISION_ITEMS)) + " de la revision por que se queda:\n"
                 + "\n".join(f"- {a}" for a in avisos_ajeno))
+        if avisos_pendiente:
+            partes.append(
+                "El pendiente del 🔔 puede tener el texto viejo (print-pendiente-opcional.py; no "
+                "bloquea, lee ids de otras ventanas). Quien lo abra en otra sesion repetiria trabajo "
+                "ya hecho. Antes de pegar el 🔔, pregunta a esa ventana por SendMessage (ListAgents) "
+                "o mira el estado real; si el texto quedo falso, corrigelo con `pendiente.update` y "
+                "di en la linea " + str(len(REVISION_ITEMS)) + " de la revision que hiciste:\n"
+                + "\n".join(f"- {a}" for a in avisos_pendiente))
         if cierre_final:
             # Al final y una sola vez: se generan DESPUES de la revision, asi que ya reflejan lo que
             # corregiste en ella, y quedan como lo ultimo que ve el usuario.
