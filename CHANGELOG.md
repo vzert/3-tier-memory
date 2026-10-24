@@ -47,11 +47,12 @@ con una pregunta en prosa. Cuatro huecos, cuatro avisos; ninguno bloquea y ningu
   revision; la del incidente salio en un turno posterior al cierre.
 - Los cuatro leen ids, campos y rutas, no hechos: un pendiente que se vuelve falso porque pasaron cosas en
   otra ventana sin nombrar su id ni tocar un plan/handoff/ficha ligado no se ve.
-- Replay sobre 45 cierres reales de este repo: 0 avisos de B y 0 de D, pero solo 1 de 60 sesiones edito un
-  plan por Edit/Write (y actualizo sus pendientes), y B se apagaba con cualquier `pendiente.add` (corregido
-  en esta version). En otro proyecto con muchos planes editados por Bash, B avisaria en 12 de 54 cierres
-  (replay con pendientes de hoy, no medido como falso positivo). La tasa de falsos positivos de B esta
-  poco medida.
+- Replay: `tools/replay-avisos-pendiente.py <memory> <carpeta de transcripts> [N]` reproduce la medicion
+  (usa el `_pendientes.md` de hoy y, para D, el ultimo texto de la sesion, no la ventana del hook). Sobre
+  los 60 transcripts mas recientes de este repo (46 con `/checkpoint-3t`): 0 avisos de B y 0 de D. Solo 1 de
+  esos 60 edito un plan por Edit/Write (y actualizo sus pendientes), y B se apagaba con cualquier
+  `pendiente.add` (corregido en esta version). La tasa de falsos positivos de B esta poco medida; en otros
+  proyectos no se midio con un comando reproducible, asi que no se declara una cifra.
 
 ## [2.63.46] - 2026-10-23
 Origen: p-1a69546329. `test-journal-race.sh` fallo en Windows en platforms 39984157994 (intento 1)
