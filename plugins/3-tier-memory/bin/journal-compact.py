@@ -1764,7 +1764,10 @@ def apply_update_monthly(mem, p):
     if p.get("text"):
         # Misma forma exacta que apply_add_monthly: el `_id:` va AL FINAL de la celda de texto,
         # que es donde find_monthly_row lo busca (toma el ULTIMO `_id:` de la celda).
-        nuevas[COL_TEXT] = f"{escape_cell(p['text'])} _id: {p['id']}_"
+        # El detalle de un pendiente con titulo (2.63.47) sobrevive a un update de su texto: el
+        # update corrige el titulo de Tier 2, no borra lo que solo existe en Tier 3.
+        nuevas[COL_TEXT] = (f"{celda_texto(p['text'], detalle_de_celda(cells[COL_TEXT]))} "
+                            f"_id: {p['id']}_")
     if p.get("prioridad"):
         nuevas[COL_PRIO] = p["prioridad"]
     if nuevas == cells:
@@ -1992,6 +1995,24 @@ def fila_mensual_que_cita(mem, pid):
     return None
 
 
+# 2.63.47 (p-206fd62e68): un pendiente con titulo lleva en Tier 2 solo el titulo; el texto completo
+# vive en la celda de texto de la fila mensual: `<titulo> — detalle: <texto> _id: p-…_`. El `_id:`
+# sigue AL FINAL de la celda (find_monthly_row lo busca ahi).
+SEP_DETALLE = " — detalle: "
+
+
+def celda_texto(titulo, detalle=""):
+    t = escape_cell(titulo)
+    return f"{t}{SEP_DETALLE}{escape_cell(detalle)}" if detalle else t
+
+
+def detalle_de_celda(celda):
+    """El `— detalle: …` de una celda de texto ya escrita (sin su `_id:` final), o ''."""
+    sin_id = re.sub(r"\s*_id:\s*p-[0-9a-f]{10}_\s*$", "", celda)
+    _, sep, resto = sin_id.partition(SEP_DETALLE)
+    return resto if sep else ""
+
+
 def apply_add_monthly(mem, p):
     found = find_monthly_row(mem, p["id"])
     if found:
@@ -2001,7 +2022,8 @@ def apply_add_monthly(mem, p):
     nums = [int(c[0]) for _, c in table_rows(lines) if c and c[0].isdigit()]
     n = (max(nums) + 1) if nums else 1
     # cell(): un `|` crudo del texto partiria la fila y la haria irresoluble (ver apply_resolve_monthly).
-    row = (f"| {n} | {escape_cell(p['text'])} _id: {p['id']}_ | {p['prioridad']} | {p['creado']} "
+    row = (f"| {n} | {celda_texto(p['text'], p.get('detalle', ''))} _id: {p['id']}_ "
+           f"| {p['prioridad']} | {p['creado']} "
            f"| {p['origen']} | | |")
     at = last_table_line(lines)
     if at is None:
