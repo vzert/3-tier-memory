@@ -443,11 +443,14 @@ caso "guard sin aviso de prosa"    checkpoint-close-guard.sh m_avisos_pendiente.
 caso "prosa sin corte de emoji"    checkpoint-close-guard.sh m_avisos_pendiente.py test-checkpoint-close-guard.sh "dentro de un fence o de los bloques" prosa-sin-corte-emoji
 caso "prosa sin signo de apertura" checkpoint-close-guard.sh m_avisos_pendiente.py test-checkpoint-close-guard.sh "una pregunta sin" prosa-sin-signo
 caso "hilo cuenta el update"       paso_ajeno.py m_avisos_pendiente.py test-aviso-hilo-sin-reconciliar.sh "actualizo un pendiente del grupo" hilo-sin-update
-caso "hilo cuenta el alta"         paso_ajeno.py m_avisos_pendiente.py test-aviso-hilo-sin-reconciliar.sh "creo uno nuevo" hilo-sin-alta
+caso "hilo cuenta el alta"         paso_ajeno.py m_avisos_pendiente.py test-aviso-hilo-sin-reconciliar.sh "creo uno nuevo que nombra" hilo-sin-alta
+caso "hilo alta suelta"            paso_ajeno.py m_avisos_pendiente.py test-aviso-hilo-sin-reconciliar.sh "pendiente.add suelto no apaga" hilo-alta-suelta
+caso "hilo sin Bash"               paso_ajeno.py m_avisos_pendiente.py test-aviso-hilo-sin-reconciliar.sh "plan escrito por Bash" hilo-sin-bash
 caso "hilo y su propia ficha"      paso_ajeno.py m_avisos_pendiente.py test-aviso-hilo-sin-reconciliar.sh "solo edito su propia ficha" hilo-ficha-propia
 caso "audit sin hilo"              checkpoint-audit.py m_avisos_pendiente.py test-aviso-hilo-sin-reconciliar.sh "plan editado: aviso" audit-sin-hilo
 caso "solape sin aviso"            journal-emit.py m_avisos_pendiente.py test-aviso-solape-pendiente.sh "mismo fichero que un pendiente abierto" solape-sin-aviso
 caso "solape con plan completado"  journal-emit.py m_avisos_pendiente.py test-aviso-solape-pendiente.sh "un plan completado no avisa" solape-plan-completado
+caso "solape sin plan propuesto"   journal-emit.py m_avisos_pendiente.py test-aviso-solape-pendiente.sh "plan propuesto" solape-sin-propuesto
 caso "solape con generico"         journal-emit.py m_avisos_pendiente.py test-aviso-solape-pendiente.sh "generico" solape-generico
 
 # 2.63.33: `ninguno` con un plan `active` sin pendiente ligado (p-7fd6a82eaa). Cada caso nombra su

@@ -41,7 +41,10 @@ for m in modos:
     if m == "codigo": edit("/p/src/app.py", "5")
     if m == "update": bash("python3 journal-emit.py --type pendiente.update --id p-6f6f6f6f6f --text x", "6")
     if m == "otro-update": bash("python3 journal-emit.py --type pendiente.update --id p-7a7a7a7a7a --text x", "7")
-    if m == "alta": bash("python3 journal-emit.py --type pendiente.add --text demo", "8")
+    if m == "alta": bash("python3 journal-emit.py --type pendiente.add --text demo --relacionado plan-demo-fusion", "8")
+    if m == "alta-suelta": bash("python3 journal-emit.py --type pendiente.add --text demo", "9")
+    if m == "bash-plan": bash("python3 - <<EOF\nopen('/p/memory/plans/plan-demo-fusion.md','w').write('x')\nEOF", "10")
+    if m == "bash-lee": bash("cat /p/memory/plans/plan-demo-fusion.md | head", "11")
 with open(ruta, "w", encoding="utf-8") as fh:
     for x in r:
         fh.write(json.dumps(x, ensure_ascii=False) + "\n")
@@ -69,7 +72,13 @@ echo "== B2. sin aviso =="
 armar; tx "$T/t.jsonl" plan update
 chk "actualizo un pendiente del grupo" "HECHO" "$(estado --transcript "$T/t.jsonl" | cut -d'|' -f1)"
 armar; tx "$T/t.jsonl" plan alta
-chk "creo uno nuevo en la sesion" "HECHO" "$(estado --transcript "$T/t.jsonl" | cut -d'|' -f1)"
+chk "creo uno nuevo que nombra el plan" "HECHO" "$(estado --transcript "$T/t.jsonl" | cut -d'|' -f1)"
+armar; tx "$T/t.jsonl" plan alta-suelta
+chk "un pendiente.add suelto no apaga el aviso" "1" "$(estado --transcript "$T/t.jsonl" | grep -c 'plan plan-demo-fusion: p-6f6f6f6f6f')"
+armar; tx "$T/t.jsonl" bash-plan
+chk "un plan escrito por Bash tambien avisa" "1" "$(estado --transcript "$T/t.jsonl" | grep -c 'plan plan-demo-fusion: p-6f6f6f6f6f')"
+armar; tx "$T/t.jsonl" bash-lee
+chk "un plan solo leido por Bash no avisa" "HECHO" "$(estado --transcript "$T/t.jsonl" | cut -d'|' -f1)"
 armar; tx "$T/t.jsonl" ficha-propia
 chk "solo edito su propia ficha" "HECHO" "$(estado --transcript "$T/t.jsonl" | cut -d'|' -f1)"
 armar; tx "$T/t.jsonl" codigo

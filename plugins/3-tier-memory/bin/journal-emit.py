@@ -857,11 +857,13 @@ def refs_de_solape(texto):
 
 def avisar_solape_pendiente(texto, pid, mem, relacionado=()):
     """Avisa —no bloquea— si el pendiente nuevo cita una referencia explicita (un plan, un handoff,
-    un fichero) que ya tiene un plan `active` o un pendiente abierto (2.64.0).
+    un fichero) que ya tiene un plan `active` o `proposed` (no cerrado) o un pendiente abierto (2.64.0).
 
-    Caso real (otro proyecto, 2026-10-24): "auditar module.<x>.php" se guardo aunque el handoff de un
-    plan activo ya encargaba ese trabajo (workflows 6 y 23 sin el IIS). Mira solo referencias
-    explicitas, nunca palabras; un solape sin referencia compartida no se ve. Falla abierto."""
+    Caso que lo motivo (otro proyecto, 2026-10-24): "auditar module.<x>.php" se guardo aunque otro
+    pendiente ya encargaba trabajo del mismo asunto (workflows 6 y 23 sin el IIS). OJO, medido por el
+    revisor: ese par NO compartia ninguna referencia explicita (el duplicado citaba el handoff, el nuevo
+    un fichero) y el plan estaba `proposed`; este aviso no lo habria visto. Mira solo referencias
+    explicitas, nunca palabras (regla 216); un solape sin referencia compartida no se ve. Falla abierto."""
     try:
         refs = refs_de_solape(texto)
         if not refs or not mem:
@@ -878,12 +880,12 @@ def avisar_solape_pendiente(texto, pid, mem, relacionado=()):
                     continue
                 fila = re.search(r"\[\[plans/" + re.escape(nombre) + r"(?:\|[^\]]*)?\]\]\s*\|\s*([^|]*)\|", indice)
                 if fila:
-                    activo = fila.group(1).strip().lower().startswith("active")
+                    activo = fila.group(1).strip().lower().startswith(("active", "proposed"))
                 else:
                     cabeza = open(os.path.join(carpeta, f), encoding="utf-8").read(2000)
-                    activo = bool(re.search(r"^status:\s*active\b", cabeza, re.M | re.I))
+                    activo = bool(re.search(r"^status:\s*(?:active|proposed)\b", cabeza, re.M | re.I))
                 if activo:
-                    hallazgos.append(f"el plan activo {nombre}")
+                    hallazgos.append(f"el plan abierto {nombre}")
         ruta = os.path.join(mem, "_pendientes.md")
         if os.path.isfile(ruta):
             for l in open(ruta, encoding="utf-8"):

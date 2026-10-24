@@ -1596,6 +1596,9 @@ printf 'Cambio: hecho.\n\nTraslape con otro encargo. ¿Cierro p-ac18cde948 y dej
 corre_en "$T/t.jsonl" false "$T/lam-q.txt" "$RQ" >/dev/null
 chk "la revision trae el aviso de la pregunta en prosa" "1" "$(grep -c '^Tu respuesta termina en una pregunta en prosa' "$AQ" 2>/dev/null)"
 chk "y cita la pregunta" "1" "$(grep -c '^- Traslape con otro encargo. ¿Cierro p-ac18cde948' "$AQ" 2>/dev/null)"
+printf 'Cambio: hecho.\n\nTraslape. ¿Cierro p-ac18cde948 y dejo solo la rotacion? No lo cerre, porque tu lo guardaste.\n' > "$T/lam-q.txt"
+corre_en "$T/t.jsonl" false "$T/lam-q.txt" "$RQ" >/dev/null
+chk "la pregunta seguida de una frase corta en la misma linea tambien avisa" "1" "$(grep -c '^Tu respuesta termina en una pregunta en prosa' "$AQ" 2>/dev/null)"
 printf 'Cambio: hecho.\n\nDecidi cerrar p-ac18cde948; queda la rotacion de la llave.\n' > "$T/lam-q.txt"
 corre_en "$T/t.jsonl" false "$T/lam-q.txt" "$RQ" >/dev/null
 chk "sin pregunta: sin aviso" "0" "$(grep -c 'pregunta en prosa' "$AQ" 2>/dev/null)"

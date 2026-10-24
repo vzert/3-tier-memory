@@ -745,7 +745,11 @@ def pregunta_final(texto):
     if not parrafos:
         return ""
     ult = re.sub(r"[\s*_`>]+$", "", parrafos[-1].splitlines()[-1])
-    return ult if ult.endswith("?") and "¿" in ult else ""
+    if ult.endswith("?") and "¿" in ult:
+        return ult
+    # Una pregunta seguida de una frase corta en la misma linea ("¿Cierro p-…? No lo cerre porque…").
+    qs = list(re.finditer(r"¿[^¿?]*\?", ult))
+    return ult if qs and len(ult) - qs[-1].end() <= 80 and "¿" in ult[qs[-1].start():] else ""
 
 
 def exigidas(salida, nueva):

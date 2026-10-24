@@ -19,7 +19,8 @@ armar() {
   printf '# Pendientes\n\n## Alta prioridad\n\n- [ ] Pasar los flujos 6 y 23 sin el intermediario, con el prompt handoffs/infra/PROMPT_demo-sin-iis_2026-10-21.md — _origen: [[sessions/2026-10-24-demo]]_ — _creado: 2026-10-21_ — _id: p-4d4d4d4d4d_\n- [ ] Subir la version en package.json — _origen: [[sessions/2026-10-24-demo]]_ — _creado: 2026-10-21_ — _id: p-9c9c9c9c9c_\n- [ ] Rotar la llave de module.factdemo.php — _origen: [[sessions/2026-10-24-demo]]_ — _creado: 2026-10-21_ — _id: p-5e5e5e5e5e_\n\n## Media prioridad\n## Baja prioridad\n' > "$M/_pendientes.md"
   printf -- '---\nstatus: active\n---\n# Plan demo\n' > "$M/plans/plan-demo-sin-iis.md"
   printf -- '---\nstatus: completed\n---\n# Plan viejo\n' > "$M/plans/plan-viejo.md"
-  printf '# Plans\n\n| Plan | Status |\n|---|---|\n| [[plans/plan-demo-sin-iis]] | active |\n| [[plans/plan-viejo]] | completed |\n' > "$M/_plans-index.md"
+  printf -- '---\nstatus: proposed\n---\n# Plan propuesto\n' > "$M/plans/plan-propuesto.md"
+  printf '# Plans\n\n| Plan | Status |\n|---|---|\n| [[plans/plan-demo-sin-iis]] | active |\n| [[plans/plan-viejo]] | completed |\n| [[plans/plan-propuesto]] | proposed |\n' > "$M/_plans-index.md"
 }
 add() {   # $1 = texto; imprime stderr, deja el id en $T/id
   python3 "$BIN/journal-emit.py" --memory-dir "$M" --type pendiente.add --text "$1" --prioridad Alta \
@@ -39,7 +40,9 @@ chk "mismo handoff que un pendiente abierto" "1" "$(n_aviso "$E")"
 armar
 E=$(add "Seguir el plan-demo-sin-iis fase 2")
 chk "cita un plan activo" "1" "$(n_aviso "$E")"
-chk "y lo nombra" "1" "$(printf '%s' "$E" | grep -c 'el plan activo plan-demo-sin-iis')"
+chk "y lo nombra" "1" "$(printf '%s' "$E" | grep -c 'el plan abierto plan-demo-sin-iis')"
+armar
+chk "un plan propuesto (no cerrado) tambien avisa" "1" "$(n_aviso "$(add "Retomar el plan-propuesto")")"
 
 echo "== C2. sin referencia compartida: sin aviso =="
 armar

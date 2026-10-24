@@ -85,9 +85,11 @@ def transcript_de_sesion(proyecto_dir):
     if not re.fullmatch(r"[0-9a-fA-F-]{8,64}", sid):
         return None
     base = os.path.join(os.path.expanduser("~"), ".claude", "projects")
-    cod = re.sub(r"[^A-Za-z0-9]", "-", os.path.abspath(proyecto_dir))
-    ruta = os.path.join(base, cod, sid + ".jsonl")
-    return ruta if os.path.isfile(ruta) else None
+    for patron in (r"[^A-Za-z0-9]", r"[^A-Za-z0-9_]"):   # el harness conserva `_` en algunos proyectos
+        ruta = os.path.join(base, re.sub(patron, "-", os.path.abspath(proyecto_dir)), sid + ".jsonl")
+        if os.path.isfile(ruta):
+            return ruta
+    return None
 
 
 def aviso_otra_ventana(pid, transcript, horas=2):

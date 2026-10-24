@@ -17,17 +17,19 @@ M = {
     "guard-sin-aviso-hilo": [("        if avisos_hilo:", "        if False:")],
     "guard-sin-aviso-prosa": [("        if avisos_prosa:", "        if False:")],
     "prosa-sin-corte-emoji": [("        if any(l.startswith(e) for e in EMOJIS):", "        if False:")],
-    "prosa-sin-signo": [('    return ult if ult.endswith("?") and "¿" in ult else ""',
-                         '    return ult if ult.endswith("?") else ""')],
+    "prosa-sin-signo": [('    if ult.endswith("?") and "¿" in ult:', '    if ult.endswith("?"):')],
     # paso_ajeno.py
-    "hilo-sin-update": [("        if ids and not altas and not (set(ids) & tocados_ids):", "        if ids and not altas:")],
-    "hilo-sin-alta": [("        if ids and not altas and not (set(ids) & tocados_ids):", "        if ids and not (set(ids) & tocados_ids):")],
+    "hilo-sin-update": [("        if ids and not nombra and not (set(ids) & tocados_ids):", "        if ids and not nombra:")],
+    "hilo-sin-alta": [("        if ids and not nombra and not (set(ids) & tocados_ids):", "        if ids and not (set(ids) & tocados_ids):")],
+    "hilo-alta-suelta": [("        nombra = any(k in cmd for cmd in altas for k in claves)", "        nombra = bool(altas)")],
+    "hilo-sin-bash": [("                    if ESCRIBE.search(cmd):", "                    if False:")],
     "hilo-ficha-propia": [("        if m and m.group(1) != propia:", "        if m:")],
     # checkpoint-audit.py
     "audit-sin-hilo": [("            if sin:", "            if False:")],
     # journal-emit.py
     "solape-sin-aviso": [("        if hallazgos:", "        if False:")],
     "solape-plan-completado": [("                if activo:", "                if True:")],
+    "solape-sin-propuesto": [('startswith(("active", "proposed"))', 'startswith(("active",))')],
     "solape-generico": [('        if base.startswith("_") or base in REFS_GENERICAS:', "        if False:")],
 }
 

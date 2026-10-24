@@ -671,11 +671,12 @@ python3 "$JBIN/journal-emit.py" --type pendiente.add --text "<texto del pendient
 ```
 
 **Solape (2.64.0)**: si el texto cita un `plan-<slug>`, un handoff/plan/research `.md` o un fichero que
-ya tiene un plan `active` o un pendiente abierto, `journal-emit.py` lo avisa por stderr (`AVISO — este
-pendiente cita lo mismo que …`) y escribe el evento igual. No lo ignores: si es el mismo trabajo,
-`pendiente.update` sobre el existente o `--relacionado`, no un duplicado (caso real de otro proyecto,
-2026-10-24: "auditar module.<x>.php" ya era parte del handoff de un plan activo). Solo ve referencias
-explicitas, nunca palabras.
+ya tiene un plan `active` o `proposed` o un pendiente abierto, `journal-emit.py` lo avisa por stderr
+(`AVISO — este pendiente cita lo mismo que …`) y escribe el evento igual. No lo ignores: si es el mismo
+trabajo, `pendiente.update` sobre el existente o `--relacionado`, no un duplicado. Solo ve referencias
+explicitas compartidas, nunca palabras: en el incidente que lo motivo (otro proyecto, 2026-10-24) el
+duplicado citaba un handoff y el nuevo un fichero distinto, asi que ese par NO lo habria disparado.
+Busca el solape tu mismo antes de guardar.
 
 **`--relacionado` (2.55.0) cuando el pendiente va junto con otro trabajo**: el id de otro pendiente
 (`p-…`) o el slug de un plan (`plan-<slug>`), repetible. Ponlo siempre que aplique una de estas,
