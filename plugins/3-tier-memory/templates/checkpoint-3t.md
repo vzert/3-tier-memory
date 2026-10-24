@@ -388,8 +388,19 @@ fine but whose `Prioridad` is not Alta/Media/Baja (fix the value, not the row); 
 monthly whose header is shorter than the canonical 7 columns, so a close has nowhere to record the
 session that closed it. Neither is fixed automatically — rewriting a header is a migration.
 
-THEN read `memory/_pendientes.md`. Every open line now ends with `_id: p-xxxxxxxxxx_`. That id is
-how you resolve it in 3a; never match a line by its text.
+THEN print the scope of 3a — do NOT read `memory/_pendientes.md` whole (p-206fd62e68: 200-370 KB on
+real backlogs, and 3a's scope is closed anyway):
+
+```bash
+python3 "$JBIN/print-pendientes-alcance.py" "$MEMORY_DIR" --ids <p-ids this session touched, comma-separated>
+```
+
+It prints `ABIERTOS=N VENCIDOS=V TOCADOS=T` and one line per pendiente in scope: the ones with
+`_revisar` due or past, plus the ids you passed (an id that is not open prints `no-abierto`). Text is
+cut at 200 chars (`…[+N]`); the full detail is in Tier 3 (`grep <id> memory/pendientes/*.md`). `N` is
+the `<N>` of the `RECONCILIACION:` line. To find a pendiente by topic, `grep -i "<term>" memory/_pendientes.md`
+— the recall hook already cross-checks each prompt. Every open line ends with `_id: p-xxxxxxxxxx_`. That
+id is how you resolve it in 3a; never match a line by its text.
 
 ### Step 3a — Reconciliacion de pendientes existentes (RECONCILIATION FIRST)
 
@@ -667,6 +678,7 @@ usuario ya lo aprobo.
 ```bash
 python3 "$JBIN/journal-emit.py" --type pendiente.add --text "<texto del pendiente>" \
   --prioridad Alta|Media|Baja --origen "[[sessions/DATE-SLUG]]" [--revisar YYYY-MM-DD] \
+  [--titulo "<resumen de una linea, max 200 caracteres>"] \
   [--bloqueado-por "<que espera, fuera de esta sesion>"] [--relacionado p-…|plan-<slug>]...
 ```
 
@@ -677,6 +689,12 @@ trabajo, `pendiente.update` sobre el existente o `--relacionado`, no un duplicad
 explicitas compartidas, nunca palabras: en el incidente que lo motivo (otro proyecto, 2026-10-24) el
 duplicado citaba un handoff y el nuevo un fichero distinto, asi que ese par NO lo habria disparado.
 Busca el solape tu mismo antes de guardar.
+
+**`--titulo` (2.63.47, p-206fd62e68)**: `_pendientes.md` (Tier 2) se lee en cada sesion y no tiene limite
+(medido: 206 KB y 371 KB). Si el texto pasa de 200 caracteres, pasa `--titulo` con un resumen de una
+linea: Tier 2 guarda solo el titulo y `--text` va entero a la fila de `pendientes/YYYY-MM.md` (Tier 3,
+`— detalle: …`). Sin `--titulo`, un texto largo se escribe igual pero `journal-emit.py` avisa por stderr.
+El titulo es lo que ve quien lea la lista: que diga que hay que hacer, no el porque.
 
 **`--relacionado` (2.55.0) cuando el pendiente va junto con otro trabajo**: el id de otro pendiente
 (`p-…`) o el slug de un plan (`plan-<slug>`), repetible. Ponlo siempre que aplique una de estas,
