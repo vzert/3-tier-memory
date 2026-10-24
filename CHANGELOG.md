@@ -3,7 +3,7 @@
 ## [2.64.0] - 2026-10-24
 Origen: incidente real de un agente de otro proyecto (2026-10-24), via `/goalspec:interview` de Victor.
 El 🔔 del cierre mostro el texto viejo de un pendiente (un servidor que otra via ya habia parchado); el
-agente lo corrigio a mano, hallo que un pendiente suyo solapaba un encargo de un plan activo y cerro
+agente lo corrigio a mano, hallo que un pendiente suyo solapaba un encargo que ya existia y cerro
 con una pregunta en prosa. Cuatro huecos, cuatro avisos; ninguno bloquea y ninguno decide por el texto
 (regla 216).
 
@@ -22,19 +22,24 @@ con una pregunta en prosa. Cuatro huecos, cuatro avisos; ninguno bloquea y ningu
   `.md` o un fichero que ya tiene un plan `active` o `proposed` o un pendiente abierto, `journal-emit.py`
   avisa por stderr y escribe el evento igual.
 - **Aviso de pregunta en prosa.** Si el texto de la respuesta, antes de los bloques del cierre y fuera
-  de fences, termina en `¿…?`, la revision del cierre lo avisa (heuristica sobre prosa; un falso positivo
+  de fences, termina en `¿…?` (la pregunta cierra la linea), la revision del cierre lo avisa (heuristica sobre prosa; un falso positivo
   solo da un aviso de mas).
 
 ### Tests
-- `test-aviso-pendiente-otra-ventana.sh` (10), `test-aviso-hilo-sin-reconciliar.sh` (11),
-  `test-aviso-solape-pendiente.sh` (11), tres bloques nuevos en `test-checkpoint-close-guard.sh`, y
-  14 mutaciones en `tools/mutaciones/m_avisos_pendiente.py`.
+- `test-aviso-pendiente-otra-ventana.sh` (10), `test-aviso-hilo-sin-reconciliar.sh` (14),
+  `test-aviso-solape-pendiente.sh` (12), tres bloques nuevos en `test-checkpoint-close-guard.sh`, y
+  17 mutaciones en `tools/mutaciones/m_avisos_pendiente.py`.
 
 ### Limites declarados (medidos por el revisor independiente sobre el incidente real)
-- **El aviso de solape (C) NO habria disparado en el incidente que lo motivo**: el duplicado real citaba un
-  handoff y el pendiente nuevo un fichero distinto (sin referencia compartida), y el plan estaba
-  `proposed`. Solo atrapa pares que comparten una referencia explicita; de un caso asi dependia ese cruce
-  y se queda fuera por la regla 216. Su prueba usa un par inventado que si comparte referencia.
+- **El aviso de solape (C) no ve el par real del incidente que lo motivo**: el duplicado citaba un handoff
+  y el pendiente nuevo un fichero distinto (sin referencia compartida), y el plan estaba `proposed`. Sobre
+  ese texto, C si dispara, pero contra otros pendientes por una mencion incidental ("mismo patron que …"),
+  no contra el duplicado. Solo atrapa pares que comparten una referencia explicita; un solape sin ella
+  queda fuera por la regla 216. Su prueba usa un par inventado que si comparte referencia.
+- **El aviso de plan sin reconciliar (B) tampoco habria disparado en ese incidente**: la sesion edito el
+  plan (por Bash) y actualizo OTRO pendiente del mismo plan; B se apaga por grupo en cuanto se toca uno, y
+  el pendiente que quedo falso era otro del grupo. Para atraparlo habria que avisar por pendiente, con el
+  ruido de las fases que no necesitan update. No se hizo.
 - **El ⚠ del 🔔 (A) tampoco habria disparado en su incidente**: la otra ventana nombro el id dentro de su
   propio turno de cierre, que `otras_ventanas` excluye a proposito (2.63.43) para no avisar de sesiones que
   ya cerraron.
@@ -44,7 +49,9 @@ con una pregunta en prosa. Cuatro huecos, cuatro avisos; ninguno bloquea y ningu
   otra ventana sin nombrar su id ni tocar un plan/handoff/ficha ligado no se ve.
 - Replay sobre 45 cierres reales de este repo: 0 avisos de B y 0 de D, pero solo 1 de 60 sesiones edito un
   plan por Edit/Write (y actualizo sus pendientes), y B se apagaba con cualquier `pendiente.add` (corregido
-  en esta version). La tasa de falsos positivos de B esta poco medida.
+  en esta version). En otro proyecto con muchos planes editados por Bash, B avisaria en 12 de 54 cierres
+  (replay con pendientes de hoy, no medido como falso positivo). La tasa de falsos positivos de B esta
+  poco medida.
 
 ## [2.63.46] - 2026-10-23
 Origen: p-1a69546329. `test-journal-race.sh` fallo en Windows en platforms 39984157994 (intento 1)

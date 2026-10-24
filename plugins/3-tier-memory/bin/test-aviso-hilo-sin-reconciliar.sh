@@ -1,7 +1,7 @@
 #!/bin/bash
 # Prueba de `pendientes.hilo_sin_reconciliar` en checkpoint-audit.py + paso_ajeno.py (2.64.0).
 #
-# Caso real (otro proyecto, 2026-10-24): el hecho que volvia falso un pendiente (un servidor ya
+# Motivo (otro proyecto, 2026-10-24; ver Limites del CHANGELOG: B no habria disparado alli): el hecho que volvia falso un pendiente (un servidor ya
 # parchado) vivio en un plan y en otra ventana; el pendiente siguio diciendo lo viejo hasta que el 🔔
 # del cierre lo destapo. El aviso (POR-DISEÑO, no bloquea) sale cuando la sesion edito un plan, un
 # handoff o una ficha ajena que liga pendientes abiertos y no actualizo, cerro ni creo NINGUNO. Cruza

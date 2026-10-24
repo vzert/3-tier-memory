@@ -20,9 +20,11 @@ minutos antes del snippet.
 `hilos_sin_reconciliar(transcript, pendientes, ficha_propia)` (2.64.0): pendientes abiertos ligados a un
 plan, handoff o ficha que la sesion edito, cuando la sesion no corrigio ni cerro NINGUNO de ese
 grupo (`pendiente.update`/`resolve`, en el cierre o fuera) ni creo uno nuevo que NOMBRE el grupo (su
-plan, su handoff o su ficha en el comando; un `pendiente.add` suelto no cuenta). Caso real (otro
+plan, su handoff o su ficha en el comando; un `pendiente.add` suelto no cuenta). Caso que la motivo (otro
 proyecto, 2026-10-24): el hecho que volvia falso un pendiente (un servidor ya parchado) vivio en el
 plan y en otra ventana, y el texto del pendiente siguio diciendo lo viejo hasta que un 🔔 lo destapo.
+Medido por el revisor: en ese caso la sesion tambien actualizo OTRO pendiente del mismo plan, asi que
+este aviso (que se apaga por grupo en cuanto se toca uno) NO lo habria disparado.
 Solo cruza por ids y campos (`_relacionado`, `_origen`, la ruta del handoff en el texto), nunca
 palabras; no ve un hecho que nadie escribio en un plan/handoff/ficha. Una edicion por Bash cuenta si el
 comando nombra `memory/plans/<plan>.md` y trae una forma de escritura (`>`, `tee`, `sed -i`, `open(`,
@@ -246,7 +248,7 @@ def otras_ventanas(transcript, ids, horas=2, ahora=None):
 
 
 BASH_PLAN = re.compile(r"memory/plans/([\w.-]+)\.md")
-ESCRIBE = re.compile(r">|\btee\b|sed\s+-i|\bopen\(|\.write")
+ESCRIBE = re.compile(r"(?<![\d&>])>(?![&>]?\s*/dev/null)|\btee\b|sed\s+-i|\bopen\(|\.write")
 PLAN_RUTA = re.compile(r"/memory/plans/([^/]+)\.md$")
 FICHA_RUTA = re.compile(r"/memory/sessions/([^/]+)\.md$")
 EDICION = ("Edit", "Write", "MultiEdit")

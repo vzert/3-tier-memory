@@ -1,11 +1,11 @@
 #!/bin/bash
 # Prueba del aviso de solape de `journal-emit.py --type pendiente.add` (2.64.0).
 #
-# Caso real (otro proyecto, 2026-10-24): un pendiente nuevo ("auditar module.<x>.php") se guardo aunque
-# el handoff de un plan activo ya encargaba ese trabajo. El aviso mira SOLO referencias explicitas
-# (un `plan-<slug>`, un handoff/plan/research `.md`, un fichero de codigo) que comparte con un plan
-# `active` o con un pendiente abierto; nunca palabras (regla 216). Va a stderr, no bloquea y el
-# evento se escribe igual. Nombres inventados: el repo es publico.
+# Motivo (otro proyecto, 2026-10-24): un pendiente nuevo duplicaba un encargo que ya existia. Medido
+# despues: ese par real NO compartia ninguna referencia explicita, asi que este aviso no lo habria
+# visto; atrapa pares que si comparten una (un `plan-<slug>`, un handoff/plan/research `.md`, un
+# fichero) con un plan `active`/`proposed` o con un pendiente abierto. Nunca palabras (regla 216).
+# Va a stderr, no bloquea y el evento se escribe igual. Nombres inventados: el repo es publico.
 set -e
 BIN="$(cd "$(dirname "$0")" && pwd)"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT

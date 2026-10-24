@@ -17,7 +17,8 @@ M = {
     "guard-sin-aviso-hilo": [("        if avisos_hilo:", "        if False:")],
     "guard-sin-aviso-prosa": [("        if avisos_prosa:", "        if False:")],
     "prosa-sin-corte-emoji": [("        if any(l.startswith(e) for e in EMOJIS):", "        if False:")],
-    "prosa-sin-signo": [('    if ult.endswith("?") and "¿" in ult:', '    if ult.endswith("?"):')],
+    "prosa-sin-signo": [('    return ult if ult.endswith("?") and "¿" in ult else ""',
+                         '    return ult if ult.endswith("?") else ""')],
     # paso_ajeno.py
     "hilo-sin-update": [("        if ids and not nombra and not (set(ids) & tocados_ids):", "        if ids and not nombra:")],
     "hilo-sin-alta": [("        if ids and not nombra and not (set(ids) & tocados_ids):", "        if ids and not (set(ids) & tocados_ids):")],
