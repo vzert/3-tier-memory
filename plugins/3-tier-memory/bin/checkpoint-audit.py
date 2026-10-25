@@ -157,6 +157,8 @@ DESDE_PASO_COMPARTIDO = "2026-10-20"
 # snippet.paso_no_trabajado / paso_otra_ventana / titulo_paso (2.63.43): auditoria del 2026-10-22,
 # 101 fichas de 4 proyectos. Incluye el caso real (una ficha de otro proyecto del 2026-10-22).
 DESDE_PASO_AJENO = "2026-10-22"
+# pendientes.hilo_sin_reconciliar (2.64.0): incluye el caso real (2026-10-24).
+DESDE_HILO_SIN_RECONCILIAR = "2026-10-24"
 # Desde 2.63.33 (p-7fd6a82eaa) un snippet `ninguno` con un plan `active` enlazado en `## Plans` y
 # ningun pendiente abierto `_relacionado` a ese plan sale como SALTADO (snippet.ninguno_plan_activo).
 # Corte al dia siguiente de la medicion (d284): las fichas de antes no tenian la regla del Step 5.
@@ -1785,6 +1787,29 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                 h.append(Hallazgo(HECHO, "snippet.paso_otra_ventana",
                                   "ninguna otra sesion del proyecto corrio comandos con el paso"))
 
+    # 8-sexies-quinquies-bis. Un plan, handoff o ficha editado cuyos pendientes abiertos nadie
+    # reconcilio (2.64.0). Caso real (otro proyecto, 2026-10-24): el 🔔 mostro el texto viejo de un
+    # pendiente cuyo hecho (un servidor parchado) ya vivia en otro lado. Aviso POR-DISEÑO, no bloquea;
+    # cruza por ids y campos (regla 216), nunca por palabras.
+    if transcript and fecha_ficha and fecha_ficha >= DESDE_HILO_SIN_RECONCILIAR \
+            and "<filled in Step 8>" not in sec_retomar:
+        ruta_pend_b = os.path.join(memory_dir, "_pendientes.md")
+        if os.path.exists(ruta_pend_b):
+            sin = _paso_ajeno_mod().hilos_sin_reconciliar(
+                transcript, _afines_mod().pendientes(ruta_pend_b), session_file)
+            if sin:
+                h.append(Hallazgo(DISENO, "pendientes.hilo_sin_reconciliar",
+                                  f"{len(sin)} plan(es), handoff(s) o ficha(s) editados tienen pendientes "
+                                  "abiertos y la sesion no actualizo ni cerro ninguno (aviso, no bloquea)",
+                                  [f"{g}: {', '.join(ids[:4])}" for g, ids in sin],
+                                  corrige="relee cada pendiente contra lo que escribiste: si su texto "
+                                          "quedo falso, `journal-emit.py --type pendiente.update`; si ya "
+                                          "se hizo, `pendiente.resolve`; si sigue cierto, dilo en la "
+                                          "linea 4 de la revision"))
+            elif sin is not None:
+                h.append(Hallazgo(HECHO, "pendientes.hilo_sin_reconciliar",
+                                  "ningun plan, handoff o ficha editado deja pendientes sin reconciliar"))
+
     # 8-sexies-quater. `ninguno` no puede enterrar un plan `active` (2.63.33, p-7fd6a82eaa). Medido
     # el 2026-10-20 en 54 planes de 4 proyectos: las fases y los disparadores de un plan vivian solo
     # en su prosa, y un cierre `ninguno` con el plan enlazado dejaba a la siguiente sesion sin hilo.
@@ -2030,7 +2055,8 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         # Modo del hook de cierre (checkpoint-close-guard.sh): solo lo que Step 8 escribe. Los
         # reparadores en seco tardan segundos y no dependen del snippet; ya los midio Step 7a.
         return [x for x in h if x.clave.startswith(("snippet.", "bugs.", "pendientes.candidatos",
-                                                    "pendientes.bloqueado_sin_fecha"))
+                                                    "pendientes.bloqueado_sin_fecha",
+                                                    "pendientes.hilo_sin_reconciliar"))
                 or x.clave == "plan.mencionado_no_enlazado"]
     avisos_script_en_seco(h, memory_dir, "repair-dualwrite.py",
                           ("header_issues", "odd_values", "unaligned_rows", "unrepairable",

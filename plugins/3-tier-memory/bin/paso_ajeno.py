@@ -17,6 +17,19 @@ Caso real que mide esto (otro proyecto, 2026-10-22): la sesion solo desbloqueo, 
 pendiente ajeno y lo dejo como `Proximo paso`; otra ventana corria comandos con ese id desde 2
 minutos antes del snippet.
 
+`hilos_sin_reconciliar(transcript, pendientes, ficha_propia)` (2.64.0): pendientes abiertos ligados a un
+plan, handoff o ficha que la sesion edito, cuando la sesion no corrigio ni cerro NINGUNO de ese
+grupo (`pendiente.update`/`resolve`, en el cierre o fuera) ni creo uno nuevo que NOMBRE el grupo (su
+plan, su handoff o su ficha en el comando; un `pendiente.add` suelto no cuenta). Caso que la motivo (otro
+proyecto, 2026-10-24): el hecho que volvia falso un pendiente (un servidor ya parchado) vivio en el
+plan y en otra ventana, y el texto del pendiente siguio diciendo lo viejo hasta que un 🔔 lo destapo.
+Medido por el revisor: en ese caso la sesion tambien actualizo OTRO pendiente del mismo plan, asi que
+este aviso (que se apaga por grupo en cuanto se toca uno) NO lo habria disparado.
+Solo cruza por ids y campos (`_relacionado`, `_origen`, la ruta del handoff en el texto), nunca
+palabras; no ve un hecho que nadie escribio en un plan/handoff/ficha. Una edicion por Bash cuenta si el
+comando nombra `memory/plans/<plan>.md` y trae una forma de escritura (`>`, `tee`, `sed -i`, `open(`,
+`.write`): heuristica, y puede avisar de mas con un `cat plan > otro`.
+
 Limite declarado: mira ids, no trabajo. Una ventana que nombro el id hace mas de 2 h y sigue viva
 no sale. Una sesion que trabajo un pendiente sin nombrar su id ni
 emitir `update`/`resolve` sale como "no lo trabajo" (aviso de mas, no bloquea); una ventana que lo
@@ -231,4 +244,69 @@ def otras_ventanas(transcript, ids, horas=2, ahora=None):
                     vistos |= {i for i in ids if i in s}
         for i in sorted(vistos):
             out[i].append(os.path.basename(f))
+    return out
+
+
+BASH_PLAN = re.compile(r"memory/plans/([\w.-]+)\.md")
+ESCRIBE = re.compile(r"(?<![\d&>])>(?![&>]?\s*/dev/null)|\btee\b|sed\s+-i|\bopen\(|\.write")
+PLAN_RUTA = re.compile(r"/memory/plans/([^/]+)\.md$")
+FICHA_RUTA = re.compile(r"/memory/sessions/([^/]+)\.md$")
+EDICION = ("Edit", "Write", "MultiEdit")
+ID_PEND = re.compile(r"\bp-[0-9a-f]{10}(?![0-9a-f])")
+
+
+def hilos_sin_reconciliar(transcript, pendientes, ficha_propia=None):
+    """[(grupo, [ids])]: por cada plan/handoff/ficha que esta sesion edito y que liga pendientes
+    abiertos, los ids si la sesion no actualizo, cerro ni creo ninguno ligado a ese grupo.
+    `pendientes` = lista de dicts de pendientes_afines.pendientes (id, texto, rel, origen).
+    None si no hay transcript legible (falla abierto)."""
+    regs = [r for _, r in _registros(transcript)] if transcript else []
+    if not regs:
+        return None
+    rutas, tocados_ids, altas = [], set(), []
+    for r in regs:
+        if r.get("type") != "assistant":
+            continue
+        for b in _bloques(r):
+            if b.get("type") != "tool_use":
+                continue
+            inp = b.get("input") or {}
+            if b.get("name") in EDICION:
+                rutas.append((inp.get("file_path") or "").replace("\\", "/"))
+            elif b.get("name") == "Bash":
+                cmd = str(inp.get("command", ""))
+                if TRABAJO.search(cmd):
+                    tocados_ids |= set(ID_PEND.findall(cmd))
+                if ALTA.search(cmd):
+                    altas.append(cmd)
+                for pl in BASH_PLAN.findall(cmd):
+                    if ESCRIBE.search(cmd):
+                        rutas.append("/memory/plans/" + pl + ".md")
+    grupos = {}
+    propia = (ficha_propia or "").rsplit("/", 1)[-1]
+    propia = propia[:-3] if propia.endswith(".md") else propia
+    for ruta in rutas:
+        m = PLAN_RUTA.search(ruta)
+        if m:
+            slug = m.group(1)
+            claves = {slug, "plan-" + slug}
+            ids = [p["id"] for p in pendientes if claves & set(p.get("rel") or ())]
+            grupos.setdefault("plan " + slug, ids)
+            continue
+        m = FICHA_RUTA.search(ruta)
+        if m and m.group(1) != propia:
+            ids = [p["id"] for p in pendientes if (p.get("origen") or "").rsplit("/", 1)[-1] == m.group(1)]
+            grupos.setdefault("ficha " + m.group(1), ids)
+            continue
+        if "/handoffs/" in ruta and ruta.endswith(".md"):
+            base = os.path.basename(ruta)
+            ids = [p["id"] for p in pendientes if base in (p.get("texto") or "")]
+            grupos.setdefault("handoff " + base, ids)
+    out = []
+    for g, ids in grupos.items():
+        tipo, _, nombre = g.partition(" ")
+        claves = {nombre, "plan-" + nombre} if tipo == "plan" else {nombre}
+        nombra = any(k in cmd for cmd in altas for k in claves)
+        if ids and not nombra and not (set(ids) & tocados_ids):
+            out.append((g, ids))
     return out

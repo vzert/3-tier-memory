@@ -712,6 +712,9 @@ avisos_compartido = []
 # trabajo de esta sesion, o otra ventana corre comandos con el. Mismo camino, sin rechazo (d414;
 # auditoria de 101 fichas del 2026-10-22, caso real: una ficha de otro proyecto).
 avisos_ajeno = []
+avisos_pendiente = []  # 2.64.0: lineas ⚠ del 🔔 (print-pendiente-opcional.py)
+avisos_hilo = []       # 2.64.0: plan/handoff/ficha editado con pendientes sin reconciliar
+avisos_prosa = []      # 2.64.0: el texto del turno termina en una pregunta en prosa
 presentes = []      # (orden, lineas, texto) de cada bloque del cierre, para medir orden y cola
 # Texto tolerado DESPUES del ultimo bloque del cierre: los separadores `───` que imprimen los
 # scripts y una linea corta. Mas que eso ya empuja el cierre hacia arriba (adversario de 2.43.0:
@@ -725,12 +728,34 @@ CORTE_CAPAS = "2026-10-01"
 EMOJIS = ("🔁", "🔔", "➕", "🗓️")
 
 
+def pregunta_final(texto):
+    """La ultima linea de prosa de `texto` si es una pregunta con `¿…?`; si no, "".
+    2.64.0 (incidente real de otro proyecto, 2026-10-24): el mensaje cerro con '¿Cierro p-…?' y
+    nadie la contesta: una decision colgada en prosa es un dead handoff. Se mira el texto ANTES de
+    los bloques del cierre (🔁 🔔 ➕ 🗓️), fuera de fences, y solo el ultimo parrafo. Es una
+    heuristica sobre prosa, no sobre pendientes (regla 216): un `¿…?` citado o retorico da un
+    aviso de mas, nunca un bloqueo."""
+    sin_fences = re.sub(r"```.*?```", "", texto, flags=re.S)
+    lineas = []
+    for l in sin_fences.splitlines():
+        if any(l.startswith(e) for e in EMOJIS):
+            break
+        lineas.append(l)
+    parrafos = [p.strip() for p in "\n".join(lineas).split("\n\n") if p.strip()]
+    if not parrafos:
+        return ""
+    ult = re.sub(r"[\s*_`>]+$", "", parrafos[-1].splitlines()[-1])
+    return ult if ult.endswith("?") and "¿" in ult else ""
+
+
 def exigidas(salida, nueva):
     """Las lineas de la salida de un script que la respuesta tiene que traer."""
     out = []
     for l in salida.splitlines():
         if not l.strip() or l.startswith("───") or l.startswith(("Copia y pega esto", "Si tienes tiempo")):
             continue
+        if l.startswith("⚠"):
+            continue  # aviso informativo (2.64.0): depende del transcript; no se exige pegarlo
         if not nueva:
             if re.fullmatch(r"\s*`{3,}\s*", l):
                 continue
@@ -882,11 +907,13 @@ def revisar(ficha):
     # pegar uno viejo. Solo para fichas desde el corte: una anterior no tenia Step 8e.
     if sec is not None and "<filled in Step 8>" not in sec and m_fecha and m_fecha.group(1) >= "2026-09-23":
         try:
-            r = subprocess.run([sys.executable, os.path.join(BIN, "print-pendiente-opcional.py"), ficha],
+            r = subprocess.run([sys.executable, os.path.join(BIN, "print-pendiente-opcional.py"), ficha]
+                               + ([] if not tpath else ["--transcript", tpath]),
                                capture_output=True, text=True, timeout=20)
             salida = r.stdout if r.returncode == 0 else ""
         except Exception:
             salida = ""
+        avisos_pendiente.extend(pref + l.strip() for l in salida.splitlines() if l.startswith("⚠"))
         esperado = exigidas(salida, nueva)
         cmd8e = f"`python3 \"{BIN}/print-pendiente-opcional.py\" \"{ficha}\"`"
         if esperado and (diferido and not reentrante):
@@ -988,6 +1015,8 @@ def revisar(ficha):
                                     "snippet.paso_otra_ventana") and x.get("estado") != "HECHO":
                 avisos_ajeno.extend(pref + x["clave"].split(".")[1] + ": " + l
                                     for l in (x.get("lineas") or [x.get("detalle", "")]))
+            elif x.get("clave") == "pendientes.hilo_sin_reconciliar" and x.get("estado") != "HECHO":
+                avisos_hilo.extend(pref + l for l in (x.get("lineas") or [x.get("detalle", "")]))
     except Exception:
         pass
 
@@ -1222,6 +1251,11 @@ if reentrante and not (pedir_revision and not revision_contestada()):
         except Exception:
             pass
 
+if pedir_revision and not reentrante:
+    _q = pregunta_final(lam)
+    if _q:
+        avisos_prosa.append(_q[-200:])
+
 if not problemas and not (pedir_revision and not reentrante):
     sys.exit(0)
 
@@ -1287,6 +1321,30 @@ else:
                 "lo lleva. Rehaz el paso con el siguiente de tu hilo o `ninguno — <motivo>`, o di en "
                 "la linea " + str(len(REVISION_ITEMS)) + " de la revision por que se queda:\n"
                 + "\n".join(f"- {a}" for a in avisos_ajeno))
+        if avisos_hilo:
+            partes.append(
+                "Editaste un plan, handoff o ficha con pendientes abiertos y no actualizaste ninguno "
+                "(checkpoint-audit.py pendientes.hilo_sin_reconciliar; no bloquea, cruza por ids). Un "
+                "pendiente cuyo hecho ya cambio sigue diciendo lo viejo y mandara a otra sesion a "
+                "repetirlo. Relee cada uno: `pendiente.update` si su texto quedo falso, "
+                "`pendiente.resolve` si ya se hizo, o di en la linea 4 de la revision por que sigue "
+                "cierto:\n" + "\n".join(f"- {a}" for a in avisos_hilo))
+        if avisos_prosa:
+            partes.append(
+                "Tu respuesta termina en una pregunta en prosa (checkpoint-close-guard.sh; no bloquea, "
+                "es una heuristica sobre `¿…?`). Nadie la contesta: una decision que nombras y no "
+                "preguntas es un dead handoff. Ponla en un AskUserQuestion con una opcion recomendada, "
+                "o decide con un default y dilo, o di en la linea " + str(len(REVISION_ITEMS)) +
+                " de la revision por que no es una decision del usuario:\n"
+                + "\n".join(f"- {a}" for a in avisos_prosa))
+        if avisos_pendiente:
+            partes.append(
+                "El pendiente del 🔔 puede tener el texto viejo (print-pendiente-opcional.py; no "
+                "bloquea, lee ids de otras ventanas). Quien lo abra en otra sesion repetiria trabajo "
+                "ya hecho. Antes de pegar el 🔔, pregunta a esa ventana por SendMessage (ListAgents) "
+                "o mira el estado real; si el texto quedo falso, corrigelo con `pendiente.update` y "
+                "di en la linea " + str(len(REVISION_ITEMS)) + " de la revision que hiciste:\n"
+                + "\n".join(f"- {a}" for a in avisos_pendiente))
         if cierre_final:
             # Al final y una sola vez: se generan DESPUES de la revision, asi que ya reflejan lo que
             # corregiste en ella, y quedan como lo ultimo que ve el usuario.

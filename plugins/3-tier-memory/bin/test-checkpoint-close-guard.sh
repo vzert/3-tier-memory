@@ -149,6 +149,7 @@ corre() {   # $1 transcript, $2 reentrante (true|false), $3 last_assistant_messa
 # puntero no casa, el reason se queda corto y los asertos de contenido fallan (no pasa en silencio).
 expande() { python3 -c '
 import json,os,re,sys
+sys.stdin.reconfigure(encoding="utf-8"); sys.stdout.reconfigure(encoding="utf-8")  # 2.64.0: el aviso del 🔔 lleva emoji; cp1252 (Windows) no lo codifica
 d=sys.stdin.read()
 if not d.strip(): sys.exit(0)
 j=json.loads(d)
@@ -701,9 +702,9 @@ corre_en() {   # $1 transcript, $2 reentrante, $3 fichero de last_assistant_mess
   python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":sys.argv[2]=="true","last_assistant_message":sys.argv[3],"cwd":sys.argv[4]}))' "$1" "$2" "$LAM" "$4" \
     | bash "$HOOK" 2>/dev/null | RAIZ_EXP="$4" expande
 }
-razon() { printf '%s' "$1" | python3 -c 'import json,sys;d=sys.stdin.read();j=json.loads(d) if d.strip() else {};print(j.get("reason") or j.get("systemMessage") or "")'; }
+razon() { printf '%s' "$1" | python3 -c 'import json,sys;sys.stdin.reconfigure(encoding="utf-8");sys.stdout.reconfigure(encoding="utf-8");d=sys.stdin.read();j=json.loads(d) if d.strip() else {};print(j.get("reason") or j.get("systemMessage") or "")'; }
 # Lo que ve el humano en la terminal (2.59.0): el `reason` tal como lo imprimio el hook.
-razon_corta() { printf '%s' "$1" | python3 -c 'import json,sys;d=sys.stdin.read();j=json.loads(d) if d.strip() else {};print(j.get("puntero") or j.get("reason") or "")'; }
+razon_corta() { printf '%s' "$1" | python3 -c 'import json,sys;sys.stdin.reconfigure(encoding="utf-8");sys.stdout.reconfigure(encoding="utf-8");d=sys.stdin.read();j=json.loads(d) if d.strip() else {};print(j.get("puntero") or j.get("reason") or "")'; }
 REV_OK='REVISION DEL CIERRE:
 1. ninguno
 2. ninguno
@@ -732,7 +733,7 @@ echo "== 2.59.0: en un repo git, lo que ve el humano es una linea; el aviso comp
 R="$T/repo"; mkdir -p "$R"; git -C "$R" init -q
 O=$(corre_en "$T/t.jsonl" false - "$R")
 chk "bloquea" "1" "$(bloquea "$O")"
-chk "el reason visible mide 300 caracteres o menos" "1" "$(razon_corta "$O" | python3 -c 'import sys;print(int(len(sys.stdin.read().strip())<=300))')"
+chk "el reason visible mide 300 caracteres o menos" "1" "$(razon_corta "$O" | python3 -c 'import sys;sys.stdin.reconfigure(encoding="utf-8");print(int(len(sys.stdin.read().strip())<=300))')"
 chk "el reason visible no trae la lista" "0" "$(razon_corta "$O" | grep -c 'No cuenta como falta')"
 chk "el reason visible senala el archivo en .git" "1" "$(razon_corta "$O" | grep -cE 'Lee con Read `[^`]*[\\/]\.git[\\/]3t-revision-cierre-sin-sesion\.md`')"
 chk "el archivo existe en .git del repo" "1" "$([ -f "$R/.git/3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
@@ -768,7 +769,7 @@ echo "== p-92aa5de144: fuera de git, lo que ve el humano es una linea; el aviso 
 rm -f "$SG/.3t-revision-cierre-sin-sesion.md"
 O=$(corre "$T/t.jsonl" false -)
 chk "bloquea" "1" "$(bloquea "$O")"
-chk "el reason visible mide 300 caracteres o menos" "1" "$(razon_corta "$O" | python3 -c 'import sys;print(int(len(sys.stdin.read().strip())<=300))')"
+chk "el reason visible mide 300 caracteres o menos" "1" "$(razon_corta "$O" | python3 -c 'import sys;sys.stdin.reconfigure(encoding="utf-8");print(int(len(sys.stdin.read().strip())<=300))')"
 chk "el reason visible no trae la lista" "0" "$(razon_corta "$O" | grep -c 'No cuenta como falta')"
 chk "el reason senala el archivo del cwd" "1" "$(razon_corta "$O" | grep -cE 'Lee con Read `[^`]*sin-git[\\/]\.3t-revision-cierre-sin-sesion\.md`')"
 chk "el archivo es igual al aviso del repo" "1" "$(python3 -c '
@@ -834,7 +835,7 @@ while len(b) < 175:
 print(b)' "$T")
 mkdir -p "$L"; git -C "$L" init -q
 O=$(corre_en "$T/t.jsonl" false - "$L")
-chk "ruta larga: reason de 300 o menos" "1" "$(razon_corta "$O" | python3 -c 'import sys;print(int(len(sys.stdin.read().strip())<=300))')"
+chk "ruta larga: reason de 300 o menos" "1" "$(razon_corta "$O" | python3 -c 'import sys;sys.stdin.reconfigure(encoding="utf-8");print(int(len(sys.stdin.read().strip())<=300))')"
 chk "ruta larga: usa la ruta relativa al directorio de la sesion" "1" "$(razon_corta "$O" | grep -c 'relativa a tu directorio de trabajo')"
 echo "== 2.59.0: si el archivo no se puede escribir, el aviso entero vuelve al reason =="
 mkdir "$R/.git/3t-revision-cierre-sin-sesion.md"
@@ -1559,6 +1560,74 @@ open(p, "w", encoding="utf-8").write("".join(json.dumps(r, ensure_ascii=False) +
 PY
 corre_en "$T/t.jsonl" false - "$RJ" >/dev/null
 chk "el usuario lo pidio en la sesion: sin aviso" "1 0" "$([ -f "$AJ" ] && echo 1 || echo 0) $(grep -c 'puede no ser trabajo de esta sesion' "$AJ" 2>/dev/null)"
+
+echo "== 2.64.0: el 🔔 con un pendiente que otra ventana toco: aviso en la revision, sin rechazo =="
+# Misma ficha que arriba; el pendiente del 🔔 vence hoy y otra ventana viva (otro transcript del
+# mismo directorio) corrio un comando con su id. El texto del 🔔 sigue pegandose sin la linea ⚠
+# (exigidas la salta), y el aviso viaja en la revision.
+RV="$T/repo-vivo"; mkdir -p "$RV"; git -C "$RV" init -q
+AV="$RV/.git/3t-revision-cierre-sin-sesion.md"
+cp "$M/_pendientes.md" "$T/pendientes-antes.md"
+printf '\n- [ ] Parchar el servidor demo — _creado: 2026-10-20_ — _revisar: %s_ — _id: p-2a2a2a2a2a_\n' "$HOY" >> "$M/_pendientes.md"
+python3 - "$T/otra.jsonl" <<'PY'
+import datetime, json, sys
+ts = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+r = [{"type": "user", "timestamp": ts, "message": {"role": "user", "content": "trabaja el servidor"}},
+     {"type": "assistant", "timestamp": ts, "message": {"content": [
+         {"type": "tool_use", "id": "v1", "name": "Bash", "input": {"command": "ssh demo 'grep node p-2a2a2a2a2a'"}}]}}]
+open(sys.argv[1], "w", encoding="utf-8").write("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in r))
+PY
+corre_en "$T/t.jsonl" false - "$RV" >/dev/null
+chk "la revision trae el aviso del 🔔" "1" "$(grep -c '^El pendiente del 🔔 puede tener el texto viejo' "$AV" 2>/dev/null)"
+chk "y dice que se toco en otra ventana" "1" "$(grep -c '^- .*⚠ tocado en otra ventana' "$AV" 2>/dev/null)"
+rm -f "$T/otra.jsonl" "$AV"; cp "$T/pendientes-antes.md" "$M/_pendientes.md"
+printf '\n- [ ] Parchar el servidor demo — _creado: 2026-10-20_ — _revisar: %s_ — _id: p-2a2a2a2a2a_\n' "$HOY" >> "$M/_pendientes.md"
+corre_en "$T/t.jsonl" false - "$RV" >/dev/null
+chk "sin la otra ventana: sin aviso" "0" "$(grep -c 'puede tener el texto viejo' "$AV" 2>/dev/null)"
+
+echo "== 2.64.0: el turno termina en una pregunta en prosa: aviso en la revision, sin rechazo =="
+# El incidente real (otro proyecto, 2026-10-24): '… ¿Cierro p-… y dejo solo la rotacion?' como ultima
+# linea, sin un AskUserQuestion. Solo cuenta el texto antes de los bloques del cierre, fuera de fences.
+RQ="$T/repo-prosa"; mkdir -p "$RQ"; git -C "$RQ" init -q
+AQ="$RQ/.git/3t-revision-cierre-sin-sesion.md"
+marco_ficha "ver en vivo la 0.13.41 (p-daf3051915)."
+python3 -c 'import sys;p=sys.argv[1];t=open(p,encoding="utf-8").read();open(p,"w",encoding="utf-8").write(t.replace("date: 2026-10-14","date: 2026-10-22",1))' "$F"
+tx "$T/t.jsonl" skill "$F" - -
+printf 'Cambio: hecho.\n\nTraslape con otro encargo. ¿Cierro p-ac18cde948 y dejo solo la rotacion de la llave?\n' > "$T/lam-q.txt"
+corre_en "$T/t.jsonl" false "$T/lam-q.txt" "$RQ" >/dev/null
+chk "la revision trae el aviso de la pregunta en prosa" "1" "$(grep -c '^Tu respuesta termina en una pregunta en prosa' "$AQ" 2>/dev/null)"
+chk "y cita la pregunta" "1" "$(grep -c '^- Traslape con otro encargo. ¿Cierro p-ac18cde948' "$AQ" 2>/dev/null)"
+printf 'Cambio: hecho.\n\nDecidi cerrar p-ac18cde948; queda la rotacion de la llave.\n' > "$T/lam-q.txt"
+corre_en "$T/t.jsonl" false "$T/lam-q.txt" "$RQ" >/dev/null
+chk "sin pregunta: sin aviso" "0" "$(grep -c 'pregunta en prosa' "$AQ" 2>/dev/null)"
+printf 'Cambio: hecho.\n\n**¿Cerrado?** Si, todo verde.\n' > "$T/lam-q.txt"
+corre_en "$T/t.jsonl" false "$T/lam-q.txt" "$RQ" >/dev/null
+chk "una pregunta que se responde en la misma linea no cuenta" "0" "$(grep -c 'pregunta en prosa' "$AQ" 2>/dev/null)"
+printf 'Cambio: hecho.\n\n```\nRetomamos: ¿que paso?\n```\n\n🔁 Siguiente sesion:\n¿Algo mas?\n' > "$T/lam-q.txt"
+corre_en "$T/t.jsonl" false "$T/lam-q.txt" "$RQ" >/dev/null
+chk "un ¿…? dentro de un fence o de los bloques del cierre no cuenta" "0" "$(grep -c 'pregunta en prosa' "$AQ" 2>/dev/null)"
+printf 'Cambio: hecho.\n\nSe puede cerrar? sin duda.\nlisto?\n' > "$T/lam-q.txt"
+corre_en "$T/t.jsonl" false "$T/lam-q.txt" "$RQ" >/dev/null
+chk "una pregunta sin ¿ no cuenta (solo prosa en español)" "0" "$(grep -c 'pregunta en prosa' "$AQ" 2>/dev/null)"
+
+echo "== 2.64.0: un plan editado con pendientes sin reconciliar: aviso en la revision, sin rechazo =="
+RH="$T/repo-hilo"; mkdir -p "$RH"; git -C "$RH" init -q
+AH="$RH/.git/3t-revision-cierre-sin-sesion.md"
+marco_ficha "ver en vivo la 0.13.41 (p-daf3051915)."
+python3 -c 'import sys;p=sys.argv[1];t=open(p,encoding="utf-8").read();open(p,"w",encoding="utf-8").write(t.replace("date: 2026-10-14","date: 2026-10-24",1))' "$F"
+printf '\n- [ ] Dar por estable el servidor demo — _creado: 2026-10-20_ — _id: p-6f6f6f6f6f_ — _relacionado: plan-demo-fusion_\n' >> "$M/_pendientes.md"
+tx "$T/t.jsonl" skill "$F" - -
+python3 - "$T/t.jsonl" <<'PY'
+import json, sys
+p = sys.argv[1]; R = [json.loads(l) for l in open(p, encoding="utf-8")]
+R.insert(1, {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "hh1", "name": "Edit",
+             "input": {"file_path": "/p/memory/plans/plan-demo-fusion.md", "old_string": "a", "new_string": "b"}}]}})
+open(p, "w", encoding="utf-8").write("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in R))
+PY
+corre_en "$T/t.jsonl" false - "$RH" >/dev/null
+chk "la revision trae el aviso del hilo" "1" "$(grep -c '^Editaste un plan, handoff o ficha con pendientes abiertos' "$AH" 2>/dev/null)"
+chk "y nombra el plan y el pendiente" "1" "$(grep -c '^- plan plan-demo-fusion: p-6f6f6f6f6f' "$AH" 2>/dev/null)"
+chk "y no lo cuenta como falta del cierre" "0" "$(grep -c 'checkpoint-audit.py pendientes.hilo_sin_reconciliar:' "$AH" 2>/dev/null)"
 
 echo "== 2.63.3: un sed que edita print-como-retomar.py y otro .py, con un break en la sesion y sin ficha: silencio =="
 # Forma real (sesion 4237bac9, p-bea9639b92): `sed -i` sobre el fuente de print-como-retomar.py

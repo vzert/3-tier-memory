@@ -1,5 +1,59 @@
 # Changelog
 
+## [2.64.0] - 2026-10-24
+Origen: incidente real de un agente de otro proyecto (2026-10-24), via `/goalspec:interview` de Victor.
+El 🔔 del cierre mostro el texto viejo de un pendiente (un servidor que otra via ya habia parchado); el
+agente lo corrigio a mano, hallo que un pendiente suyo solapaba un encargo que ya existia y cerro
+con una pregunta en prosa. Cuatro huecos, cuatro avisos; ninguno bloquea y ninguno decide por el texto
+(regla 216).
+
+### Added
+- **El 🔔 avisa si otra ventana toco su pendiente.** `print-pendiente-opcional.py` acepta
+  `--transcript` (o lee el de `CLAUDE_CODE_SESSION_ID`) y, si `paso_ajeno.otras_ventanas` ve que otra
+  sesion viva del proyecto corrio una herramienta de accion con el id en las ultimas 2 h, agrega
+  `⚠ tocado en otra ventana …: verifica que el texto siga siendo cierto antes de abrirlo`. El 🔔 sale
+  igual. El hook de cierre no exige pegar la linea (depende del transcript) y la lleva a la revision.
+- **`pendientes.hilo_sin_reconciliar` (POR-DISEÑO).** Si la sesion edito un plan, un handoff o una
+  ficha ajena que liga pendientes abiertos (`_relacionado`, `_origen`, la ruta del handoff en el texto)
+  y no actualizo, cerro ni creo uno que nombre ese grupo (un `pendiente.add` suelto no cuenta), la
+  revision del cierre lo avisa. Ve ediciones por Edit/Write/MultiEdit y por Bash cuando el comando
+  nombra `memory/plans/<plan>.md` con una forma de escritura (heuristica). `paso_ajeno.hilos_sin_reconciliar`.
+- **Aviso de solape en `pendiente.add`.** Si el texto cita un `plan-<slug>`, un handoff/plan/research
+  `.md` o un fichero que ya tiene un plan `active` o `proposed` o un pendiente abierto, `journal-emit.py`
+  avisa por stderr y escribe el evento igual.
+- **Aviso de pregunta en prosa.** Si el texto de la respuesta, antes de los bloques del cierre y fuera
+  de fences, termina en `¿…?` (la pregunta cierra la linea), la revision del cierre lo avisa (heuristica sobre prosa; un falso positivo
+  solo da un aviso de mas).
+
+### Tests
+- `test-aviso-pendiente-otra-ventana.sh` (10), `test-aviso-hilo-sin-reconciliar.sh` (14),
+  `test-aviso-solape-pendiente.sh` (12), tres bloques nuevos en `test-checkpoint-close-guard.sh`, y
+  17 mutaciones en `tools/mutaciones/m_avisos_pendiente.py`.
+
+### Limites declarados (medidos por el revisor independiente sobre el incidente real)
+- **El aviso de solape (C) no ve el par real del incidente que lo motivo**: el duplicado citaba un handoff
+  y el pendiente nuevo un fichero distinto (sin referencia compartida), y el plan estaba `proposed`. Sobre
+  ese texto, C si dispara, pero contra otros pendientes por una mencion incidental ("mismo patron que …"),
+  no contra el duplicado. Solo atrapa pares que comparten una referencia explicita; un solape sin ella
+  queda fuera por la regla 216. Su prueba usa un par inventado que si comparte referencia.
+- **El aviso de plan sin reconciliar (B) tampoco habria disparado en ese incidente**: la sesion edito el
+  plan (por Bash) y actualizo OTRO pendiente del mismo plan; B se apaga por grupo en cuanto se toca uno, y
+  el pendiente que quedo falso era otro del grupo. Para atraparlo habria que avisar por pendiente, con el
+  ruido de las fases que no necesitan update. No se hizo.
+- **El ⚠ del 🔔 (A) tampoco habria disparado en su incidente**: la otra ventana nombro el id dentro de su
+  propio turno de cierre, que `otras_ventanas` excluye a proposito (2.63.43) para no avisar de sesiones que
+  ya cerraron.
+- La pregunta en prosa (D) solo mira el primer Stop de un `/checkpoint-3t`, no la respuesta posterior a la
+  revision; la del incidente salio en un turno posterior al cierre.
+- Los cuatro leen ids, campos y rutas, no hechos: un pendiente que se vuelve falso porque pasaron cosas en
+  otra ventana sin nombrar su id ni tocar un plan/handoff/ficha ligado no se ve.
+- Replay: `tools/replay-avisos-pendiente.py <memory> <carpeta de transcripts> [N]` reproduce la medicion
+  (usa el `_pendientes.md` de hoy y, para D, el ultimo texto de la sesion, no la ventana del hook). Sobre
+  los 60 transcripts mas recientes de este repo (46 con `/checkpoint-3t`): 0 avisos de B y 0 de D. Solo 1 de
+  esos 60 edito un plan por Edit/Write (y actualizo sus pendientes), y B se apagaba con cualquier
+  `pendiente.add` (corregido en esta version). La tasa de falsos positivos de B esta poco medida; en otros
+  proyectos no se midio con un comando reproducible, asi que no se declara una cifra.
+
 ## [2.63.47] - 2026-10-23
 Origen: p-206fd62e68 (otro proyecto con el plugin, 2026-10-21). Los indices Tier 2 crecen sin limite y el plugin
 mandaba leerlos enteros: `_pendientes.md` 206 KB (217 abiertos, 75 lineas de mas de 800 caracteres),

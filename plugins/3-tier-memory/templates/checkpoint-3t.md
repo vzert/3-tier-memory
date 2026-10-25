@@ -682,6 +682,14 @@ python3 "$JBIN/journal-emit.py" --type pendiente.add --text "<texto del pendient
   [--bloqueado-por "<que espera, fuera de esta sesion>"] [--relacionado p-…|plan-<slug>]...
 ```
 
+**Solape (2.64.0)**: si el texto cita un `plan-<slug>`, un handoff/plan/research `.md` o un fichero que
+ya tiene un plan `active` o `proposed` o un pendiente abierto, `journal-emit.py` lo avisa por stderr
+(`AVISO — este pendiente cita lo mismo que …`) y escribe el evento igual. No lo ignores: si es el mismo
+trabajo, `pendiente.update` sobre el existente o `--relacionado`, no un duplicado. Solo ve referencias
+explicitas compartidas, nunca palabras: en el incidente que lo motivo (otro proyecto, 2026-10-24) el
+duplicado citaba un handoff y el nuevo un fichero distinto, asi que ese par NO lo habria disparado.
+Busca el solape tu mismo antes de guardar.
+
 **`--titulo` (2.63.47, p-206fd62e68)**: `_pendientes.md` (Tier 2) se lee en cada sesion y no tiene limite
 (medido: 206 KB y 371 KB). Si el texto pasa de 200 caracteres, pasa `--titulo` con un resumen de una
 linea: Tier 2 guarda solo el titulo y `--text` va entero a la fila de `pendientes/YYYY-MM.md` (Tier 3,
