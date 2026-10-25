@@ -421,6 +421,18 @@ def main():
         dz = correr(mem, lib, "--hoy", hoy_real, "--sessions-dir", reg, "--projects-root", proyectos)
         REGISTRO and check("retomada: una ventana de otro proyecto o con pid reusado no cuenta",
               {g["slug"]: g for g in dz["planes"]}["2026-10-13-s"]["ventana"]["estado"] == "cerrada")
+        # Linux: procStart es el starttime de /proc como CADENA de digitos (forma real, con comillas).
+        if os.path.exists("/proc/self/stat"):
+            tick = int(open("/proc/self/stat").read().rsplit(")", 1)[1].split()[19])
+            registra("w.json", SID_W, tmp, procStart=str(tick + 500))
+            dl = correr(mem, lib, "--hoy", hoy_real, "--sessions-dir", reg, "--projects-root", proyectos)
+            REGISTRO and check("retomada: procStart de Linux (tick) que no cuadra no cuenta",
+                  {g["slug"]: g for g in dl["planes"]}["2026-10-13-s"]["ventana"]["estado"] == "cerrada")
+            registra("w.json", SID_W, tmp, procStart=str(tick))
+            dl = correr(mem, lib, "--hoy", hoy_real, "--sessions-dir", reg, "--projects-root", proyectos)
+            REGISTRO and check("retomada: procStart de Linux (tick) que cuadra cuenta",
+                  {g["slug"]: g for g in dl["planes"]}["2026-10-13-s"]["ventana"]["estado"] == "abierta")
+            registra("w.json", SID_W, tmp, procStart="Mon Jan  1 00:00:00 2001")
         tx_de(tmp, SID_X, relleno + snap)
         registra("x.json", SID_X, tmp)
         wt = os.path.join(tmp, "wt")
