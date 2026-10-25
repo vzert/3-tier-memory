@@ -149,7 +149,7 @@ corre() {   # $1 transcript, $2 reentrante (true|false), $3 last_assistant_messa
 # puntero no casa, el reason se queda corto y los asertos de contenido fallan (no pasa en silencio).
 expande() { python3 -c '
 import json,os,re,sys
-sys.stdout.reconfigure(encoding="utf-8")  # 2.64.0: el aviso del 🔔 lleva emoji; cp1252 (Windows) no lo codifica
+sys.stdin.reconfigure(encoding="utf-8"); sys.stdout.reconfigure(encoding="utf-8")  # 2.64.0: el aviso del 🔔 lleva emoji; cp1252 (Windows) no lo codifica
 d=sys.stdin.read()
 if not d.strip(): sys.exit(0)
 j=json.loads(d)
@@ -702,9 +702,9 @@ corre_en() {   # $1 transcript, $2 reentrante, $3 fichero de last_assistant_mess
   python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":sys.argv[2]=="true","last_assistant_message":sys.argv[3],"cwd":sys.argv[4]}))' "$1" "$2" "$LAM" "$4" \
     | bash "$HOOK" 2>/dev/null | RAIZ_EXP="$4" expande
 }
-razon() { printf '%s' "$1" | python3 -c 'import json,sys;sys.stdout.reconfigure(encoding="utf-8");d=sys.stdin.read();j=json.loads(d) if d.strip() else {};print(j.get("reason") or j.get("systemMessage") or "")'; }
+razon() { printf '%s' "$1" | python3 -c 'import json,sys;sys.stdin.reconfigure(encoding="utf-8");sys.stdout.reconfigure(encoding="utf-8");d=sys.stdin.read();j=json.loads(d) if d.strip() else {};print(j.get("reason") or j.get("systemMessage") or "")'; }
 # Lo que ve el humano en la terminal (2.59.0): el `reason` tal como lo imprimio el hook.
-razon_corta() { printf '%s' "$1" | python3 -c 'import json,sys;sys.stdout.reconfigure(encoding="utf-8");d=sys.stdin.read();j=json.loads(d) if d.strip() else {};print(j.get("puntero") or j.get("reason") or "")'; }
+razon_corta() { printf '%s' "$1" | python3 -c 'import json,sys;sys.stdin.reconfigure(encoding="utf-8");sys.stdout.reconfigure(encoding="utf-8");d=sys.stdin.read();j=json.loads(d) if d.strip() else {};print(j.get("puntero") or j.get("reason") or "")'; }
 REV_OK='REVISION DEL CIERRE:
 1. ninguno
 2. ninguno
@@ -733,7 +733,7 @@ echo "== 2.59.0: en un repo git, lo que ve el humano es una linea; el aviso comp
 R="$T/repo"; mkdir -p "$R"; git -C "$R" init -q
 O=$(corre_en "$T/t.jsonl" false - "$R")
 chk "bloquea" "1" "$(bloquea "$O")"
-chk "el reason visible mide 300 caracteres o menos" "1" "$(razon_corta "$O" | python3 -c 'import sys;print(int(len(sys.stdin.read().strip())<=300))')"
+chk "el reason visible mide 300 caracteres o menos" "1" "$(razon_corta "$O" | python3 -c 'import sys;sys.stdin.reconfigure(encoding="utf-8");print(int(len(sys.stdin.read().strip())<=300))')"
 chk "el reason visible no trae la lista" "0" "$(razon_corta "$O" | grep -c 'No cuenta como falta')"
 chk "el reason visible senala el archivo en .git" "1" "$(razon_corta "$O" | grep -cE 'Lee con Read `[^`]*[\\/]\.git[\\/]3t-revision-cierre-sin-sesion\.md`')"
 chk "el archivo existe en .git del repo" "1" "$([ -f "$R/.git/3t-revision-cierre-sin-sesion.md" ] && echo 1 || echo 0)"
@@ -769,7 +769,7 @@ echo "== p-92aa5de144: fuera de git, lo que ve el humano es una linea; el aviso 
 rm -f "$SG/.3t-revision-cierre-sin-sesion.md"
 O=$(corre "$T/t.jsonl" false -)
 chk "bloquea" "1" "$(bloquea "$O")"
-chk "el reason visible mide 300 caracteres o menos" "1" "$(razon_corta "$O" | python3 -c 'import sys;print(int(len(sys.stdin.read().strip())<=300))')"
+chk "el reason visible mide 300 caracteres o menos" "1" "$(razon_corta "$O" | python3 -c 'import sys;sys.stdin.reconfigure(encoding="utf-8");print(int(len(sys.stdin.read().strip())<=300))')"
 chk "el reason visible no trae la lista" "0" "$(razon_corta "$O" | grep -c 'No cuenta como falta')"
 chk "el reason senala el archivo del cwd" "1" "$(razon_corta "$O" | grep -cE 'Lee con Read `[^`]*sin-git[\\/]\.3t-revision-cierre-sin-sesion\.md`')"
 chk "el archivo es igual al aviso del repo" "1" "$(python3 -c '
@@ -835,7 +835,7 @@ while len(b) < 175:
 print(b)' "$T")
 mkdir -p "$L"; git -C "$L" init -q
 O=$(corre_en "$T/t.jsonl" false - "$L")
-chk "ruta larga: reason de 300 o menos" "1" "$(razon_corta "$O" | python3 -c 'import sys;print(int(len(sys.stdin.read().strip())<=300))')"
+chk "ruta larga: reason de 300 o menos" "1" "$(razon_corta "$O" | python3 -c 'import sys;sys.stdin.reconfigure(encoding="utf-8");print(int(len(sys.stdin.read().strip())<=300))')"
 chk "ruta larga: usa la ruta relativa al directorio de la sesion" "1" "$(razon_corta "$O" | grep -c 'relativa a tu directorio de trabajo')"
 echo "== 2.59.0: si el archivo no se puede escribir, el aviso entero vuelve al reason =="
 mkdir "$R/.git/3t-revision-cierre-sin-sesion.md"
