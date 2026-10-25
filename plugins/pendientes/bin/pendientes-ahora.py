@@ -521,9 +521,20 @@ def epoch_local(texto):
         return None
 
 
+def tick_de_arranque(pid):
+    """Campo 22 (`starttime`, ticks desde el arranque) de /proc/<pid>/stat, o None si no hay /proc.
+    El nombre del proceso va entre parentesis y puede llevar espacios o `)`: se corta tras el ULTIMO."""
+    try:
+        with open("/proc/%d/stat" % pid, encoding="utf-8", errors="replace") as fh:
+            resto = fh.read().rsplit(")", 1)[1]
+        return int(resto.split()[19])
+    except (OSError, IndexError, ValueError):
+        return None
+
+
 def proceso_vivo(pid, inicio):
     """True si el proceso `pid` existe y, cuando el registro trae `procStart`, arranco a esa hora
-    (un pid reusado por otro proceso no cuenta). `procStart` va en UTC y `ps` responde en hora
+    (un pid reusado por otro proceso no cuenta). En macOS `procStart` es texto de fecha en UTC y `ps` responde en hora
     local: se comparan como epoch, con 2 s de margen."""
     try:
         os.kill(pid, 0)
@@ -535,6 +546,10 @@ def proceso_vivo(pid, inicio):
         return False
     if not inicio:
         return True
+    if isinstance(inicio, int) or str(inicio).isdigit():
+        # Linux: Claude Code escribe el `starttime` de /proc (medido: cadena de digitos, 2.1.304 a 2.1.310)
+        visto = tick_de_arranque(pid)
+        return True if visto is None else visto == int(inicio)  # sin /proc el pid existe
     try:
         out = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True,
                              timeout=5)
