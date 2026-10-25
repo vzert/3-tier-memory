@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.64.1] - 2026-10-24
+Origen: la ronda de revision posterior al merge de 2.64.0 (revisor independiente). Las pruebas y un docstring de
+2.64.0 llevaban datos recortados de un caso real de otro proyecto: el id de un pendiente vivo y frases de su
+contenido. El repo es publico.
+
+### Fixed
+- `test-checkpoint-close-guard.sh`, `test-aviso-solape-pendiente.sh` y el docstring de `avisar_solape_pendiente`
+  (`journal-emit.py`) usan ids, planes y textos inventados con la misma forma. Sin cambio de comportamiento.
+- Limite: los datos recortados siguen legibles en el historial de git de 2.64.0 (y por SHA en GitHub aunque se
+  reescriba el historial). Reescribirlo lo decide el dueno del repo; aqui no se hizo.
+
 ## [2.64.0] - 2026-10-24
 Origen: incidente real de un agente de otro proyecto (2026-10-24), via `/goalspec:interview` de Victor.
 El 🔔 del cierre mostro el texto viejo de un pendiente (un servidor que otra via ya habia parchado); el

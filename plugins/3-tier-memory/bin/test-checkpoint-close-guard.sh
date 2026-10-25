@@ -1593,11 +1593,11 @@ AQ="$RQ/.git/3t-revision-cierre-sin-sesion.md"
 marco_ficha "ver en vivo la 0.13.41 (p-daf3051915)."
 python3 -c 'import sys;p=sys.argv[1];t=open(p,encoding="utf-8").read();open(p,"w",encoding="utf-8").write(t.replace("date: 2026-10-14","date: 2026-10-22",1))' "$F"
 tx "$T/t.jsonl" skill "$F" - -
-printf 'Cambio: hecho.\n\nTraslape con otro encargo. ¿Cierro p-ac18cde948 y dejo solo la rotacion de la llave?\n' > "$T/lam-q.txt"
+printf 'Cambio: hecho.\n\nTraslape con otro encargo. ¿Cierro p-3d3d3d3d3d y dejo solo la segunda parte?\n' > "$T/lam-q.txt"
 corre_en "$T/t.jsonl" false "$T/lam-q.txt" "$RQ" >/dev/null
 chk "la revision trae el aviso de la pregunta en prosa" "1" "$(grep -c '^Tu respuesta termina en una pregunta en prosa' "$AQ" 2>/dev/null)"
-chk "y cita la pregunta" "1" "$(grep -c '^- Traslape con otro encargo. ¿Cierro p-ac18cde948' "$AQ" 2>/dev/null)"
-printf 'Cambio: hecho.\n\nDecidi cerrar p-ac18cde948; queda la rotacion de la llave.\n' > "$T/lam-q.txt"
+chk "y cita la pregunta" "1" "$(grep -c '^- Traslape con otro encargo. ¿Cierro p-3d3d3d3d3d' "$AQ" 2>/dev/null)"
+printf 'Cambio: hecho.\n\nDecidi cerrar p-3d3d3d3d3d; queda la segunda parte.\n' > "$T/lam-q.txt"
 corre_en "$T/t.jsonl" false "$T/lam-q.txt" "$RQ" >/dev/null
 chk "sin pregunta: sin aviso" "0" "$(grep -c 'pregunta en prosa' "$AQ" 2>/dev/null)"
 printf 'Cambio: hecho.\n\n**¿Cerrado?** Si, todo verde.\n' > "$T/lam-q.txt"

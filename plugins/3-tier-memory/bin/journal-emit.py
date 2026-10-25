@@ -879,8 +879,8 @@ def avisar_solape_pendiente(texto, pid, mem, relacionado=()):
     """Avisa —no bloquea— si el pendiente nuevo cita una referencia explicita (un plan, un handoff,
     un fichero) que ya tiene un plan `active` o `proposed` (no cerrado) o un pendiente abierto (2.64.0).
 
-    Caso que lo motivo (otro proyecto, 2026-10-24): "auditar module.<x>.php" se guardo aunque otro
-    pendiente ya encargaba trabajo del mismo asunto (workflows 6 y 23 sin el IIS). OJO, medido por el
+    Caso que lo motivo (otro proyecto, 2026-10-24): un pendiente nuevo se guardo aunque otro
+    pendiente ya encargaba trabajo del mismo asunto. OJO, medido por el
     revisor: ese par NO compartia ninguna referencia explicita (el duplicado citaba el handoff, el nuevo
     un fichero) y el plan estaba `proposed`; este aviso no lo habria visto. Mira solo referencias
     explicitas, nunca palabras (regla 216); un solape sin referencia compartida no se ve. Falla abierto."""
