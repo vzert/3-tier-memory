@@ -149,6 +149,7 @@ corre() {   # $1 transcript, $2 reentrante (true|false), $3 last_assistant_messa
 # puntero no casa, el reason se queda corto y los asertos de contenido fallan (no pasa en silencio).
 expande() { python3 -c '
 import json,os,re,sys
+sys.stdout.reconfigure(encoding="utf-8")  # 2.64.0: el aviso del 🔔 lleva emoji; cp1252 (Windows) no lo codifica
 d=sys.stdin.read()
 if not d.strip(): sys.exit(0)
 j=json.loads(d)
@@ -701,9 +702,9 @@ corre_en() {   # $1 transcript, $2 reentrante, $3 fichero de last_assistant_mess
   python3 -c 'import json,sys; print(json.dumps({"transcript_path":sys.argv[1],"stop_hook_active":sys.argv[2]=="true","last_assistant_message":sys.argv[3],"cwd":sys.argv[4]}))' "$1" "$2" "$LAM" "$4" \
     | bash "$HOOK" 2>/dev/null | RAIZ_EXP="$4" expande
 }
-razon() { printf '%s' "$1" | python3 -c 'import json,sys;d=sys.stdin.read();j=json.loads(d) if d.strip() else {};print(j.get("reason") or j.get("systemMessage") or "")'; }
+razon() { printf '%s' "$1" | python3 -c 'import json,sys;sys.stdout.reconfigure(encoding="utf-8");d=sys.stdin.read();j=json.loads(d) if d.strip() else {};print(j.get("reason") or j.get("systemMessage") or "")'; }
 # Lo que ve el humano en la terminal (2.59.0): el `reason` tal como lo imprimio el hook.
-razon_corta() { printf '%s' "$1" | python3 -c 'import json,sys;d=sys.stdin.read();j=json.loads(d) if d.strip() else {};print(j.get("puntero") or j.get("reason") or "")'; }
+razon_corta() { printf '%s' "$1" | python3 -c 'import json,sys;sys.stdout.reconfigure(encoding="utf-8");d=sys.stdin.read();j=json.loads(d) if d.strip() else {};print(j.get("puntero") or j.get("reason") or "")'; }
 REV_OK='REVISION DEL CIERRE:
 1. ninguno
 2. ninguno
