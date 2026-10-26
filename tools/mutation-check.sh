@@ -447,6 +447,12 @@ caso "hilo cuenta el alta"         paso_ajeno.py m_avisos_pendiente.py test-avis
 caso "hilo alta suelta"            paso_ajeno.py m_avisos_pendiente.py test-aviso-hilo-sin-reconciliar.sh "pendiente.add suelto no apaga" hilo-alta-suelta
 caso "hilo sin Bash"               paso_ajeno.py m_avisos_pendiente.py test-aviso-hilo-sin-reconciliar.sh "plan escrito por Bash" hilo-sin-bash
 caso "hilo y su propia ficha"      paso_ajeno.py m_avisos_pendiente.py test-aviso-hilo-sin-reconciliar.sh "solo edito su propia ficha" hilo-ficha-propia
+caso "hilo sin id nombrado"        paso_ajeno.py m_avisos_pendiente.py test-aviso-hilo-sin-reconciliar.sh "plan: el nombrado sale aunque" hilo-sin-id-nombrado
+caso "hilo id sin texto del Edit"  paso_ajeno.py m_avisos_pendiente.py test-aviso-hilo-sin-reconciliar.sh "handoff: el nombrado sale aunque" hilo-id-sin-texto-edit
+caso "hilo id sin Bash"            paso_ajeno.py m_avisos_pendiente.py test-aviso-hilo-sin-reconciliar.sh "plan escrito por Bash: el nombrado sale" hilo-id-sin-bash
+caso "hilo id sin bloqueo"         paso_ajeno.py m_avisos_pendiente.py test-aviso-hilo-sin-reconciliar.sh "el nombrado bloqueado no sale" hilo-id-sin-bloqueo
+caso "hilo id con Write"          paso_ajeno.py m_avisos_pendiente.py test-aviso-hilo-sin-reconciliar.sh "un Write del archivo entero" hilo-id-con-write
+caso "hilo id Bash con ficha"      paso_ajeno.py m_avisos_pendiente.py test-aviso-hilo-sin-reconciliar.sh "un Bash que escribe una ficha" hilo-id-bash-ficha
 caso "audit sin hilo"              checkpoint-audit.py m_avisos_pendiente.py test-aviso-hilo-sin-reconciliar.sh "plan editado: aviso" audit-sin-hilo
 caso "solape sin aviso"            journal-emit.py m_avisos_pendiente.py test-aviso-solape-pendiente.sh "mismo fichero que un pendiente abierto" solape-sin-aviso
 caso "solape con plan completado"  journal-emit.py m_avisos_pendiente.py test-aviso-solape-pendiente.sh "un plan completado no avisa" solape-plan-completado

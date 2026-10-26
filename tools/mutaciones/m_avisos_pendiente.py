@@ -25,6 +25,13 @@ M = {
     "hilo-alta-suelta": [("        nombra = any(k in cmd for cmd in altas for k in claves)", "        nombra = bool(altas)")],
     "hilo-sin-bash": [("                    if ESCRIBE.search(cmd):", "                    if False:")],
     "hilo-ficha-propia": [("        if m and m.group(1) != propia:", "        if m:")],
+    # 2.65.0: id nombrado en la edicion (par real del incidente)
+    "hilo-sin-id-nombrado": [("        if sueltos:", "        if False:")],
+    "hilo-id-sin-texto-edit": [("                nombrados.append((ruta, set(ID_PEND.findall(txt))))", "                nombrados.append((ruta, set()))")],
+    "hilo-id-sin-bash": [('                            nombrados.append(("/memory/plans/" + pl + ".md", set(ID_PEND.findall(cmd))))', "                            pass")],
+    "hilo-id-sin-bloqueo": [("    reconciliados = tocados_ids | bloqueados_ids", "    reconciliados = tocados_ids")],
+    "hilo-id-con-write": [('for k in ("old_string", "new_string"))', 'for k in ("old_string", "new_string", "content"))')],
+    "hilo-id-bash-ficha": [("                        if not BASH_FICHA.search(cmd):", "                        if True:")],
     # checkpoint-audit.py
     "audit-sin-hilo": [("            if sin:", "            if False:")],
     # journal-emit.py

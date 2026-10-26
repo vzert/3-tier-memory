@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.65.0] - 2026-10-26
+Origen: p-1e298b2d06. El aviso B de 2.64.0 (`pendientes.hilo_sin_reconciliar`) no atrapaba el incidente
+que lo motivo: la sesion cambio un plan con texto que nombraba un pendiente, actualizo OTRO pendiente del
+mismo plan, y B se apago para todo el grupo.
+
+### Changed
+- **`paso_ajeno.hilos_sin_reconciliar`**: ademas de la regla de grupo, un pendiente abierto del grupo
+  (plan, ficha ajena o handoff) cuyo id aparece en el texto de la edicion sale aunque otro del grupo se
+  haya tocado, salvo que la sesion lo actualizo, cerro o bloqueo. Texto de la edicion: old/new de Edit y
+  MultiEdit, y el comando Bash que escribe un plan si no nombra tambien una ficha. Un Write no aporta ids.
+  Mismo aviso y mismo formato; no bloquea.
+- Medido con `tools/replay-aviso-b-id-nombrado.py` (nuevo):
+  - El incidente, con el `_pendientes.md` de ese momento: antes 0 ids; ahora 1, el que quedo falso.
+    La variante "avisar por cada pendiente del grupo" daba 5 (4 sin cambio).
+  - Cierres que avisan solo por la regla nueva, en los ultimos 200 transcripts de cuatro proyectos con
+    el `_pendientes.md` de hoy (minimo): 5 de 138, 4 de 189, 3 de 62 y 0 de 105 en este repo. No se
+    clasificaron uno a uno.
+  - Sin excluir el Write eran 17, casi todo fichas que la misma sesion habia escrito en un cierre anterior.
+
+### Limites declarados
+- Un plan reescrito entero con Write solo lo ve la regla de grupo.
+- No ve un hecho que nadie escribio con el id del pendiente al lado.
+
+### Added
+- Pruebas: 12 asertos nuevos en `test-aviso-hilo-sin-reconciliar.sh` (26 en total), con el par real: un
+  hermano actualizado y otro id nombrado sin tocar, en plan, ficha ajena, handoff y Bash. Ids inventados.
+- 6 mutaciones nuevas en `tools/mutaciones/m_avisos_pendiente.py`.
+
 ## [2.64.2] - 2026-10-26
 Origen: p-6ba77d2ea4. 2.63.47 cambio el puente solo para proyectos nuevos; los ya instalados seguian
 mandando leer `_pendientes.md` y `_learnings.md` enteros al arrancar.
