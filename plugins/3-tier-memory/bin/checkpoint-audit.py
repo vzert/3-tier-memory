@@ -1800,7 +1800,8 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             if sin:
                 h.append(Hallazgo(DISENO, "pendientes.hilo_sin_reconciliar",
                                   f"{len(sin)} plan(es), handoff(s) o ficha(s) editados tienen pendientes "
-                                  "abiertos y la sesion no actualizo ni cerro ninguno (aviso, no bloquea)",
+                                  "abiertos sin reconciliar: la sesion no actualizo ni cerro ninguno del grupo, o la edicion "
+                                  "nombra uno que no toco (aviso, no bloquea)",
                                   [f"{g}: {', '.join(ids[:4])}" for g, ids in sin],
                                   corrige="relee cada pendiente contra lo que escribiste: si su texto "
                                           "quedo falso, `journal-emit.py --type pendiente.update`; si ya "

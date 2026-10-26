@@ -19,7 +19,7 @@ minutos antes del snippet.
 
 `hilos_sin_reconciliar(transcript, pendientes, ficha_propia)` (2.64.0): pendientes abiertos ligados a un
 plan, handoff o ficha que la sesion edito, cuando la sesion no corrigio ni cerro NINGUNO de ese
-grupo (`pendiente.update`/`resolve`, en el cierre o fuera) ni creo uno nuevo que NOMBRE el grupo (su
+grupo (o, desde 2.65.0, el que la edicion nombra y la sesion no toco; ver abajo) (`pendiente.update`/`resolve`, en el cierre o fuera) ni creo uno nuevo que NOMBRE el grupo (su
 plan, su handoff o su ficha en el comando; un `pendiente.add` suelto no cuenta). Caso que la motivo (otro
 proyecto, 2026-10-24): el hecho que volvia falso un pendiente (un servidor ya parchado) vivio en el
 plan y en otra ventana, y el texto del pendiente siguio diciendo lo viejo hasta que un 🔔 lo destapo.

@@ -336,8 +336,8 @@ Reglas para llenar los slots:
   Desde 2.64.0 la revision avisa tambien (todos no bloquean, cruzan por ids y campos): si el pendiente
   del 🔔 lo toco otra ventana en las ultimas 2 h (linea `⚠` del 🔔, el hook no la exige pegar);
   si editaste un plan, handoff o ficha ajena con pendientes abiertos y no actualizaste ni cerraste
-  ninguno (`pendientes.hilo_sin_reconciliar`: relee cada uno, `pendiente.update` si su texto quedo
-  falso); y si tu texto termina en una pregunta `¿…?` sin AskUserQuestion — una decision en prosa no
+  ninguno, o (desde 2.65.0) tu edicion nombra uno del grupo que no tocaste aunque tocaste otro
+  (`pendientes.hilo_sin_reconciliar`: relee cada uno, `pendiente.update` si su texto quedo falso); y si tu texto termina en una pregunta `¿…?` sin AskUserQuestion — una decision en prosa no
   esta tomada: pregúntala o decide con un default.
   **Desde 2.33.0 esta pregunta tiene respaldo mecanico, pero solo si el pendiente
   lleva el campo**: nace con `--bloqueado-por "<que espera>"` (Step 3b) o se lo pone

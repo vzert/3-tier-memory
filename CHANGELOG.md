@@ -11,6 +11,9 @@ mismo plan, y B se apago para todo el grupo.
   haya tocado, salvo que la sesion lo actualizo, cerro o bloqueo. Texto de la edicion: old/new de Edit y
   MultiEdit, y el comando Bash que escribe un plan si no nombra tambien una ficha. Un Write no aporta ids.
   Mismo aviso y mismo formato; no bloquea.
+- Los textos que describen el aviso (mensaje de `checkpoint-audit.py`, aviso de `checkpoint-close-guard.sh`,
+  `templates/checkpoint-3t-step8.md` y el docstring de `paso_ajeno.py`) ya no dicen "no actualizaste ninguno"
+  a secas: nombran tambien el caso del id nombrado y no tocado.
 - Medido con `tools/replay-aviso-b-id-nombrado.py` (nuevo):
   - El incidente, con el `_pendientes.md` de ese momento: antes 0 ids; ahora 1, el que quedo falso.
     La variante "avisar por cada pendiente del grupo" daba 5 (4 sin cambio).
