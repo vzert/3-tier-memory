@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.64.2] - 2026-10-26
+Origen: p-6ba77d2ea4. 2.63.47 cambio el puente solo para proyectos nuevos; los ya instalados seguian
+mandando leer `_pendientes.md` y `_learnings.md` enteros al arrancar.
+
+### Added
+- **`bin/update-puente.py`**: reescribe, en el `MEMORY.md` de auto-memoria del proyecto, SOLO el par
+  exacto de lineas de la plantilla vieja (`Read _pendientes.md` / `Read _learnings.md`) por
+  `/status-3t` + `grep`. Un puente editado a mano (otro texto, otro idioma, CRLF, lineas separadas) no
+  se toca. Idempotente, deja `MEMORY.md.pre-2.64.2`, fail-open. `session-start.sh` lo corre y avisa.
+- Prueba: `bin/test-update-puente.sh` (35 asertos, incluido extremo a extremo con HOME falso).
+
 ## [2.64.1] - 2026-10-24
 Origen: la ronda de revision posterior al merge de 2.64.0 (revisor independiente). Las pruebas y un docstring de
 2.64.0 llevaban datos recortados de un caso real de otro proyecto: el id de un pendiente vivo y frases de su

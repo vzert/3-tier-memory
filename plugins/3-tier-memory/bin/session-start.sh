@@ -614,6 +614,18 @@ if [ -n "$UPDATED" ]; then
   out ""
 fi
 
+# Puente ya instalado (p-6ba77d2ea4): el de antes de 2.63.47 manda leer _pendientes.md y
+# _learnings.md ENTEROS al arrancar. update-puente.py cambia solo el par de lineas exacto de la
+# plantilla vieja; un puente editado a mano no se toca. Fail-open.
+if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/update-puente.py" ] && [ -n "$CLAUDE_PROJECT_DIR" ]; then
+  _BRIDGE="$HOME/.claude/projects/$(echo "$CLAUDE_PROJECT_DIR" | sed 's/[^A-Za-z0-9]/-/g')/memory/MEMORY.md"
+  if [ -f "$_BRIDGE" ] && [ "$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/update-puente.py" "$_BRIDGE" 2>/dev/null)" = "ACTUALIZADO" ]; then
+    out "PUENTE ACTUALIZADO: $_BRIDGE ya no manda leer los indices Tier 2 enteros (usa /status-3t + grep). Copia: MEMORY.md.pre-2.64.2."
+    human "MEMORIA: puente actualizado — ya no manda leer _pendientes.md ni _learnings.md enteros."
+    out ""
+  fi
+fi
+
 # Desincronizacion en el repo del PROPIO plugin (p-d72c123065). El bloque de arriba compara
 # .claude/commands/*.md contra el plugin INSTALADO ($TEMPLATES_DIR = $CLAUDE_PLUGIN_ROOT/templates),
 # nunca contra el arbol de trabajo de ESTE repo — asi que si $CLAUDE_PROJECT_DIR es el repo del
