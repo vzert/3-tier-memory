@@ -19,18 +19,22 @@ caracteres en `_pendientes.md`, 206 en `_learnings.md` y 101 en `_research-index
     (`<!-- regla: -->`, `[[learnings/x]]`, `[[research/x]]`). Si ese fichero ya contiene el texto, solo se
     acorta la linea. Si no, el texto se anade como cita al final del fichero.
   Tier 3 se escribe y se comprueba antes de acortar Tier 2. El script trabaja bajo el lock del journal y
-  re-sella las huellas. Antes de escribir, respalda lo que va a tocar en `.journal/migrar-tier2/`. No
-  aplica si hay eventos sin compactar.
+  re-sella las huellas. Antes de escribir, respalda lo que va a tocar en `.journal/migrar-tier2/`, como
+  `<nombre>.pre-migrar` y con un `.gitignore` propio (en 2 de 3 proyectos medidos `.journal/` se
+  versiona). No aplica si hay eventos sin compactar.
   Probado en copias de los 9 proyectos: 554 de 607 lineas largas migradas, 707 textos comprobados en Tier 3 y 0 perdidos. Las lineas que
   quedan son las listadas como `no-migrable`: sin `_id`, mensual sin tabla, sin fichero al que apuntar o
   `- [~]`.
-- Prueba: `bin/test-migrar-tier2.sh` (39 asertos). 7 mutaciones en `tools/mutaciones/m_migrar_tier2.py`.
+- Prueba: `bin/test-migrar-tier2.sh` (46 asertos; incluye `research.upsert` y `learning.add` sobre filas
+  ya acortadas). 7 mutaciones en `tools/mutaciones/m_migrar_tier2.py`.
   Una de ellas destapo un hueco, ya cerrado: si una escritura posterior al mismo destino borraba el texto
   de una anterior, el script no lo veia. Ahora repasa todos los textos en Tier 3 antes de acortar cada
   indice, y la linea que falle se queda como estaba.
 - **`MUT_SOLO='<regex>' tools/mutation-check.sh`** (p-3a58571ac9): corre solo los casos cuya etiqueta
-  casa. Si no casa con ninguno, sale con error, para no dar un verde de 0 casos. Funciona tambien con
-  `MUT_JOBS`. Pruebas en `tools/test-mutation-filtro.sh` y una mutacion propia.
+  casa. El filtro va despues del reparto por tandas (`MUT_JOBS`), asi que no cambia que tanda corre cada
+  caso. Si no casa con ninguno, sale con error, para no dar un verde de 0 casos. La prueba
+  (`tools/test-mutation-filtro.sh`, con una mutacion propia) cubre el filtro; la salida con error y
+  `MUT_JOBS` no tienen prueba propia.
 
 ### Changed
 - `/status-3t`: si algun indice tiene `largas` mayor que 0, el consejo nombra el dry-run de

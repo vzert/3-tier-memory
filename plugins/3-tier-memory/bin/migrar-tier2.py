@@ -35,7 +35,10 @@ Escribe a mano bajo el lock del journal (`.journal/.lock`), como repair-dualwrit
 repair-research-index.py, y re-sella las huellas de lo que escribe. Con eventos sin compactar en
 `.journal/pending/` no aplica: un `pendiente.update` emitido con el texto viejo caeria en
 cuarentena. Antes de escribir copia cada fichero que va a tocar en
-`.journal/migrar-tier2/<fecha-hora>/`.
+`.journal/migrar-tier2/<fecha-hora>/` (como `<nombre>.pre-migrar`, fuera de git).
+
+Sabido y aceptado: en un topic sin `## Related`, la seccion movida queda dentro del cuerpo, y un
+learning.add posterior anade su regla debajo de ella (no cambia la numeracion).
 
 Uso:  migrar-tier2.py MEMORY_DIR [--apply] [--largas CHARS] [--budget SEG]
 Sin --apply es un dry-run: lista una linea por candidato y no escribe nada.
@@ -403,11 +406,21 @@ def sigue_en_tier3(jc, mem, a):
 # ---------------------------------------------------------------------- main
 
 def respaldar(mem, rutas, carpeta):
+    """Copia cada fichero como `<nombre>.pre-migrar`. Sin `.md`: check-wikilinks.py y
+    scan-secrets.py recorren memory/ entero, `.journal/` incluido. La carpeta lleva su propio
+    `.gitignore` (`*`): en 2 de 3 proyectos medidos `.journal/` se versiona, y un checkpoint
+    subiria al repo una copia de cada indice (370 KB el mas grande)."""
+    os.makedirs(carpeta, exist_ok=True)
+    raiz = os.path.dirname(carpeta)
+    gi = os.path.join(raiz, ".gitignore")
+    if not os.path.exists(gi):
+        with open(gi, "w", encoding="utf-8") as fh:
+            fh.write("# Respaldos de migrar-tier2.py: solo sirven en esta copia de trabajo.\n*\n")
     for r in rutas:
         if os.path.isfile(r):
             d = os.path.join(carpeta, os.path.dirname(os.path.relpath(r, mem)))
             os.makedirs(d, exist_ok=True)
-            shutil.copy2(r, d)
+            shutil.copy2(r, os.path.join(d, os.path.basename(r) + ".pre-migrar"))
 
 
 def main():

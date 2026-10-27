@@ -171,8 +171,11 @@ R=$(python3 "$BIN/repair-dualwrite.py" "$M" 2>&1)
 chk "repair-dualwrite: sin filas que anadir ni ids inventados ni barras rotas" "1" "$(echo "$R" | grep -c 'rows_added=0 pipes_broken=0.* ids_invented=0')"
 
 echo "== 5. respaldo e idempotencia =="
-chk "respaldo de _pendientes.md antes de escribir" "1" "$(ls "$M"/.journal/migrar-tier2/*/_pendientes.md 2>/dev/null | wc -l | tr -d ' ')"
-chk "el respaldo es el original (P1 entero)" "1" "$(grep -c 'FIN-P1' "$M"/.journal/migrar-tier2/*/_pendientes.md)"
+chk "respaldo de _pendientes.md antes de escribir" "1" "$(ls "$M"/.journal/migrar-tier2/*/_pendientes.md.pre-migrar 2>/dev/null | wc -l | tr -d ' ')"
+chk "el respaldo es el original (P1 entero)" "1" "$(grep -c 'FIN-P1' "$M"/.journal/migrar-tier2/*/_pendientes.md.pre-migrar)"
+chk "el respaldo no deja ningun .md" "0" "$(find "$M/.journal/migrar-tier2" -name '*.md' | wc -l | tr -d ' ')"
+git -C "$T" init -q 2>/dev/null
+chk "el respaldo queda fuera de git" "0" "$(git -C "$T" status --porcelain --untracked-files=all 2>/dev/null | grep -c 'migrar-tier2/')"
 H1=$(huella)
 chk "segundo --apply: nada que aplicar" "1" "$(migrar --apply | grep -c 'migrables=0 .*nada que aplicar')"
 chk "segundo --apply: no cambia nada" "$H1" "$(huella)"
@@ -185,6 +188,14 @@ chk "resolve: P2 sale de Tier 2" "0" "$(grep -c "_id: ${P2}_" "$M/_pendientes.md
 chk "resolve: su fila mensual queda cerrada" "1" "$(grep "_id: ${P2}_" "$M/pendientes/2026-09.md" | grep -c "| $(date +%F) |")"
 emit --type learning.add --topic topic --text "**Regla dos** — nueva tras migrar" --decision nueva >/dev/null 2>&1; compact
 chk "learning.add: numera 2 antes de Related" "1" "$(awk '/^## Related/{exit} /^2\. \*\*Regla dos/' "$M/learnings/topic.md" | wc -l | tr -d ' ')"
+emit --type research.upsert --slug r1 --tema "$RT" --status active --next-step "paso nuevo" >/dev/null 2>&1; compact
+chk "research.upsert: encuentra la fila acortada por su enlace (una sola)" "1" "$(grep -c 'research/r1' "$M/_research-index.md")"
+chk "research.upsert: actualiza su Next step" "1" "$(grep 'research/r1' "$M/_research-index.md" | grep -c '| paso nuevo |')"
+emit --type research.upsert --slug r1 --tema "$RT" --status completed --resultado "hecho" >/dev/null 2>&1; compact
+chk "research completed: una fila, en Completed, con el tema corto" "1" "$(awk '/^## Completed/{c=1} c && /research\/r1/' "$M/_research-index.md" | grep -c '^| RTEMA palabra0 .*… | hecho |')"
+chk "research completed: ninguna fila queda en Active" "1" "$(grep -c 'research/r1' "$M/_research-index.md")"
+emit --type learning.add --topic regla-a --text "**Regla x** — tras migrar" --decision nueva >/dev/null 2>&1; compact
+chk "learning.add en un topic con fila acortada: no duplica la fila" "1" "$(grep -c '\[\[learnings/regla-a\]\]' "$M/_learnings.md")"
 
 echo "== 7. tras adoptar, P3 ya se migra =="
 P3=$(emit --type pendiente.adopt --text-prefix "P3 palabra0" 2>/dev/null); compact
