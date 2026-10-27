@@ -13,8 +13,8 @@ T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 pass=0; fail=0
 chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: esperaba '$2', salio '$3'"; fi; }
 
-sed -n '/^caso() {/,/^}/p; /^caso_tools() {/,/^}/p' "$MC" > "$T/funciones.sh"
-chk "mutation-check.sh tiene caso() y caso_tools()" "2" "$(grep -cE '^caso(_tools)?\(\) \{' "$T/funciones.sh")"
+sed -n '/^caso() {/,/^}/p; /^caso_tools() {/,/^}/p; /^solo() {/,/^}/p' "$MC" > "$T/funciones.sh"
+chk "mutation-check.sh tiene caso(), caso_tools() y solo()" "3" "$(grep -cE '^(caso(_tools)?|solo)\(\) \{' "$T/funciones.sh")"
 mkdir -p "$T/src" "$T/tools" "$T/mut"
 : > "$T/src/obj.sh"; : > "$T/tools/obj.sh"
 # El mutador falso aplica siempre una sustitucion: lo que se mide es el filtro, no la mutacion.
@@ -44,6 +44,14 @@ for f in caso caso_tools; do
   chk "$f: ni SKIP ni FALLA con rc 0: el aserto es vacuo" "NO" "$(veredicto "$f" nada)"
 done
 chk "caso_tools: un skip en minusculas dentro de otro aserto no es un SKIP" "NO" "$(veredicto caso_tools skip-minus)"
+
+echo "== MUT_SOLO (p-3a58571ac9) =="
+# La etiqueta de los casos de veredicto() es "et".
+for f in caso caso_tools; do
+  chk "MUT_SOLO: $f que casa corre" "ok" "$(MUT_SOLO='^et$' veredicto "$f" falla-solo)"
+  chk "MUT_SOLO: un caso que no casa no corre ($f)" "" "$(MUT_SOLO='^otro$' veredicto "$f" falla-solo)"
+done
+chk "MUT_SOLO vacio: corre todo" "ok" "$(MUT_SOLO='' veredicto caso falla-solo)"
 
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
