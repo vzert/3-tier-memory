@@ -6,10 +6,10 @@
 #   1. canonico completo                 -> byte a byte identico, headers_added=0
 #   2. variantes que el compactador acepta (`## Alta Prioridad`, `## Media`, `## baja — nuevos`)
 #                                        -> identico, headers_added=0
-#   3. solo `## Abiertos` + Como usar arriba + Related abajo (unifi-expert)
+#   3. solo `## Abiertos` + Como usar arriba + Related abajo (proyecto-red)
 #                                        -> 3 headers antes de Related, items intactos, Abiertos intacto
 #   4. secciones por tema, sin Related (seo)  -> 3 headers al final
-#   5. falta solo Baja (Vecinex)          -> Baja despues de la seccion Media, antes de Como usar
+#   5. falta solo Baja (Vecindad)          -> Baja despues de la seccion Media, antes de Como usar
 #   6. falta solo Alta                    -> Alta justo antes de Media
 #   7. faltan Media y Baja                -> ambos tras la seccion Alta, en orden
 #   8. archivo inexistente                -> exit 0, headers_added=0
@@ -58,7 +58,7 @@ mk c2 '# Pendientes\n\n## Alta Prioridad\n\n- [ ] a\n\n## Media\n\n- [ ] b\n\n##
 cp "$T/c2/_pendientes.md" "$T/c2.orig"; OUT=$(run c2)
 [ "$OUT" = "headers_added=0" ] && cmp -s "$T/c2.orig" "$T/c2/_pendientes.md" && ok || fail "variantes: '$OUT'"
 
-echo "3 solo Abiertos (unifi-expert):"
+echo "3 solo Abiertos (proyecto-red):"
 mk c3 '---\ntype: index\n---\n# Pendientes\n\n## Como usar\n- texto\n\n## Abiertos\n\n- [ ] uno\n- [ ] dos\n- [ ] tres\n\n## Related\n- [[_session-index]]\n'
 OUT=$(run c3); F="$T/c3/_pendientes.md"
 [ "$OUT" = "headers_added=3 (Alta prioridad, Media prioridad, Baja prioridad)" ] || fail "abiertos out: '$OUT'"
@@ -76,12 +76,12 @@ mk c4 '# Pendientes\n\n## Daily 2026-08-07\n\n- [ ] x\n\n## Weekly W34\n\n- [ ] 
 OUT=$(run c4); F="$T/c4/_pendientes.md"
 [ "$(canon "$F")" = 3 ] && [ "$(items "$F")" = 2 ] && [ "$(tail -c 1 "$F" | od -An -c | tr -d ' ')" = '\n' ] && [ "$(grep -n '^## Baja prioridad$' "$F" | cut -d: -f1)" -gt "$(grep -n '^## Weekly W34$' "$F" | cut -d: -f1)" ] && ok || fail "seo: '$OUT'"
 
-echo "5 falta Baja (Vecinex):"
+echo "5 falta Baja (Vecindad):"
 mk c5 '# Pendientes\n\n## Alta prioridad\n\n- [ ] a\n\n## Media prioridad\n\n- [ ] b1\n- [ ] b2\n\n## Como usar\n- texto\n\n## Related\n- [[x]]\n'
 OUT=$(run c5); F="$T/c5/_pendientes.md"
-[ "$OUT" = "headers_added=1 (Baja prioridad)" ] || fail "vecinex out: '$OUT'"
+[ "$OUT" = "headers_added=1 (Baja prioridad)" ] || fail "vecindad out: '$OUT'"
 B=$(grep -n '^## Baja prioridad$' "$F" | cut -d: -f1); CU=$(grep -n '^## Como usar$' "$F" | cut -d: -f1); B2=$(grep -n '^- \[ \] b2$' "$F" | cut -d: -f1)
-[ "$B2" -lt "$B" ] && [ "$B" -lt "$CU" ] && [ "$(items "$F")" = 3 ] && ok || fail "vecinex pos: b2=$B2 B=$B CU=$CU"
+[ "$B2" -lt "$B" ] && [ "$B" -lt "$CU" ] && [ "$(items "$F")" = 3 ] && ok || fail "vecindad pos: b2=$B2 B=$B CU=$CU"
 
 echo "6 falta Alta:"
 mk c6 '# Pendientes\n\n## Media prioridad\n\n- [ ] b\n\n## Baja prioridad\n\n- [ ] c\n'

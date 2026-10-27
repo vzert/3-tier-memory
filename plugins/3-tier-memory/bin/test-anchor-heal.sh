@@ -4,7 +4,7 @@
 # de mandar el evento a cuarentena — mismo criterio que ya existia desde 2.22.0 para el header de
 # prioridad de _pendientes.md. v2.24.0.
 #
-# Motivacion real: cloudflare-expert (2026-09-12) tenia _session-index.md y _plans-index.md sin
+# Motivacion real: proyecto-edge (2026-09-12) tenia _session-index.md y _plans-index.md sin
 # estas anclas — defecto estructural de instalaciones cuyo Step 3 de /setup-memory las genero con
 # otro texto — y el primer session.add/plan.upsert de la sesion se fue a quarantine/ en silencio.
 #

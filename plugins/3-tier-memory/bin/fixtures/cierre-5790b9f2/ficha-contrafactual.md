@@ -4,16 +4,16 @@ date: 2026-09-23
 status: completed-with-pendientes
 importance: 8
 ---
-# Dos regresiones reales del snippet "Como retomar", confirmadas en el JSONL crudo de claude-vzert (2.32.0)
+# Dos regresiones reales del snippet "Como retomar", confirmadas en el JSONL crudo de proyecto-vps (2.32.0)
 
 ## Contexto
 Víctor pidió (vía `/goalspec:interview`) revisar el JSONL de las sesiones recientes de
-`claude-vzert` por una sospecha de regresión: el mecanismo de "próximo paso lee el plan activo"
+`proyecto-vps` por una sospecha de regresión: el mecanismo de "próximo paso lee el plan activo"
 (2.25.0/2.25.1) y el de "no repitas un id que ya tiene su propio recordatorio futuro" (2.25.7/8/9)
 llevan semanas sin tocarse en el template, pero Víctor los vio fallar en vivo en la sesión "fase 7".
 
 ## Cambios realizados
-- Localicé el JSONL de `claude-vzert` (`~/.claude/projects/-Users-will-Projects-claude-vzert/`,
+- Localicé el JSONL de `proyecto-vps` (`~/.claude/projects/-Users-will-Projects-proyecto-vps/`,
   149-202 sesiones) y encontré el turno exacto donde Víctor corrigió al agente ("no hay un paso
   siguiente de la fase 7 en vez de que me des un prompt genérico"), grepeando mensajes de usuario
   reales, no la ficha ya compactada.
@@ -22,7 +22,7 @@ llevan semanas sin tocarse en el template, pero Víctor los vio fallar en vivo e
   checkpoint anterior" mientras `## Como retomar` nombraba el plan por ruta en prosa suelta —
   confirmando que el caso 1 de `<next-step>` nunca se disparó porque el plan no estaba enlazado.
 - Escribí un script de barrido (`shadow_run.py`, en el scratchpad) contra las 101-102 fichas
-  reales de `claude-vzert` desde 2.25.9 (2026-09-17 en adelante) para confirmar la segunda
+  reales de `proyecto-vps` desde 2.25.9 (2026-09-17 en adelante) para confirmar la segunda
   sospecha: encontré 2 sesiones reales (`verificar-avance-pr192-censo-grep`, `restos-213-pr220`)
   con un id duplicado entre `## Recordatorios de calendario` y `Sigue abierto:`.
 - Implementé dos checks nuevos en `checkpoint-audit.py`: `plan.mencionado_no_enlazado` y
@@ -55,9 +55,9 @@ llevan semanas sin tocarse en el template, pero Víctor los vio fallar en vivo e
   turno. Versión 2.32.0 → 2.32.1.
 
 ## Bugs fixed
-- **Producto** (`claude-vzert`, mecanismo del plugin): caso 1 de `<next-step>` no leía el `## Estado`
+- **Producto** (`proyecto-vps`, mecanismo del plugin): caso 1 de `<next-step>` no leía el `## Estado`
   del plan cuando `## Plans` decía "sin cambios" en prosa (fase 7); `Sigue abierto:` podía repetir
-  un id ya cubierto por su propio recordatorio de calendario (2 sesiones reales). _verificado: test-checkpoint-audit.sh sobre las 2 sesiones reales de claude-vzert_
+  un id ya cubierto por su propio recordatorio de calendario (2 sesiones reales). _verificado: test-checkpoint-audit.sh sobre las 2 sesiones reales de proyecto-vps_
 - **Propios de esta sesión, encontrados por el adversario antes de comitear**: el respaldo por
   substring de `plan.mencionado_no_enlazado` daba falso NEGATIVO (prosa sin wikilink real contaba
   como "enlazado") y falso POSITIVO (mención en `No repitas:` o ruta `docs/plans/…` contaba como
@@ -131,10 +131,10 @@ Ninguno.
 ## Pendientes
 RECONCILIACION: 3 de 109 pendientes abiertos revisados — 106 sin revisar, barrido en /triage-3t
 - [ ] verificar en uso real que las dos reglas de prosa nuevas (variante del caso 5 del caso 1; pregunta explicita antes de fijar next-step de casos 2-4) se siguen de verdad — `p-e685e9c92a`
-- [ ] verificar en instalacion real (claude-vzert) que los dos checks nuevos no dan falsos positivos fuera del corpus medido — `p-a4439fa8fd`
+- [ ] verificar en instalacion real (proyecto-vps) que los dos checks nuevos no dan falsos positivos fuera del corpus medido — `p-a4439fa8fd`
 
 ## Commits
-- `33fb17b` — 2.32.0: dos checks nuevos cierran una regresion real del snippet de cierre en claude-vzert
+- `33fb17b` — 2.32.0: dos checks nuevos cierran una regresion real del snippet de cierre en proyecto-vps
 - `59bc6e7` — 2.32.1: la regla contra pasos bloqueados por terceros ya no depende de una frase literal
 - Git commit del checkpoint saltado: `memory/` está en `.gitignore` de este repo (`.gitignore:3`),
   así que Step 6 no tiene nada que comitear — la memoria de este proyecto vive solo en disco, no
@@ -145,7 +145,7 @@ RECONCILIACION: 3 de 109 pendientes abiertos revisados — 106 sin revisar, barr
 ```
 Retomamos: /checkpoint-3t cometio en vivo, en su propio cierre, los 4 defectos que Victor ve en otros agentes.
 
-Lee memory/sessions/2026-09-22-snippet-cierre-regresion-claude-vzert.md para el contexto completo.
+Lee memory/sessions/2026-09-22-snippet-cierre-regresion-proyecto-vps.md para el contexto completo.
 
 Proximo paso: ninguno — lo unico propio espera a otra instalacion.
 
@@ -177,15 +177,15 @@ esta sesión?"), reescrita después de que el propio agente de esa sesión viola
 anterior de esa regla en su propio cierre, minutos después de escribirla. Ninguna de las
 dos es un check mecánico — el mismo tipo de regla que ya falló en silencio antes (el
 hallazgo de "fase 7" que motivó toda la sesión). Ese día hay que revisar sesiones nuevas
-de claude-vzert (u otro proyecto real) y confirmar si el agente siguió las dos reglas o
+de proyecto-vps (u otro proyecto real) y confirmar si el agente siguió las dos reglas o
 las volvió a violar con otras palabras.
 
 Pega esto dentro del evento (es el prompt para el agente):
 ```
 Proyecto: 3-tier-memory — /home/usuario/Projects/3-tier-memory
 Retomamos: verificar si las dos reglas nuevas del caso 1/Step 8 se siguen en la practica _id: p-e685e9c92a_
-Contexto: memory/sessions/2026-09-22-snippet-cierre-regresion-claude-vzert.md
-Comprueba: busca en sesiones reales de claude-vzert (u otro proyecto con el plugin actualizado a 2.32.1+) (a) un plan activo con ## Estado bloqueado por fecha futura ya cubierta por el calendario — el snippet debe usar la media-linea "ninguno — <plan> Fase <N> esta bloqueada...", no repetir la accion completa; (b) un <next-step> de los casos 2-4 que dependa de que algo FUERA de la sesion actue o decida (un peer, otra instalacion, un PR ajeno) — no deberia estar en Proximo paso, sino en Sigue abierto o fuera del snippet. Si cualquiera de las dos se viola, decidir si vale la pena un check mecanico (aunque signifique acercarse al juicio semantico que la regla 216 prohibe) o reforzar la prosa otra vez.
+Contexto: memory/sessions/2026-09-22-snippet-cierre-regresion-proyecto-vps.md
+Comprueba: busca en sesiones reales de proyecto-vps (u otro proyecto con el plugin actualizado a 2.32.1+) (a) un plan activo con ## Estado bloqueado por fecha futura ya cubierta por el calendario — el snippet debe usar la media-linea "ninguno — <plan> Fase <N> esta bloqueada...", no repetir la accion completa; (b) un <next-step> de los casos 2-4 que dependa de que algo FUERA de la sesion actue o decida (un peer, otra instalacion, un PR ajeno) — no deberia estar en Proximo paso, sino en Sigue abierto o fuera del snippet. Si cualquiera de las dos se viola, decidir si vale la pena un check mecanico (aunque signifique acercarse al juicio semantico que la regla 216 prohibe) o reforzar la prosa otra vez.
 Si ya no aplica, cierralo con /checkpoint-3t en vez de dejarlo abierto.
 ```
 ────────────────────────────────────

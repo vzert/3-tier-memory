@@ -390,7 +390,7 @@ def existing_ids(jc, mem):
     """Ids que YA tienen fila propia en algun mensual.
 
     Se busca `_id: X_` solo en la celda de texto, no en el archivo entero: el texto de un
-    pendiente puede citar el id de otro (p-2f63bfea40 cita tres), y contarlos inflaria el
+    pendiente puede citar el id de otro (p-fe00ec98b3 cita tres), y contarlos inflaria el
     conjunto y dejaria huerfanos sin reparar. Y se busca el ULTIMO `_id:` de esa celda, que es
     el propio: los citados van antes, dentro del texto.
     """

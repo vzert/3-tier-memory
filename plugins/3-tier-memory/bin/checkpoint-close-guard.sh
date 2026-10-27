@@ -702,7 +702,7 @@ anexo = []          # lo que falto al final, para mostrarselo al usuario (cierre
 avisos_marco = []
 # Avisos `snippet.ninguno_bloqueo` (2.62.11): `Ninguno` con un pendiente `_bloqueado` en la ficha.
 # Mismo camino que snippet.marco: viajan en la revision, que bloquea una vez, con la pregunta de si
-# el bloqueo espera a alguien que no es el usuario (caso real: claude-vzert, p-341fdf5e59).
+# el bloqueo espera a alguien que no es el usuario (caso real: proyecto-vps, p-9a2f3e5c68).
 avisos_bloqueo = []
 # Avisos `snippet.paso_compartido` (2.63.22): otra ficha de hoy ya deja el mismo `Proximo paso`.
 # Mismo camino: viajan en la revision y no suman un rechazo (decision de Victor, d267; caso real:

@@ -215,7 +215,7 @@ def main():
 
         # 0.3.1: una ventana nueva (sin ficha propia y sin prompt) no tiene "trabajo actual", aunque
         # la ficha mas nueva del proyecto tenga hilo: esa es de otra ventana (caso real de
-        # cloudflare-expert, 2026-10-22).
+        # proyecto-edge, 2026-10-22).
         transcripcion("nueva", [], hace=0)
         dv = correr(mem, lib, "--session-id", "nueva", "--projects-root", raiz)
         check("ventana nueva: sin SIGUIENTE ni RELACIONADO",
