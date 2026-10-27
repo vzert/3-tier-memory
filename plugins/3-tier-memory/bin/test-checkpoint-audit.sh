@@ -774,7 +774,7 @@ O=$($AUD "$M10" --session-file "$S10" --no-git --hoy $HOY 2>&1)
 chk "HECHO, sin avisos" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*avisos.scripts.research-index')"
 
 echo "== plan.mencionado_no_enlazado: nombrado por ruta en el snippet, ## Plans dice Ninguno =="
-# Caso real: claude-vzert, 2026-09-22-verificacion-cierre-pr238.md. `## Plans` decia "Ninguno —
+# Caso real: proyecto-vps, 2026-09-22-verificacion-cierre-pr238.md. `## Plans` decia "Ninguno —
 # sin cambios al plan desde el checkpoint anterior" y el snippet nombraba el plan por ruta en
 # prosa suelta en vez de enlazarlo y dejar que el caso 1 de <next-step> leyera su ## Estado.
 M12="$T/memory12"; nueva_memoria "$M12"
@@ -814,7 +814,7 @@ chk "ya no avisa" "0" "$(printf '%s' "$O" | grep -c 'SALTADO .*plan.mencionado_n
 chk "sale HECHO" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*plan.mencionado_no_enlazado')"
 
 echo "== wikilink con ruta relativa ../plans/x tambien cuenta como enlazado (no es falso positivo) =="
-# Encontrado en el barrido de sombra contra claude-vzert (pr199-rescate-bloque-b,
+# Encontrado en el barrido de sombra contra proyecto-vps (pr199-rescate-bloque-b,
 # candidatos-upstream-2195-2315): [[../plans/x]] es un wikilink valido, WIKILINK_PLAN no lo casa
 # por el prefijo `../`, y comparar solo contra el regex estricto marcaba un plan ya enlazado como
 # si no lo estuviera.
@@ -829,7 +829,7 @@ O=$($AUD "$M12" --session-file "$S12" --no-git --hoy $HOY 2>&1)
 chk "sigue HECHO con ../plans/" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*plan.mencionado_no_enlazado')"
 
 echo "== snippet.futuro_duplicado: un id reservado por el calendario reaparece en Sigue abierto =="
-# Casos reales: claude-vzert, 2026-09-18-verificar-avance-pr192-censo-grep.md y
+# Casos reales: proyecto-vps, 2026-09-18-verificar-avance-pr192-censo-grep.md y
 # 2026-09-19-restos-213-pr220.md. El mismo id vencia en ## Recordatorios de calendario Y volvia a
 # aparecer en la linea `Sigue abierto:` del bloque de hoy.
 M13="$T/memory13"; nueva_memoria "$M13"
@@ -840,17 +840,17 @@ p=sys.argv[1]; t=open(p,encoding='utf-8').read()
 t=t.replace(
     "## Como retomar\nNinguno — la sesion cerro sin continuidad.",
     "## Como retomar\n\n```\nRetomamos: demo.\n\n"
-    "Sigue abierto: disco al 97% _id: p-b25ac1ef68_.\n```\n\n"
+    "Sigue abierto: disco al 97% _id: p-6a230669e6_.\n```\n\n"
     "## Recordatorios de calendario\n\n"
     "### 2026-09-25 — [demo] revisar disco otra vez\n\n"
     "```\n"
-    "Retomamos: medir disco del VPS otra vez _id: p-b25ac1ef68_\n"
+    "Retomamos: medir disco del VPS otra vez _id: p-6a230669e6_\n"
     "```")
 open(p,'w',encoding='utf-8').write(t)
 PY
 O=$($AUD "$M13" --session-file "$S13" --no-git --hoy $HOY 2>&1)
 chk "avisa del duplicado" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*snippet.futuro_duplicado')"
-chk "nombra el id" "1" "$(printf '%s' "$O" | grep -A1 'snippet.futuro_duplicado' | grep -c 'p-b25ac1ef68')"
+chk "nombra el id" "1" "$(printf '%s' "$O" | grep -A1 'snippet.futuro_duplicado' | grep -c 'p-6a230669e6')"
 
 echo "== el mismo id, pero solo citado en Proximo paso como motivo del caso 5: NO es duplicado =="
 # Dos falsos positivos reales de esta forma (remedicion-goalspec-precondicion-no-cumplida,
@@ -865,12 +865,12 @@ t=t.replace(
     "## Como retomar\nNinguno — la sesion cerro sin continuidad.",
     "## Como retomar\n\n```\nRetomamos: demo.\n\n"
     "Proximo paso: ninguno -- el pendiente de esta sesion queda con fecha futura "
-    "_id: p-b25ac1ef68_, ver Recordatorios de calendario.\n\n"
+    "_id: p-6a230669e6_, ver Recordatorios de calendario.\n\n"
     "Sigue abierto: otro pendiente sin relacion _id: p-1111111111_.\n```\n\n"
     "## Recordatorios de calendario\n\n"
     "### 2026-09-25 — [demo] revisar disco otra vez\n\n"
     "```\n"
-    "Retomamos: medir disco del VPS otra vez _id: p-b25ac1ef68_\n"
+    "Retomamos: medir disco del VPS otra vez _id: p-6a230669e6_\n"
     "```")
 open(p,'w',encoding='utf-8').write(t)
 PY
@@ -1046,7 +1046,7 @@ chk "tilde + negrita en Proximo paso tambien se revisan" "1" "$(printf '%s' "$O"
 # ================================================================================================
 # 2.33.0 — p-daf3051915: `Proximo paso:` (snippet.proximo_paso). Fixtures REALES de la sesion
 # 5790b9f2 de este repo (bin/fixtures/cierre-5790b9f2/, extraidos del JSONL) mas el borrador de
-# claude-vzert pr238, y casos adversariales construidos (regla 270: no basta el corpus real).
+# proyecto-vps pr238, y casos adversariales construidos (regla 270: no basta el corpus real).
 FX="$BIN/fixtures/cierre-5790b9f2"
 
 ficha_pp() {   # $1 memoria  $2 fichero-snippet|"-" (usa $3 como linea Proximo paso)  $3 texto  $4 lineas `## Pendientes`
@@ -1096,7 +1096,7 @@ O=$(pp_out "$M")
 chk "F2: SALTADO" "1" "$(printf '%s' "$O" | grep -c 'SALTADO .*snippet.proximo_paso')"
 chk "F2: dice caso 4" "1" "$(printf '%s' "$O" | grep -c 'caso 4 generico')"
 
-echo "== pr238 real (claude-vzert): 'revisar _pendientes.md y proponer...' sin pendientes propios =="
+echo "== pr238 real (proyecto-vps): 'revisar _pendientes.md y proponer...' sin pendientes propios =="
 M="$T/mP238"; ficha_pp "$M" - "Proximo paso: revisar _pendientes.md y proponer siguiente prioridad — esta sesión no tuvo próximo paso propio; el trabajo activo real es la Fase 7 pieza 3 del port 3-tier, ver memory/plans/plan-port-3tier-cronologia.md." ""
 chk "pr238: SALTADO caso 4" "1" "$(pp_out "$M" | grep -c 'caso 4 generico')"
 
@@ -1212,8 +1212,8 @@ open(p,"w",encoding="utf-8").write(t)
 PYX
 chk "sin fence y no es 'Ninguno': SALTADO" "1" "$(pp_out "$M" | grep -c 'no tiene bloque de codigo')"
 echo "== ronda 1: 'ninguno' con un still-open de OTRA sesion reconciliado en ## Pendientes: HECHO =="
-M="$T/mR2"; ficha_pp "$M" - "Proximo paso: ninguno — la sesion cerro sola." '- [ ] rotar una key — `p-5e75762256` (still-open, de otra sesion)'
-printf -- '- [ ] rotar una key — _origen: [[sessions/2026-09-01-otra]]_ — _creado: 2026-09-01_ — _id: p-5e75762256_\n' > "$M/.l"
+M="$T/mR2"; ficha_pp "$M" - "Proximo paso: ninguno — la sesion cerro sola." '- [ ] rotar una key — `p-72e4827a69` (still-open, de otra sesion)'
+printf -- '- [ ] rotar una key — _origen: [[sessions/2026-09-01-otra]]_ — _creado: 2026-09-01_ — _id: p-72e4827a69_\n' > "$M/.l"
 python3 -c 'import sys;p=sys.argv[1];t=open(p, encoding="utf-8").read();open(p, "w", encoding="utf-8").write(t.replace("## Media prioridad\n","## Media prioridad\n\n"+open(sys.argv[2], encoding="utf-8").read(),1))' "$M/_pendientes.md" "$M/.l"
 chk "ajeno no cuenta como trabajo propio" "1" "$(pp_out "$M" | grep -c 'HECHO .*snippet.proximo_paso')"
 
@@ -1244,9 +1244,9 @@ nd() { pp_out "$1" | grep -E "^\s+(HECHO|SALTADO)\s+snippet\.ninguno_defecto" | 
 OK_PP="Proximo paso: arreglar el parser _id: p-1234567890_."
 
 echo "== C1 real (5790b9f2 contrafactual): ninguno + defecto arreglado solo con prosa, sin campo =="
-M="$T/mC1"; nueva_memoria "$M"; S="$M/sessions/2026-09-22-snippet-cierre-regresion-claude-vzert.md"
+M="$T/mC1"; nueva_memoria "$M"; S="$M/sessions/2026-09-22-snippet-cierre-regresion-proyecto-vps.md"
 cp "$FX/ficha-contrafactual.md" "$S"
-printf -- '- [ ] verificar instalacion real — _origen: [[sessions/2026-09-22-snippet-cierre-regresion-claude-vzert]]_ — _creado: 2026-09-22_ — _id: p-a4439fa8fd_ — _bloqueado: otra instalacion_\n- [ ] reglas nuevas — _origen: [[sessions/2026-09-22-snippet-cierre-regresion-claude-vzert]]_ — _creado: 2026-09-22_ — _id: p-e685e9c92a_ — _revisar: 2026-09-27_\n' > "$M/.l"
+printf -- '- [ ] verificar instalacion real — _origen: [[sessions/2026-09-22-snippet-cierre-regresion-proyecto-vps]]_ — _creado: 2026-09-22_ — _id: p-a4439fa8fd_ — _bloqueado: otra instalacion_\n- [ ] reglas nuevas — _origen: [[sessions/2026-09-22-snippet-cierre-regresion-proyecto-vps]]_ — _creado: 2026-09-22_ — _id: p-e685e9c92a_ — _revisar: 2026-09-27_\n' > "$M/.l"
 python3 -c 'import sys;p=sys.argv[1];t=open(p, encoding="utf-8").read();open(p, "w", encoding="utf-8").write(t.replace("## Media prioridad\n","## Media prioridad\n\n"+open(sys.argv[2], encoding="utf-8").read(),1))' "$M/_pendientes.md" "$M/.l"
 c1() { $AUD "$M" --session-file "$S" --no-git --hoy 2026-09-23 --solo-snippet 2>&1; }
 O=$(c1)
@@ -1259,7 +1259,7 @@ python3 - "$S" <<'PYX'
 import sys; p=sys.argv[1]; t=open(p,encoding="utf-8").read()
 open(p,"w",encoding="utf-8").write(t.replace("ver `## Cambios realizados`.", "ver `## Cambios realizados`. _pendiente: p-daf3051915_", 1))
 PYX
-printf -- '- [ ] resolver de raiz los 4 defectos — _origen: [[sessions/2026-09-22-snippet-cierre-regresion-claude-vzert]]_ — _creado: 2026-09-22_ — _id: p-daf3051915_\n' > "$M/.l"
+printf -- '- [ ] resolver de raiz los 4 defectos — _origen: [[sessions/2026-09-22-snippet-cierre-regresion-proyecto-vps]]_ — _creado: 2026-09-22_ — _id: p-daf3051915_\n' > "$M/.l"
 python3 -c 'import sys;p=sys.argv[1];t=open(p, encoding="utf-8").read();open(p, "w", encoding="utf-8").write(t.replace("## Alta prioridad\n","## Alta prioridad\n\n"+open(sys.argv[2], encoding="utf-8").read(),1))' "$M/_pendientes.md" "$M/.l"
 O=$(c1)
 chk "C1+id: bugs.cierre HECHO" "1" "$(printf '%s' "$O" | grep -c 'HECHO .*bugs.cierre')"

@@ -256,7 +256,7 @@ chk "y no lo vuelve SALTADO" "0" "$(printf '%s\n' "$OUT" | grep -c 'SALTADO .*sn
 chk "nombra la espera" "1" "$(printf '%s\n' "$OUT" | grep -c 'si Victor lo decide')"
 OUT=$(marco "Proximo paso: pedir permiso al usuario para el merge (p-1111111111).")
 chk "pedir permiso: POR-DISENO" "1" "$(printf '%s\n' "$OUT" | grep -c 'POR-DISEÑO .*snippet.marco')"
-OUT=$(marco "Proximo paso: revisar si goal-spec-skill respondió al mensaje (p-1111111111).")
+OUT=$(marco "Proximo paso: revisar si proyecto-spec respondió al mensaje (p-1111111111).")
 chk "revisar si X respondio (con tilde): POR-DISENO" "1" "$(printf '%s\n' "$OUT" | grep -c 'POR-DISEÑO .*snippet.marco')"
 OUT=$(marco "Proximo paso: arreglar el parser (p-1111111111) y de paso"$'\n'"el lector (p-2222222222).")
 chk "dos pendientes, el segundo en otra linea del campo: POR-DISENO" "1" "$(printf '%s\n' "$OUT" | grep -c 'junta 2 pendientes')"

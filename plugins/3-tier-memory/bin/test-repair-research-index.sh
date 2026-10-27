@@ -3,18 +3,18 @@
 # columna las tablas de memory/_research-index.md anteriores a 2.31.5 (cuya ultima columna no se
 # llama Archivo ni File, asi que `research_table_is_canonical`/`apply_research_upsert` en
 # journal-compact.py las deja de SOLO LECTURA y cualquier research nuevo entra en cuarentena).
-# Medido en 5 instalaciones reales (omniroute, scalar-api-docs, seedance-generator, time-tracker,
-# unifi-expert): 10 formas de cabecera distintas entre las dos tablas, ninguna igual a otra.
+# Medido en 5 instalaciones reales (proyecto-rutas, proyecto-docs, proyecto-video-generator, proyecto-reloj,
+# proyecto-red): 10 formas de cabecera distintas entre las dos tablas, ninguna igual a otra.
 #
 # Lo que estas pruebas defienden:
-#   A. `Topic | File | Resultado` (medido: unifi-expert) migra y re-cabecea, sin columna de fecha;
-#   B. `Topic | Result | File | Fecha` (medido: omniroute) migra con Fecha en la celda 3 -> se
+#   A. `Topic | File | Resultado` (medido: proyecto-red) migra y re-cabecea, sin columna de fecha;
+#   B. `Topic | Result | File | Fecha` (medido: proyecto-rutas) migra con Fecha en la celda 3 -> se
 #      anexa como texto DESPUES del enlace, en Archivo — nunca a Resultado/Origen (ver P2 y el
 #      hallazgo F1 de la tercera ronda de adversario: anexar ahi solo trasladaba el riesgo a
 #      cualquier `research.upsert` normal que trajera esa misma columna) — y NUNCA se le anexa una
 #      marca de completado (ver O, y el hallazgo F3 de la segunda ronda, subagente en Opus,
 #      2.31.6: marcarla volveria podable de golpe una fila que antes no competia en la poda);
-#   C. `Slug | Topic | Fecha | Sesion` para Active (medido: seedance-generator/time-tracker): el
+#   C. `Slug | Topic | Fecha | Sesion` para Active (medido: proyecto-video-generator/proyecto-reloj): el
 #      Archivo sale del Slug (el wikilink vive ahi, no en una columna "File"), el Tema del Topic,
 #      Next step y Origen quedan vacios (nunca reciben extras), y Fecha+Sesion se anexan como
 #      texto DESPUES del enlace, en Archivo, sin perderse;
@@ -121,7 +121,7 @@ check(){ [ "$2" = "$3" ] && ok "$1" || { bad "$1"; printf '       esperado: %s\n
 
 campo() { echo "$1" | grep -o "$2=[^ ]*"; }
 
-echo "A. Topic|File|Resultado (unifi-expert): migra y re-cabecea, sin fecha -> sin marca de completado"
+echo "A. Topic|File|Resultado (proyecto-red): migra y re-cabecea, sin fecha -> sin marca de completado"
 MA="$TMP/ma/memory"; mkdir -p "$MA"
 cat > "$MA/_research-index.md" <<'EOF'
 ---
@@ -150,7 +150,7 @@ check "fila migrada sin marca de completado (no habia fecha)" \
   "$(grep -c '^| Ecosistema MCP | sirkirby/unifi-mcp elegido | \[\[research/mcp-ecosistema\]\] |$' "$MA/_research-index.md")" "1"
 check "sin _completado en la fila migrada" "$(grep -c '_completado:' "$MA/_research-index.md")" "0"
 
-echo "B. Topic|Result|File|Fecha (omniroute): Fecha en celda 3 -> se anexa AL ARCHIVO, despues del enlace"
+echo "B. Topic|Result|File|Fecha (proyecto-rutas): Fecha en celda 3 -> se anexa AL ARCHIVO, despues del enlace"
 MB="$TMP/mb/memory"; mkdir -p "$MB"
 cat > "$MB/_research-index.md" <<'EOF'
 ---
@@ -167,20 +167,20 @@ type: index
 
 | Topic | Result | File | Fecha |
 |---|---|---|---|
-| OmniRoute ecosystem | Free stack validado | [[research/omniroute-ecosystem]] | 2026-04-26 |
+| Proyecto-Rutas ecosystem | Free stack validado | [[research/proyecto-rutas-ecosystem]] | 2026-04-26 |
 
 ## Related
 EOF
 OUT=$(python3 "$BIN/repair-research-index.py" "$MB" --apply)
 check "completed_rows_migrated=1" "$(campo "$OUT" completed_rows_migrated)" "completed_rows_migrated=1"
 check "Archivo SIN marca de completado (la migracion ya no la anexa, ver hallazgo F3 2.31.6)" \
-  "$(grep -c '\[\[research/omniroute-ecosystem\]\] _completado:' "$MB/_research-index.md")" "0"
+  "$(grep -c '\[\[research/proyecto-rutas-ecosystem\]\] _completado:' "$MB/_research-index.md")" "0"
 check "Resultado es el Result original, SIN la fecha mezclada (ver hallazgo F1 ronda 3, 2.31.6)" \
-  "$(grep -c '^| OmniRoute ecosystem | Free stack validado | ' "$MB/_research-index.md")" "1"
+  "$(grep -c '^| Proyecto-Rutas ecosystem | Free stack validado | ' "$MB/_research-index.md")" "1"
 check "la fecha se anexo como texto DESPUES del enlace, en Archivo (la unica celda que un research.upsert normal nunca reescribe)" \
-  "$(grep -c '^| OmniRoute ecosystem | Free stack validado | \[\[research/omniroute-ecosystem\]\] — Fecha: 2026-04-26 |$' "$MB/_research-index.md")" "1"
+  "$(grep -c '^| Proyecto-Rutas ecosystem | Free stack validado | \[\[research/proyecto-rutas-ecosystem\]\] — Fecha: 2026-04-26 |$' "$MB/_research-index.md")" "1"
 
-echo "C. Slug|Topic|Fecha|Sesion (seedance/time-tracker) en Active: Slug->Archivo, extras anexados AL ARCHIVO"
+echo "C. Slug|Topic|Fecha|Sesion (proyecto-video/proyecto-reloj) en Active: Slug->Archivo, extras anexados AL ARCHIVO"
 MC="$TMP/mc/memory"; mkdir -p "$MC"
 cat > "$MC/_research-index.md" <<'EOF'
 ---

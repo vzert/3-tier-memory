@@ -13,17 +13,17 @@ resumen: hecho=18 parcial=1 saltado=0 por-diseno=1
 2. Avisos que vi y no reporté: `check-active-plans.py` listó 5 planes activos de este repo (ninguno tocado por mí) y `check-active-research.py` avisó de 3 recomendaciones sin resolver en `research/openwolf-vs-3tier` (no la toqué esta sesión, no la enlacé).
 3. Pasos que recorté: ninguno.
 
-**Reporte:** ficha `memory/sessions/2026-09-22-snippet-cierre-regresion-claude-vzert.md`, 2 pendientes nuevos (ambos Media), 0 resueltos, 2 learnings (reglas 269-270 en `learnings/3tier-memory-system.md`). Journal: `applied=N` en cada paso, sin cuarentena. Sin plan/research nuevos. Commit de código `33fb17b`; el checkpoint de memoria no comitea (`memory/` en `.gitignore` de este repo, ya documentado como límite conocido).
+**Reporte:** ficha `memory/sessions/2026-09-22-snippet-cierre-regresion-proyecto-vps.md`, 2 pendientes nuevos (ambos Media), 0 resueltos, 2 learnings (reglas 269-270 en `learnings/3tier-memory-system.md`). Journal: `applied=N` en cada paso, sin cuarentena. Sin plan/research nuevos. Commit de código `33fb17b`; el checkpoint de memoria no comitea (`memory/` en `.gitignore` de este repo, ya documentado como límite conocido).
 
 ```
 ─── ¿Como retomar en la siguiente sesion? ───
 Copia y pega esto al iniciar una nueva sesion de Claude Code:
 
-Retomamos: Dos regresiones reales del snippet Como retomar en claude-vzert, confirmadas en su JSONL.
+Retomamos: Dos regresiones reales del snippet Como retomar en proyecto-vps, confirmadas en su JSONL.
 
-Lee memory/sessions/2026-09-22-snippet-cierre-regresion-claude-vzert.md para el contexto completo.
+Lee memory/sessions/2026-09-22-snippet-cierre-regresion-proyecto-vps.md para el contexto completo.
 
-Proximo paso: verificar en una instalacion real (claude-vzert u otro proyecto que use el plugin) que plan.mencionado_no_enlazado y snippet.futuro_duplicado no producen falsos positivos nuevos fuera del corpus de 102 fichas ya medido, una vez esa instalacion actualice a 2.32.0 _id: p-a4439fa8fd_.
+Proximo paso: verificar en una instalacion real (proyecto-vps u otro proyecto que use el plugin) que plan.mencionado_no_enlazado y snippet.futuro_duplicado no producen falsos positivos nuevos fuera del corpus de 102 fichas ya medido, una vez esa instalacion actualice a 2.32.0 _id: p-a4439fa8fd_.
 
 Sigue abierto: p-014255373e plan.upsert sin guardian de reversa, des-completa un plan cerrado en silencio · p-49996efc69 estado FINAL de 2.30.0 sin revisar por adversario, ronda acotada al delta 52f2538..7f03029 · p-13df49fa31 el nudge de checkpoint-audit no puede disparar donde memory/ esta en .gitignore (afecta a este mismo repo) · +4 mas en _pendientes.md.
 

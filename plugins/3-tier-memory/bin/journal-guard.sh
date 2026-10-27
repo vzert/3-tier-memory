@@ -24,7 +24,7 @@ export PYTHONUTF8=1 PYTHONIOENCODING=utf-8
 # instalaciones no tienen .memory-config) este hook YA NO sale en silencio: imprime un AVISO (no
 # bloquea) en el mismo formato que bin/bash-journal-nudge.sh, que aprendio esta leccion antes.
 # Antes de v2.24.0 una escritura a mano via Edit/Write a un indice protegido no generaba NINGUNA
-# senal si journal_strict no estaba activado — el incidente de cloudflare-expert 2026-09-12 (12
+# senal si journal_strict no estaba activado — el incidente de proyecto-edge 2026-09-12 (12
 # ids inventados + filas duplicadas de una migracion escrita a mano) paso exactamente por esta
 # asimetria: bash-journal-nudge.sh SI avisaba escrituras por Bash sin depender de la config, pero
 # el equivalente para Edit/Write se quedaba mudo. Misma asimetria, mismo fix: avisar siempre,
@@ -160,7 +160,7 @@ if os.environ.get("STRICT") == "1":
 else:
     # Aviso, no bloqueo — misma redaccion/contrato que bin/bash-journal-nudge.sh. Sin esto el
     # hook salia en silencio total (el caso comun, sin journal_strict=1): asi paso el incidente
-    # de cloudflare-expert 2026-09-12.
+    # de proyecto-edge 2026-09-12.
     print(
         f"AVISO del plugin 3-tier-memory: Edit/Write esta escribiendo memory/{rel} directamente. "
         "Ese indice lo escribe SOLO el compactador del journal — una linea puesta a mano no "

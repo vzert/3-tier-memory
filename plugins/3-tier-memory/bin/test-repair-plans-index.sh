@@ -3,7 +3,7 @@
 # memory/_plans-index.md — cabecera vieja de 4 columnas (Fecha|Plan|Status|Resumen, pre-journal)
 # conviviendo con filas nuevas de 6 (Plan|Status|Fecha|Sesion|Pendientes|Learnings, que
 # apply_plan_upsert escribe desde v2.12.0 sin mirar la cabecera). Medido en produccion
-# (claude-vzert, ver p-baa546ddac/p-04acf30315).
+# (proyecto-vps, ver p-baa546ddac/p-04acf30315).
 #
 # Lo que estas pruebas defienden:
 #   A. una fila legacy de 4 columnas con fecha en la celda 0 se migra a la forma canonica de 6,

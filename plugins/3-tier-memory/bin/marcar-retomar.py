@@ -26,7 +26,7 @@ otra ficha F (`hilo_retoma: F` en su frontmatter, de stamp-hilo.py) y uno de los
 (`hilo_paso`) sigue abierto con `_retomar … sessions/F_` y no quedo marcado ahora, emite
 `pendiente.retomar --quitar --ficha sessions/F`. Sin esto la marca vieja seguia en PLANES ACTIVOS
 y el clic del mod pegaba un snippet ya hecho cuando el paso nuevo caia en otro pendiente (caso real
-de cloudflare-expert, 2026-10-22: la ficha de la Fase 4 retomo la de la Fase 3 y marco otro
+de proyecto-edge, 2026-10-22: la ficha de la Fase 4 retomo la de la Fase 3 y marco otro
 pendiente). Si la marca ya apunta a otra ficha, el compactador no la toca.
 
 Por ultimo liga los hermanos al paso (2.65.2): si un id del paso es un pendiente abierto NACIDO en

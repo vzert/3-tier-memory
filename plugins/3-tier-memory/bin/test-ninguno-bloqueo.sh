@@ -1,6 +1,6 @@
 #!/bin/bash
-# Prueba de 2.62.11: una decision del usuario no es un bloqueo. Caso real (claude-vzert,
-# 2026-10-16): `p-341fdf5e59` nacio con `--bloqueado-por "decisiones de Victor"`, el bloqueo lo
+# Prueba de 2.62.11: una decision del usuario no es un bloqueo. Caso real (proyecto-vps,
+# 2026-10-16): `p-9a2f3e5c68` nacio con `--bloqueado-por "decisiones de Victor"`, el bloqueo lo
 # saco de `Proximo paso`, el snippet salio `Ninguno` y las decisiones quedaron escondidas.
 #
 #  1. checkpoint-audit.py avisa (`snippet.ninguno_bloqueo`, POR-DISEÑO) cuando el snippet dice
@@ -33,7 +33,7 @@ type: index
 
 ## Alta prioridad
 
-- [ ] Fase 0 del plan bandeja (decisiones de Victor) — D4, D5 — _origen: ${ORI}_ — _creado: 2026-10-16_ — _id: p-341fdf5e59_$1
+- [ ] Fase 0 del plan bandeja (decisiones de Victor) — D4, D5 — _origen: ${ORI}_ — _creado: 2026-10-16_ — _id: p-9a2f3e5c68_$1
 
 ## Media prioridad
 
@@ -48,20 +48,20 @@ p, fecha, retomar = sys.argv[1], sys.argv[2], sys.argv[3].replace("\\n", "\n")
 open(p, "w", encoding="utf-8").write(
     f"---\ntype: session\ndate: {fecha}\n---\n# Canal\n\n## Contexto\nalgo\n\n## Bugs fixed\n- Ninguno\n\n"
     "## Plans\n- Ninguno\n\n## Research\n- Ninguno\n\n## Learnings generados\n- Ninguno\n\n"
-    "## Pendientes\n- [ ] Fase 0 del plan bandeja (decisiones de Victor) — `p-341fdf5e59`\n\n"
+    "## Pendientes\n- [ ] Fase 0 del plan bandeja (decisiones de Victor) — `p-9a2f3e5c68`\n\n"
     f"## Commits\n- `abc1234`\n\n## Como retomar\n\n{retomar}\n\n## Related\n- [[_pendientes]]\n")
 PY
 }
 audit() { python3 "$BIN/checkpoint-audit.py" "$M" --session-file "$M/sessions/$SLUG.md" --no-git --hoy 2026-10-16 --solo-snippet 2>&1; }
-NINGUNO='Ninguno — el plan bandeja espera decisiones de Victor (`p-341fdf5e59`, bloqueado).'
-BLOQUE='```\nRetomamos: bandeja.\n\nLee memory/sessions/2026-10-16-canal.md para el contexto completo.\n\nProximo paso: decidir con el usuario las decisiones abiertas de la Fase 0 (D4, D5), una pregunta por decision con su recomendacion (p-341fdf5e59).\n\nAntes de actuar, dime en 3 lineas donde quedamos.\n```'
+NINGUNO='Ninguno — el plan bandeja espera decisiones de Victor (`p-9a2f3e5c68`, bloqueado).'
+BLOQUE='```\nRetomamos: bandeja.\n\nLee memory/sessions/2026-10-16-canal.md para el contexto completo.\n\nProximo paso: decidir con el usuario las decisiones abiertas de la Fase 0 (D4, D5), una pregunta por decision con su recomendacion (p-9a2f3e5c68).\n\nAntes de actuar, dime en 3 lineas donde quedamos.\n```'
 
 echo "== 1. Ninguno con el pendiente bloqueado por decisiones del usuario: aviso =="
 memoria " — _bloqueado: decisiones de Victor_"
 ficha 2026-10-16 "$NINGUNO"
 OUT=$(audit)
 chk "POR-DISEÑO snippet.ninguno_bloqueo" "1" "$(printf '%s\n' "$OUT" | grep -c 'POR-DISEÑO .*snippet.ninguno_bloqueo')"
-chk "nombra el pendiente y su bloqueo" "1" "$(printf '%s\n' "$OUT" | grep -c 'p-341fdf5e59 `_bloqueado: decisiones de Victor`')"
+chk "nombra el pendiente y su bloqueo" "1" "$(printf '%s\n' "$OUT" | grep -c 'p-9a2f3e5c68 `_bloqueado: decisiones de Victor`')"
 chk "no es SALTADO" "0" "$(printf '%s\n' "$OUT" | grep -c 'SALTADO .*snippet.ninguno_bloqueo')"
 chk "en --json el estado es POR-DISEÑO (el que lee el hook de cierre)" "POR-DISEÑO" "$(python3 "$BIN/checkpoint-audit.py" "$M" --session-file "$M/sessions/$SLUG.md" --no-git --hoy 2026-10-16 --solo-snippet --json | python3 -c "import json,sys; print([x['estado'] for x in json.load(sys.stdin) if x['clave']=='snippet.ninguno_bloqueo'][0])")"
 
@@ -75,17 +75,17 @@ chk "y el paso pasa snippet.proximo_paso" "1" "$(printf '%s\n' "$OUT" | grep -c 
 # La ruta va como argumento, no dentro del codigo: en Git Bash MSYS convierte `/d/a/...` en los
 # argumentos, pero no dentro de un string de `-c` (fallo en windows-latest, platforms de 2.62.11).
 senales() { python3 -c "import importlib.util,sys;s=importlib.util.spec_from_file_location('a',sys.argv[1]);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);print(len(m.senales_marco(sys.argv[2])))" "$BIN/pendientes_afines.py" "$1"; }
-chk "el marco sigue avisando una espera condicional" "1" "$(senales 'publicar si Victor lo decide (p-341fdf5e59).')"
-chk "y decidir con un tercero (un proveedor externo)" "1" "$(senales 'decidir con el proveedor externo el formato (p-341fdf5e59).')"
-chk "un usuario con apellido es un tercero: usuario externo, usuario final, usuario-final, usuario del cliente" "1 1 1 1" "$(senales 'decidir con el usuario externo el formato (p-341fdf5e59).') $(senales 'decidir con el usuario final (p-341fdf5e59).') $(senales 'decidir con el usuario-final (p-341fdf5e59).') $(senales 'decidir con el usuario del cliente (p-341fdf5e59).')"
-chk "un complemento del usuario no lo vuelve tercero: de la tienda, del equipo, finalmente" "0 0 0" "$(senales 'decidir con el usuario de la tienda el horario (p-341fdf5e59).') $(senales 'decidir con el usuario del equipo el horario (p-341fdf5e59).') $(senales 'decidir con el usuario finalmente el horario (p-341fdf5e59).')"
-chk "y un tercero escrito con de/del sigue avisando: de otra empresa, del proveedor, de cliente" "1 1 1" "$(senales 'decidir con el usuario de otra empresa el horario (p-341fdf5e59).') $(senales 'decidir con el usuario del proveedor el horario (p-341fdf5e59).') $(senales 'decidir con el usuario de cliente el horario (p-341fdf5e59).')"
-chk "un tercero con articulo tras de/del sigue avisando: de la otra empresa, de los clientes, de las otras areas; y la tienda, el equipo y finalmente no" "1 1 1 0 0 0" "$(senales 'decidir con el usuario de la otra empresa el horario (p-341fdf5e59).') $(senales 'decidir con el usuario de los clientes el horario (p-341fdf5e59).') $(senales 'decidir con el usuario de las otras areas el horario (p-341fdf5e59).') $(senales 'decidir con el usuario de la tienda el horario (p-341fdf5e59).') $(senales 'decidir con el usuario del equipo el horario (p-341fdf5e59).') $(senales 'decidir con el usuario finalmente el horario (p-341fdf5e59).')"
-chk "decidir con el usuario (con o sin articulo) no es senal" "0 0" "$(senales 'decidir con el usuario D4 (p-341fdf5e59).') $(senales 'decidir con usuario D4 (p-341fdf5e59).')"
+chk "el marco sigue avisando una espera condicional" "1" "$(senales 'publicar si Victor lo decide (p-9a2f3e5c68).')"
+chk "y decidir con un tercero (un proveedor externo)" "1" "$(senales 'decidir con el proveedor externo el formato (p-9a2f3e5c68).')"
+chk "un usuario con apellido es un tercero: usuario externo, usuario final, usuario-final, usuario del cliente" "1 1 1 1" "$(senales 'decidir con el usuario externo el formato (p-9a2f3e5c68).') $(senales 'decidir con el usuario final (p-9a2f3e5c68).') $(senales 'decidir con el usuario-final (p-9a2f3e5c68).') $(senales 'decidir con el usuario del cliente (p-9a2f3e5c68).')"
+chk "un complemento del usuario no lo vuelve tercero: de la tienda, del equipo, finalmente" "0 0 0" "$(senales 'decidir con el usuario de la tienda el horario (p-9a2f3e5c68).') $(senales 'decidir con el usuario del equipo el horario (p-9a2f3e5c68).') $(senales 'decidir con el usuario finalmente el horario (p-9a2f3e5c68).')"
+chk "y un tercero escrito con de/del sigue avisando: de otra empresa, del proveedor, de cliente" "1 1 1" "$(senales 'decidir con el usuario de otra empresa el horario (p-9a2f3e5c68).') $(senales 'decidir con el usuario del proveedor el horario (p-9a2f3e5c68).') $(senales 'decidir con el usuario de cliente el horario (p-9a2f3e5c68).')"
+chk "un tercero con articulo tras de/del sigue avisando: de la otra empresa, de los clientes, de las otras areas; y la tienda, el equipo y finalmente no" "1 1 1 0 0 0" "$(senales 'decidir con el usuario de la otra empresa el horario (p-9a2f3e5c68).') $(senales 'decidir con el usuario de los clientes el horario (p-9a2f3e5c68).') $(senales 'decidir con el usuario de las otras areas el horario (p-9a2f3e5c68).') $(senales 'decidir con el usuario de la tienda el horario (p-9a2f3e5c68).') $(senales 'decidir con el usuario del equipo el horario (p-9a2f3e5c68).') $(senales 'decidir con el usuario finalmente el horario (p-9a2f3e5c68).')"
+chk "decidir con el usuario (con o sin articulo) no es senal" "0 0" "$(senales 'decidir con el usuario D4 (p-9a2f3e5c68).') $(senales 'decidir con usuario D4 (p-9a2f3e5c68).')"
 
 echo "== 2a. bloque completo con un pendiente bloqueado en la ficha: no es ninguno, no avisa =="
 memoria " — _bloqueado: que otra instalacion actualice_"
-ficha 2026-10-16 "$(printf '%s' "$BLOQUE" | sed 's/decidir con el usuario las decisiones abiertas de la Fase 0 (D4, D5), una pregunta por decision con su recomendacion (p-341fdf5e59)/arreglar el parser/')"
+ficha 2026-10-16 "$(printf '%s' "$BLOQUE" | sed 's/decidir con el usuario las decisiones abiertas de la Fase 0 (D4, D5), una pregunta por decision con su recomendacion (p-9a2f3e5c68)/arreglar el parser/')"
 chk "snippet con paso y pendiente bloqueado: HECHO" "1" "$(audit | grep -c 'HECHO .*snippet.ninguno_bloqueo')"
 
 echo "== 2b. el pendiente bloqueado nacio en esta sesion (no en un research) =="

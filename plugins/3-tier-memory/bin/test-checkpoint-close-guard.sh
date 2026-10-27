@@ -1498,7 +1498,7 @@ chk "fuera de git: los avisos van en el archivo del cwd" "1 1" "$(O=$(corre "$T/
 echo "== 2.62.11: Ninguno con un pendiente _bloqueado en la ficha: la revision pregunta por el bloqueo =="
 # bloqueo_ficha PEND: la ficha del caso 5 (snippet `Ninguno`) con fecha 2026-10-16 y esa linea en
 # `## Pendientes`. p-a4439fa8fd lleva `_bloqueado:` en _pendientes.md (armar); p-014255373e no.
-# Forma del caso real (claude-vzert, p-341fdf5e59): el bloqueo era "decisiones de Victor".
+# Forma del caso real (proyecto-vps, p-9a2f3e5c68): el bloqueo era "decisiones de Victor".
 bloqueo_ficha() {
   armar "$M" -
   python3 -c 'import sys;p=sys.argv[1];t=open(p,encoding="utf-8").read();t=t.replace("date: 2026-09-22","date: 2026-10-16",1).replace("## Pendientes\n- Ninguno","## Pendientes\n"+sys.argv[2],1);open(p,"w",encoding="utf-8").write(t)' "$F" "$1"

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Prueba de 2.63.32: todo pendiente `_bloqueado` lleva `_revisar`, y ese dia vuelve a salir.
-# Caso real (claude-vzert, 2026-10-20): `p-98a561dc02` quedo bloqueado ("que la cuenta de infra
+# Caso real (proyecto-vps, 2026-10-20): `p-0940093a1e` quedo bloqueado ("que la cuenta de infra
 # instale el plugin y que un dev mande un mensaje"), sin fecha, con snippet `Ninguno`; nada lo
 # iba a volver a mostrar. Medido ese dia: 50 de 54 bloqueados abiertos en 7 proyectos sin fecha.
 #
@@ -91,7 +91,7 @@ type: index
 
 ## Media prioridad
 
-- [ ] Cerrar la Fase 4 con una prueba real de infra — _origen: [[sessions/$SLUG]]_ — _creado: 2026-10-20_ — _id: p-98a561dc02_ — _bloqueado: que la cuenta de infra instale el plugin y que un dev mande un mensaje_$1
+- [ ] Cerrar la Fase 4 con una prueba real de infra — _origen: [[sessions/$SLUG]]_ — _creado: 2026-10-20_ — _id: p-0940093a1e_ — _bloqueado: que la cuenta de infra instale el plugin y que un dev mande un mensaje_$1
 - [ ] Otro bloqueado viejo — _origen: [[sessions/2026-09-01-x]]_ — _creado: 2026-09-01_ — _id: p-1111111111_ — _bloqueado: otra instalacion_$2
 
 ## Baja prioridad
@@ -105,19 +105,19 @@ p, fecha, retomar, bugs = sys.argv[1], sys.argv[2], sys.argv[3].replace("\\n", "
 open(p, "w", encoding="utf-8").write(
     f"---\ntype: session\ndate: {fecha}\n---\n# Canal\n\n## Contexto\nalgo\n\n## Bugs fixed\n{bugs}\n\n"
     "## Plans\n- Ninguno\n\n## Research\n- Ninguno\n\n## Learnings generados\n- Ninguno\n\n"
-    "## Pendientes\n- [ ] Cerrar la Fase 4 con una prueba real de infra — `p-98a561dc02`\n\n"
+    "## Pendientes\n- [ ] Cerrar la Fase 4 con una prueba real de infra — `p-0940093a1e`\n\n"
     f"## Commits\n- `abc1234`\n\n## Como retomar\n\n{retomar}\n\n## Related\n- [[_pendientes]]\n")
 PY
 }
 audit() { python3 "$BIN/checkpoint-audit.py" "$M" --session-file "$M/sessions/$SLUG.md" --no-git --hoy 2026-10-20 --solo-snippet "$@" 2>&1; }
 estado() { audit --json | python3 -c "import json,sys; print(' '.join(x['estado'] for x in json.load(sys.stdin) if x['clave']==sys.argv[1]) or '-')" "$1"; }
-NINGUNO='Ninguno — lo unico abierto espera a infra (`p-98a561dc02`).'
+NINGUNO='Ninguno — lo unico abierto espera a infra (`p-0940093a1e`).'
 paso() { printf '```\nRetomamos: bandeja.\n\nLee memory/sessions/%s.md para el contexto completo.\n\nProximo paso: %s\n\nAntes de actuar, dime en 3 lineas donde quedamos.\n```' "$SLUG" "$1"; }
 
 memoria "" ""
 ficha 2026-10-20 "$NINGUNO"
 chk "caso real: bloqueado de la ficha sin fecha es SALTADO (modo del hook)" "SALTADO" "$(estado pendientes.bloqueado_sin_fecha)"
-chk "nombra el pendiente" "1" "$(audit --json | python3 -c "import json,sys; print(sum('p-98a561dc02' in l for x in json.load(sys.stdin) if x['clave']=='pendientes.bloqueado_sin_fecha' for l in x.get('lineas') or []))")"
+chk "nombra el pendiente" "1" "$(audit --json | python3 -c "import json,sys; print(sum('p-0940093a1e' in l for x in json.load(sys.stdin) if x['clave']=='pendientes.bloqueado_sin_fecha' for l in x.get('lineas') or []))")"
 memoria " — _revisar: 2026-10-25_" ""
 ficha 2026-10-20 "$NINGUNO"
 chk "con _revisar: ya no es SALTADO; el otro del indice sale como aviso" "POR-DISEÑO" "$(estado pendientes.bloqueado_sin_fecha)"
@@ -128,7 +128,7 @@ ficha 2026-10-19 "$NINGUNO"
 chk "ficha anterior al corte: no se mide" "-" "$(estado pendientes.bloqueado_sin_fecha)"
 
 memoria " — _revisar: 2026-10-19_" " — _revisar: 2026-10-25_"
-ficha 2026-10-20 "$(paso 'mirar si infra ya instalo el plugin y el dev mando el mensaje (p-98a561dc02).')"
+ficha 2026-10-20 "$(paso 'mirar si infra ya instalo el plugin y el dev mando el mensaje (p-0940093a1e).')"
 chk "bloqueado con _revisar pasado: puede ser Proximo paso" "HECHO" "$(estado snippet.proximo_paso)"
 memoria " — _revisar: 2026-10-25_" " — _revisar: 2026-10-25_"
 chk "bloqueado con _revisar futuro: sigue fuera de Proximo paso" "SALTADO" "$(estado snippet.proximo_paso)"
@@ -139,12 +139,12 @@ chk "y en snippet.sigue_abierto (la guardia del colapso usa la misma regla)" "SA
 memoria " — _revisar: 2026-10-25_" " — _revisar: 2026-10-25_"
 chk "con la fecha aun futura, el colapso no lo reclama" "HECHO" "$(estado snippet.sigue_abierto)"
 memoria " — _revisar: 2026-10-19_" " — _revisar: 2026-10-25_"
-ficha 2026-10-20 "$(paso 'nada accionable hoy — espera a infra (p-98a561dc02).')"
+ficha 2026-10-20 "$(paso 'nada accionable hoy — espera a infra (p-0940093a1e).')"
 chk "ninguno en bloque con un bloqueado propio ya vencido: SALTADO" "SALTADO" "$(estado snippet.proximo_paso)"
 # snippet.ninguno_defecto (8-sexies): `## Bugs fixed` cita el bloqueado como `_pendiente:`. Vencido es
 # un defecto abierto e inmediato; con fecha futura sigue esperando. Sin este par, revertir esa guardia
 # a `i not in bloqueados` no hacia caer nada (p-ff21920a7e).
-BUG='- La bandeja perdia el mensaje de infra _pendiente: p-98a561dc02_'
+BUG='- La bandeja perdia el mensaje de infra _pendiente: p-0940093a1e_'
 memoria " — _revisar: 2026-10-19_" " — _revisar: 2026-10-25_"
 ficha 2026-10-20 "$NINGUNO" "$BUG"
 chk "Ninguno con un defecto bloqueado ya vencido: snippet.ninguno_defecto SALTADO" "SALTADO" "$(estado snippet.ninguno_defecto)"

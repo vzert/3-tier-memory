@@ -18,7 +18,7 @@ export PYTHONUTF8=1 PYTHONIOENCODING=utf-8
 # que el aviso de deriva —`journal-compact.py --check-drift`, que ya existia desde 2.13.2 y ya
 # usaba bin/session-start.sh para avisar en el arranque de la SIGUIENTE sesion— se corre TAMBIEN
 # aqui, en cada prompt, para que llegue en la MISMA sesion donde paso la escritura a mano, no una
-# sesion despues (que es cuando de verdad importa: el incidente de cloudflare-expert 2026-09-12
+# sesion despues (que es cuando de verdad importa: el incidente de proyecto-edge 2026-09-12
 # tuvo un /checkpoint-3t corriendo en la misma sesion que la escritura a mano, y ese `--check-drift`
 # resella la linea base sin que nadie viera el aviso antes).
 #
