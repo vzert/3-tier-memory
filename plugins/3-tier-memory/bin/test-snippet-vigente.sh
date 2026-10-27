@@ -17,6 +17,7 @@ chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$(
 P="$T/proyecto"; M="$P/memory"
 mkdir -p "$M/sessions" "$M/pendientes"
 VIVO=p-aaaaaaaaaa; CERRADO=p-bbbbbbbbbb; NUEVO=p-cccccccccc; SELLADO=p-dddddddddd; MARCADO=p-eeeeeeeeee
+MARCA_VIEJA=p-1212121212
 
 cat > "$M/_pendientes.md" <<EOF
 # Pendientes
@@ -26,6 +27,7 @@ cat > "$M/_pendientes.md" <<EOF
 - [ ] Paso vigente — _creado: 2026-10-18_ — _id: ${VIVO}_
 - [ ] Paso con ficha nueva — _creado: 2026-10-18_ — _id: ${NUEVO}_
 - [ ] Paso sellado — _creado: 2026-10-18_ — _id: ${SELLADO}_
+- [ ] Paso con marca vieja — _creado: 2026-10-17_ — _id: ${MARCA_VIEJA}_ — _retomar: 2026-10-17 sessions/2026-10-17-vieja_
 - [ ] Paso marcado — _creado: 2026-10-18_ — _id: ${MARCADO}_ — _retomar: 2026-10-19 sessions/2026-10-19-otra_
 EOF
 cat > "$M/pendientes/2026-10.md" <<EOF
@@ -115,7 +117,37 @@ chk "prompt normal: nada, rc 0" "rc=0" "$O"
 O=$(entrada "$(snippet "x ($CERRADO)")" | CLAUDE_PROJECT_DIR="$T/sin-memoria" bash "$BIN/snippet-vigente.sh"; echo "rc=$?")
 chk "proyecto sin memoria: nada, rc 0" "rc=0" "$O"
 
-echo "== 13. hooks.json lo registra en UserPromptSubmit =="
+echo "== 13. snippet como argumento de un comando (p-8a21c08256) =="
+O=$(hook "/goalspec:interview $(snippet "terminar ($CERRADO)")")
+chk "tecleado: /cmd Retomamos" "1" "$(printf '%s' "$O" | grep -c "$CERRADO ya esta cerrado")"
+O=$(hook "<command-message>goalspec:interview</command-message>
+<command-name>/goalspec:interview</command-name>
+<command-args>$(snippet "terminar ($CERRADO)")</command-args>")
+chk "envuelto: <command-args>Retomamos" "1" "$(printf '%s' "$O" | grep -c "$CERRADO ya esta cerrado")"
+O=$(hook "/goalspec:interview <pasted_content id=\"x\">$(snippet "terminar ($CERRADO)")</pasted_content>")
+chk "comando con el snippet pegado como bloque" "1" "$(printf '%s' "$O" | grep -c "$CERRADO ya esta cerrado")"
+chk "comando con otro argumento: nada" "" "$(hook "/goalspec:interview revisa $CERRADO")"
+chk "<command-args> con otro argumento: nada" "" "$(hook "<command-name>/x</command-name><command-args>mira $(snippet "x ($CERRADO)")</command-args>")"
+chk "comando sin argumento: nada" "" "$(hook "/checkpoint-3t")"
+chk "ruta absoluta no es comando: nada" "" "$(hook "/Users/x/y $(snippet "x ($CERRADO)")")"
+O=$(hook "$(printf 'Retomamos: el hook ve <command-args>foo</command-args> en el prompt.\n\nProximo paso: cerrar (%s)' "$CERRADO")")
+chk "Retomamos que cita las etiquetas <command-args> se lee entero" "1" "$(printf '%s' "$O" | grep -c "$CERRADO ya esta cerrado")"
+O=$(entrada "/goalspec:interview $(snippet "x ($CERRADO)")" | CLAUDE_PROJECT_DIR="$P" bash "$BIN/snippet-vigente.sh")
+chk "por el hook de verdad (snippet-vigente.sh)" "1" "$(printf '%s' "$O" | grep -c "$CERRADO ya esta cerrado")"
+
+echo "== 13b. la marca _retomar y la tilde (p-c711eabb05) =="
+chk "marca a una ficha mas vieja que la pegada: nada" "" "$(hook "$(snippet "seguir ($MARCA_VIEJA)")")"
+# La tilde se escribe dentro de python, no por argv: en Git Bash el argv no ASCII puede llegar
+# convertido (25423b1).
+tilde() {  # tilde ensure_ascii -> JSON del hook con `Próximo paso:`
+  python3 -c 'import json,sys; print(json.dumps({"prompt": "Próximo paso: terminar (" + sys.argv[1] + ")", "cwd": sys.argv[2]}, ensure_ascii=(sys.argv[3] == "1")))' "$CERRADO" "$P" "$1"
+}
+O=$(tilde 0 | CLAUDE_PROJECT_DIR="$P" bash "$BIN/snippet-vigente.sh")
+chk "Próximo paso con tilde tal cual pasa el filtro rapido" "1" "$(printf '%s' "$O" | grep -c "$CERRADO ya esta cerrado")"
+O=$(tilde 1 | CLAUDE_PROJECT_DIR="$P" bash "$BIN/snippet-vigente.sh")
+chk "tilde escapada como \\u00f3 tambien" "1" "$(printf '%s' "$O" | grep -c "$CERRADO ya esta cerrado")"
+
+echo "== 14. hooks.json lo registra en UserPromptSubmit =="
 if [ ! -f "$BIN/../hooks/hooks.json" ]; then
   echo "  SKIP (no hay hooks/ junto a bin/)"
 else

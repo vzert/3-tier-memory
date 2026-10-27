@@ -478,7 +478,7 @@ Tambien quita la marca que esta sesion consumio (2.63.42): si arranco con el sni
 ficha sin quedar marcado ahora, emite `pendiente.retomar --quitar` (`🧹`). Asi el mod no vuelve a
 pegar un snippet ya hecho cuando el paso nuevo cae en otro pendiente. Una marca que otra sesion ya
 movio a su ficha no se toca.
-Y liga los hermanos al paso (2.65.2): si el paso es un pendiente que nacio en esta sesion, cada otro
+Y liga los hermanos al paso (2.66.1): si el paso es un pendiente que nacio en esta sesion, cada otro
 pendiente abierto nacido en ella SIN `_relacionado` recibe `pendiente.relate` con ese id (`🔗`); el
 que ya cita algo tiene su ancla y no se toca. La liga al nacer de Step 3b solo apunta al paso que la sesion RECIBIO; sin esto, los
 hermanos de una sesion que no recibio paso seguian en el hilo siguiente solo si su snippet se
