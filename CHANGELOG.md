@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.67.1] - 2026-10-27
+Origen: p-d8e559e776. Tres limites de `snippet.hilo_externo` (2.67.0) quedaron sin declarar. Se
+reprodujeron los tres sobre fichas de prueba; ninguna ficha real usa todavia `## Hilos externos`.
+
+### Fixed
+- Una negacion que no va pegada a `leido completo` daba `HECHO`: `no he leido completo`, `nunca`,
+  `sin`, `jamas`, `no fue leido completo el …` y `no  leido` (dos espacios). Ahora cuenta una
+  negacion en toda la frase de delante (desde el ultimo `—`, `;`, `,`, `:` o `|`); una palabra
+  dentro de la etiqueta entre comillas invertidas o pegada a un guion (`no-tocar`) no cuenta.
+- La palabra `abierto` dentro de un nombre con guiones (`pedido-abierto-x`, `pr-abierto`) bloqueaba
+  como un abierto fuera de su vineta. Ahora solo cuenta la palabra suelta.
+- `test-hilos-externos.sh` seccion 7g: 20 asertos nuevos. 9 salen rojos contra 2.67.0; los otros 11
+  vigilan que el cambio no bloquee de mas (fechas en espanol, etiquetas, una lectura negada y otra
+  afirmada).
+
+### Limites declarados
+- Un numero que no es fecha tras `leido completo` (`leido completo 3 de 14`, `0%`) da `HECHO`. Queda
+  asi: escribir `leido completo` sobre una lectura parcial es una seccion falsa, que este chequeo no
+  promete atrapar, y exigir una fecha ISO bloquearia `el 26 de octubre`, `26/10` o `el dia 26`.
+- Una negacion con otra palabra (`ni`, `tampoco`) o en otra frase (`no pude abrir dos, leido completo …`)
+  no se ve.
+
 ## [2.67.0] - 2026-10-27
 Un cierre decia `Ninguno` sobre un hilo externo (una bandeja de mensajes entre agentes) que la sesion
 habia leido solo en parte. La vista que uso filtraba por destinatario: vio 4 mensajes de un hilo de 14.
