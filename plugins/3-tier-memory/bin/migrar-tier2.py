@@ -414,7 +414,7 @@ def respaldar(mem, rutas, carpeta):
     raiz = os.path.dirname(carpeta)
     gi = os.path.join(raiz, ".gitignore")
     if not os.path.exists(gi):
-        with open(gi, "w", encoding="utf-8") as fh:
+        with open(gi, "w", encoding="utf-8", newline="") as fh:
             fh.write("# Respaldos de migrar-tier2.py: solo sirven en esta copia de trabajo.\n*\n")
     for r in rutas:
         if os.path.isfile(r):
