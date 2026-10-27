@@ -41,6 +41,13 @@ Modos:
   checkpoint-audit.py <MEMORY_DIR> --session-file <ruta> --count  solo SALTADO+PARCIAL
   ... --repo-root <ruta>   raiz del repo para el chequeo de commits sin subir (default: cwd)
   ... --no-git             omite el chequeo de git (util en pruebas)
+
+Lee tambien, si existe, `<MEMORY_DIR>/.hilos-externos.json` (2.67.0, `snippet.hilo_externo`):
+  {"fuentes": [{"nombre": "bandeja", "patron": "<regex; el grupo 1 es el id citado>",
+                "leer": "<comando que imprime el hilo completo; {id} = el id>"}]}
+El audit usa `nombre` y `patron`, y exige que `leer` exista y lleve `{id}`; lo corre el agente (Step
+3-hilos), nunca el audit. Sin el fichero y sin
+`## Hilos externos` en la ficha, ese chequeo no existe.
 """
 # sella-huellas: no (solo lee memory/ y consulta git; no escribe nada)
 import argparse
@@ -168,6 +175,12 @@ DESDE_NINGUNO_PLAN = "2026-10-21"
 # 2.63.32 (espera_viva: un bloqueado con `_revisar` pasado es accionable) no tiene corte: re-auditar
 # una ficha vieja cuyo bloqueado ya vencio puede cambiar las guardias de `ninguno` y `Proximo paso`.
 DESDE_BLOQUEADO_FECHA = "2026-10-20"
+# snippet.hilo_externo (2.67.0): incluye el caso real (2026-10-26).
+DESDE_HILOS = "2026-10-26"
+CONFIG_HILOS_ROTA = ("`.hilos-externos.json` no se pudo leer (JSON o regex invalido, sin `fuentes`, o "
+                     "una fuente sin `leer` con `{id}`)")
+CONFIG_HILOS_FORMA = ("arregla el fichero: {\"fuentes\": [{\"nombre\": …, \"patron\": <regex con un "
+                      "grupo que captura el id>, \"leer\": <comando con {id}>}]}")
 # Tercer cierre de un defecto (2.53.0): el usuario decidio en Step 3b no abrirle pendiente.
 DESCARTADO_BUG = re.compile(r"_descartado:\s*(.*?)_(?=\s|$|[.,;:)\]—])", re.S)
 # `pendientes.candidatos` (2.53.0): desde aqui cada pendiente nuevo sale en `## Candidatos a
@@ -241,6 +254,25 @@ def seccion_por_prefijo(secs, nombre):
         if k.lower() == nombre_l or k.lower().startswith(nombre_l + " "):
             return v
     return None
+
+
+def fuentes_hilos(memory_dir):
+    """Fuentes de `<memory>/.hilos-externos.json` (2.67.0): [] si no existe, None si no se lee."""
+    p = os.path.join(memory_dir, ".hilos-externos.json")
+    if not os.path.isfile(p):
+        return []
+    try:
+        with open(p, encoding="utf-8") as fh:
+            datos = json.load(fh)
+        fuentes = []
+        for f in datos["fuentes"]:
+            # Sin `leer` (con `{id}`) el agente no tiene con que leer el hilo completo: config rota.
+            if not isinstance(f.get("leer"), str) or "{id}" not in f["leer"]:
+                return None
+            fuentes.append({"nombre": str(f.get("nombre") or "hilo"), "re": re.compile(f["patron"])})
+        return fuentes
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, re.error):
+        return None
 
 
 def pendientes_abiertos(memory_dir):
@@ -1642,6 +1674,138 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         else:
             h.append(Hallazgo(HECHO, "snippet.ninguno_bloqueo",
                               "sin `ninguno` sobre un pendiente `_bloqueado` de la ficha"))
+
+    # 8-sexies-ter. Hilos externos (2.67.0). Un hilo de conversacion que vive fuera de memory/ (una
+    # bandeja entre agentes, un PR, un issue, un correo) puede tener mensajes que la sesion no vio:
+    # la vista que uso estaba filtrada (por destinatario, por estado) y el cierre dijo `ninguno` o
+    # armo un recordatorio sobre una premisa ya desmentida en el mismo hilo. Caso real (2026-10-26):
+    # la ficha citaba cuatro mensajes de un hilo de 14; uno nuevo sin atender pedia una decision
+    # antes del corte y otro, aceptado por otra cuenta, condicionaba la fecha, y el snippet salio
+    # `Ninguno`. Ninguna otra comprobacion mira fuera de memory/. Inerte sin config: solo mide si
+    # existe `<memory>/.hilos-externos.json` (patrones que reconocen un hilo citado en la ficha) o
+    # si la ficha ya trae `## Hilos externos`. Modelo de amenaza: atrapa la omision (no leer el hilo
+    # completo, no listar lo abierto, dejar lo abierto sin dueno); no atrapa una seccion falsa.
+    # Todas las secciones `## Hilos externos…`, no la ultima: `secciones()` es un dict por encabezado
+    # y una segunda seccion tapaba a la primera (adversario externo, ronda 2).
+    cuerpos_h, dentro = [], None
+    for linea in texto.splitlines():
+        if linea.startswith("## "):
+            dentro = norm_encabezado(linea[3:]).startswith("hilos externos")
+            if dentro:
+                cuerpos_h.append([])
+        elif dentro:
+            cuerpos_h[-1].append(linea)
+    sec_hilos = "\n".join("\n".join(c) for c in cuerpos_h) if cuerpos_h else None
+    fuentes = fuentes_hilos(memory_dir)
+    config_rota = fuentes is None
+    if config_rota:
+        fuentes = []
+    con_contenido = sec_hilos is not None and any(
+        l.strip() and not l.strip().startswith("<") for l in sec_hilos.splitlines())
+    mide_hilos = bool(fecha_ficha and fecha_ficha >= DESDE_HILOS
+                      and "<filled in Step 8>" not in sec_retomar and (fuentes or con_contenido))
+    if config_rota and not mide_hilos:
+        # SALTADO, no PARCIAL: el hook de cierre solo bloquea SALTADO, y una config rota apaga el
+        # chequeo en silencio (adversario externo, ronda 1). Si la ficha trae la seccion, el error va
+        # dentro del hallazgo de abajo: una sola clave, no dos (ronda 3).
+        h.append(Hallazgo(SALTADO, "snippet.hilo_externo", CONFIG_HILOS_ROTA,
+                          corrige=CONFIG_HILOS_FORMA))
+    if mide_hilos:
+        sin_hilos = "\n".join(t for n, t in secs.items()
+                              if not norm_encabezado(n).startswith("hilos externos"))
+        citados = []
+        for f in fuentes:
+            for m in f["re"].finditer(sin_hilos):
+                g = m.group(1) if m.groups() else m.group(0)
+                if g and g.strip():
+                    citados.append((f["nombre"], g.strip()))
+        citados = list(dict.fromkeys(citados))
+        prob = [CONFIG_HILOS_ROTA + "; " + CONFIG_HILOS_FORMA] if config_rota else []
+        sec_h = sec_hilos or ""
+        # Cada bullet de la seccion es un hilo (sin sangria) o un item del hilo (con sangria). La
+        # grafia del item no se exige exacta: se quitan vinetas y enfasis y se compara en minusculas.
+        # Un item que no es `abierto…` ni `abiertos: ninguno` sale como no reconocido, para que
+        # una vineta con otra grafia no deje pasar un abierto sin dueno (adversario, ronda 1:
+        # `Abierto:`, `* abierto:`, `**abierto**:` y `abierto` sin dos puntos pasaban como HECHO). Y
+        # la palabra `abierto` fuera de un item (una linea sin vineta, una cita, una fila de tabla,
+        # pegada a la linea del hilo) sale como no reconocida (ronda 2).
+        hilos, items, n_items = [], [], []
+        for l in sec_h.splitlines():
+            mb = re.match(r"^(\s*)(?:[-*+•–]|\d+[.)])\s+(.*)", l)
+            if not mb:
+                if re.search(r"\babierto\b", l, re.I):
+                    prob.append("`abierto` fuera de un item de `## Hilos externos` (va en su propia "
+                                f"vineta con sangria, bajo su hilo): {l.strip()[:120]}")
+                continue
+            cuerpo = mb.group(2).strip()
+            plano = re.sub(r"[*_`]", "", cuerpo).strip().lower()
+            if mb.group(1) or plano.startswith("abierto"):
+                items.append((plano, cuerpo))
+                if n_items:
+                    n_items[-1] += 1
+            elif plano.rstrip(".") != "ninguno":
+                hilos.append(cuerpo)
+                n_items.append(0)
+                if re.search(r"\babierto\b", plano):
+                    prob.append("`abierto` en la linea del hilo (va en su propia vineta con "
+                                f"sangria, debajo): {cuerpo[:120]}")
+        # Lo citado cuenta como leido solo si sale en la LINEA DE UN HILO (`mensajes: …`), no en un
+        # `abierto:` ni en una linea suelta (adversario externo, ronda 1). El id cuenta solo entero:
+        # `5` no esta en `PR 15` ni en una fecha `2026-10-05`.
+        cabeceras = "\n".join(hilos)
+        faltan = [f"{n} `{i}`" for n, i in citados
+                  if not re.search(r"(?<![\w-])" + re.escape(i) + r"(?![\w-])", cabeceras)]
+        if faltan and sec_hilos is None:
+            prob.append("la ficha cita hilo(s) externo(s) y no tiene `## Hilos externos`: "
+                        + ", ".join(faltan))
+        elif faltan:
+            prob.append("ninguna linea de hilo de `## Hilos externos` (`- <fuente> `<hilo>` — leido "
+                        "completo …; mensajes: …`) lista lo que la ficha cita: " + ", ".join(faltan))
+        if items and not hilos:
+            prob.append("`## Hilos externos` tiene items y ninguna linea de hilo con `leido completo`")
+        # `leido completo` cuenta seguido de su fecha y sin un `no` delante: `no leido completo` y
+        # `"leido completo" es falso` no son la afirmacion (adversario externo, ronda 2).
+        for l, n in zip(hilos, n_items):
+            # Entre la frase y la fecha solo palabras de enlace: `leido completo el 2026-10-26`, `el dia`,
+            # `a las 22:10` (ronda 3). Cualquier palabra dejaba pasar `leido completo; mensajes: 2026-…`.
+            if not re.search(r"(?<!\bno )le[ií]do completo\W{0,3}(?:(?:el|la|las|del|al|a|en|hoy|"
+                             r"d[ií]a|on|at)\W{1,3}){0,3}\d", l, re.I):
+                prob.append(f"hilo sin `leido completo <fecha>`: {l[:120]}")
+            if n == 0:
+                prob.append("hilo sin estado de lo abierto (debajo, `abierto: …` por cada cosa o "
+                            f"`abiertos: ninguno`): {l[:120]}")
+        for plano, cuerpo in items:
+            if re.match(r"abiertos\s*:\s*ningun[oa]\b", plano):
+                continue
+            if not plano.startswith("abierto"):
+                prob.append("linea de `## Hilos externos` que no se reconoce (cada item es "
+                            f"`abierto: …` o `abiertos: ninguno`): {cuerpo[:120]}")
+                continue
+            txt = cuerpo
+            ids = ID_PENDIENTE.findall(txt)
+            # El dueno tiene que decir quien o que: `espera a` sin nombre, `no espera a nadie` y un
+            # `_descartado: _` vacio no son dueno (adversario externo, ronda 2).
+            espera = re.search(r"(?<!\bno )\bespera a\s+(?!nadie\b|ningun)[^\s—.;,]", txt, re.I)
+            desc = DESCARTADO_BUG.search(txt)
+            if any(i in ids_abiertos for i in ids) or espera or (desc and desc.group(1).strip()):
+                continue
+            prob.append(("abierto con pendiente cerrado o inexistente: " if ids else
+                         "abierto sin dueno (ni `p-…` vivo, ni `espera a <quien>`, ni "
+                         "`_descartado: …_`): ") + txt.strip()[:160])
+        if prob:
+            h.append(Hallazgo(SALTADO, "snippet.hilo_externo",
+                              "un hilo externo que la sesion toco no quedo leido completo o deja "
+                              "algo abierto sin dueno", prob,
+                              corrige="lee cada hilo COMPLETO con el comando `leer` de "
+                                      ".hilos-externos.json (todos los destinatarios y estados, solo "
+                                      "lectura) y escribe `## Hilos externos` (Step 3-hilos): lo "
+                                      "abierto que toca a esta cuenta va como candidato en Step 3b "
+                                      "y su linea cita el `p-…`; lo que espera a otro dice `espera a "
+                                      "<quien>`; despues rehace `Como retomar` y el calendario con lo "
+                                      "que el hilo dice HOY"))
+        else:
+            h.append(Hallazgo(HECHO, "snippet.hilo_externo",
+                              f"{len(hilos)} hilo(s) externo(s) leido(s) completo(s), lo abierto con dueno"))
 
     # 8-sexies-quater. Un bloqueado sin fecha (2.63.32). `_bloqueado` saca el pendiente del hilo,
     # de `Proximo paso` y de la caducidad; sin `_revisar` tampoco sale en el recordatorio de
