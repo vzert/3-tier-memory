@@ -11,7 +11,8 @@ Imprime una linea por indice que exista:
   <fichero> bytes=N lineas=L largas=K[ GRANDE]
 `largas` cuenta las lineas de mas de --largas caracteres (800 por defecto). `GRANDE` sale cuando el
 fichero pasa --grande bytes (60000 por defecto) o tiene alguna linea larga: el aviso para recortar
-(`/triage-3t`, titulo corto en Tier 2, detalle en Tier 3). Solo mide; no escribe nada.
+(`/triage-3t`, titulo corto en Tier 2, detalle en Tier 3; las lineas largas ya escritas las mueve
+migrar-tier2.py). Solo mide; no escribe nada.
 
 Uso:  print-tier2-tamano.py MEMORY_DIR [--grande BYTES] [--largas CHARS]
 """

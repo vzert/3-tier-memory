@@ -36,6 +36,10 @@ python3 "$JBIN/print-tier2-tamano.py" "$MEMORY_DIR"
 
 It prints `<index> bytes=N lineas=L largas=K[ GRANDE]` per index. A `GRANDE` index goes in the report
 (Step 4, line `Tier 2`) with the advice to trim it (`/triage-3t`; short title in Tier 2, detail in Tier 3).
+If `largas` is not 0 in `_pendientes.md`, `_learnings.md` or `_research-index.md`, the advice also names
+`python3 "$JBIN/migrar-tier2.py" "$MEMORY_DIR"`: a dry-run that lists each long line and where its text
+would go in Tier 3. `--apply` moves it, and only runs when the user approves it. This command does not run
+either one.
 Locate `JBIN` as in /checkpoint-3t Step 0.
 
 **Pendientes** (`memory/_pendientes.md`):

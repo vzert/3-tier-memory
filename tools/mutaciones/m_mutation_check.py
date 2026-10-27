@@ -15,6 +15,7 @@ M = {
     "dueno-muerto-vale": [(VIVO, '   ; then')],
     "ascendencia-cualquiera": [('    [ "$p" = "$1" ] && return 0', '    return 0')],
     # p-984862c40d: un SKIP no tapa un FALLA del mismo aserto, en caso() y en caso_tools().
+    "solo-no-filtra": [('  [ -z "${MUT_SOLO:-}" ] && return 0', '  return 0')],
     "skip-tapa-falla-caso": [
         ('     && ! printf \'%s\\n\' "$out" | grep -qiE "(FAIL|FALLA).*${espera}"; then', '     ; then')],
     "skip-tapa-falla-tools": [
