@@ -105,11 +105,26 @@ chk "fecha irreal: error de uso" "2" "$rc"
 python3 "$BIN/print-pendientes-alcance.py" "$T/no-existe" >/dev/null 2>&1; rc=$?
 chk "sin _pendientes.md: sale 1" "1" "$rc"
 
+M3="$T/m3"; mkdir -p "$M3"
+cat > "$M3/_pendientes.md" <<EOT
+# Pendientes
+
+## Alta prioridad
+
+- [ ] revisar justo hoy — _origen: [[sessions/a]]_ — _creado: 2026-10-01_ — _id: p-ffffffffff_ — _revisar: 2026-10-23_
+EOT
+S=$(python3 "$BIN/print-pendientes-alcance.py" "$M3" --hoy 2026-10-23)
+chk "_revisar == hoy: sale con motivo hoy, no vencido" "1" "$(echo "$S" | grep -c '^p-ffffffffff | Alta .* | hoy | revisar justo hoy')"
+
 echo "== 7. print-tier2-tamano =="
 Z=$(python3 "$BIN/print-tier2-tamano.py" "$M2" --largas 400)
 chk "linea larga: GRANDE" "1" "$(echo "$Z" | grep -c '^_pendientes.md bytes=[0-9]* lineas=[0-9]* largas=1 GRANDE$')"
 Z=$(python3 "$BIN/print-tier2-tamano.py" "$M2" --largas 600)
 chk "con tope mayor: sin GRANDE" "0" "$(echo "$Z" | grep -c GRANDE)"
+Z=$(python3 "$BIN/print-tier2-tamano.py" "$M3" --grande 10)
+chk "fichero sin lineas largas pasa --grande: GRANDE" "1" "$(echo "$Z" | grep -c '^_pendientes.md bytes=[0-9]* lineas=[0-9]* largas=0 GRANDE$')"
+Z=$(python3 "$BIN/print-tier2-tamano.py" "$M3")
+chk "fichero chico sin lineas largas: sin GRANDE" "0" "$(echo "$Z" | grep -c GRANDE)"
 
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
