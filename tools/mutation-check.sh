@@ -464,6 +464,23 @@ caso "solape con generico"         journal-emit.py m_avisos_pendiente.py test-av
 caso "ninguno plan sin rechazo"  checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "rechaza y nombra el plan" plan-sin-rechazo
 caso "ninguno plan liga prosa"   checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "la prosa no liga" plan-liga-prosa
 caso "ninguno plan cualquiera"   checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "plan cerrado" plan-cualquier-estado
+
+# 2.65.1: titulo corto en Tier 2 (2.63.47, p-206fd62e68) y puente viejo (2.64.2, p-6ba77d2ea4)
+# (p-f324d6604f). Los asertos son los de test-tier2-limites.sh y test-update-puente.sh.
+caso "titulo sin tope"             journal-emit.py m_tier2_limites.py test-tier2-limites.sh "titulo de 201 caracteres: rechazado" emit-titulo-sin-tope
+caso "titulo vacio pasa"           journal-emit.py m_tier2_limites.py test-tier2-limites.sh "titulo vacio: rechazado" emit-titulo-vacio-pasa
+caso "titulo sin detalle en Tier 3" journal-emit.py m_tier2_limites.py test-tier2-limites.sh "la fila lleva titulo y detalle entero" emit-titulo-pierde-detalle
+caso "sin aviso de texto largo"    journal-emit.py m_tier2_limites.py test-tier2-limites.sh "avisa por stderr y nombra --titulo" emit-sin-aviso-largo
+caso "update pierde el detalle"    journal-compact.py m_tier2_limites.py test-tier2-limites.sh "update: Tier 3 conserva el detalle" compact-update-pierde-detalle
+caso "fila mensual sin detalle"    journal-compact.py m_tier2_limites.py test-tier2-limites.sh "la fila lleva titulo y detalle entero" compact-sin-detalle-en-fila
+caso "alcance sin recorte"         print-pendientes-alcance.py m_tier2_limites.py test-tier2-limites.sh "el tocado largo sale recortado" alcance-sin-recorte
+caso "alcance vencido con hoy"     print-pendientes-alcance.py m_tier2_limites.py test-tier2-limites.sh "sale con motivo hoy, no vencido" alcance-vencido-incluye-hoy
+caso "alcance con futuros"         print-pendientes-alcance.py m_tier2_limites.py test-tier2-limites.sh "no imprime el futuro" alcance-imprime-futuros
+caso "tamano sin largas"           print-tier2-tamano.py m_tier2_limites.py test-tier2-limites.sh "linea larga: GRANDE" tamano-sin-largas
+caso "tamano sin bytes"            print-tier2-tamano.py m_tier2_limites.py test-tier2-limites.sh "fichero sin lineas largas pasa --grande" tamano-sin-bytes
+caso "puente casa todo"            update-puente.py m_tier2_limites.py test-update-puente.sh "sin salida" puente-casa-todo
+caso "puente sin copia"            update-puente.py m_tier2_limites.py test-update-puente.sh "deja copia identica" puente-sin-copia
+caso "puente dry-run escribe"      update-puente.py m_tier2_limites.py test-update-puente.sh "dry-run: no escribe" puente-dry-escribe
 caso "ninguno plan sin prefijo"  checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "ligado con plan-<nombre>" plan-sin-prefijo
 caso "ninguno plan enlace"       checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "forma \[\[\.\./plans" plan-enlace-estricto
 caso "ninguno plan sin corte"    checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "antes de 2.63.33" plan-sin-corte

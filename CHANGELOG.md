@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.65.1] - 2026-10-26
+Origen: p-f324d6604f. 2.63.47 (`--titulo`, detalle en Tier 3) y 2.64.2 (puente viejo) no tenian mutaciones
+propias: sus asertos nunca se habian visto fallar.
+
+### Added
+- `tools/mutaciones/m_tier2_limites.py` y 14 casos en `tools/mutation-check.sh`: tope y validacion de
+  `--titulo`, detalle que pasa a Tier 3 y sobrevive a un update, aviso de texto largo, alcance del cierre
+  (`print-pendientes-alcance.py`), marca `GRANDE` y `update-puente.py` (casado exacto, copia, dry-run).
+
+### Fixed
+- Dos asertos eran vacuos (la mutacion no los hacia caer): `_revisar == hoy` en el alcance del cierre y el
+  umbral en bytes de `print-tier2-tamano.py`. `test-tier2-limites.sh` gana 3 asertos que los cubren.
+
 ## [2.65.0] - 2026-10-26
 Origen: p-1e298b2d06. El aviso B de 2.64.0 (`pendientes.hilo_sin_reconciliar`) no atrapaba el incidente
 que lo motivo: la sesion cambio un plan con texto que nombraba un pendiente, actualizo OTRO pendiente del
