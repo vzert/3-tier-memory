@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.65.2] - 2026-10-26
+Dos huecos por los que un pendiente nacido en una sesion seguia en el hilo de la siguiente solo por
+coincidencia (caso real de otro proyecto: el paso escrito y tres hermanos nacieron en una sesion sin
+`Retomamos:`, sin `_relacionado` entre ellos).
+
+### Fixed
+- `marcar-retomar.py` (Step 8a2): si el `Proximo paso` es un pendiente nacido en la sesion, liga a el
+  (`pendiente.relate`) los demas pendientes abiertos nacidos en ella que no tengan `_relacionado`; el que
+  ya cita algo no se toca.
+  La liga al nacer solo apuntaba al paso RECIBIDO. Un paso viejo no liga nada.
+- `pendientes_afines.py` (`snippet_de_transcripcion`): un comando cuyo argumento empieza por `Retomamos:`
+  (`/goalspec:interview Retomamos: …`) cuenta como el snippet. Antes el filtro borraba `<command-args>` y
+  la sesion quedaba sin sello (`stamp-hilo.py`) y sin liga al nacer.
+
+### Added
+- `bin/test-hilo-hermanos.sh` (21 asertos; 11 rojos contra 2.65.1, incluido `stamp-hilo.py` de punta a punta).
+
 ## [2.65.1] - 2026-10-26
 Origen: p-f324d6604f. 2.63.47 (`--titulo`, detalle en Tier 3) y 2.64.2 (puente viejo) no tenian mutaciones
 propias: sus asertos nunca se habian visto fallar.
