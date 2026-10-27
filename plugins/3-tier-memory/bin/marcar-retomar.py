@@ -29,6 +29,15 @@ y el clic del mod pegaba un snippet ya hecho cuando el paso nuevo caia en otro p
 de cloudflare-expert, 2026-10-22: la ficha de la Fase 4 retomo la de la Fase 3 y marco otro
 pendiente). Si la marca ya apunta a otra ficha, el compactador no la toca.
 
+Por ultimo liga los hermanos al paso (2.65.2): si un id del paso es un pendiente abierto NACIDO en
+esta sesion (`_origen: [[sessions/<slug>]]` de esta ficha), cada otro pendiente abierto nacido en
+ella que no tenga `_relacionado` recibe `pendiente.relate` con ese id. Uno que ya cita algo no
+se toca: tiene su ancla, y sumarle el paso lo meteria en el hilo de otro tema. La liga al
+nacer (journal-emit) solo apunta al paso RECIBIDO; sin esto, en una sesion que no recibio paso, o
+cuyo paso escrito es uno de sus propios pendientes, los hermanos seguian en el hilo de la sesion
+siguiente solo si su snippet se sellaba (caso real de otro proyecto, 2026-10-26: un paso y tres
+hermanos sin liga). Un paso viejo no liga nada: lo que nacio aqui ya lo liga la liga al nacer.
+
 Salida: una linea por id. Codigo 0 salvo error de uso o de escritura.
 
 Uso:  marcar-retomar.py SESSION_FILE [--hoy YYYY-MM-DD] [--memory-dir DIR]
@@ -196,6 +205,30 @@ def main(argv):
             return 1
         emitidos += 1
         print(f"🧹 {pid}: sin _retomar ({vieja} ya se retomo en esta sesion)")
+    slug = os.path.splitext(os.path.basename(path))[0]
+    nacidos = {p["id"]: p for p in pa.pendientes(pend_path) if p["origen"] == slug}
+    for pid in ids:
+        if pid not in nacidos:
+            continue
+        for hid, h in nacidos.items():
+            # Solo el hermano SIN liga: ese es el que se caia. Uno que ya cita algo (el paso
+            # recibido, un plan, otro pendiente) tiene su ancla, y sumarle este paso lo meteria en
+            # el hilo de otro tema que nacio en la misma sesion.
+            if hid in ids or h["rel"]:
+                continue
+            nuevo = [pid]
+            cmd = [sys.executable, os.path.join(BIN, "journal-emit.py"), "--memory-dir", memory_dir,
+                   "--type", "pendiente.relate", "--id", hid]
+            for x in nuevo:
+                cmd += ["--relacionado", x]
+            r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8")
+            if r.returncode != 0:
+                print(f"⚠ marcar-retomar.py: journal-emit fallo con {hid}: {r.stderr.strip()}",
+                      file=sys.stderr)
+                return 1
+            emitidos += 1
+            h["rel"] = set(nuevo)
+            print(f"🔗 {hid}: ligado al paso {pid} (nacieron en la misma sesion)")
     if emitidos:
         r = subprocess.run([sys.executable, os.path.join(BIN, "journal-compact.py"),
                             "--memory-dir", memory_dir, "--quiet"],
