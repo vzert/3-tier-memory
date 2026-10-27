@@ -1,5 +1,43 @@
 # Changelog
 
+## [2.66.0] - 2026-10-26
+Un cierre decia `Ninguno` sobre un hilo externo (una bandeja de mensajes entre agentes) que la sesion
+habia leido solo en parte. La vista que uso filtraba por destinatario: vio 4 mensajes de un hilo de 14.
+Un mensaje nuevo pedia una decision antes de un corte y otro, aceptado por otra cuenta, condicionaba la
+fecha del recordatorio de calendario. Ninguna comprobacion del cierre miraba fuera de `memory/`.
+
+### Added
+- **Step 3-hilos** (`templates/checkpoint-3t.md`): si la sesion toco un hilo externo (bandeja, PR, issue,
+  correo), el checkpoint lo lee COMPLETO (todos los destinatarios y estados, solo lectura) y escribe
+  `## Hilos externos` en la ficha: una linea por hilo con `leido completo <cuando>` y sus mensajes, y una
+  por cada cosa abierta con su `p-…`, `espera a <quien>` o `_descartado: …_`. Lo que toca a esta cuenta va
+  como candidato en Step 3b.
+- **`snippet.hilo_externo`** (`bin/checkpoint-audit.py`): `SALTADO` (el hook de cierre lo bloquea) si la
+  ficha cita un hilo que ninguna linea de hilo de `## Hilos externos` lista (un id que solo sale en un
+  `abierto:` o en una linea suelta no cuenta), items sin linea de hilo, un hilo sin `leido completo
+  <fecha>` (o con un `no` delante), un hilo sin `abierto:` ni `abiertos: ninguno` debajo, o un
+  `abierto:` sin dueno o con un pendiente cerrado. `espera a` sin nombre, `espera a nadie`, `no espera a`
+  y `_descartado: _` vacio no son dueno. Si la ficha trae dos secciones `## Hilos externos`, mide las dos. La grafia del item no se exige exacta (`Abierto:`, `* abierto:`,
+  `**abierto**:`); un item que no es `abierto…` ni `abiertos: ninguno` sale como no reconocido. Un id
+  citado cuenta como listado solo entero (`5` no esta en `PR 15`). Fichas desde el 2026-10-26.
+- **`memory/.hilos-externos.json`** (opcional, por proyecto): `fuentes` con `nombre`, `patron` (regex que
+  reconoce un hilo citado en la ficha; el grupo 1 es el id) y `leer` (el comando que imprime el hilo
+  completo, con `{id}`). JSON o regex ilegible, o una fuente sin `leer` con `{id}`: `SALTADO`, una sola
+  linea (una config rota no apaga el chequeo en silencio). `leido completo` admite palabras de enlace
+  antes de la fecha (`el`, `el dia`, `a las`).
+- `test-hilos-externos.sh`.
+
+### Sin cambio para quien no usa hilos externos
+- Sin `.hilos-externos.json` y sin `## Hilos externos` en la ficha (o con la seccion solo con su
+  placeholder), el chequeo no aparece en la salida.
+
+### Limites declarados
+- Atrapa la omision, no una seccion falsa: no puede saber si el hilo se leyo de verdad entero.
+- Un hilo citado de una forma que ningun `patron` reconoce solo lo ve la instruccion de Step 3-hilos.
+- La palabra `abierto` fuera de un item con vineta (linea suelta, cita, fila de tabla, pegada a la
+  linea del hilo) bloquea como no reconocida; un abierto escrito sin esa palabra no se mide.
+- Medido sobre la ficha real del caso (copia de solo lectura): sin config, sin cambios en la salida; con
+  config, `SALTADO snippet.hilo_externo` nombrando los 4 mensajes citados.
 ## [2.65.1] - 2026-10-26
 Origen: p-f324d6604f. 2.63.47 (`--titulo`, detalle en Tier 3) y 2.64.2 (puente viejo) no tenian mutaciones
 propias: sus asertos nunca se habian visto fallar.

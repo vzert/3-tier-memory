@@ -211,6 +211,9 @@ importance: <0-10>
 - <what was tried> → <why it failed> → <what to do instead>
 <or "Ninguno">
 
+## Hilos externos
+<filled in Step 3-hilos — borra esta seccion si la sesion no toco ningun hilo externo>
+
 ## Candidatos a pendiente
 <filled in Step 3b — leave this placeholder for now>
 
@@ -401,6 +404,57 @@ cut at 200 chars (`…[+N]`); the full detail is in Tier 3 (`grep <id> memory/pe
 the `<N>` of the `RECONCILIACION:` line. To find a pendiente by topic, `grep -i "<term>" memory/_pendientes.md`
 — the recall hook already cross-checks each prompt. Every open line ends with `_id: p-xxxxxxxxxx_`. That
 id is how you resolve it in 3a; never match a line by its text.
+
+### Step 3-hilos — Hilos externos: leelos COMPLETOS antes de decidir que queda abierto (2.66.0)
+
+Un hilo externo es una conversacion que vive fuera de `memory/`: una bandeja de mensajes entre
+agentes, un PR, un issue, un hilo de correo. Si la sesion leyo, respondio o cito uno, lo que sigue
+abierto en ese hilo es trabajo de esta cuenta aunque ningun pendiente lo diga todavia. Caso real
+(2026-10-26): la sesion leyo la bandeja con una vista filtrada por destinatario, vio 4 mensajes de
+un hilo de 14 y cerro `Ninguno`; un mensaje nuevo pedia una decision antes del corte y otro,
+aceptado por otra cuenta, condicionaba la fecha del recordatorio. El usuario lo encontro al
+preguntar.
+
+1. **Que hilos toco la sesion.** Si existe `memory/.hilos-externos.json`, sus `patron` dicen como se
+   cita un hilo en la ficha (por ejemplo `[[comms/<id>]]`); ademas cuenta cualquier PR, issue o
+   correo que la sesion leyo o contesto. Si no toco ninguno, borra `## Hilos externos` de la ficha y
+   sigue: sin config ni seccion, este paso no existe.
+2. **Leelo completo, no la vista que usaste.** Corre el comando `leer` de la fuente (con `{id}` =
+   el hilo o un mensaje del hilo) o, sin config, la vista del hilo entero (todos los comentarios del
+   PR, todo el hilo de correo). Todos los destinatarios y todos los estados; solo lectura: no marques
+   nada leido ni respondas desde aqui. Una vista de bandeja filtrada por tu rol no es el hilo.
+   Si el comando sale con error o no imprime el hilo, NO es un hilo vacio: no escribas `leido
+   completo` (la auditoria lo marca), dile al usuario que no se pudo leer y que el cierre no puede
+   decir `ninguno` sobre ese hilo.
+3. **Escribe `## Hilos externos` en la ficha**, una linea por hilo y debajo una por cada cosa abierta:
+
+   ```
+   - <fuente> `<hilo>` — leido completo <fecha hora>; mensajes: <id>, <id>, …
+     - abierto: <id> <que pide, en una linea> — p-xxxxxxxxxx
+     - abierto: <id> <que pide> — espera a <quien>
+     - abierto: <id> <que pide> — _descartado: <decision del usuario>_
+     - abiertos: ninguno
+   ```
+
+   La linea del hilo lista TODOS los mensajes que leiste, incluidos los que la ficha cita. Si la
+   fuente no deja abrir el cuerpo de un mensaje al cerrar (una bandeja puede permitir solo la lista
+   del hilo), el `abierto:` dice su estado, de quien es y para quien, y lo abierto se le muestra al
+   usuario en Step 3b para que decida; no lo abras por tu cuenta.
+   **Abierto** = un mensaje sin resolver, o resuelto con una condicion que sigue viva (una fecha, un
+   "antes de X"). Lo que toca a esta cuenta (una decision, una respuesta, un paso) va como candidato
+   en Step 3b, y al guardarlo su linea cita el `p-…`. Lo que espera a otra cuenta dice `espera a
+   <quien>`.
+4. **Lo que el hilo dice HOY manda sobre lo que recordabas.** Si un mensaje desmiente la premisa
+   de un pendiente o de un recordatorio (un llamador mas, una fecha nueva), corrige ese pendiente
+   (`pendiente.update`) antes de Step 8.
+
+`checkpoint-audit.py` marca `SALTADO` en `snippet.hilo_externo` (y el hook de cierre lo bloquea) si
+la ficha cita un mensaje que ninguna linea de hilo lista (en `mensajes:`; un `abierto:` no cuenta),
+un hilo sin `leido completo <fecha>`, un hilo sin ningun `abierto:` ni `abiertos: ninguno` debajo, un
+`abierto:` sin `p-…` vivo, sin `espera a <quien>` y sin `_descartado: <decision>_` (vacios o
+negados no cuentan), la palabra `abierto` fuera de su vineta, o un `.hilos-externos.json` que no se
+puede leer. Escribe UNA sola seccion `## Hilos externos`: si hay dos, se miden las dos. No puede saber si de verdad leiste
+el hilo entero: eso queda en ti.
 
 ### Step 3a — Reconciliacion de pendientes existentes (RECONCILIATION FIRST)
 
