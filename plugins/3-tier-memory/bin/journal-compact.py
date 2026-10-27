@@ -2317,7 +2317,7 @@ def find_row_anywhere(lines, ncols, key_re, cell=None):
     viejas adoptar — correcto, no se puede saber cual es sin ambiguedad. Pero la busqueda de
     duplicados de `apply_session_add`/`apply_plan_upsert` solo miraba las filas de ESA tabla
     (vacia), asi que una fila que ya vivia en una de las tablas viejas (paperclip: 70 planes bajo
-    '## Active Plans'; scalar-api-docs: bajo '## Active/Completed Plans') quedaba invisible y se
+    '## Active Plans'; proyecto-docs: bajo '## Active/Completed Plans') quedaba invisible y se
     insertaba OTRA VEZ en la nueva — la misma duplicacion silenciosa que el ancla-adopcion (2.24.0,
     misma noche) ya arreglo para el caso de UNA sola candidata. Aqui se cierra para N candidatas:
     la busqueda de duplicados mira TODO el archivo, la insercion de una fila nueva sigue yendo solo
@@ -2335,7 +2335,7 @@ def find_row_anywhere(lines, ncols, key_re, cell=None):
 
     `cell`: si se da, el wikilink se busca SOLO en esa celda, no en toda la fila. Hallazgo de
     `/goalspec:adversary` (2.31.4, ronda 2): buscando en la fila, una fila cuyo Resumen CITA la
-    sesion (`unifi-expert`: "... completados en [[sessions/<otra>]]") aparece antes que la fila de
+    sesion (`proyecto-red`: "... completados en [[sessions/<otra>]]") aparece antes que la fila de
     esa sesion, y el update le pisaba Status/Resumen/Commit a la fila equivocada.
     """
     for _sec_header, hdr, _sep, rows in find_tables(lines):
@@ -2376,7 +2376,7 @@ SESSION_CELL_RE = re.compile(r"^\[\[sessions/([^\]|\\]+)(?:\\\|[^\]]*)?\]\]$")
 def heal_session_table(lines, hdr, sep, rows):
     """Repara en sitio la tabla `## Sessions` de una instalacion vieja. Devuelve True si cambio algo.
 
-    Caso real (Will-Ops, 2026-09-21, hallazgo de Codex): la cabecera tenia 4 columnas
+    Caso real (Demo-Ops, 2026-09-21, hallazgo de Codex): la cabecera tenia 4 columnas
     (`Fecha | Sesion | Status | Resumen`, sin `Commit`). `find_row_anywhere(lines, 5, ...)` salta
     toda tabla que no tenga 5, asi que el segundo `session.add` de una sesion (el del commit) nunca
     encontraba la fila del primero e insertaba OTRA. Cada sesion ocupaba dos filas, y la poda de
@@ -2388,7 +2388,7 @@ def heal_session_table(lines, hdr, sep, rows):
        columnas (tras el paso 1): otro ancho no es la forma que este bug deja. La sesion se lee de
        la celda Sesion (SESSION_CELL_RE), nunca del resto de la fila. Gana la fila de ARRIBA, celda
        por celda donde no este vacia, y queda en su lugar. No porque la tabla este ordenada por
-       fecha (Vecinex no lo esta), sino porque el bug crea cada duplicado insertando en `sep + 1`,
+       fecha (Vecindad no lo esta), sino porque el bug crea cada duplicado insertando en `sep + 1`,
        por encima de TODAS las filas existentes, incluida la anterior de su misma sesion: en un par
        creado asi la de arriba siempre es el evento posterior, sea cual sea el orden del resto.
        Es lo mismo que habria hecho el update que el bug salto. Un grupo con alguna fila de mas de
@@ -3737,7 +3737,7 @@ def apply_plan_upsert(mem, p):
             # serian invisibles para would_cycle. Se bloquea CUALQUIER --parent nuevo mientras
             # existan, en vez de intentar adivinar si esta fila en particular esta en el camino
             # — la certeza de que no lo esta requeriria el mismo recorrido que no se puede hacer
-            # con una fila sin identidad. Mismo criterio que p-6687b07b2d (no emitir plan.upsert
+            # con una fila sin identidad. Mismo criterio que p-31fb97d648 (no emitir plan.upsert
             # en un indice de columnas mixtas hasta unificarlo): aqui queda mecanico, no en prosa.
             nombres = ", ".join(f"'{o[0]}'->plan-{o[1]}" for o in orphans[:3])
             mas = f" (+{len(orphans) - 3} mas)" if len(orphans) > 3 else ""
@@ -3939,11 +3939,11 @@ def find_research_owned_row(lines, ncols, slug):
       ella (guard_research_legacy_insert) ni se poda.
 
     Por que asi (2.31.5): buscando en toda la fila, un `completed` de X borraba de Active la fila
-    que solo citaba a X (cloudflare-expert:25 lo tiene vivo), y un update le pisaba celdas. Tres
+    que solo citaba a X (proyecto-edge:25 lo tiene vivo), y un update le pisaba celdas. Tres
     reglas por la forma de la fila rompieron, una por ronda de adversario, siempre con una fila
     construida. Aqui ningun error de clasificacion llega a borrar ni a escribir: en la tabla
     con Archivo/File la regla es exacta, y en la otra no se escribe. Medido 2026-09-21 en 12
-    instalaciones: las 572 busquedas dan la misma fila que en 2.31.4 salvo cloudflare-expert:25
+    instalaciones: las 572 busquedas dan la misma fila que en 2.31.4 salvo proyecto-edge:25
     (el arreglo); 88 caen en tablas con Archivo/File y solo 13 en tablas de solo lectura.
     """
     key = link_re("research/", slug)

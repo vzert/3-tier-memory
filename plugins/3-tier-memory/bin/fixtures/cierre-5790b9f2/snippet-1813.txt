@@ -1,8 +1,8 @@
-Retomamos: Dos regresiones reales del snippet Como retomar en claude-vzert, confirmadas en su JSONL.
+Retomamos: Dos regresiones reales del snippet Como retomar en proyecto-vps, confirmadas en su JSONL.
 
-Lee memory/sessions/2026-09-22-snippet-cierre-regresion-claude-vzert.md para el contexto completo.
+Lee memory/sessions/2026-09-22-snippet-cierre-regresion-proyecto-vps.md para el contexto completo.
 
-Proximo paso: verificar en una instalacion real (claude-vzert u otro proyecto que use el plugin) que plan.mencionado_no_enlazado y snippet.futuro_duplicado no producen falsos positivos nuevos fuera del corpus de 102 fichas ya medido, una vez esa instalacion actualice a 2.32.0 _id: p-a4439fa8fd_.
+Proximo paso: verificar en una instalacion real (proyecto-vps u otro proyecto que use el plugin) que plan.mencionado_no_enlazado y snippet.futuro_duplicado no producen falsos positivos nuevos fuera del corpus de 102 fichas ya medido, una vez esa instalacion actualice a 2.32.0 _id: p-a4439fa8fd_.
 
 Sigue abierto: p-014255373e plan.upsert sin guardian de reversa, des-completa un plan cerrado en silencio · p-49996efc69 estado FINAL de 2.30.0 sin revisar por adversario, ronda acotada al delta 52f2538..7f03029 · p-13df49fa31 el nudge de checkpoint-audit no puede disparar donde memory/ esta en .gitignore (afecta a este mismo repo) · +4 mas en _pendientes.md.
 

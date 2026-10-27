@@ -202,7 +202,7 @@ fi
 # corre en cada arranque. Se lee solo la LINEA RESUMEN (siempre la primera) y se compone un aviso
 # propio y corto: la salida completa imprime un parrafo por cada fila rota, y eso no cabe aqui.
 #
-# Antes de esto, esta clase de dano (measured 2026-09-12 en cloudflare-expert: 12 ids no
+# Antes de esto, esta clase de dano (measured 2026-09-12 en proyecto-edge: 12 ids no
 # canonicos + 4 filas rotas + 86 con prioridad en emoji, todo de una migracion escrita a mano) solo
 # se veia si alguien corria /audit-3t o /checkpoint-3t por su cuenta — la misma leccion que ya
 # esta en memory/learnings/3tier-memory-system de este propio proyecto: una deteccion que solo

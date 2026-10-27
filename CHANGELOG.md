@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.66.0] - 2026-10-26
+## [2.67.0] - 2026-10-27
 Un cierre decia `Ninguno` sobre un hilo externo (una bandeja de mensajes entre agentes) que la sesion
 habia leido solo en parte. La vista que uso filtraba por destinatario: vio 4 mensajes de un hilo de 14.
 Un mensaje nuevo pedia una decision antes de un corte y otro, aceptado por otra cuenta, condicionaba la
@@ -38,6 +38,75 @@ fecha del recordatorio de calendario. Ninguna comprobacion del cierre miraba fue
   linea del hilo) bloquea como no reconocida; un abierto escrito sin esa palabra no se mide.
 - Medido sobre la ficha real del caso (copia de solo lectura): sin config, sin cambios en la salida; con
   config, `SALTADO snippet.hilo_externo` nombrando los 4 mensajes citados.
+## [2.66.2] - 2026-10-27
+Origen: p-b4cac6d698. El repo es publico, y sus archivos actuales llevaban ids de pendientes nacidos en
+otros proyectos y nombres de proyectos privados del autor, como ejemplos de casos reales.
+
+### Fixed
+- Codigo, pruebas, fixtures y plantillas usan nombres de proyecto e ids inventados con la misma forma:
+  10 ids y unas 150 menciones en 35 archivos. Sin cambio de comportamiento: solo cambian comentarios,
+  textos de prueba y fixtures; las suites de los archivos cambiados pasan.
+- Fuera de este cambio, por decision del dueno del repo: las entradas viejas de este CHANGELOG, y los nombres
+  que el codigo usa para funcionar (la variable de entorno de Paperclip, la ruta de estado de lookout,
+  la URL de instalacion). El historial de git no se reescribe: lo viejo sigue legible por SHA.
+
+## [2.66.1] - 2026-10-27
+Dos huecos por los que un pendiente nacido en una sesion seguia en el hilo de la siguiente solo por
+coincidencia (caso real de otro proyecto: el paso escrito y tres hermanos nacieron en una sesion sin
+`Retomamos:`, sin `_relacionado` entre ellos).
+
+### Fixed
+- `marcar-retomar.py` (Step 8a2): si el `Proximo paso` es un pendiente nacido en la sesion, liga a el
+  (`pendiente.relate`) los demas pendientes abiertos nacidos en ella que no tengan `_relacionado`; el que
+  ya cita algo no se toca.
+  La liga al nacer solo apuntaba al paso RECIBIDO. Un paso viejo no liga nada.
+- `pendientes_afines.py` (`snippet_de_transcripcion`): un comando cuyo argumento empieza por `Retomamos:`
+  (`/goalspec:interview Retomamos: …`) cuenta como el snippet. Antes el filtro borraba `<command-args>` y
+  la sesion quedaba sin sello (`stamp-hilo.py`) y sin liga al nacer.
+
+### Added
+- `bin/test-hilo-hermanos.sh` (21 asertos; 11 rojos contra 2.66.0, incluido `stamp-hilo.py` de punta a punta).
+
+## [2.66.0] - 2026-10-27
+Origen: p-206fd62e68, propuesta f. 2.63.47 dejo de escribir lineas largas nuevas en Tier 2, pero las ya
+escritas seguian alli. Medido 2026-10-27 en 9 proyectos de esta maquina: hasta 88 lineas de mas de 800
+caracteres en `_pendientes.md`, 206 en `_learnings.md` y 101 en `_research-index.md`.
+
+### Added
+- **`bin/migrar-tier2.py MEMORY_DIR [--apply]`**. Sin `--apply` es un dry-run: lista cada linea de mas de
+  800 caracteres de los tres indices, con su estado (`mueve`, `acorta`, `no-migrable: <motivo>`), su
+  destino Tier 3 y el titulo propuesto. No escribe nada.
+  Con `--apply`:
+  - Un pendiente queda en Tier 2 con un titulo de 200 caracteres como mucho y con `_actualizado:`. Su id
+    no cambia. El texto entero va a su fila mensual como `— detalle:` (la forma de 2.63.47). Si el pendiente
+    no tiene fila mensual, crea una.
+  - Las sub-vinetas de un pendiente (de cualquier nivel) y la prosa escrita despues de sus metadatos van
+    al detalle del mismo pendiente.
+  - Una linea de learnings o de research se acorta, y su texto va al fichero al que la linea ya apunta
+    (`<!-- regla: -->`, `[[learnings/x]]`, `[[research/x]]`). Si ese fichero ya contiene el texto, solo se
+    acorta la linea. Si no, el texto se anade como cita al final del fichero.
+  Tier 3 se escribe y se comprueba antes de acortar Tier 2. El script trabaja bajo el lock del journal y
+  re-sella las huellas. Antes de escribir, respalda lo que va a tocar en `.journal/migrar-tier2/`, como
+  `<nombre>.pre-migrar` y con un `.gitignore` propio (en 2 de 3 proyectos medidos `.journal/` se
+  versiona). No aplica si hay eventos sin compactar.
+  Probado en copias de los 9 proyectos: 554 de 607 lineas largas migradas, 707 textos comprobados en Tier 3 y 0 perdidos. Las lineas que
+  quedan son las listadas como `no-migrable`: sin `_id`, mensual sin tabla, sin fichero al que apuntar o
+  `- [~]`.
+- Prueba: `bin/test-migrar-tier2.sh` (46 asertos; incluye `research.upsert` y `learning.add` sobre filas
+  ya acortadas). 7 mutaciones en `tools/mutaciones/m_migrar_tier2.py`.
+  Una de ellas destapo un hueco, ya cerrado: si una escritura posterior al mismo destino borraba el texto
+  de una anterior, el script no lo veia. Ahora repasa todos los textos en Tier 3 antes de acortar cada
+  indice, y la linea que falle se queda como estaba.
+- **`MUT_SOLO='<regex>' tools/mutation-check.sh`** (p-3a58571ac9): corre solo los casos cuya etiqueta
+  casa. El filtro va despues del reparto por tandas (`MUT_JOBS`), asi que no cambia que tanda corre cada
+  caso. Si no casa con ninguno, sale con error, para no dar un verde de 0 casos. La prueba
+  (`tools/test-mutation-filtro.sh`, con una mutacion propia) cubre el filtro; la salida con error y
+  `MUT_JOBS` no tienen prueba propia.
+
+### Changed
+- `/status-3t`: si algun indice tiene `largas` mayor que 0, el consejo nombra el dry-run de
+  `migrar-tier2.py`.
+
 ## [2.65.1] - 2026-10-26
 Origen: p-f324d6604f. 2.63.47 (`--titulo`, detalle en Tier 3) y 2.64.2 (puente viejo) no tenian mutaciones
 propias: sus asertos nunca se habian visto fallar.

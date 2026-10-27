@@ -6,13 +6,13 @@ usan un formato anterior a 2.31.5, hacia la forma canonica de `TABLE_COLUMNS` en
 Archivo). p-cd33654290, continuacion de 2.31.5 (research.upsert ya no pisa filas ajenas, pero deja
 en SOLO LECTURA cualquier tabla anclada cuya ultima columna no se llame Archivo ni File —
 `research_table_is_canonical` en journal-compact.py — asi que un research nuevo en esas 5
-instalaciones medidas (omniroute, scalar-api-docs, seedance-generator, time-tracker, unifi-expert)
+instalaciones medidas (proyecto-rutas, proyecto-docs, proyecto-video-generator, proyecto-reloj, proyecto-red)
 va a cuarentena en vez de escribirse).
 
 Por que por NOMBRE y no por FORMA (a diferencia de repair-plans-index.py, que ancla la fila legacy
 por su ANCHO + una fecha en la celda 0): medidas las 5 instalaciones, hay 10 formas de cabecera
 DISTINTAS (2 tablas x 5 instalaciones) y el mismo ancho no significa lo mismo en dos de ellas —
-un `Topic|Result|File|Fecha` (omniroute) y un `Topic|Completed|File|Conclusion` (scalar-api-docs)
+un `Topic|Result|File|Fecha` (proyecto-rutas) y un `Topic|Completed|File|Conclusion` (proyecto-docs)
 tienen las dos 4 celdas, pero la fecha vive en la celda 3 en una y en la celda 1 en la otra. Anclar
 por posicion ahi adivina; anclar por el NOMBRE de cada columna no.
 
@@ -199,8 +199,8 @@ def _colkey(cell):
     return re.sub(r"\s+", " ", t).strip()
 
 
-# Rol de cada nombre de columna medido en las 5 instalaciones (omniroute, scalar-api-docs,
-# seedance-generator, time-tracker, unifi-expert) mas las variantes obvias en ingles/espanol de
+# Rol de cada nombre de columna medido en las 5 instalaciones (proyecto-rutas, proyecto-docs,
+# proyecto-video-generator, proyecto-reloj, proyecto-red) mas las variantes obvias en ingles/espanol de
 # los propios nombres canonicos. Un nombre que no aparece aqui deja la cabecera sin reconocer
 # (`header_unrecognized`) en vez de adivinarle un rol — mismo criterio de "reportar, no adivinar"
 # que `header_shape` en repair-plans-index.py.
@@ -491,7 +491,7 @@ def repair_table(jc, lines, header):
         # sin migrar (nunca estuvieron protegidas: nunca hubo cuarentena que perder) y solo deja
         # tambien sin arreglar a las filas que SI calificaban. Reproducido sobre copia de una
         # instalacion real (ronda 5 de adversario, subagente en Opus, 2.31.6): dos rondas de
-        # correccion antes de esta bloqueaban por completo `goal-spec-skill` (2 de 3 filas Active
+        # correccion antes de esta bloqueaban por completo `proyecto-spec` (2 de 3 filas Active
         # sin migrar por ancho) dejando la cabecera en `Topic|Started|Sesion|File` — que sigue
         # pasando la puerta lenient de journal-compact.py — y el hallazgo curado se seguia
         # perdiendo en la siguiente escritura. Aqui SI se migra lo que se puede y se reescribe la

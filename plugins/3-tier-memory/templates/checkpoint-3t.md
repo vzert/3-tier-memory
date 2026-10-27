@@ -405,7 +405,7 @@ the `<N>` of the `RECONCILIACION:` line. To find a pendiente by topic, `grep -i 
 — the recall hook already cross-checks each prompt. Every open line ends with `_id: p-xxxxxxxxxx_`. That
 id is how you resolve it in 3a; never match a line by its text.
 
-### Step 3-hilos — Hilos externos: leelos COMPLETOS antes de decidir que queda abierto (2.66.0)
+### Step 3-hilos — Hilos externos: leelos COMPLETOS antes de decidir que queda abierto (2.67.0)
 
 Un hilo externo es una conversacion que vive fuera de `memory/`: una bandeja de mensajes entre
 agentes, un PR, un issue, un hilo de correo. Si la sesion leyo, respondio o cito uno, lo que sigue
@@ -785,7 +785,7 @@ tercero que no es el usuario. Decidelo al CREAR el pendiente, respondiendo "¿se
 inmediato, sin esperar a nadie?". **Una decision del usuario NUNCA es bloqueo** (2.62.11): el
 usuario la toma en la sesion siguiente, con el agente al lado, asi que el pendiente se queda sin
 `--bloqueado-por` y el snippet de Step 8 lo pone delante con `Proximo paso: decidir con el usuario
-<que decisiones, donde estan> (p-…)`. Caso real (claude-vzert, 2026-10-16): `p-341fdf5e59` nacio
+<que decisiones, donde estan> (p-…)`. Caso real (proyecto-vps, 2026-10-16): `p-9a2f3e5c68` nacio
 con `--bloqueado-por "decisiones de Victor"`, el snippet salio `Ninguno` y las decisiones quedaron
 escondidas; Victor lo senalo: "si no me muestras las decisiones pendientes, ¿como se supone que las
 tome?". Desde 2.62.11 `checkpoint-audit.py` avisa (`snippet.ninguno_bloqueo`, POR-DISEÑO) cuando el
@@ -809,7 +809,7 @@ hoy+5` (la regla 2 de abajo), y `pendiente.block` hace lo mismo si la linea no t
 `--revisar`. Ese dia el pendiente sale en el aviso 🔔 del cierre y, pasada la fecha, vuelve al hilo
 y puede ser `Proximo paso` ("mirar si X ya llego"); `expire-pendientes.py` nunca caduca un
 bloqueado. Antes un bloqueado sin fecha no volvia a salir en ningun lado: medido 2026-10-20, 50 de
-54 bloqueados abiertos en 7 proyectos, y el caso real `p-98a561dc02` de claude-vzert (espera a que
+54 bloqueados abiertos en 7 proyectos, y el caso real `p-0940093a1e` de proyecto-vps (espera a que
 infra instale un plugin y un dev mande un mensaje) cerro con snippet `Ninguno`.
 `checkpoint-audit.py` marca `SALTADO` (`pendientes.bloqueado_sin_fecha`) un `_bloqueado` sin
 `_revisar` listado en `## Pendientes` de la ficha. **Si para que se mueva hace falta que el usuario
@@ -859,7 +859,7 @@ salvo la fecha ya vencida o de hoy de la regla 1, que va sin `--revisar`. Un pen
 tiempo y queda sin `--revisar` no cae en la exclusion de Step 8 (2.25.7) — se
 queda flotando indefinidamente como candidato de `<next-step>` por pura prioridad,
 sin importar que tan pronto sea razonable revisarlo. Caso real (2026-09-16, proyecto
-`claude-vzert`): `p-fd5c8cccb7` ("revisar el log del cron por PUSH FAILED", prioridad Alta, sin
+`proyecto-vps`): `p-d12300e388` ("revisar el log del cron por PUSH FAILED", prioridad Alta, sin
 `--revisar`) gano `<next-step>` el mismo dia que se implemento el cron que monitorea — sin
 actividad de push acumulada todavia el chequeo no tenia con que fallar de verdad — y siguio
 reapareciendo dateless en `Sigue abierto` de una sesion posterior

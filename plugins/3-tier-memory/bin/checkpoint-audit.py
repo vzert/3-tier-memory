@@ -42,7 +42,7 @@ Modos:
   ... --repo-root <ruta>   raiz del repo para el chequeo de commits sin subir (default: cwd)
   ... --no-git             omite el chequeo de git (util en pruebas)
 
-Lee tambien, si existe, `<MEMORY_DIR>/.hilos-externos.json` (2.66.0, `snippet.hilo_externo`):
+Lee tambien, si existe, `<MEMORY_DIR>/.hilos-externos.json` (2.67.0, `snippet.hilo_externo`):
   {"fuentes": [{"nombre": "bandeja", "patron": "<regex; el grupo 1 es el id citado>",
                 "leer": "<comando que imprime el hilo completo; {id} = el id>"}]}
 El audit usa `nombre` y `patron`, y exige que `leer` exista y lleve `{id}`; lo corre el agente (Step
@@ -90,7 +90,7 @@ SECCIONES_OBLIGATORIAS = [
 ]
 
 # El cierre `\b` NO sirve aqui: en `_pendientes.md` el id viene entre guiones bajos de cursiva
-# (`_id: p-481cd4368e_`) y `_` es caracter de palabra, asi que `\b` no casa entre `e` y `_`. Medido
+# (`_id: p-439a5ab2be_`) y `_` es caracter de palabra, asi que `\b` no casa entre `e` y `_`. Medido
 # contra la memoria real de un usuario: con `\b` salian 24 de 189 pendientes abiertos, y el
 # conteo de Step 3a habria mentido por defecto — justo el fallo silencioso que esto audita.
 ID_PENDIENTE = re.compile(r"\bp-[0-9a-f]{10}(?![0-9a-f])")
@@ -175,7 +175,7 @@ DESDE_NINGUNO_PLAN = "2026-10-21"
 # 2.63.32 (espera_viva: un bloqueado con `_revisar` pasado es accionable) no tiene corte: re-auditar
 # una ficha vieja cuyo bloqueado ya vencio puede cambiar las guardias de `ninguno` y `Proximo paso`.
 DESDE_BLOQUEADO_FECHA = "2026-10-20"
-# snippet.hilo_externo (2.66.0): incluye el caso real (2026-10-26).
+# snippet.hilo_externo (2.67.0): incluye el caso real (2026-10-26).
 DESDE_HILOS = "2026-10-26"
 CONFIG_HILOS_ROTA = ("`.hilos-externos.json` no se pudo leer (JSON o regex invalido, sin `fuentes`, o "
                      "una fuente sin `leer` con `{id}`)")
@@ -257,7 +257,7 @@ def seccion_por_prefijo(secs, nombre):
 
 
 def fuentes_hilos(memory_dir):
-    """Fuentes de `<memory>/.hilos-externos.json` (2.66.0): [] si no existe, None si no se lee."""
+    """Fuentes de `<memory>/.hilos-externos.json` (2.67.0): [] si no existe, None si no se lee."""
     p = os.path.join(memory_dir, ".hilos-externos.json")
     if not os.path.isfile(p):
         return []
@@ -910,7 +910,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                               "la fila de cada plan enlazado apunta a esta sesion"))
 
     # 5-bis. Un plan mencionado por su RUTA dentro de `## Como retomar` que `## Plans` no enlaza.
-    # Medido en `claude-vzert` (2026-09-22, PR#238): la ficha escribio `## Plans` con "Ninguno —
+    # Medido en `proyecto-vps` (2026-09-22, PR#238): la ficha escribio `## Plans` con "Ninguno —
     # sin cambios al plan desde el checkpoint anterior", y el propio snippet decia en prosa suelta
     # "el trabajo activo real es la Fase 7 pieza 3... ver memory/plans/plan-....md" en vez de usar
     # el caso 1 de `<next-step>` (que lee el `## Estado` de ESE plan y lo habria dado como accion
@@ -1298,7 +1298,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     # Descripcion completos, fecha futura) no puede reaparecer en la linea `Sigue abierto:` de
     # `## Como retomar` — esa linea es la lista de lo que "sigue abierto y toca retomar", y listar
     # ahi un id que ya tiene su propio recordatorio con fecha duplica la misma informacion en dos
-    # formas. Medido en `claude-vzert` (2026-09-18/19, dos sesiones reales): el mismo id vencia en
+    # formas. Medido en `proyecto-vps` (2026-09-18/19, dos sesiones reales): el mismo id vencia en
     # el bloque de calendario Y volvia a aparecer en `Sigue abierto` del snippet de hoy. La regla
     # de 2.25.7 ("la escalera de `<next-step>` descarta candidatos con `_revisar` futuro") solo
     # mira que ningun id FALTE de esa linea; el check 8 de arriba hereda esa misma direccion —
@@ -1361,7 +1361,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     pp = linea_proximo_paso(sec_retomar)
     if seccion_por_prefijo(secs, "Como retomar") is None:
         # Sin la seccion no hay paso que medir; la ausencia ya la marca `ficha.secciones`.
-        # Contarla aqui tambien la duplicaba (8 fichas de claude-vzert, todas sin seccion).
+        # Contarla aqui tambien la duplicaba (8 fichas de proyecto-vps, todas sin seccion).
         h.append(Hallazgo(HECHO, "snippet.proximo_paso",
                           "la ficha no tiene `## Como retomar` (lo marca ficha.secciones)"))
     elif "<filled in Step 8>" in sec_retomar:
@@ -1371,7 +1371,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     elif "```" not in sec_retomar and not sec_retomar.strip().strip("*").lower().startswith("ninguno"):
         # Sin fence, la unica forma valida es la linea del caso 5 (`Ninguno — …`, Step 8a). Tratar
         # cualquier seccion sin fence como caso 5 dejaba pasar el caso 4 con solo quitarle las
-        # comillas triples (adversario externo, ronda 1, sobre una ficha real de claude-vzert).
+        # comillas triples (adversario externo, ronda 1, sobre una ficha real de proyecto-vps).
         h.append(Hallazgo(SALTADO, "snippet.proximo_paso",
                           "`## Como retomar` no tiene bloque de codigo y no es la linea del caso 5 "
                           "(`Ninguno — …`)",
@@ -1387,7 +1387,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     else:
         problemas = []
         # "nada accionable hoy — …" es la misma forma del caso 5 con otras palabras (medido en
-        # claude-vzert, `verificar-reaper-y-limpiar-default-herdr`): tratarla como paso sin id era
+        # proyecto-vps, `verificar-reaper-y-limpiar-default-herdr`): tratarla como paso sin id era
         # un falso positivo sobre un cierre correcto.
         es_ninguno = pp.lower().startswith(("ninguno", "nada accionable"))
         ids_pp = sorted(set(ID_PENDIENTE.findall(pp)))
@@ -1459,7 +1459,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             # Y solo los que NACIERON en esta sesion (`_origen: [[sessions/<esta ficha>]]`): la
             # seccion `## Pendientes` tambien lista los de otras sesiones que Step 3a reconcilio
             # como still-open, y esos no son "trabajo propio" que el caso 5 tape (medido en
-            # claude-vzert: `verificar-reaper-…` listaba 4 ajenos y salia SALTADO en falso).
+            # proyecto-vps: `verificar-reaper-…` listaba 4 ajenos y salia SALTADO en falso).
             accionables = [i for i in abiertos_ficha
                            if i in ids_abiertos and not espera_viva(i)
                            and origen_por_id.get(i) == slug]
@@ -1649,7 +1649,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
 
     # 8-sexies-bis. `ninguno` con un pendiente de la ficha `_bloqueado` (2.62.11). Una decision del
     # usuario no es un bloqueo: la toma el en la sesion siguiente, con el agente. Caso real
-    # (claude-vzert, 2026-10-16): `p-341fdf5e59` nacio con `--bloqueado-por "decisiones de Victor"`,
+    # (proyecto-vps, 2026-10-16): `p-9a2f3e5c68` nacio con `--bloqueado-por "decisiones de Victor"`,
     # el bloqueo lo saco de `Proximo paso` y el snippet salio `Ninguno`, con las decisiones
     # escondidas. Quien espera el bloqueo es texto libre y no se clasifica (regla 216), asi que el
     # estado es POR-DISENO: checkpoint-close-guard.sh lo pone en la revision del cierre, que bloquea
@@ -1675,7 +1675,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             h.append(Hallazgo(HECHO, "snippet.ninguno_bloqueo",
                               "sin `ninguno` sobre un pendiente `_bloqueado` de la ficha"))
 
-    # 8-sexies-ter. Hilos externos (2.66.0). Un hilo de conversacion que vive fuera de memory/ (una
+    # 8-sexies-ter. Hilos externos (2.67.0). Un hilo de conversacion que vive fuera de memory/ (una
     # bandeja entre agentes, un PR, un issue, un correo) puede tener mensajes que la sesion no vio:
     # la vista que uso estaba filtrada (por destinatario, por estado) y el cierre dijo `ninguno` o
     # armo un recordatorio sobre una premisa ya desmentida en el mismo hilo. Caso real (2026-10-26):
@@ -1810,7 +1810,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     # 8-sexies-quater. Un bloqueado sin fecha (2.63.32). `_bloqueado` saca el pendiente del hilo,
     # de `Proximo paso` y de la caducidad; sin `_revisar` tampoco sale en el recordatorio de
     # calendario, asi que nada lo vuelve a mostrar y "pedirle a X" o "mirar si X ya contesto" se
-    # olvida. Caso real (claude-vzert, 2026-10-20): `p-98a561dc02` bloqueado por "que infra
+    # olvida. Caso real (proyecto-vps, 2026-10-20): `p-0940093a1e` bloqueado por "que infra
     # instale el plugin y un dev mande el mensaje", snippet `Ninguno`, y Victor tuvo que
     # preguntar como se iba a acordar nadie. Medido ese dia: 50 de 54 bloqueados abiertos en 7
     # proyectos, sin `_revisar`. Desde 2.63.32 journal-emit.py pone hoy+5 al bloquear; este

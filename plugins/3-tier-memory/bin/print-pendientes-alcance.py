@@ -4,7 +4,7 @@
 mandar al agente a leer `_pendientes.md` entero (p-206fd62e68).
 
 Por que existe: Step 3-pre decia "THEN read `memory/_pendientes.md`". Con un backlog real eso son
-200-370 KB en contexto en cada cierre (medido 2026-10-21: cloudflare-expert 206 KB con 217 abiertos,
+200-370 KB en contexto en cada cierre (medido 2026-10-21: proyecto-edge 206 KB con 217 abiertos,
 paperclip 371 KB), y el alcance obligatorio de 3a es cerrado: los pendientes que la sesion toco y los
 que traen `_revisar` vencida o de hoy. Lo demas solo se cuenta. Este script imprime exactamente eso.
 

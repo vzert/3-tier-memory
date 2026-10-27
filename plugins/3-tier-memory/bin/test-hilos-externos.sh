@@ -1,5 +1,5 @@
 #!/bin/bash
-# Prueba de 2.66.0: un cierre no puede decir `ninguno` sobre un hilo externo (una bandeja entre
+# Prueba de 2.67.0: un cierre no puede decir `ninguno` sobre un hilo externo (una bandeja entre
 # agentes, un PR, un correo) que la sesion toco sin haberlo leido completo y sin dueno para lo que
 # sigue abierto. Caso real (2026-10-26): la ficha citaba 4 mensajes de un hilo de 14, la vista que
 # uso la sesion filtraba por destinatario, y un mensaje nuevo que pedia una decision antes del corte
