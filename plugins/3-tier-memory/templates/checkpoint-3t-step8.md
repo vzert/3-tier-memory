@@ -14,7 +14,7 @@ calendario existe para evitar — mas ruido que senal. Ver la instruccion altern
 
 **Un pendiente Alta del backlog general (sin relacion con el trabajo de esta sesion) NO es motivo
 para generar el bloque completo cuando el caso 5 aplica.** Caso real (2026-09-17, proyecto
-`claude-vzert`, via `/goalspec:interview`): con 89 pendientes abiertos y 5 en Alta, siempre hay
+`proyecto-vps`, via `/goalspec:interview`): con 89 pendientes abiertos y 5 en Alta, siempre hay
 alguno suelto que calificaria para la antigua linea `Sigue abierto` — la excepcion anterior ("si hay un Alta que
 agregar, bloque completo") volvia inalcanzable el colapso a una linea en la practica, justo cuando
 la sesion no dejo nada accionable hoy (los unicos pendientes de esa sesion tenian `_revisar`
@@ -89,7 +89,7 @@ Reglas para llenar los slots:
      esa accion: pasa a `ninguno — <plan> Fase <N> esta bloqueada hasta <fecha>, ver Recordatorios de calendario`
      (mismo formato de media linea que ya usa la variante de casos 2-3 mas abajo). La regla de mas
      abajo ("la escalera descarta candidatos con `_revisar` futuro") se escribio pensando en casos
-     2-3 y nunca se extendio a este caso 1 — medido en `claude-vzert` (2026-09-18 y 2026-09-21, dos
+     2-3 y nunca se extendio a este caso 1 — medido en `proyecto-vps` (2026-09-18 y 2026-09-21, dos
      sesiones reales): el caso 1 imprimio integro el texto de una `Proxima accion` fechada a futuro
      (el script exacto a correr, la fecha, el criterio), y el snippet pensado para "copia y arranca
      AHORA" termino siendo una copia del recordatorio que Step 8c ya iba a mandar por separado.
@@ -229,8 +229,8 @@ Reglas para llenar los slots:
   lee para generar su propio recordatorio de calendario. Un pendiente asi no es accionable hoy sea
   cual sea su prioridad: tratalo como si el caso no aplicara y sigue cayendo por la escalera (al
   otro candidato del mismo caso si hay mas de uno, o al siguiente caso). Caso real (2026-09-15,
-  proyecto `cloudflare-expert`): el `<next-step>` elegido fue `confirmar el 2026-09-16 que...`
-  sobre `p-b106ce03d9` (`_revisar: 2026-09-16`) — identico al recordatorio de calendario que el
+  proyecto `proyecto-edge`): el `<next-step>` elegido fue `confirmar el 2026-09-16 que...`
+  sobre `p-81ecf29a43` (`_revisar: 2026-09-16`) — identico al recordatorio de calendario que el
   mismo Step 8c genero para esa fecha en la MISMA sesion. Sin esta regla, `Como retomar` es una
   replica del bloque de calendario: no le dice a la sesion siguiente nada que el calendario no
   fuera a decir ya, y un usuario despistado copia el snippet y arranca una sesion sin nada que
@@ -270,8 +270,8 @@ Reglas para llenar los slots:
      pueda avanzar antes de esa fecha. La media-linea de motivo lo dice tal cual, señalando el
      bloque de calendario: `ninguno — lo unico abierto de este hilo tiene fecha futura, ver
      Recordatorios de calendario`. Ejemplo: si la sesion del 2026-09-08 no hubiera dejado el
-     pendiente suelto sin fecha `p-9445bed4b6`, el texto habria sido `ninguno — el snapshot semanal
-     de SQL-LIVE y la confirmacion de N8n-Crons ya tienen su propio recordatorio (09-16, 09-20)`.
+     pendiente suelto sin fecha `p-b0f492844f`, el texto habria sido `ninguno — el snapshot semanal
+     de DB-PROD y la confirmacion de Flujos-Crons ya tienen su propio recordatorio (09-16, 09-20)`.
 
      **Tambien aplica, por la misma razon, cuando el candidato es el caso 1** (plan activo con
      `## Estado`) y su `Proxima accion` espera una fecha futura ya cubierta por el calendario, sin ningun otro pendiente propio de esta sesion que se pueda hacer ya — ver el
@@ -322,7 +322,7 @@ Reglas para llenar los slots:
   `<next-step>` normal: `Proximo paso: decidir con el usuario <que decisiones, y donde estan
   escritas> (p-…)`, una pregunta por decision con su recomendacion. Nunca lleva `_bloqueado:` y
   nunca colapsa el snippet al caso 5: un `Ninguno` que esconde decisiones del usuario le quita la
-  unica forma de verlas (caso real, claude-vzert 2026-10-16, `p-341fdf5e59`). El audit lo avisa en
+  unica forma de verlas (caso real, proyecto-vps 2026-10-16, `p-9a2f3e5c68`). El audit lo avisa en
   `snippet.ninguno_bloqueo` y el hook de cierre lo pregunta en la revision. Desde 2.63.22 el audit
   avisa tambien (`snippet.paso_compartido`, POR-DISEÑO, no suma un rechazo) si otra ficha del mismo
   dia ya deja tu mismo `p-…` como `Proximo paso`: pregunta a esa sesion por SendMessage si lo
@@ -358,15 +358,15 @@ Reglas para llenar los slots:
   respondio/actuo"**, cuando X es un agente, persona o proceso FUERA de esta sesion (un peer, un
   mantenedor ajeno, un PR de otro repo, OTRA instalacion que tiene que actualizar algo). Escribirlo
   como si fuera un paso accionable le hace perder tiempo a quien lo lea despues. Dos casos reales:
-  2026-09-14, "revisar si goal-spec-skill-7d respondio" en vez del caso 5, `ninguno`; 2026-09-22,
-  esta misma sesion (`2026-09-22-snippet-cierre-regresion-claude-vzert`) promovio a `Proximo paso`
+  2026-09-14, "revisar si proyecto-spec-7d respondio" en vez del caso 5, `ninguno`; 2026-09-22,
+  esta misma sesion (`2026-09-22-snippet-cierre-regresion-proyecto-vps`) promovio a `Proximo paso`
   un pendiente formulado como "verificar... una vez OTRA instalacion actualice el plugin" — mismo
   defecto, palabras distintas, sin la frase literal "revisar si X respondio" que la version
   anterior de esta regla buscaba. El usuario lo senalo en vivo, en el propio cierre del cambio que
   arreglaba justo esta clase de fallo en otro proyecto. El seguimiento no es una linea de este
   snippet: es el `_revisar` del pendiente bloqueado (2.63.32). Ese dia sale en el aviso 🔔 del
   cierre y, pasada la fecha, vuelve al hilo como "mirar si X ya llego". Sin esa fecha el pendiente
-  no volvia a salir nunca (caso real `p-98a561dc02`, claude-vzert 2026-10-20).
+  no volvia a salir nunca (caso real `p-0940093a1e`, proyecto-vps 2026-10-20).
 
   Incluye aqui los umbrales o criterios que ya se acordaron en esta sesion (un numero, un limite,
   una condicion de exito), si los hay. Sin ellos la sesion siguiente los vuelve a negociar contigo.

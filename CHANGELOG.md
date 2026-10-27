@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.66.2] - 2026-10-27
+## [2.67.1] - 2026-10-27
 El CI de main tras el merge de #80 (2.66.0) salio rojo en `platforms` / windows-latest:
 `test-migrar-tier2` pass=43 fail=3 (corrida 40520030467). ubuntu y macOS, verdes.
 
@@ -12,6 +12,18 @@ El CI de main tras el merge de #80 (2.66.0) salio rojo en `platforms` / windows-
 - `test-migrar-tier2.sh`, `test-pendiente-adopt.sh`, `test-update-puente.sh`: sha256 por Python en vez
   de `shasum`, que no existe en Git Bash. Ahi los asertos "no escribe nada" / "no cambia nada"
   comparaban vacio con vacio y pasaban siempre.
+
+## [2.66.2] - 2026-10-27
+Origen: p-b4cac6d698. El repo es publico, y sus archivos actuales llevaban ids de pendientes nacidos en
+otros proyectos y nombres de proyectos privados del autor, como ejemplos de casos reales.
+
+### Fixed
+- Codigo, pruebas, fixtures y plantillas usan nombres de proyecto e ids inventados con la misma forma:
+  10 ids y unas 150 menciones en 35 archivos. Sin cambio de comportamiento: solo cambian comentarios,
+  textos de prueba y fixtures; las suites de los archivos cambiados pasan.
+- Fuera de este cambio, por decision del dueno del repo: las entradas viejas de este CHANGELOG, y los nombres
+  que el codigo usa para funcionar (la variable de entorno de Paperclip, la ruta de estado de lookout,
+  la URL de instalacion). El historial de git no se reescribe: lo viejo sigue legible por SHA.
 
 ## [2.66.1] - 2026-10-27
 Dos huecos por los que un pendiente nacido en una sesion seguia en el hilo de la siguiente solo por

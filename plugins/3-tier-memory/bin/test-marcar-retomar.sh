@@ -223,7 +223,7 @@ chk "la linea no cambio" "0" "$(linea "$A" | grep -c '_retomar:')"
 chk "y no se partio (sin una linea suelta '_')" "0" "$(grep -c '^_$' "$M/_pendientes.md" || true)"
 
 # 2.63.42: la sesion que retomo el snippet de otra ficha consume su marca, aunque su paso nuevo
-# caiga en otro pendiente (caso real de cloudflare-expert, 2026-10-22: la ficha de la Fase 4 retomo
+# caiga en otro pendiente (caso real de proyecto-edge, 2026-10-22: la ficha de la Fase 4 retomo
 # la de la Fase 3, marco otro pendiente y la marca vieja siguio en PLANES ACTIVOS del mod).
 sellar() {  # sellar SLUG "hilo_paso" "hilo_retoma" — agrega el sello de stamp-hilo.py
   python3 -I - "$M/sessions/$1.md" "$2" "$3" <<'PY'

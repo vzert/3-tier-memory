@@ -1,6 +1,6 @@
-Retomamos: Dos regresiones reales del snippet Como retomar en claude-vzert, confirmadas en su JSONL.
+Retomamos: Dos regresiones reales del snippet Como retomar en proyecto-vps, confirmadas en su JSONL.
 
-Lee memory/sessions/2026-09-22-snippet-cierre-regresion-claude-vzert.md para el contexto completo.
+Lee memory/sessions/2026-09-22-snippet-cierre-regresion-proyecto-vps.md para el contexto completo.
 
 Proximo paso: revisar _pendientes.md y proponer siguiente prioridad — esta sesion no dejo un paso propio accionable hoy; su unico pendiente sin fecha (p-a4439fa8fd) esta condicionado a que otra instalacion actualice el plugin, no a trabajo de esta sesion.
 

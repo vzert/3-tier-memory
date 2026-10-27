@@ -2,13 +2,13 @@
 # Regresion: journal-compact.py repara la tabla '## Sessions' de una instalacion vieja con cabecera
 # de 4 columnas (sin 'Commit'). v2.31.4.
 #
-# Motivacion real: Will-Ops (2026-09-21, hallazgo de Codex). Con 4 columnas, find_row_anywhere
+# Motivacion real: Demo-Ops (2026-09-21, hallazgo de Codex). Con 4 columnas, find_row_anywhere
 # (que exige 5) no encontraba la fila de la sesion y cada session.add insertaba otra: dos filas por
 # sesion, y la poda de MAX_SESSIONS (cuenta filas) dejaba el indice en 5 sesiones en vez de 10.
 #
 # Casos:
 #   1. Cabecera de 4: el segundo session.add de la misma sesion actualiza la fila, no inserta otra.
-#   2. Duplicados ya existentes (la forma exacta de Will-Ops): el siguiente session.add, de OTRA
+#   2. Duplicados ya existentes (la forma exacta de Demo-Ops): el siguiente session.add, de OTRA
 #      sesion, los junta — gana la fila de arriba celda por celda, sin perder el commit.
 #   3. La poda cuenta sesiones de verdad: 12 sesiones duplicadas -> quedan las 10 mas nuevas.
 #   4. Idempotencia: compactar un evento sin cambios no vuelve a escribir el archivo.
@@ -17,9 +17,9 @@
 #      repetidas), grupo con fila de 6 celdas.
 #   7. Dos sesiones DISTINTAS cuyo Resumen cita la misma sesion no se juntan: la sesion se lee de
 #      la celda Sesion, no del resto de la fila (ronda 1 de adversario, unsafe).
-#   8. Tabla en orden ascendente (forma de Vecinex): el duplicado que el bug inserto arriba gana,
+#   8. Tabla en orden ascendente (forma de Vecindad): el duplicado que el bug inserto arriba gana,
 #      aunque el resto de la tabla vaya de vieja a nueva.
-#   9. Un session.add para una sesion que otra fila CITA en su Resumen (forma de unifi-expert,
+#   9. Un session.add para una sesion que otra fila CITA en su Resumen (forma de proyecto-red,
 #      con la fila que cita ARRIBA) actualiza la fila de la sesion, no la que la cita (ronda 2).
 #   10. Tabla de 4 columnas (forma vieja, por nombre) bajo OTRO titulo: se adopta como
 #       '## Sessions', gana Commit y el session.add de una sesion que ya tenia fila la actualiza
@@ -60,7 +60,7 @@ grep -q 'una\]\] | con pendientes | resumen | `abc1234` |$' "$IDX" || fail "la f
 grep -q 'texto que no se toca' "$IDX" || fail "se perdio contenido fuera de la tabla"
 [ "$FAIL" = 0 ] && echo "  ok"
 
-echo "== caso 2: duplicados existentes (forma de Will-Ops) =="
+echo "== caso 2: duplicados existentes (forma de Demo-Ops) =="
 rm -rf "$M/.journal"; head4
 {
   echo '| 2026-09-19 | [[sessions/2026-09-19-b\|b]] |  |  | `bbb2222` |'
@@ -152,7 +152,7 @@ grep -q '^| 2026-09-10 | sesion-p (sin enlace) | completada | sigue a \[\[sessio
 grep -q '^| 2026-09-09 | sesion-q (sin enlace) | completada | tambien cita \[\[sessions/2026-09-01-ref\]\] | `q1` |$' "$IDX" || fail "q desaparecio (se junto con p por el enlace del Resumen)"
 [ "$FAIL" = 0 ] && echo "  ok"
 
-echo "== caso 8: tabla ascendente (forma de Vecinex) con un duplicado del bug arriba =="
+echo "== caso 8: tabla ascendente (forma de Vecindad) con un duplicado del bug arriba =="
 rm -rf "$M/.journal"; head4
 {
   echo '| 2026-03-22 | [[sessions/2026-03-22-k\|k]] |  |  | `k99` |'
@@ -168,7 +168,7 @@ ORDEN=$(grep -o 'sessions/2026-0[39]-[0-9]*-[a-z]' "$IDX" | tr '\n' ' ')
 [ "$ORDEN" = "sessions/2026-09-12-m sessions/2026-03-22-k sessions/2026-03-21-j sessions/2026-03-29-l " ] || fail "orden: $ORDEN"
 [ "$FAIL" = 0 ] && echo "  ok"
 
-echo "== caso 9: el Resumen de otra fila cita la sesion (forma de unifi-expert) =="
+echo "== caso 9: el Resumen de otra fila cita la sesion (forma de proyecto-red) =="
 rm -rf "$M/.journal"; head4
 {
   echo '| 2026-08-02 | [[sessions/2026-08-02-build]] | completada | validacion completada en [[sessions/2026-08-02-skill]] | `2af581f` |'

@@ -96,7 +96,7 @@ def fecha_futura(texto, hoy):
 # limpio. Se busca sin tildes.
 # `decidir con el usuario` dejo de ser senal en 2.62.11: es la forma que Step 8 pide para el paso que
 # pone delante una decision del usuario, y el aviso le decia al agente que lo bloqueara, que es justo
-# como el snippet salio `Ninguno` en claude-vzert (p-341fdf5e59). `decidir con <otro>` sigue siendo
+# como el snippet salio `Ninguno` en proyecto-vps (p-9a2f3e5c68). `decidir con <otro>` sigue siendo
 # senal: puede ser un tercero, y el aviso ya dice que una decision del usuario no es espera. Un
 # `usuario` con apellido (`usuario externo`, `usuario final`, `usuario-final`, `usuario del
 # cliente`) es un tercero y sigue avisando. Un complemento que no nombra a otro (`usuario de la

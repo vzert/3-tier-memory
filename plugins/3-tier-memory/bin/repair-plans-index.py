@@ -6,7 +6,7 @@
 `Fecha | Plan | Status | Resumen`. Desde v2.12.0 `apply_plan_upsert` (journal-compact.py) escribe
 SIEMPRE 6 columnas (`pad(split_cells(...), 6)` sobre `Plan | Status | Fecha | Sesion | Pendientes
 | Learnings`, ver TABLE_COLUMNS["## Plans"]) sin mirar la cabecera existente. Medido en una
-instalacion real (claude-vzert, referenciado en p-04acf30315/p-baa546ddac): una cabecera vieja de
+instalacion real (proyecto-vps, referenciado en p-04acf30315/p-baa546ddac): una cabecera vieja de
 4 columnas convivia con filas nuevas de 6 escritas por el journal — un humano leyendo la tabla
 malinterpreta las columnas de cualquier fila nueva, y `apply_plan_upsert` ya documenta (ver su
 comentario junto a `find_plan_rows`) que un indice de formato mixto puede volverse ciego a una fila

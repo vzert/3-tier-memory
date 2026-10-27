@@ -4,7 +4,7 @@
 #
 # Motivacion real (2026-09-21, medido en 12 instalaciones): find_research_row buscaba el wikilink
 # `[[research/<slug>]]` en toda la fila, asi que una fila que CITABA el research pasaba por la suya:
-# un update le pisaba celdas y un `completed` la BORRABA de Active. cloudflare-expert:25 lo tiene
+# un update le pisaba celdas y un `completed` la BORRABA de Active. proyecto-edge:25 lo tiene
 # vivo. Tres reglas por la forma de la fila (el enlace abre la celda; un solo dueno; Archivo
 # primero) rompieron una por ronda de adversario, siempre con una fila construida. La regla final
 # no clasifica mejor: acota la consecuencia.
@@ -15,7 +15,7 @@
 # Casos (ultima columna Archivo/File):
 #   1. Fila activa que cita X en su Next step: `completed` de X no la borra ni la toca.
 #   2. Cita arriba y fila propia abajo (Completed): el update llega a la propia.
-#   4. Archivo decorado (`[[research/x]] · sesion: ...`, forma de cloudflare-expert:33): se
+#   4. Archivo decorado (`[[research/x]] · sesion: ...`, forma de proyecto-edge:33): se
 #      actualiza, no se duplica.
 #   5. `_completado:` en Archivo: se actualiza, no se duplica.
 #   6. Fila `(inline)`: el fallback por titulo sigue funcionando.
@@ -25,9 +25,9 @@
 #      sin duplicarse.
 #  10. Fila `(inline)` de otro tema que cita X al inicio de una celda: no se borra.
 #  12. Archivo vacio, o solo con `_completado:`, y una cita que abre su celda: no se borra.
-#  13. Forma de cloudflare-expert:25 (Topic | Status | File, la fila de A cita a B en prosa): la
+#  13. Forma de proyecto-edge:25 (Topic | Status | File, la fila de A cita a B en prosa): la
 #      ultima columna es File, asi que `completed` de B no toca la fila de A y B entra en Completed.
-#  15. Tabla vieja con File al final (forma de goal-spec-skill, `Topic | Started | Sesion | File`):
+#  15. Tabla vieja con File al final (forma de proyecto-spec, `Topic | Started | Sesion | File`):
 #      un research nuevo entra, y su `completed` lo saca de Active sin cuarentena.
 #  20. Madurar de Active a Completed preserva lo que el Archivo trae mas alla del enlace desnudo
 #      (decoracion, o texto plegado por repair-research-index.py) — antes se perdia siempre, la
@@ -63,7 +63,7 @@
 #      del cierre roto y el `\]]` escapado de la decoracion son indistinguibles para cualquier
 #      regex; `[^\]]*` los trata igual: ambos hacen fallar el match).
 # Casos (otra ultima columna: solo lectura):
-#   3. Enlace propio en la celda 0 (forma de seedance-generator, `Slug | Topic | Fecha | Sesion`):
+#   3. Enlace propio en la celda 0 (forma de proyecto-video-generator, `Slug | Topic | Fecha | Sesion`):
 #      no se duplica; como el evento pide cambiarla, cuarentena y archivo intacto.
 #  11. Ultima columna "Related research": `completed` del research relacionado no borra la fila;
 #      cuarentena.
@@ -128,7 +128,7 @@ has '| X2 | nuevo | [[research/x2]] _completado: 2026-09-02_ |' || fail "la fila
 [ "$(count '[[research/x2]] _completado')" = 1 ] || fail "X2 se duplico"
 [ "$FAIL" = 0 ] && echo "  ok"
 
-echo "== caso 3: tabla vieja, enlace en la celda 0 (forma de seedance-generator) =="
+echo "== caso 3: tabla vieja, enlace en la celda 0 (forma de proyecto-video-generator) =="
 rm -rf "$M/.journal"
 printf -- '---\ntype: index\n---\n## Active Research\n\n| Slug | Topic | Fecha | Sesion |\n|---|---|---|---|\n| [[research/z0]] | Z0 | 2026-04-20 | s |\n\n## Completed Research\n\n| Tema | Resultado | Archivo |\n|---|---|---|\n' > "$IDX"
 emit --slug z0 --tema "Z0" --status active --next-step "paso nuevo" --origen "[[sessions/s]]"
@@ -136,7 +136,7 @@ compact_quarantine
 [ "$(count '[[research/z0]]')" = 1 ] || fail "Z0 se duplico"
 [ "$FAIL" = 0 ] && echo "  ok"
 
-echo "== caso 4: Archivo decorado (forma de cloudflare-expert:33) =="
+echo "== caso 4: Archivo decorado (forma de proyecto-edge:33) =="
 canon "" "| W | r | [[research/w-deco]] · sesion: [[sessions/2026-07-25-x]] |
 "
 emit --slug w-deco --tema "W" --status completed --resultado "r2" --date 2026-09-21
@@ -229,10 +229,10 @@ has '| Y12c | [[research/x12c]] es requisito | _completado: 2026-09-20_ |' || fa
 has '| X12c | hecho | [[research/x12c]] _completado: 2026-09-21_ |' || fail "X12c no entro en Completed"
 [ "$FAIL" = 0 ] && echo "  ok"
 
-echo "== caso 13: forma de cloudflare-expert:25 =="
+echo "== caso 13: forma de proyecto-edge:25 =="
 rm -rf "$M/.journal"
-printf -- '---\ntype: index\n---\n## Active Research\n\n| Topic | Status | File |\n|---|---|---|\n| Acceso a SQL-LIVE | En progreso, ver [[research/b13]] | [[research/a13]] |\n\n## Completed Research\n\n| Tema | Resultado | Archivo |\n|---|---|---|\n' > "$IDX"
-A13='| Acceso a SQL-LIVE | En progreso, ver [[research/b13]] | [[research/a13]] |'
+printf -- '---\ntype: index\n---\n## Active Research\n\n| Topic | Status | File |\n|---|---|---|\n| Acceso a DB-PROD | En progreso, ver [[research/b13]] | [[research/a13]] |\n\n## Completed Research\n\n| Tema | Resultado | Archivo |\n|---|---|---|\n' > "$IDX"
+A13='| Acceso a DB-PROD | En progreso, ver [[research/b13]] | [[research/a13]] |'
 emit --slug b13 --tema "B13" --status completed --resultado "hecho" --date 2026-09-21
 compact
 has "$A13" || fail "la fila de A se borro o se altero"
