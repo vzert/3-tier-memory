@@ -13,6 +13,10 @@
 # Cada mutador imprime cuantas sustituciones hizo; CERO significa SIN PROBAR, no aprobado.
 #
 # Uso:  tools/mutation-check.sh        (exit 0 = todas discriminan)
+#       MUT_SOLO='<regex ERE>' tools/mutation-check.sh   solo los casos cuya etiqueta casa
+#       (p-3a58571ac9). Sirve para ver caer los casos nuevos sin correr los 440; la corrida completa
+#       sigue siendo la que vale antes de un PR. Si no casa con ningun caso, sale con error: un
+#       "DISCRIMINAN (de 0)" pareceria verde sin haber probado nada.
 # Entra en el runner, y un arnes que nadie corre se pudre. En serie tardaba 41 min en ubuntu con 236
 # casos (2026-10-14; ~2,5 min con 24 el 2026-09-29): el CI lo corre con MUT_JOBS=4. Si una mutacion deja de aplicarse porque el fuente cambio, esto se pone ROJO con
 # "SIN PROBAR" y hay que actualizar el mutador — no es ruido, es que el arnes dejo de verificar lo
@@ -95,6 +99,7 @@ if [ "$JOBS" -gt 1 ] && [ -z "${MUT_SHARD:-}" ]; then
   rm -rf "$W"
   echo
   if [ "$MALAS" -gt 0 ]; then echo "TANDAS ROTAS: $MALAS de $JOBS"; exit 1; fi
+  if [ "$T" -eq 0 ] && [ -n "${MUT_SOLO:-}" ]; then echo "MUT_SOLO NO CASA CON NINGUN CASO: «$MUT_SOLO»"; exit 1; fi
   if [ "$P" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $T)"; else echo "SIN ACLARAR: $P de $T"; fi
   exit $(( P > 0 ))
 fi
@@ -105,9 +110,16 @@ mio() {
   [ -z "${MUT_SHARD:-}" ] && return 0
   [ $(( IDX % ${MUT_SHARD#*/} )) -eq "${MUT_SHARD%/*}" ]
 }
+# 0 si el caso entra en MUT_SOLO (o no hay filtro). Va DESPUES de mio(): el reparto por tandas
+# sigue contando todos los casos, asi que el filtro no cambia que tanda corre cada uno.
+solo() {
+  [ -z "${MUT_SOLO:-}" ] && return 0
+  printf '%s\n' "$1" | grep -qE -- "$MUT_SOLO"
+}
 
 caso() {  # etiqueta | fichero a mutar | mutador | suite | aserto que DEBE caer | [arg del mutador]
   mio || return 0
+  solo "$1" || return 0
   local et="$1" f="$2" m="$3" suite="$4" espera="$5" arg="${6:-}"
   local D; D=$(mktemp -d)/bin; mkdir -p "$D"; cp "$SRC"/* "$D/" 2>/dev/null
   # templates/ y commands/ junto a bin/, como en el plugin: test-project-dir-fallback.sh recorre el
@@ -152,6 +164,7 @@ caso() {  # etiqueta | fichero a mutar | mutador | suite | aserto que DEBE caer 
 # la suite de tools/ con RUN_TESTS (u otra variable, la 7a) apuntando a la copia.
 caso_tools() {  # etiqueta | fichero de tools/ | mutador | suite de tools/ | aserto | arg | [variable]
   mio || return 0
+  solo "$1" || return 0
   local et="$1" f="$2" m="$3" suite="$4" espera="$5" arg="${6:-}" var="${7:-RUN_TESTS}"
   local D; D=$(mktemp -d); cp "tools/$f" "$D/$f"
   TOTAL=$(( TOTAL + 1 ))
@@ -481,6 +494,14 @@ caso "tamano sin bytes"            print-tier2-tamano.py m_tier2_limites.py test
 caso "puente casa todo"            update-puente.py m_tier2_limites.py test-update-puente.sh "sin salida" puente-casa-todo
 caso "puente sin copia"            update-puente.py m_tier2_limites.py test-update-puente.sh "deja copia identica" puente-sin-copia
 caso "puente dry-run escribe"      update-puente.py m_tier2_limites.py test-update-puente.sh "dry-run: no escribe" puente-dry-escribe
+# migrar-tier2.py (2.66.0, p-206fd62e68 propuesta f): el texto largo ya escrito pasa a Tier 3 sin perderse.
+caso "migrar dry-run escribe"      migrar-tier2.py m_migrar_tier2.py test-migrar-tier2.sh "dry-run: no escribe nada" dry-escribe
+caso "migrar con pending"          migrar-tier2.py m_migrar_tier2.py test-migrar-tier2.sh "se niega \(rc=1\)" sin-negativa-pending
+caso "migrar sin respaldo"         migrar-tier2.py m_migrar_tier2.py test-migrar-tier2.sh "respaldo de _pendientes.md antes de escribir" sin-respaldo
+caso "migrar no escribe destino"   migrar-tier2.py m_migrar_tier2.py test-migrar-tier2.sh "topic.md: el QR va como cita al final" no-escribe-destino
+caso "migrar vineta pisa detalle"  migrar-tier2.py m_migrar_tier2.py test-migrar-tier2.sh "P1: la fila mensual lleva el detalle entero" subvineta-pisa-detalle
+caso "migrar pierde prosa"         migrar-tier2.py m_migrar_tier2.py test-migrar-tier2.sh "P2: fila nueva en 2026-09 con texto y prosa" pierde-prosa
+caso "migrar titulo sin recorte"   migrar-tier2.py m_migrar_tier2.py test-migrar-tier2.sh "queda solo la linea larga de P3" titulo-sin-recorte
 caso "ninguno plan sin prefijo"  checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "ligado con plan-<nombre>" plan-sin-prefijo
 caso "ninguno plan enlace"       checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "forma \[\[\.\./plans" plan-enlace-estricto
 caso "ninguno plan sin corte"    checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "antes de 2.63.33" plan-sin-corte
@@ -687,7 +708,13 @@ caso_tools "cualquiera es antecesor" mutation-check.sh m_mutation_check.py test-
 caso_tools "SKIP tapa FALLA en caso" mutation-check.sh m_mutation_check.py test-mutation-filtro.sh "caso: SKIP y FALLA del mismo aserto" skip-tapa-falla-caso MUTATION_CHECK
 caso_tools "SKIP tapa FALLA en tools" mutation-check.sh m_mutation_check.py test-mutation-filtro.sh "caso_tools: SKIP y FALLA del mismo aserto" skip-tapa-falla-tools MUTATION_CHECK
 caso_tools "se relanza sin fin"    mutation-check.sh m_mutation_check.py test-run-tests.sh "un relanzado que no ve el candado no se relanza sin fin" relanza-sin-fin MUTATION_CHECK
+# p-3a58571ac9: MUT_SOLO filtra por etiqueta.
+caso_tools "MUT_SOLO no filtra"    mutation-check.sh m_mutation_check.py test-mutation-filtro.sh "MUT_SOLO: un caso que no casa no corre" solo-no-filtra MUTATION_CHECK
 
 echo
+# En una tanda no: otra tanda puede tener los casos que casan; lo decide el agregador de arriba.
+if [ "$TOTAL" -eq 0 ] && [ -n "${MUT_SOLO:-}" ] && [ -z "${MUT_SHARD:-}" ]; then
+  echo "MUT_SOLO NO CASA CON NINGUN CASO: «$MUT_SOLO»"; exit 1
+fi
 if [ "$PEND" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $TOTAL)"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi
 exit $(( PEND > 0 ))
