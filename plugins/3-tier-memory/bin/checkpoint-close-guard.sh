@@ -1323,7 +1323,8 @@ else:
                 + "\n".join(f"- {a}" for a in avisos_ajeno))
         if avisos_hilo:
             partes.append(
-                "Editaste un plan, handoff o ficha con pendientes abiertos y no actualizaste ninguno "
+                "Editaste un plan, handoff o ficha con pendientes abiertos y no actualizaste ninguno, o tu "
+                "edicion nombra un pendiente del grupo que no tocaste aunque si tocaste otro "
                 "(checkpoint-audit.py pendientes.hilo_sin_reconciliar; no bloquea, cruza por ids). Un "
                 "pendiente cuyo hecho ya cambio sigue diciendo lo viejo y mandara a otra sesion a "
                 "repetirlo. Relee cada uno: `pendiente.update` si su texto quedo falso, "

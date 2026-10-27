@@ -19,12 +19,18 @@ minutos antes del snippet.
 
 `hilos_sin_reconciliar(transcript, pendientes, ficha_propia)` (2.64.0): pendientes abiertos ligados a un
 plan, handoff o ficha que la sesion edito, cuando la sesion no corrigio ni cerro NINGUNO de ese
-grupo (`pendiente.update`/`resolve`, en el cierre o fuera) ni creo uno nuevo que NOMBRE el grupo (su
+grupo (o, desde 2.65.0, el que la edicion nombra y la sesion no toco; ver abajo) (`pendiente.update`/`resolve`, en el cierre o fuera) ni creo uno nuevo que NOMBRE el grupo (su
 plan, su handoff o su ficha en el comando; un `pendiente.add` suelto no cuenta). Caso que la motivo (otro
 proyecto, 2026-10-24): el hecho que volvia falso un pendiente (un servidor ya parchado) vivio en el
 plan y en otra ventana, y el texto del pendiente siguio diciendo lo viejo hasta que un 🔔 lo destapo.
-Medido por el revisor: en ese caso la sesion tambien actualizo OTRO pendiente del mismo plan, asi que
-este aviso (que se apaga por grupo en cuanto se toca uno) NO lo habria disparado.
+Medido por el revisor: en ese caso la sesion tambien actualizo OTRO pendiente del mismo plan, y hasta
+2.64.2 este aviso (que se apaga por grupo en cuanto se toca uno) NO lo disparaba. Desde 2.65.0 un
+pendiente del grupo cuyo id aparece en el texto de la edicion (old/new de Edit o MultiEdit; el
+comando Bash que escribe el plan, si no nombra tambien una ficha) sale aunque otro del grupo se haya
+tocado, salvo que la sesion lo actualizo, cerro o bloqueo. Replay del incidente: 1 id, el que quedo
+falso (`tools/replay-aviso-b-id-nombrado.py`). Un Write no aporta ids: reescribe el archivo entero y
+nombraria todos (medido: era casi todo el ruido de fichas, sobre todo la ficha que la misma sesion
+escribio en un cierre anterior); un plan reescrito con Write solo lo ve la regla de grupo.
 Solo cruza por ids y campos (`_relacionado`, `_origen`, la ruta del handoff en el texto), nunca
 palabras; no ve un hecho que nadie escribio en un plan/handoff/ficha. Una edicion por Bash cuenta si el
 comando nombra `memory/plans/<plan>.md` y trae una forma de escritura (`>`, `tee`, `sed -i`, `open(`,
@@ -55,6 +61,8 @@ MANTENIMIENTO = re.compile(r"--type[\s=]+pendiente\.(relate|block|window|retomar
 # Eventos que si lo son: corregir su texto o cerrarlo.
 TRABAJO = re.compile(r"--type[\s=]+pendiente\.(update|resolve)\b")
 ALTA = re.compile(r"--type[\s=]+pendiente\.add\b")
+# Para la regla por id nombrado (2.65.0): bloquear tambien reconcilia el pendiente que se nombra.
+BLOQUEO = re.compile(r"--type[\s=]+pendiente\.block\b")
 HERRAMIENTAS_ACCION = ("Bash", "Edit", "Write", "MultiEdit", "NotebookEdit")
 # Copias de checkpoint-close-guard.sh (TAG_CHECKPOINT, INYECTADO): el guard es un heredoc, no un
 # modulo importable.
@@ -252,6 +260,7 @@ ESCRIBE = re.compile(r"(?<![\d&>])>(?![&>]?\s*/dev/null)|\btee\b|sed\s+-i|\bopen
 PLAN_RUTA = re.compile(r"/memory/plans/([^/]+)\.md$")
 FICHA_RUTA = re.compile(r"/memory/sessions/([^/]+)\.md$")
 EDICION = ("Edit", "Write", "MultiEdit")
+BASH_FICHA = re.compile(r"memory/sessions/[\w.-]+\.md")
 ID_PEND = re.compile(r"\bp-[0-9a-f]{10}(?![0-9a-f])")
 
 
@@ -263,7 +272,8 @@ def hilos_sin_reconciliar(transcript, pendientes, ficha_propia=None):
     regs = [r for _, r in _registros(transcript)] if transcript else []
     if not regs:
         return None
-    rutas, tocados_ids, altas = [], set(), []
+    rutas, tocados_ids, bloqueados_ids, altas = [], set(), set(), []
+    nombrados = []  # (ruta, ids que nombra el texto de la edicion)
     for r in regs:
         if r.get("type") != "assistant":
             continue
@@ -272,17 +282,26 @@ def hilos_sin_reconciliar(transcript, pendientes, ficha_propia=None):
                 continue
             inp = b.get("input") or {}
             if b.get("name") in EDICION:
-                rutas.append((inp.get("file_path") or "").replace("\\", "/"))
+                ruta = (inp.get("file_path") or "").replace("\\", "/")
+                rutas.append(ruta)
+                txt = " ".join(str(inp.get(k) or "") for k in ("old_string", "new_string"))
+                txt += " ".join(str(e.get("old_string") or "") + " " + str(e.get("new_string") or "")
+                                for e in inp.get("edits") or [] if isinstance(e, dict))
+                nombrados.append((ruta, set(ID_PEND.findall(txt))))
             elif b.get("name") == "Bash":
                 cmd = str(inp.get("command", ""))
                 if TRABAJO.search(cmd):
                     tocados_ids |= set(ID_PEND.findall(cmd))
+                if BLOQUEO.search(cmd):
+                    bloqueados_ids |= set(ID_PEND.findall(cmd))
                 if ALTA.search(cmd):
                     altas.append(cmd)
                 for pl in BASH_PLAN.findall(cmd):
                     if ESCRIBE.search(cmd):
                         rutas.append("/memory/plans/" + pl + ".md")
-    grupos = {}
+                        if not BASH_FICHA.search(cmd):
+                            nombrados.append(("/memory/plans/" + pl + ".md", set(ID_PEND.findall(cmd))))
+    grupos, rutas_grupo = {}, {}
     propia = (ficha_propia or "").rsplit("/", 1)[-1]
     propia = propia[:-3] if propia.endswith(".md") else propia
     for ruta in rutas:
@@ -292,16 +311,25 @@ def hilos_sin_reconciliar(transcript, pendientes, ficha_propia=None):
             claves = {slug, "plan-" + slug}
             ids = [p["id"] for p in pendientes if claves & set(p.get("rel") or ())]
             grupos.setdefault("plan " + slug, ids)
+            rutas_grupo.setdefault(ruta, "plan " + slug)
             continue
         m = FICHA_RUTA.search(ruta)
         if m and m.group(1) != propia:
             ids = [p["id"] for p in pendientes if (p.get("origen") or "").rsplit("/", 1)[-1] == m.group(1)]
             grupos.setdefault("ficha " + m.group(1), ids)
+            rutas_grupo.setdefault(ruta, "ficha " + m.group(1))
             continue
         if "/handoffs/" in ruta and ruta.endswith(".md"):
             base = os.path.basename(ruta)
             ids = [p["id"] for p in pendientes if base in (p.get("texto") or "")]
             grupos.setdefault("handoff " + base, ids)
+            rutas_grupo.setdefault(ruta, "handoff " + base)
+    en_texto = {}
+    for ruta, ids_txt in nombrados:
+        g = rutas_grupo.get(ruta)
+        if g:
+            en_texto.setdefault(g, set()).update(ids_txt)
+    reconciliados = tocados_ids | bloqueados_ids
     out = []
     for g, ids in grupos.items():
         tipo, _, nombre = g.partition(" ")
@@ -309,4 +337,8 @@ def hilos_sin_reconciliar(transcript, pendientes, ficha_propia=None):
         nombra = any(k in cmd for cmd in altas for k in claves)
         if ids and not nombra and not (set(ids) & tocados_ids):
             out.append((g, ids))
+            continue
+        sueltos = [i for i in ids if i in en_texto.get(g, ()) and i not in reconciliados]
+        if sueltos:
+            out.append((g, sueltos))
     return out
