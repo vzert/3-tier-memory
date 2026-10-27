@@ -21,7 +21,8 @@ T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 pass=0; fail=0
 unset CLAUDE_CODE_SESSION_ID
 chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: esperaba '$2', salio '$3'"; fi; }
-# sha256 por Python: `shasum` no existe en Git Bash, y ahi las dos llamadas daban "" y un
+# sha256 por Python: el Git Bash del runner windows-latest no trae `shasum` (corrida
+# 40520030467), y ahi las dos llamadas daban "" y un
 # "no cambia nada" pasaba comparando vacio con vacio.
 hash_() { python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'; }
 

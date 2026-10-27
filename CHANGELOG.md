@@ -10,7 +10,8 @@ El CI de main tras el merge de #80 (2.66.0) salio rojo en `platforms` / windows-
 - `test-migrar-tier2.sh`: las rutas del `python3 -c` del aserto del `\|` escapado van por argv; dentro
   del codigo MSYS no las convierte y Windows no abria `D:\d/a/...`.
 - `test-migrar-tier2.sh`, `test-pendiente-adopt.sh`, `test-update-puente.sh`: sha256 por Python en vez
-  de `shasum`, que no existe en Git Bash. Ahi los asertos "no escribe nada" / "no cambia nada"
+  de `shasum`, que el Git Bash del runner windows-latest no trae ("shasum: command not found" en la
+  corrida 40520030467). Ahi los asertos "no escribe nada" / "no cambia nada"
   comparaban vacio con vacio y pasaban siempre.
 
 ## [2.67.0] - 2026-10-27

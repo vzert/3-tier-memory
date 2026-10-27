@@ -25,7 +25,8 @@ M="$T/m"; mkdir -p "$M/pendientes" "$M/learnings" "$M/research"
 emit() { python3 "$BIN/journal-emit.py" --memory-dir "$M" "$@"; }
 compact() { python3 "$BIN/journal-compact.py" --memory-dir "$M" --quiet >/dev/null 2>&1; }
 migrar() { python3 "$BIN/migrar-tier2.py" "$M" "$@"; }
-# sha256 por Python: `shasum` no existe en Git Bash, y ahi las dos llamadas daban "" y un
+# sha256 por Python: el Git Bash del runner windows-latest no trae `shasum` (corrida
+# 40520030467), y ahi las dos llamadas daban "" y un
 # "no escribe nada" pasaba comparando vacio con vacio.
 huella() { python3 - "$M" <<'EOF'
 import hashlib, os, sys
