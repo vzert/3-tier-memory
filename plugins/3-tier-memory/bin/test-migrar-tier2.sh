@@ -25,7 +25,20 @@ M="$T/m"; mkdir -p "$M/pendientes" "$M/learnings" "$M/research"
 emit() { python3 "$BIN/journal-emit.py" --memory-dir "$M" "$@"; }
 compact() { python3 "$BIN/journal-compact.py" --memory-dir "$M" --quiet >/dev/null 2>&1; }
 migrar() { python3 "$BIN/migrar-tier2.py" "$M" "$@"; }
-huella() { (cd "$M" && find . -type f ! -path './.journal/*' -print0 | sort -z | xargs -0 shasum) | shasum; }
+# sha256 por Python: `shasum` no existe en Git Bash, y ahi las dos llamadas daban "" y un
+# "no escribe nada" pasaba comparando vacio con vacio.
+huella() { python3 - "$M" <<'EOF'
+import hashlib, os, sys
+h = hashlib.sha256()
+for raiz, dirs, ficheros in os.walk(sys.argv[1]):
+    dirs[:] = sorted(d for d in dirs if d != ".journal")
+    for f in sorted(ficheros):
+        p = os.path.join(raiz, f)
+        h.update(os.path.relpath(p, sys.argv[1]).replace(os.sep, "/").encode() + b"\0")
+        h.update(open(p, "rb").read())
+print(h.hexdigest())
+EOF
+}
 largas() { python3 "$BIN/print-tier2-tamano.py" "$M" | grep "^$1 " | sed 's/.*largas=\([0-9]*\).*/\1/'; }
 fila() { cat "$M"/pendientes/*.md | grep -- "_id: $1_"; }
 linea() { grep -- "_id: $1_" "$M/_pendientes.md"; }
@@ -164,9 +177,10 @@ chk "sin perder detalle: los 9 textos largos estan en Tier 3" "9 9" "$(cat "$T/v
 chk "regla-a.md (ya lo tenia): no se toca" "0" "$(grep -c 'Texto movido' "$M/learnings/regla-a.md")"
 chk "topic.md: el QR va como cita al final, tras Related" "1" "$(awk '/^## Related/{r=1} r && /^> \*\*Quick ref larga/' "$M/learnings/topic.md" | wc -l | tr -d ' ')"
 chk "research: las dos celdas se acortan y van etiquetadas" "2" "$(grep -cE '^> \*\*(Tema|Next step):\*\* ' "$M/research/r1.md")"
+# Las rutas van por argv: dentro del codigo de -c MSYS no las convierte y Windows no las abre.
 chk "research: el \\| escapado no parte la fila" "4" "$(python3 -c "
-import sys,importlib.util as u;s=u.spec_from_file_location('jc','$BIN/journal-compact.py');jc=u.module_from_spec(s);s.loader.exec_module(jc)
-print(len(jc.split_cells([l for l in open('$M/_research-index.md') if 'research/r1' in l][0])))")"
+import sys,importlib.util as u;s=u.spec_from_file_location('jc',sys.argv[1]);jc=u.module_from_spec(s);s.loader.exec_module(jc)
+print(len(jc.split_cells([l for l in open(sys.argv[2]) if 'research/r1' in l][0])))" "$BIN/journal-compact.py" "$M/_research-index.md")"
 R=$(python3 "$BIN/repair-dualwrite.py" "$M" 2>&1)
 chk "repair-dualwrite: sin filas que anadir ni ids inventados ni barras rotas" "1" "$(echo "$R" | grep -c 'rows_added=0 pipes_broken=0.* ids_invented=0')"
 

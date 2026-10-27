@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.66.2] - 2026-10-27
+El CI de main tras el merge de #80 (2.66.0) salio rojo en `platforms` / windows-latest:
+`test-migrar-tier2` pass=43 fail=3 (corrida 40520030467). ubuntu y macOS, verdes.
+
+### Fixed
+- `migrar-tier2.py`: el destino y el respaldo se imprimen con `/` tambien en Windows
+  (`pendientes/2026-10.md`, no `pendientes\2026-10.md`), como `check-wikilinks.py`.
+- `test-migrar-tier2.sh`: las rutas del `python3 -c` del aserto del `\|` escapado van por argv; dentro
+  del codigo MSYS no las convierte y Windows no abria `D:\d/a/...`.
+- `test-migrar-tier2.sh`, `test-pendiente-adopt.sh`, `test-update-puente.sh`: sha256 por Python en vez
+  de `shasum`, que no existe en Git Bash. Ahi los asertos "no escribe nada" / "no cambia nada"
+  comparaban vacio con vacio y pasaban siempre.
+
 ## [2.66.1] - 2026-10-27
 Dos huecos por los que un pendiente nacido en una sesion seguia en el hilo de la siguiente solo por
 coincidencia (caso real de otro proyecto: el paso escrito y tres hermanos nacieron en una sesion sin
