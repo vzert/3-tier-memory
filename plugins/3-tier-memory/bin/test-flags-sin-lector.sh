@@ -55,6 +55,7 @@ LEE = {
     "learning.update": "topic text quickref match-prefix quickref-prefix title when disparadores "
                        "sin-disparadores quickref-regla last-verified",
     "learning.retire": "topic match-prefix motivo por nota quickref-prefix",
+    "learning.patch": "topic match-prefix quickref-prefix viejo nuevo",
     "plan.upsert": "slug parent inline promote title status date sesion pendientes learnings",
     "plan.reopen": "slug title",
     "research.upsert": "slug status tema date next-step resultado origen inline",
@@ -67,8 +68,8 @@ COMUNES = {"--type", "--memory-dir", "--session", "--help"}
 m = re.search(r"--type \{([^}]*)\}", HELP)
 tipos = m.group(1).split(",") if m else []
 flags = sorted(set(re.findall(r"(?<![\w-])--[a-z][a-z-]*", HELP)) - COMUNES)
-chk("el --help trae los 19 tipos", len(tipos) == 19, f"{len(tipos)}: {tipos}")
-chk("el --help trae los 57 flags", len(flags) == 57, f"{len(flags)}")
+chk("el --help trae los 20 tipos", len(tipos) == 20, f"{len(tipos)}: {tipos}")
+chk("el --help trae los 59 flags", len(flags) == 59, f"{len(flags)}")
 chk("LEE cubre los mismos tipos que el emisor", set(tipos) == set(LEE),
     f"sobran {set(LEE) - set(tipos)}, faltan {set(tipos) - set(LEE)}")
 fuera = sorted({f for v in LEE.values() for f in v} - set(flags))
@@ -104,6 +105,8 @@ BASE = {
     "learning.add": ["--topic", "uno", "--text", "**Regla nueva** — cuerpo de prueba distinto"],
     "learning.update": ["--topic", "uno", "--title", "Titulo"],
     "learning.retire": ["--topic", "uno", "--match-prefix", "**Regla vieja**", "--motivo", "obsoleta"],
+    "learning.patch": ["--topic", "uno", "--match-prefix", "Regla vieja", "--viejo", "texto viejo",
+                       "--nuevo", "texto nuevo"],
     "plan.upsert": ["--slug", "demo", "--title", "Demo", "--status", "active"],
     "plan.reopen": ["--slug", "demo"],
     "research.upsert": ["--slug", "rs", "--tema", "Tema", "--status", "active"],
@@ -205,6 +208,8 @@ CONTROL = {
 RAMA = {
     ("pendiente.update", "--nota"): "pendiente.update no guarda --nota",
     ("learning.add", "--sin-disparadores"): "--sin-disparadores es de learning.update",
+    # Con --match-prefix (BASE) y --quickref-prefix a la vez: su rama pide uno de los dos.
+    ("learning.patch", "--quickref-prefix"): "uno de los dos",
 }
 
 print("== 3. cada flag que el tipo lee pasa y deja su evento (o lo rechaza su rama) ==")

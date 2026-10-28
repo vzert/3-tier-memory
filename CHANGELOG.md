@@ -42,6 +42,10 @@ parser queda para si esto no basta.
   `comprobar_primera_linea` y la linea en blanco de `insert_at_section_end`. Cada una de 14
   mutaciones del compactador (quitar una guardia o el arreglo) pone en rojo al menos un aserto.
 - `test-learning-retire.sh` seccion 8: la regla de varias lineas ahora se marca en su primera linea.
+- `test-learning-update.sh` seccion 15: el motivo de cuarentena nombra `learning.patch` (antes, «a
+  mano»). `test-flags-sin-lector.sh`: 20 tipos y 59 flags, con lo que lee `learning.patch`.
+- README: «Twenty event types», con `learning.patch` y el retire en primera linea.
+
 ## [2.67.3] - 2026-10-28
 Origen: p-8a21c08256, con p-c711eabb05 y p-e1bbf2d4e4. `snippet-vigente.py` (el aviso de snippet
 viejo al pegar) no veia un `Retomamos:` pasado como argumento de un comando; 2.66.1 ya lo habia
