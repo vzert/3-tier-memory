@@ -1728,12 +1728,14 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         # una vineta con otra grafia no deje pasar un abierto sin dueno (adversario, ronda 1:
         # `Abierto:`, `* abierto:`, `**abierto**:` y `abierto` sin dos puntos pasaban como HECHO). Y
         # la palabra `abierto` fuera de un item (una linea sin vineta, una cita, una fila de tabla,
-        # pegada a la linea del hilo) sale como no reconocida (ronda 2).
+        # pegada a la linea del hilo) sale como no reconocida (ronda 2). Dentro de un nombre con
+        # guiones (`pedido-abierto-x`, `pr-abierto`) no es la palabra: bloqueaba sin motivo (2.67.1).
+        abierto_suelto = re.compile(r"(?<![\w-])abierto(?![\w-])", re.I)
         hilos, items, n_items = [], [], []
         for l in sec_h.splitlines():
             mb = re.match(r"^(\s*)(?:[-*+•–]|\d+[.)])\s+(.*)", l)
             if not mb:
-                if re.search(r"\babierto\b", l, re.I):
+                if abierto_suelto.search(l):
                     prob.append("`abierto` fuera de un item de `## Hilos externos` (va en su propia "
                                 f"vineta con sangria, bajo su hilo): {l.strip()[:120]}")
                 continue
@@ -1746,7 +1748,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             elif plano.rstrip(".") != "ninguno":
                 hilos.append(cuerpo)
                 n_items.append(0)
-                if re.search(r"\babierto\b", plano):
+                if abierto_suelto.search(plano):
                     prob.append("`abierto` en la linea del hilo (va en su propia vineta con "
                                 f"sangria, debajo): {cuerpo[:120]}")
         # Lo citado cuenta como leido solo si sale en la LINEA DE UN HILO (`mensajes: …`), no en un
@@ -1764,12 +1766,22 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         if items and not hilos:
             prob.append("`## Hilos externos` tiene items y ninguna linea de hilo con `leido completo`")
         # `leido completo` cuenta seguido de su fecha y sin un `no` delante: `no leido completo` y
-        # `"leido completo" es falso` no son la afirmacion (adversario externo, ronda 2).
+        # `"leido completo" es falso` no son la afirmacion (adversario externo, ronda 2). La negacion
+        # cuenta en toda la clausula de delante, no solo pegada: `no he leido completo`, `nunca`,
+        # `sin`, `no fue` y `no  leido` (dos espacios) daban HECHO (2.67.1). La clausula empieza tras
+        # el ultimo `—`, `;`, `,`, `:` o `|`, y la etiqueta entre comillas invertidas no cuenta.
+        negacion = re.compile(r"(?<![\w-])(?:no|nunca|sin|jam[aá]s)(?![\w-])", re.I)
+
+        def leido_afirmado(m, l):
+            clausula = re.split(r"[—;,:|]", l[:m.start()])[-1]
+            return not negacion.search(re.sub(r"`[^`]*`", "", clausula))
+
         for l, n in zip(hilos, n_items):
             # Entre la frase y la fecha solo palabras de enlace: `leido completo el 2026-10-26`, `el dia`,
             # `a las 22:10` (ronda 3). Cualquier palabra dejaba pasar `leido completo; mensajes: 2026-…`.
-            if not re.search(r"(?<!\bno )le[ií]do completo\W{0,3}(?:(?:el|la|las|del|al|a|en|hoy|"
-                             r"d[ií]a|on|at)\W{1,3}){0,3}\d", l, re.I):
+            if not any(leido_afirmado(m, l) for m in re.finditer(
+                    r"le[ií]do completo\W{0,3}(?:(?:el|la|las|del|al|a|en|hoy|"
+                    r"d[ií]a|on|at)\W{1,3}){0,3}\d", l, re.I)):
                 prob.append(f"hilo sin `leido completo <fecha>`: {l[:120]}")
             if n == 0:
                 prob.append("hilo sin estado de lo abierto (debajo, `abierto: …` por cada cosa o "
