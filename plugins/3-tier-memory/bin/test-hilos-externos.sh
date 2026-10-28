@@ -200,6 +200,34 @@ for c in 'leído completo el 2026-10-26' 'leido completo el dia 2026-10-26 22:10
   chk "'$c': HECHO" "1" "$(cuenta 'HECHO .*snippet.hilo_externo')"
 done
 
+echo "== 7g. 2.67.1: negacion en la clausula, abierto dentro de un nombre =="
+config "$CONFIG"
+MSGS='mensajes: 2026-10-26-cuenta-1a2b3c4d, 2026-10-26-otra-5e6f7a8b'
+for c in 'no he leido completo 2026-10-26' 'nunca leido completo 2026-10-26' 'sin leido completo 2026-10-26' 'no fue leido completo el 2026-10-26' 'no  leido completo 2026-10-26' 'todavia No lo he leído completo el 2026-10-26' 'jamas leido completo 2026-10-26'; do
+  ficha 2026-10-26 "- bandeja \`corte\` — $c; $MSGS\n  - abiertos: ninguno" "$NINGUNO"; OUT=$(audit)
+  chk "negacion en la clausula '$c': SALTADO" "1" "$(cuenta 'hilo sin `leido completo <fecha>`')"
+done
+for c in 'leido completo el 26 de octubre' 'leido completo 26/10' 'leido completo el dia 26' 'leido completo hoy 22:10' 'leido completo 2026-10-26 (no hubo mensajes nuevos)'; do
+  ficha 2026-10-26 "- bandeja \`corte\` — $c; $MSGS\n  - abiertos: ninguno" "$NINGUNO"; OUT=$(audit)
+  chk "sin negacion '$c': HECHO" "1" "$(cuenta 'HECHO .*snippet.hilo_externo')"
+done
+# La etiqueta va en la misma clausula que la frase (sin `—` entre medias): solo la quita la regla
+# de las comillas invertidas, o la de la palabra entera.
+for e in '`no tocar`' '`sin revisor`' 'no-tocar'; do
+  ficha 2026-10-26 "- bandeja $e leido completo 2026-10-26; $MSGS\n  - abiertos: ninguno" "$NINGUNO"; OUT=$(audit)
+  chk "negacion solo dentro de la etiqueta $e: HECHO" "1" "$(cuenta 'HECHO .*snippet.hilo_externo')"
+done
+ficha 2026-10-26 "- bandeja \`corte\` — no leido completo 2026-10-25; leido completo 2026-10-26; $MSGS\n  - abiertos: ninguno" "$NINGUNO"; OUT=$(audit)
+chk "una lectura negada y otra afirmada: HECHO" "1" "$(cuenta 'HECHO .*snippet.hilo_externo')"
+ficha 2026-10-26 "- bandeja \`pedido-abierto-x\` — leido completo 2026-10-26; $MSGS\n  - abiertos: ninguno" "$NINGUNO"; OUT=$(audit)
+chk "abierto dentro de la etiqueta del hilo: HECHO" "1" "$(cuenta 'HECHO .*snippet.hilo_externo')"
+ficha 2026-10-26 "$CABEZA"'\nNota: ver plan-abierto-q4 y pr-abierto.\n  - abiertos: ninguno' "$NINGUNO"; OUT=$(audit)
+chk "abierto dentro de un nombre en una linea suelta: HECHO" "1" "$(cuenta 'HECHO .*snippet.hilo_externo')"
+ficha 2026-10-26 "$CABEZA"'\nNota: queda abierto el corte.\n  - abiertos: ninguno' "$NINGUNO"; OUT=$(audit)
+chk "abierto suelto en una linea suelta: sigue SALTADO" "1" "$(cuenta 'fuera de un item')"
+ficha 2026-10-26 "- bandeja \`corte\` (abierto) — leido completo 2026-10-26; $MSGS\n  - abiertos: ninguno" "$NINGUNO"; OUT=$(audit)
+chk "abierto suelto en la linea del hilo: sigue SALTADO" "1" "$(cuenta 'en la linea del hilo')"
+
 echo "== 8. la regla en sus textos =="
 TPL="$BIN/../templates"
 chk "Step 3-hilos existe en checkpoint-3t.md" "1" "$(grep -c '^### Step 3-hilos' "$TPL/checkpoint-3t.md")"
