@@ -129,7 +129,7 @@ chk "comando con el snippet pegado como bloque" "1" "$(printf '%s' "$O" | grep -
 chk "comando con otro argumento: nada" "" "$(hook "/goalspec:interview revisa $CERRADO")"
 chk "<command-args> con otro argumento: nada" "" "$(hook "<command-name>/x</command-name><command-args>mira $(snippet "x ($CERRADO)")</command-args>")"
 chk "comando sin argumento: nada" "" "$(hook "/checkpoint-3t")"
-chk "ruta absoluta no es comando: nada" "" "$(hook "/Users/x/y $(snippet "x ($CERRADO)")")"
+chk "ruta absoluta no es comando: nada" "" "$(hook "/opt/x/y $(snippet "x ($CERRADO)")")"
 O=$(hook "$(printf 'Retomamos: el hook ve <command-args>foo</command-args> en el prompt.\n\nProximo paso: cerrar (%s)' "$CERRADO")")
 chk "Retomamos que cita las etiquetas <command-args> se lee entero" "1" "$(printf '%s' "$O" | grep -c "$CERRADO ya esta cerrado")"
 O=$(entrada "/goalspec:interview $(snippet "x ($CERRADO)")" | CLAUDE_PROJECT_DIR="$P" bash "$BIN/snippet-vigente.sh")
