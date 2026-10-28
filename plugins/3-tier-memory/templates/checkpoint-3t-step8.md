@@ -483,7 +483,7 @@ Tambien quita la marca que esta sesion consumio (2.63.42): si arranco con el sni
 ficha sin quedar marcado ahora, emite `pendiente.retomar --quitar` (`🧹`). Asi el mod no vuelve a
 pegar un snippet ya hecho cuando el paso nuevo cae en otro pendiente. Una marca que otra sesion ya
 movio a su ficha no se toca.
-Y liga los hermanos al paso (2.65.2): si el paso es un pendiente que nacio en esta sesion, cada otro
+Y liga los hermanos al paso (2.66.1): si el paso es un pendiente que nacio en esta sesion, cada otro
 pendiente abierto nacido en ella SIN `_relacionado` recibe `pendiente.relate` con ese id (`🔗`); el
 que ya cita algo tiene su ancla y no se toca. La liga al nacer de Step 3b solo apunta al paso que la sesion RECIBIO; sin esto, los
 hermanos de una sesion que no recibio paso seguian en el hilo siguiente solo si su snippet se
@@ -560,7 +560,7 @@ ultimo bloque no quedan mas de 300 caracteres (una linea corta). En una ficha de
 exige tambien la cabecera con emoji de cada bloque. Si algo de eso
 falla, el aviso al usuario trae el cierre completo, tal como lo imprimen los scripts. Si lo unico
 que falla del cierre es un fence de mas (el 🔔 o el 🗓️ envuelto en uno), el aviso no reimprime el
-cierre, y sin ningun otro problema es una sola linea (2.67.3): el cierre ya esta completo arriba, y
+cierre, y sin ningun otro problema es una sola linea (2.67.4): el cierre ya esta completo arriba, y
 reimprimirlo en gris enterraba el snippet. Limite: si el
 hook no corre (instalacion sin hooks), el cierre no se pega; queda en la ficha.
 
@@ -596,7 +596,7 @@ python3 "$JBIN/print-recordatorios.py" "$SESSION_FILE"
 
 Imprime los dos primeros **sin el fence** del prompt (solo Retomamos va en color) y, si hay mas,
 `+N con fecha futura en _pendientes.md`. El tope es para no llenar la terminal. Pegalo asi, sin
-volver a ponerle el fence que el prompt tiene en la ficha (2.67.3: medido en un cierre real de
+volver a ponerle el fence que el prompt tiene en la ficha (2.67.4: medido en un cierre real de
 2026-10-28, el agente lo envolvia y el 🗓️ salia en color).
 
 **Un pendiente, un recordatorio vivo (2.39.2).** Antes de generar el bloque, busca si OTRA ficha

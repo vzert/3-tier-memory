@@ -13,11 +13,17 @@ M = {
     "vigente-sin-cerrado": [("            if c:", "            if False:")],
     "vigente-sin-ficha-nueva": [("        nuevas = fichas_nuevas(memory_dir, slug, pid, pa) if slug else []",
                                  "        nuevas = []")],
-    "vigente-sin-marca": [("        if m_ret and m_ret.group(1) != slug and m_ret.group(1) not in nuevas:",
-                           "        if False:")],
+    "vigente-sin-marca": [("        if (m_ret and m_ret.group(1) not in nuevas", "        if (False")],
     "vigente-sin-tarjeta-mod": [("    m_mod = TARJETA_MOD.match(texto)", "    m_mod = None")],
-    "vigente-mismo-dia-sin-mtime": [("        if fecha_base and n[:10] == fecha_base and mtime <= mtime_base:",
-                                     "        if False:")],
+    "vigente-mismo-dia-sin-mtime": [("    if fecha_base and otro[:10] == fecha_base:", "    if False:")],
+    # p-8a21c08256 / p-c711eabb05: el snippet como argumento de un comando, la marca que apunta a
+    # una ficha mas vieja y el filtro rapido con tilde.
+    "vigente-sin-comando": [("    m = pa.ARGS_COMANDO.search(prompt) or COMANDO.match(prompt)", "    m = None")],
+    "vigente-comando-sin-marca": [('    if m and _es_snippet(pa.PASTED.sub("", m.group(1)).strip()):',
+                                   "    if m:")],
+    "vigente-marca-sin-fecha": [("                and (not slug or posterior(memory_dir, slug, m_ret.group(1)))):",
+                                 "                and True):")],
+    "vigente-sh-sin-tilde": [("*'óximo paso:'*|*'u00f3ximo paso:'*|", "")],
     # checkpoint-audit.py
     "audit-sin-paso-compartido": [("        if compartido:", "        if False:")],
     "audit-compartido-cualquier-dia": [('fecha_ficha + "-*.md"', '"*.md"')],

@@ -1150,10 +1150,10 @@ echo "== 2.44.0: el calendario antes del pendiente: lo reclama por el orden =="
 { printf '%s\n\n' "$REV_OK"; cat "$T/n8b.txt"; printf '\n'; cat "$T/n8c.txt"; printf '\n'; cat "$T/n8e.txt"; } > "$T/r44-orden.txt"
 vuelta "$T/t44.jsonl" "$T/t.jsonl" "$T/r44-orden.txt"
 chk "reclama el orden" "1" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -c 'no van en el orden snippet, pendiente, calendario')"
-chk "2.67.3: con otro defecto (orden) el cierre se reimprime" "1" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -c 'Aqui esta, tal como')"
-echo "== 2.67.3: el primer cierre le pide al agente pegar el 🔔 y el 🗓️ sin fence =="
+chk "2.67.4: con otro defecto (orden) el cierre se reimprime" "1" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -c 'Aqui esta, tal como')"
+echo "== 2.67.4: el primer cierre le pide al agente pegar el 🔔 y el 🗓️ sin fence =="
 chk "la instruccion llega al agente" "1" "$(razon "$(corre "$T/t44.jsonl" false -)" | grep -c 'No le agregues fences: solo el snippet trae el suyo')"
-echo "== 2.67.3: el 🗓️ en un fence y nada mas mal: una linea, sin reimprimir el cierre =="
+echo "== 2.67.4: el 🗓️ en un fence y nada mas mal: una linea, sin reimprimir el cierre =="
 python3 "$BIN/checkpoint-audit.py" "$M" --session-file "$F" --no-git > "$T/audit44.txt" || true
 { cat "$T/audit44.txt"; printf '\n%s\n\n' "$REV_OK"; cat "$T/n8b.txt"; printf '\n'; cat "$T/n8e.txt"; printf '\n'; sed '2,$ { /^Retomamos: verificar/ { i\
 ```
