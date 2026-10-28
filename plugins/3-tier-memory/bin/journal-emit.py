@@ -135,6 +135,15 @@ Tipos de evento:
                     servirla. --por (la regla viva que la reemplaza) es obligatorio con
                     duplicada|superada y no se admite con obsoleta. --quickref-prefix quita su
                     linea del Quick Reference (sin renumerar el resto). Imprime l-topic-<T>.
+  learning.patch    (--topic T --match-prefix P | --quickref-prefix QP)
+                    --viejo "<trozo>" --nuevo "<trozo>"                                  (2.68.0)
+                    Cambia un trozo LITERAL de la primera linea de una regla, sin tocar su
+                    numero, vineta, marca de retirada ni comentarios. Es la via para las reglas
+                    que learning.update no puede reescribir (cuarentena anterior,
+                    bloque-multilinea o codigo-antes). El trozo viejo tiene que salir una vez en
+                    el texto de la regla y el nuevo ninguna; ninguno lleva saltos de linea,
+                    vallas (``` ~~~), `<!--`, `-->` ni ⊘, y --nuevo no puede estar dentro de
+                    --viejo. Se comprueba al emitir y otra vez al compactar.
   learning.update   --topic T [--match-prefix P --text "<nuevo>"]
                     [--quickref-prefix QP --quickref "<nuevo>"] [--title TT] [--when W]
                     [--match-prefix P --disparadores "<frases=...>"]                     (2.48.0)
@@ -1092,6 +1101,7 @@ FLAGS_DE = {
                         "when", "disparadores", "sin_disparadores", "quickref_regla",
                         "last_verified"},
     "learning.retire": {"topic", "match_prefix", "motivo", "por", "nota", "quickref_prefix"},
+    "learning.patch": {"topic", "match_prefix", "quickref_prefix", "viejo", "nuevo"},
     "plan.upsert": {"slug", "parent", "inline", "promote", "title", "status", "date", "sesion",
                     "pendientes", "learnings"},
     "plan.reopen": {"slug", "title"},
@@ -1127,6 +1137,7 @@ def main():
                              "pendiente.block", "pendiente.relate", "pendiente.adopt",
                              "session.add", "session.amend",
                              "learning.add", "learning.update", "learning.retire",
+                             "learning.patch",
                              "plan.upsert", "plan.reopen", "research.upsert",
                              "research.rename"])
     ap.add_argument("--memory-dir")
@@ -1202,6 +1213,9 @@ def main():
     ap.add_argument("--last-verified", dest="last_verified", default="")
     # learning.update: enlace Quick Reference -> regla (F7, 2.51.0)
     ap.add_argument("--quickref-regla", dest="quickref_regla", default="")
+    # learning.patch: trozo literal de la primera linea de una regla (2.68.0)
+    ap.add_argument("--viejo", default=None)
+    ap.add_argument("--nuevo", default=None)
     pasados = flags_pasados(ap)
     a = ap.parse_args()
 
@@ -1435,6 +1449,66 @@ def main():
         }
         write_event(memory_dir, base)
         print(f"l-topic-{topic}")
+        return
+
+    if a.type == "learning.patch":
+        # Los trozos van LITERALES (sin normalize_text): tienen que casar byte a byte con el fichero.
+        mprefix = normalize_text(a.match_prefix or "")
+        qprefix = normalize_text(a.quickref_prefix or "")
+        if bool(mprefix) == bool(qprefix):
+            sys.exit("journal-emit: learning.patch necesita --match-prefix (regla del topic, con "
+                     "--topic) o --quickref-prefix (linea del Quick Reference), uno de los dos")
+        topic = check_slug(a.topic, "--topic") if (mprefix or a.topic) else ""
+        if a.viejo is None or a.nuevo is None or not a.viejo.strip() or not a.nuevo.strip():
+            sys.exit("journal-emit: learning.patch necesita --viejo y --nuevo, los dos con texto")
+        jc = _compactador()
+        for flag, v in (("--viejo", a.viejo), ("--nuevo", a.nuevo)):
+            mal = jc.problema_trozo(v, flag)
+            if mal:
+                sys.exit(f"journal-emit: {mal}")
+        if a.nuevo in a.viejo:
+            sys.exit("journal-emit: --nuevo esta dentro de --viejo: el compactador no distinguiria el "
+                     "replay del primer cambio. Alarga --nuevo con texto vecino (p. ej. --viejo "
+                     "'foo (ver #1) bar' --nuevo 'foo bar')")
+        # Se comprueba ya contra el fichero de hoy, para que el error salga donde se puede corregir
+        # (el compactador repite todo: es su propia frontera de confianza).
+        if mprefix:
+            path = os.path.join(memory_dir, "learnings", topic + ".md")
+            if not os.path.isfile(path):
+                sys.exit(f"journal-emit: learnings/{topic}.md no existe")
+            lines = jc.read_lines(path)
+            start, end = jc.body_region(lines)
+            donde = f"learnings/{topic}.md"
+        else:
+            path = os.path.join(memory_dir, "_learnings.md")
+            lines = jc.read_lines(path) if os.path.isfile(path) else []
+            sec = jc.section_bounds(lines, "## Quick Reference")
+            if not sec:
+                sys.exit("journal-emit: no hay '## Quick Reference' en _learnings.md")
+            start, end = sec
+            donde = "'## Quick Reference'"
+        try:
+            i, ya = jc.localizar_parche(lines, start, end, mprefix or qprefix, a.viejo, a.nuevo, donde)
+            if not ya:
+                _n, t = jc.rule_text(lines[i])
+                c = jc.cuerpo_regla(t)
+                jc.comprobar_primera_linea(lines[i], jc.con_texto(lines[i], c.replace(a.viejo, a.nuevo, 1)
+                                                                 + t[len(c):]), donde, retira=False)
+        except jc.Quarantine as e:
+            sys.exit(f"journal-emit: {e}")
+        if ya:
+            print("journal-emit: la regla ya tiene el trozo nuevo; no se emite nada", file=sys.stderr)
+            print(f"l-topic-{topic}" if topic else "l-quickref")
+            return
+        base["payload"] = {
+            "topic": topic,
+            "match_prefix": mprefix,
+            "quickref_prefix": qprefix,
+            "viejo": a.viejo,
+            "nuevo": a.nuevo,
+        }
+        write_event(memory_dir, base)
+        print(f"l-topic-{topic}" if topic else "l-quickref")
         return
 
     if a.type == "learning.update":

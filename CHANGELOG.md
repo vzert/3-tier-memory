@@ -1,5 +1,47 @@
 # Changelog
 
+## [2.68.0] - 2026-10-28
+`learning.update`, `learning.retire` y `learning.add --supersedes` pasan por `rewrite_rule`, que se
+niega cuando no puede demostrar que la regla es UNA linea (`anterior`, `bloque-multilinea`,
+`codigo-antes`), y el mensaje decia «corrigela a mano». En los learnings de 25 proyectos del mismo
+usuario (2026-10-28) eran 2419 de 9183 reglas numeradas (anterior 923, codigo-antes 965,
+bloque-multilinea 531): sin via por el journal. Lo pidio una sesion de otro proyecto con un caso real
+(una regla que citaba un pendiente cerrado y no se podia apuntar al nuevo). Decisiones de Victor
+(d488-d495): un evento que cambia un trozo, no un parser (seria la primera dependencia, I4); el
+parser queda para si esto no basta.
+
+### Added
+- `learning.patch` (`--topic T --match-prefix P` o `--quickref-prefix QP`, con `--viejo`/`--nuevo`):
+  cambia un trozo literal de la PRIMERA linea de una regla del topic o de una linea del Quick
+  Reference. No pasa por `regla_reescribible`: no cambia la estructura del markdown, asi que no
+  necesita saber donde acaba la regla. El trozo viejo tiene que salir una vez en el texto de la
+  regla (sin numero, vineta, marca de retirada ni comentarios de disparadores o de enlace) y el
+  nuevo ninguna. Ninguno lleva salto de linea, valla (```` ``` ````, `~~~`), `<!--`, `-->` ni `⊘`, y
+  `--nuevo` no puede estar dentro de `--viejo` (si no, el replay no se distingue del primer cambio).
+  Tras el cambio, la linea tiene que leerse igual para sus lectores: mismo numero y familia, misma
+  marca, mismos comentarios, mismas comillas invertidas sueltas. Si no, cuarentena `primera-linea`
+  y no se escribe nada. El emisor lo comprueba contra el fichero de hoy y el compactador otra vez.
+  Replay = noop, tambien cuando el parche cambio el propio prefijo del ancla.
+
+### Changed
+- `learning.retire` sobre una regla que `rewrite_rule` no puede reescribir ya no va a cuarentena: la
+  marca va al final de su PRIMERA linea (delante del comentario de disparadores), con las mismas
+  comprobaciones, y la nota con las mismas prohibiciones que el trozo. `learning.add --supersedes`
+  sobre una regla asi sigue yendo a cuarentena (no entraba en lo decidido).
+- `insert_at_section_end` (la usan `learning.add` y `--quickref`) deja una linea en blanco antes de la
+  regla nueva cuando la de arriba es un parrafo o una vineta de otra familia. Pegada, una `N.` con
+  N != 1 es continuacion del parrafo en CommonMark y `rewrite_rule` la rechazaba despues por
+  `anterior`. Las reglas que ya estan pegadas no se reparan: medido, la linea en blanco solo
+  desbloquea 230 de las 923 `anterior` (579 pasan a `bloque-multilinea` y 114 a `codigo-antes`).
+- El mensaje de cuarentena de `rewrite_rule` nombra `learning.patch` y `learning.retire` en vez de
+  «corrigela a mano».
+
+### Tests
+- `test-learning-patch.sh`: los tres motivos, replay, guardias al emitir y al compactar (evento
+  escrito a mano), Quick Reference, retire en reglas bloqueadas, la segunda capa de
+  `comprobar_primera_linea` y la linea en blanco de `insert_at_section_end`. Cada una de 14
+  mutaciones del compactador (quitar una guardia o el arreglo) pone en rojo al menos un aserto.
+- `test-learning-retire.sh` seccion 8: la regla de varias lineas ahora se marca en su primera linea.
 ## [2.67.3] - 2026-10-28
 Origen: p-8a21c08256, con p-c711eabb05 y p-e1bbf2d4e4. `snippet-vigente.py` (el aviso de snippet
 viejo al pegar) no veia un `Retomamos:` pasado como argumento de un comando; 2.66.1 ya lo habia

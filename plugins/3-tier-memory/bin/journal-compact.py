@@ -41,8 +41,16 @@ Fase 2 (sesiones, reglas, planes, research) — mismo principio, anclas de tabla
   learning.retire  (2.45.0) anade `— ⊘ RETIRADA (FECHA, motivo[ por #N]): nota` al final de la
                    regla anclada por prefijo, conservando su numero (I1); --quickref-prefix quita
                    esa linea del Quick Reference sin renumerar. --por N tiene que ser una regla
-                   viva del mismo topic; un ciclo va a cuarentena. Replay = noop.
-  plan.upsert      fila en '## Plans' por [[plans/plan-<slug>]] o, solo filas (inline), por
+                   viva del mismo topic; un ciclo va a cuarentena. Replay = noop. Una regla que
+                   rewrite_rule no puede reescribir (2.68.0) recibe la marca solo en su PRIMERA
+                   linea, con las guardias de learning.patch.
+  learning.patch   (2.68.0) cambia un trozo literal `viejo` por `nuevo` en la PRIMERA linea de la
+                   regla anclada por prefijo (--match-prefix en el topic, o --quickref-prefix en el
+                   Quick Reference). No pasa por regla_reescribible: es la via para las reglas que
+                   update no puede reescribir (anterior, bloque-multilinea, codigo-antes). El
+                   trozo tiene que salir UNA vez en el texto de la regla (sin numero ni vineta,
+                   marca de retirada ni comentarios); la linea conserva todo lo demas.
+  plan.upsert     fila en '## Plans' por [[plans/plan-<slug>]] o, solo filas (inline), por
                    titulo; --promote convierte la UNICA fila (inline) con ese titulo en
                    [[plans/plan-<slug>|T]] si existe plans/plan-<slug>.md; actualiza Status, Sesion, Pendientes, Learnings (Fecha no cambia
                    en updates); poda
@@ -2591,6 +2599,13 @@ def insert_at_section_end(lines, start, end, new_line):
     if at - 1 == start:            # seccion vacia: dejar una linea en blanco tras el header
         lines.insert(at, "")
         at += 1
+    elif not en_blanco(lines[at - 1]) and familia(lines[at - 1]) != familia(new_line):
+        # 2.68.0: pegada a un parrafo (o a una vineta de otra familia), una regla `N.` con N != 1 es
+        # continuacion de lo de arriba en CommonMark, y rewrite_rule la rechaza despues por
+        # `anterior`. La linea en blanco la deja como item. Solo evita casos nuevos: las reglas que
+        # ya estan pegadas no se reparan (medido: la linea en blanco solo desbloquea 230 de 923).
+        lines.insert(at, "")
+        at += 1
     lines.insert(at, new_line)
     if at + 1 < len(lines) and lines[at + 1].strip() != "":
         lines.insert(at + 1, "")
@@ -3044,12 +3059,167 @@ def rewrite_rule(lines, i, end, nuevo, donde):
     if motivo:
         raise Quarantine(
             f"{motivo}: en {donde}, {MOTIVOS_REGLA[motivo]}. learning.update solo reescribe una "
-            f"regla cuando markdown no deja otra lectura; corrigela a mano, o simplificala a una "
-            f"linea sin sangria y reemite.")
+            f"regla cuando markdown no deja otra lectura. Para cambiar un trozo de su primera "
+            f"linea usa learning.patch --viejo/--nuevo; para retirarla, learning.retire (marca "
+            f"solo la primera linea).")
     s = lines[i]                               # columna 0 garantizada: no hay sangria que conservar
     m = re.match(r"^(\d+)\.\s", s)
     cabeza = f"{m.group(1)}. " if m else f"{s[0]} "
     lines[i] = f"{cabeza}{nuevo}"
+
+
+# --- Primera linea (2.68.0): learning.patch y la marca de learning.retire en reglas bloqueadas ------
+#
+# rewrite_rule se niega cuando no puede demostrar que la regla es UNA linea (MOTIVOS_REGLA), y en los
+# learnings de 25 proyectos del mismo usuario (2026-10-28) eso eran 2419 de 9183 reglas numeradas:
+# anterior 923, codigo-antes 965, bloque-multilinea 531. Para ellas no habia via por el journal.
+#
+# Lo que sigue no necesita saber donde acaba la regla, porque no cambia la estructura: toca solo
+# TEXTO dentro de la primera linea, detras del numero o la vineta, y comprueba despues que la linea
+# sigue diciendo lo mismo a sus lectores (numero, familia, marca de retirada, comentarios de
+# disparadores y de enlace, comillas invertidas sueltas). El peor caso aceptado: si la regla cae
+# dentro de un bloque de codigo, se cambia texto de ese bloque, que sigue siendo el mismo bloque.
+# Lo que se rechaza es el caso que rompe el fichero: un salto de linea, una valla, un comentario
+# HTML o el simbolo de la marca dentro del trozo. Un parser de markdown (vendorizado) queda para
+# cuando esto no baste (decision de Victor, 2026-10-28, d488).
+
+PROHIBIDO_EN_TROZO = ("\n", "\r", "```", "~~~", "<!--", "-->", "⊘")
+
+
+def problema_trozo(s, que):
+    """Texto del problema de un trozo de learning.patch (o de la nota de una marca), o None."""
+    if not isinstance(s, str):
+        return f"{que} no es texto"
+    malo = next((x for x in PROHIBIDO_EN_TROZO if x in s), None)
+    if malo is not None:
+        return (f"{que} lleva {malo!r}: un salto de linea, una valla, un comentario HTML o la marca "
+                f"de retirada cambian la estructura del fichero, no solo su texto")
+    return None
+
+
+def sueltas(texto):
+    """Rachas de comillas invertidas que no cierran ningun code span (learning_marks.code_spans)."""
+    spans = learning_marks.code_spans(texto)
+    return sum(1 for m in re.finditer(r"`+", texto) if not any(a <= m.start() < b for a, b in spans))
+
+
+def cuerpo_regla(t):
+    """Lo que la regla DICE: su texto sin la marca de enlace del Quick Reference, la marca de
+    retirada ni el comentario de disparadores. Es un prefijo de `t` (las tres funciones cortan)."""
+    return learning_marks.sin_marca(learning_marks.sin_regla_qr(t))
+
+
+def con_texto(linea, t_nuevo):
+    """La linea con su texto de regla (rule_text) cambiado por `t_nuevo`, sin tocar la sangria, el
+    numero o la vineta, ni el espacio del final."""
+    s = linea.strip()
+    _n, t = rule_text(linea)
+    ini = (len(linea) - len(linea.lstrip())) + (len(s) - len(t))
+    return linea[:ini] + t_nuevo + linea[ini + len(t):]
+
+
+def comprobar_primera_linea(vieja, nueva, donde, retira):
+    """Quarantine si `nueva` cambia algo mas que el texto de la regla de `vieja`.
+
+    `retira`: la nueva tiene que llevar la marca de retirada y la vieja no. Si no, la marca (o su
+    ausencia) tiene que seguir igual."""
+    n0, t0 = rule_text(vieja)
+    n1, t1 = rule_text(nueva)
+    c1 = cuerpo_regla(t1 or "")
+    fallo = None
+    if t1 is None or n0 != n1 or familia(vieja) != familia(nueva):
+        fallo = "el numero o la vineta de la linea cambiarian"
+    elif not c1.strip() or c1 != c1.lstrip():
+        fallo = "el texto de la regla quedaria vacio o empezaria por un espacio"
+    elif (learning_marks.sufijo_disparadores(t0) != learning_marks.sufijo_disparadores(t1)
+          or learning_marks.sufijo_regla_qr(t0) != learning_marks.sufijo_regla_qr(t1)):
+        fallo = "el comentario de disparadores o de enlace dejaria de leerse igual"
+    elif retira and not (learning_marks.regla_retirada(t1) and not learning_marks.regla_retirada(t0)):
+        fallo = "la marca de retirada no se leeria (una comilla invertida la meteria en codigo)"
+    elif not retira and learning_marks.sufijo_marca(t0) != learning_marks.sufijo_marca(t1):
+        fallo = "la marca de retirada dejaria de leerse igual"
+    elif sueltas(t0) != sueltas(t1):
+        fallo = "cambia cuantas comillas invertidas quedan sueltas (abriria o cerraria codigo en linea)"
+    if fallo:
+        raise Quarantine(f"primera-linea: en {donde}, {fallo}. No se escribe nada.")
+
+
+def localizar_parche(lines, start, end, prefix, viejo, nuevo, donde):
+    """(indice, ya_aplicado) de la regla de learning.patch en lines[start:end].
+
+    El ancla es el prefijo del texto de HOY (como learning.update). Antes del guardian se mira si el
+    parche ya esta (replay, I3): el texto tiene `nuevo` una vez y `viejo` solo dentro de el. Para que
+    las dos lecturas no se confundan, el emisor y validate exigen que `nuevo` no este dentro de
+    `viejo`, y aqui se exige que antes de aplicar el texto no tenga `nuevo`."""
+    pp = plain(prefix)
+    hits, ya = [], []
+    for i in range(start, end):
+        _n, t = rule_text(lines[i])
+        if not t:
+            continue
+        c = cuerpo_regla(t)
+        aplicado = c.count(nuevo) == 1 and c.count(viejo) == nuevo.count(viejo)
+        if plain(c).startswith(pp):
+            hits.append((i, aplicado))
+        elif aplicado and plain(c.replace(nuevo, viejo, 1)).startswith(pp):
+            ya.append(i)                       # el parche cambio el propio prefijo: replay
+    if len(hits) > 1:
+        raise Quarantine(f"ambiguous: {len(hits)} reglas de {donde} empiezan por '{prefix[:40]}' — "
+                         f"alarga el prefijo hasta que sea unico")
+    if hits:
+        i, aplicado = hits[0]
+        if aplicado:
+            return i, True
+        c = cuerpo_regla(rule_text(lines[i])[1])
+        if c.count(viejo) != 1 or c.count(nuevo) != 0:
+            raise Quarantine(
+                f"no-anchor: en {donde}, la regla que empieza por '{prefix[:40]}' tiene {c.count(viejo)} "
+                f"veces el trozo viejo y {c.count(nuevo)} el nuevo en su primera linea; learning.patch "
+                f"necesita el viejo UNA vez y el nuevo ninguna. Alarga el trozo con texto vecino")
+        return i, False
+    if len(ya) == 1:
+        log(f"replay learning.patch: en {donde} la regla ya tiene el trozo nuevo — no se escribe nada")
+        return ya[0], True
+    raise Quarantine(f"no-anchor: ninguna regla de {donde} empieza por '{prefix[:40]}'"
+                     + (f" ({len(ya)} ya tienen el trozo nuevo: no se sabe cual)" if ya else ""))
+
+
+def apply_learning_patch(mem, p):
+    """Cambia el trozo literal `viejo` por `nuevo` en la primera linea de UNA regla (2.68.0).
+
+    Con `match_prefix`, en learnings/<topic>.md; con `quickref_prefix`, en el '## Quick Reference'
+    de _learnings.md. Ver el comentario de PROHIBIDO_EN_TROZO."""
+    viejo, nuevo = p["viejo"], p["nuevo"]
+    if p.get("quickref_prefix"):
+        path = os.path.join(mem, "_learnings.md")
+        if not os.path.isfile(path):
+            raise Quarantine("no-index: _learnings.md no existe")
+        lines = read_lines(path)
+        sec = section_bounds(lines, "## Quick Reference")
+        if not sec:
+            raise Quarantine("no-anchor: falta '## Quick Reference' en _learnings.md")
+        start, end = sec
+        prefix, donde = p["quickref_prefix"], "'## Quick Reference'"
+    else:
+        topic = check_slug(p["topic"], "topic")
+        path = os.path.join(mem, "learnings", topic + ".md")
+        donde = f"learnings/{topic}.md"
+        if not os.path.isfile(path):
+            raise Quarantine(f"no-anchor: {donde} no existe — learning.patch corrige una regla ya escrita")
+        lines = read_lines(path)
+        start, end = body_region(lines)
+        prefix = p["match_prefix"]
+    i, ya = localizar_parche(lines, start, end, normalize_text(prefix), viejo, nuevo, donde)
+    if ya:
+        return False
+    _n, t = rule_text(lines[i])
+    c = cuerpo_regla(t)
+    nueva = con_texto(lines[i], c.replace(viejo, nuevo, 1) + t[len(c):])
+    comprobar_primera_linea(lines[i], nueva, donde, retira=False)
+    lines[i] = nueva
+    bump_updated(lines)
+    atomic_write(path, lines)
+    return True
 
 
 def find_topic_row(lines, topic):
@@ -3295,12 +3465,18 @@ def apply_learning_retire(mem, p):
     if not ya:
         if por:
             comprobar_por(lines, start, related, por, n, donde)
-        motivo = regla_reescribible(lines, i, related)
-        if motivo:
-            raise Quarantine(f"{motivo}: en {donde}, {MOTIVOS_REGLA[motivo]}. learning.retire solo "
-                             f"marca una regla de una linea; marcala a mano o simplificala y reemite.")
         nuevo = learning_marks.con_marca(t, learning_marks.marca_canonica(
             p.get("fecha") or date.today().isoformat(), p["motivo"], por, p.get("nota") or ""))
+        # 2.68.0: una regla que rewrite_rule no puede reescribir se marca igual, solo en su PRIMERA
+        # linea y con las guardias de learning.patch (ver PROHIBIDO_EN_TROZO). Hasta 2.67 iba a
+        # cuarentena y la persona tenia que marcarla a mano. Se comprueba antes de escribir nada.
+        bloqueo = regla_reescribible(lines, i, related)
+        if bloqueo:
+            mal = problema_trozo(p.get("nota") or "", "la nota")
+            if mal:
+                raise Quarantine(f"primera-linea: en {donde}, {mal}. No se escribe nada.")
+            linea_marcada = con_texto(lines[i], nuevo)
+            comprobar_primera_linea(lines[i], linea_marcada, donde, retira=True)
     qp = normalize_text(p.get("quickref_prefix") or "")
     quitar = None
     ilines = None
@@ -3311,7 +3487,11 @@ def apply_learning_retire(mem, p):
         quitar = quickref_a_quitar(ilines, qp, ya)
     changed = False
     if nuevo is not None:
-        rewrite_rule(lines, i, related, nuevo, donde)
+        if bloqueo:
+            lines[i] = linea_marcada
+            log(f"learning.retire: {donde} #{n} marcada solo en su primera linea ({bloqueo})")
+        else:
+            rewrite_rule(lines, i, related, nuevo, donde)
         bump_updated(lines)
         atomic_write(tpath, lines)
         changed = True
@@ -4550,6 +4730,26 @@ def validate(ev):
         validar_fecha_evento(p, "learning.retire")
         check_slug(p["topic"], "topic")
         return t, p
+    elif t == "learning.patch":
+        # Frontera de confianza propia (learning 106): lo mismo que exige journal-emit.
+        mp, qp = p.get("match_prefix"), p.get("quickref_prefix")
+        if bool(mp) == bool(qp):
+            raise Quarantine("malformed: learning.patch necesita 'match_prefix' (regla del topic) o "
+                             "'quickref_prefix' (linea del Quick Reference), uno de los dos")
+        if mp and not p.get("topic"):
+            raise Quarantine("malformed: learning.patch con 'match_prefix' sin 'topic'")
+        for k in ("viejo", "nuevo"):
+            mal = problema_trozo(p.get(k), f"'{k}'")
+            if mal:
+                raise Quarantine(f"malformed: learning.patch: {mal}")
+        if not p["viejo"].strip() or not p["nuevo"].strip():
+            raise Quarantine("malformed: learning.patch con 'viejo' o 'nuevo' vacio")
+        if p["nuevo"] in p["viejo"]:
+            raise Quarantine("malformed: learning.patch con 'nuevo' dentro de 'viejo' — no se "
+                             "distinguiria el replay del primer cambio; alarga 'nuevo' con texto vecino")
+        if mp:
+            check_slug(p["topic"], "topic")
+        return t, p
     elif t == "learning.update":
         # El compactador es su propia frontera de confianza (learning 106): journal-emit ya
         # rechaza estos casos, pero un evento puede venir escrito a mano o de otro emisor.
@@ -4706,6 +4906,8 @@ def apply_event(mem, ev):
         return apply_learning_update(mem, p)
     if t == "learning.retire":
         return apply_learning_retire(mem, p)
+    if t == "learning.patch":
+        return apply_learning_patch(mem, p)
     if t == "plan.upsert":
         return apply_plan_upsert(mem, p)
     if t == "plan.reopen":

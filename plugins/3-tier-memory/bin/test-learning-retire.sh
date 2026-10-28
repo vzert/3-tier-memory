@@ -11,8 +11,9 @@
 # 2. REPLAY = NOOP (I3), tambien el de un learning.update sobre una regla ya retirada, cuya linea
 #    termina en el marcador y no en el texto que trae el evento.
 # 3. NADA A MEDIAS. `--supersedes` escribe la nueva y marca la vieja en el MISMO escrito; una
-#    cuarentena (por --por, por el Quick Reference o por una regla de varias lineas) no deja nada
-#    escrito.
+#    cuarentena (por --por, por el Quick Reference o, en --supersedes, por una regla de varias
+#    lineas) no deja nada escrito. learning.retire sobre una regla de varias lineas la marca solo en
+#    su primera linea desde 2.68.0 (test-learning-patch.sh).
 # 4. LOS LECTORES. El indice de recall (y por el find-dup-candidates) no sirve una regla retirada,
 #    ni con el marcador nuevo ni con las dos formas viejas del corpus real, y un topic con la
 #    cabecera retirada no entra. Una regla que solo CITA el marcador (entre comillas invertidas o
@@ -217,12 +218,13 @@ compact --quiet >/dev/null
 chk "el replay completa el Quick Reference que faltaba, sin cuarentena" "1. **Uno corto** — a|3. **Tres corto** — c|0" \
   "$(qr | grep -E '^[0-9]+\. ' | paste -sd'|' -)|$(cuar)"
 
-echo "== 8. regla multilinea -> cuarentena con el motivo de rewrite_rule =="
-fixture; H=$(huella)
+echo "== 8. regla multilinea -> la marca va solo en su primera linea (2.68.0; antes, cuarentena) =="
+fixture
+L=$(wc -l < "$M/learnings/gate.md")
 emit --type learning.retire --topic gate --match-prefix "Regla multilinea" --motivo obsoleta >/dev/null
 compact --quiet >/dev/null
-chk "cuarentena, nada escrito" "1|$H" "$(cuar)|$(huella)"
-has "motivo bloque-multilinea" "$(motivo)" "^bloque-multilinea: "
+chk "sin cuarentena, mismas lineas, la 6 marcada" "0|$L|1" \
+  "$(cuar)|$(wc -l < "$M/learnings/gate.md")|$(grep -c '^6\. .*⊘ RETIRADA' "$M/learnings/gate.md" | tr -d ' ')"
 
 echo "== 9. el recall no sirve una regla retirada (marcador nuevo y las dos formas viejas) =="
 fixture
