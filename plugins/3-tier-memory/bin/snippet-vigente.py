@@ -18,7 +18,8 @@ disparar en el pegado vigente de control, son estas, y las dos salen de memory/ 
 
 Que lee: el JSON del hook UserPromptSubmit en stdin (campo `prompt`). Solo actua si el prompt
 empieza por `Retomamos:` o `Proximo paso:` (el snippet de Step 8 o la tarjeta de 8e/8c) o por
-`p-…:` (la tarjeta que pega el mod pendientes); en cualquier otro caso sale sin imprimir nada.
+`p-…:` (la tarjeta que pega el mod pendientes); en cualquier otro caso sale sin imprimir nada. Si
+el prompt es un comando (`/cmd …` o `<command-args>…</command-args>`), mira su argumento.
 
 Salida: texto plano para el agente (UserPromptSubmit lo inyecta como contexto), o nada. Es solo
 un aviso: nunca bloquea, y no decide si el trabajo sigue haciendo falta (un plan de varias noches
@@ -41,6 +42,7 @@ BIN = os.path.dirname(os.path.abspath(__file__))
 TARJETA_MOD = re.compile(r"^(p-[0-9a-f]{10}):")
 RETOMAR = re.compile(r"_retomar:\s*\d{4}-\d{2}-\d{2}\s+sessions/(\S+?)_")
 FECHA = re.compile(r"^\d{4}-\d{2}-\d{2}")
+COMANDO = re.compile(r"^\s*/[\w:.-]+\s+(.*)\Z", re.S)
 
 
 def _afines():
@@ -97,33 +99,43 @@ def seccion_retomar(texto):
     return m.group(1) if m else ""
 
 
+def _mtime(ruta):
+    try:
+        return os.path.getmtime(ruta)
+    except OSError:
+        return None
+
+
+def posterior(memory_dir, slug, otro):
+    """True si la ficha `otro` es posterior a `slug`: fecha del nombre mayor, o la misma fecha y
+    escrita despues. Sin fecha en `slug`, cualquier ficha con fecha cuenta."""
+    carpeta = os.path.join(memory_dir, "sessions")
+    if otro == slug or not FECHA.match(otro):
+        return False
+    fecha_base = slug[:10] if FECHA.match(slug) else ""
+    if fecha_base and otro[:10] < fecha_base:
+        return False
+    if fecha_base and otro[:10] == fecha_base:
+        mtime = _mtime(os.path.join(carpeta, otro + ".md"))
+        return mtime is not None and mtime > (_mtime(os.path.join(carpeta, slug + ".md")) or 0)
+    return True
+
+
 def fichas_nuevas(memory_dir, slug, pid, pa):
     """Fichas posteriores a `slug` que citan `pid` en su Como retomar o en su sello hilo_paso,
-    de la mas nueva a la mas vieja. Posterior = fecha del nombre mayor, o la misma fecha y
-    escrita despues."""
+    de la mas nueva a la mas vieja."""
     carpeta = os.path.join(memory_dir, "sessions")
-    base = os.path.join(carpeta, slug + ".md")
-    try:
-        mtime_base = os.path.getmtime(base)
-    except OSError:
-        mtime_base = 0
-    fecha_base = slug[:10] if FECHA.match(slug) else ""
     out = []
     try:
         nombres = os.listdir(carpeta)
     except OSError:
         return out
     for n in nombres:
-        if not n.endswith(".md") or n[:-3] == slug or not FECHA.match(n):
-            continue
-        if fecha_base and n[:10] < fecha_base:
+        if not n.endswith(".md") or not posterior(memory_dir, slug, n[:-3]):
             continue
         ruta = os.path.join(carpeta, n)
-        try:
-            mtime = os.path.getmtime(ruta)
-        except OSError:
-            continue
-        if fecha_base and n[:10] == fecha_base and mtime <= mtime_base:
+        mtime = _mtime(ruta)
+        if mtime is None:
             continue
         texto = _leer(ruta) or ""
         fm = pa.frontmatter(texto)
@@ -133,13 +145,32 @@ def fichas_nuevas(memory_dir, slug, pid, pa):
     return [s for _, _, s in out]
 
 
+def _sin_comando(prompt, pa):
+    """El argumento de un comando, si el prompt es uno; si no, el prompt tal cual.
+
+    `/goalspec:interview Retomamos: …` llega tecleado o envuelto como
+    `<command-args>Retomamos: …</command-args>`, y RUIDO borraba ese bloque entero: el snippet
+    pegado como argumento no contaba (p-8a21c08256; snippet_de_transcripcion ya lo leia, 2.66.1).
+    Como alli, el argumento solo cuenta si empieza por una marca de snippet: un `Retomamos:` que
+    cita las etiquetas `<command-args>` en su texto sigue leyendose entero."""
+    m = pa.ARGS_COMANDO.search(prompt) or COMANDO.match(prompt)
+    if m and _es_snippet(pa.PASTED.sub("", m.group(1)).strip()):
+        return m.group(1)
+    return prompt
+
+
+def _es_snippet(texto):
+    return bool(TARJETA_MOD.match(texto)) or texto.lower().startswith(
+        ("retomamos:", "proximo paso:", "próximo paso:"))
+
+
 def avisos(prompt, memory_dir):
     pa = _afines()
-    texto = pa.PASTED.sub("", pa.RUIDO.sub("", prompt or "")).strip()
+    texto = pa.PASTED.sub("", pa.RUIDO.sub("", _sin_comando(prompt or "", pa))).strip()
     m_mod = TARJETA_MOD.match(texto)
     if m_mod:
         ids, slug = [m_mod.group(1)], None
-    elif texto.lower().startswith(("retomamos:", "proximo paso:", "próximo paso:")):
+    elif _es_snippet(texto):
         rec = pa.recibido(texto)
         ids = [x for x in rec["paso"] if x.startswith("p-")]
         slug = rec["retoma"]
@@ -157,7 +188,10 @@ def avisos(prompt, memory_dir):
             continue
         m_ret = RETOMAR.search(vivos[pid])
         nuevas = fichas_nuevas(memory_dir, slug, pid, pa) if slug else []
-        if m_ret and m_ret.group(1) != slug and m_ret.group(1) not in nuevas:
+        # La marca cuenta solo si apunta a una ficha posterior a la pegada (p-c711eabb05: antes
+        # una marca a una ficha mas vieja salia como "ficha mas nueva"). Sin ficha pegada, cuenta.
+        if (m_ret and m_ret.group(1) not in nuevas
+                and (not slug or posterior(memory_dir, slug, m_ret.group(1)))):
             nuevas.insert(0, m_ret.group(1))
         if nuevas:
             extra = f" (y {len(nuevas) - 1} mas)" if len(nuevas) > 1 else ""

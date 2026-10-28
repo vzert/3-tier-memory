@@ -11,8 +11,10 @@ export PYTHONUTF8=1 PYTHONIOENCODING=utf-8
 source "$(dirname "$0")/resolve-project-dir.sh"
 
 # Fast path: casi todos los prompts no son un snippet; sin esto se lanzaria python en cada uno.
+# `Próximo paso:` llega con la tilde tal cual o escapada en el JSON (`ó`); el patron no
+# lleva la barra porque bash 3.2 no la empareja dentro de comillas (p-c711eabb05).
 case "$_HOOK_INPUT" in
-  *Retomamos:*|*'oximo paso:'*|*'"prompt":"p-'*|*'"prompt": "p-'*) ;;
+  *Retomamos:*|*'oximo paso:'*|*'óximo paso:'*|*'u00f3ximo paso:'*|*'"prompt":"p-'*|*'"prompt": "p-'*) ;;
   *) exit 0 ;;
 esac
 

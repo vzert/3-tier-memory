@@ -29,7 +29,7 @@ y el clic del mod pegaba un snippet ya hecho cuando el paso nuevo caia en otro p
 de proyecto-edge, 2026-10-22: la ficha de la Fase 4 retomo la de la Fase 3 y marco otro
 pendiente). Si la marca ya apunta a otra ficha, el compactador no la toca.
 
-Por ultimo liga los hermanos al paso (2.65.2): si un id del paso es un pendiente abierto NACIDO en
+Por ultimo liga los hermanos al paso (2.66.1): si un id del paso es un pendiente abierto NACIDO en
 esta sesion (`_origen: [[sessions/<slug>]]` de esta ficha), cada otro pendiente abierto nacido en
 ella que no tenga `_relacionado` recibe `pendiente.relate` con ese id. Uno que ya cita algo no
 se toca: tiene su ancla, y sumarle el paso lo meteria en el hilo de otro tema. La liga al
