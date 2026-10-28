@@ -1153,6 +1153,14 @@ chk "reclama el orden" "1" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -c 'no
 chk "2.67.4: con otro defecto (orden) el cierre se reimprime" "1" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -c 'Aqui esta, tal como')"
 echo "== 2.67.4: el primer cierre le pide al agente pegar el 🔔 y el 🗓️ sin fence =="
 chk "la instruccion llega al agente" "1" "$(razon "$(corre "$T/t44.jsonl" false -)" | grep -c 'No le agregues fences: solo el snippet trae el suyo')"
+# El mismo parrafo del aviso pide pegar sin fence y nombra el comando del 🗓️ (revisor externo de 2.67.4).
+chk "el mismo parrafo nombra print-recordatorios.py" "1 1" "$(razon "$(corre "$T/t44.jsonl" false -)" | python3 -c '
+import sys
+sys.stdin.reconfigure(encoding="utf-8")
+t = sys.stdin.read()
+i = t.find("Despues del bloque de la revision")
+p = t[i:].split("\n\n")[0] if i >= 0 else ""
+print(int("No le agregues fences" in p), int("print-recordatorios.py" in p))')"
 echo "== 2.67.4: el 🗓️ en un fence y nada mas mal: una linea, sin reimprimir el cierre =="
 python3 "$BIN/checkpoint-audit.py" "$M" --session-file "$F" --no-git > "$T/audit44.txt" || true
 { cat "$T/audit44.txt"; printf '\n%s\n\n' "$REV_OK"; cat "$T/n8b.txt"; printf '\n'; cat "$T/n8e.txt"; printf '\n'; sed '2,$ { /^Retomamos: verificar/ { i\

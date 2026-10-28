@@ -16,7 +16,8 @@ de un fence). En el segundo Stop el guard ya no bloquea: avisa y anexa el cierre
 - `templates/checkpoint-3t-step8.md` (8b y 8c): lo mismo.
 - `test-checkpoint-close-guard.sh`: 3 casos nuevos (aviso de una linea sin anexo, instruccion al
   agente en el primer cierre, anexo que sigue con un defecto de orden). Con el guard de 2.67.3 los
-  dos primeros fallan (el aviso salia en 36 lineas).
+  dos primeros fallan (el aviso salia en 36 lineas). El caso de la instruccion comprueba tambien que
+  el mismo parrafo del aviso nombra `print-recordatorios.py`.
 
 ## [2.67.3] - 2026-10-28
 Origen: p-8a21c08256, con p-c711eabb05 y p-e1bbf2d4e4. `snippet-vigente.py` (el aviso de snippet
