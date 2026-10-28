@@ -263,6 +263,11 @@ Reglas para llenar los slots:
      Si lo propusiste y el usuario lo descarto (`_descartado:` en `## Bugs fixed`), si aplica.
      `checkpoint-audit.py` marca `SALTADO` en `snippet.ninguno_defecto` un `ninguno` con un
      `_pendiente:` de `## Bugs fixed` abierto e inmediato (2.34.0).
+     Si la sesion toco un hilo externo (Step 3-hilos), `ninguno` solo vale despues de leerlo
+     completo: cada `abierto:` de `## Hilos externos` tiene que tener su `p-…` vivo o decir `espera
+     a <quien>`, y el motivo de la media linea y los recordatorios de calendario salen de lo que el
+     hilo dice hoy, no de la parte que viste. `checkpoint-audit.py` lo mide en
+     `snippet.hilo_externo` (2.67.0).
 
      **Tambien aplica cuando el UNICO candidato que encontraste en 2 o 3 quedo excluido por la
      regla de `_revisar` futuro de arriba, y no hay otro sin fecha que lo reemplace** — no es lo
