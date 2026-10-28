@@ -2,7 +2,7 @@
 
 ## [2.67.1] - 2026-10-27
 Origen: p-d8e559e776. Tres limites de `snippet.hilo_externo` (2.67.0) quedaron sin declarar. Se
-reprodujeron los tres sobre fichas de prueba; ninguna ficha real usa todavia `## Hilos externos`.
+reprodujeron los tres sobre fichas de prueba; al medirlos, ninguna ficha real usaba aun `## Hilos externos`.
 
 ### Fixed
 - Una negacion que no va pegada a `leido completo` daba `HECHO`: `no he leido completo`, `nunca`,
@@ -19,8 +19,11 @@ reprodujeron los tres sobre fichas de prueba; ninguna ficha real usa todavia `##
 - Un numero que no es fecha tras `leido completo` (`leido completo 3 de 14`, `0%`) da `HECHO`. Queda
   asi: escribir `leido completo` sobre una lectura parcial es una seccion falsa, que este chequeo no
   promete atrapar, y exigir una fecha ISO bloquearia `el 26 de octubre`, `26/10` o `el dia 26`.
-- Una negacion con otra palabra (`ni`, `tampoco`) o en otra frase (`no pude abrir dos, leido completo …`)
-  no se ve.
+- Una negacion con otra palabra (`ni`, `tampoco`, `ningun`) o en otra parte de la linea (`no pude abrir
+  dos, leido completo …`) no se ve.
+- Un `.`, un parentesis o unas comillas `«»` no cortan la frase: `no hubo mas mensajes. leido completo …`,
+  `(no hubo nuevos) leido completo …` o `«no tocar» leido completo …` bloquean. Se corrige separando
+  con `—` o `;`, o poniendo la etiqueta entre comillas invertidas.
 
 ## [2.67.0] - 2026-10-27
 Un cierre decia `Ninguno` sobre un hilo externo (una bandeja de mensajes entre agentes) que la sesion

@@ -450,7 +450,7 @@ preguntar.
 
 `checkpoint-audit.py` marca `SALTADO` en `snippet.hilo_externo` (y el hook de cierre lo bloquea) si
 la ficha cita un mensaje que ninguna linea de hilo lista (en `mensajes:`; un `abierto:` no cuenta),
-un hilo sin `leido completo <fecha>` (o con `no`, `nunca`, `sin` o `jamas` delante en la misma frase), un hilo sin ningun `abierto:` ni `abiertos: ninguno` debajo, un
+un hilo sin `leido completo <fecha>` (o con `no`, `nunca`, `sin` o `jamas` delante, desde el ultimo `—`, `;`, `,`, `:` o `|`), un hilo sin ningun `abierto:` ni `abiertos: ninguno` debajo, un
 `abierto:` sin `p-…` vivo, sin `espera a <quien>` y sin `_descartado: <decision>_` (vacios o
 negados no cuentan), la palabra `abierto` fuera de su vineta, o un `.hilos-externos.json` que no se
 puede leer. Escribe UNA sola seccion `## Hilos externos`: si hay dos, se miden las dos. No puede saber si de verdad leiste
