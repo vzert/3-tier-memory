@@ -427,6 +427,10 @@ caso "vigente sin ficha nueva"  snippet-vigente.py m_paso_vigente.py test-snippe
 caso "vigente sin marca"        snippet-vigente.py m_paso_vigente.py test-snippet-vigente.sh "nombra la ficha de la marca" vigente-sin-marca
 caso "vigente sin tarjeta mod"  snippet-vigente.py m_paso_vigente.py test-snippet-vigente.sh "avisa por el id de la tarjeta" vigente-sin-tarjeta-mod
 caso "vigente mismo dia"        snippet-vigente.py m_paso_vigente.py test-snippet-vigente.sh "sin salida" vigente-mismo-dia-sin-mtime
+caso "vigente sin comando"      snippet-vigente.py m_paso_vigente.py test-snippet-vigente.sh "tecleado: /cmd Retomamos" vigente-sin-comando
+caso "vigente comando sin marca" snippet-vigente.py m_paso_vigente.py test-snippet-vigente.sh "se lee entero" vigente-comando-sin-marca
+caso "vigente marca sin fecha"  snippet-vigente.py m_paso_vigente.py test-snippet-vigente.sh "marca a una ficha mas vieja" vigente-marca-sin-fecha
+caso "vigente sh sin tilde"     snippet-vigente.sh m_paso_vigente.py test-snippet-vigente.sh "tilde tal cual" vigente-sh-sin-tilde
 caso "cierre sin paso compartido" checkpoint-audit.py m_paso_vigente.py test-paso-compartido.sh "la segunda ficha" audit-sin-paso-compartido
 caso "paso compartido otro dia" checkpoint-audit.py m_paso_vigente.py test-paso-compartido.sh "otro dia" audit-compartido-cualquier-dia
 caso "guard sin paso compartido" checkpoint-close-guard.sh m_paso_vigente.py test-checkpoint-close-guard.sh "la revision trae el aviso del paso compartido" guard-sin-compartido
