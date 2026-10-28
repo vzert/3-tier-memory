@@ -558,7 +558,10 @@ pegarlos al final. El segundo cierre los busca solo DESPUES de `REVISION DEL CIE
 comprueba que van en orden (8b, 8e, 8c), que el snippet sale una sola vez ahi y que despues del
 ultimo bloque no quedan mas de 300 caracteres (una linea corta). En una ficha desde el 2026-10-01
 exige tambien la cabecera con emoji de cada bloque. Si algo de eso
-falla, el aviso al usuario trae el cierre completo, tal como lo imprimen los scripts. Limite: si el
+falla, el aviso al usuario trae el cierre completo, tal como lo imprimen los scripts. Si lo unico
+que falla del cierre es un fence de mas (el 🔔 o el 🗓️ envuelto en uno), el aviso no reimprime el
+cierre, y sin ningun otro problema es una sola linea (2.67.3): el cierre ya esta completo arriba, y
+reimprimirlo en gris enterraba el snippet. Limite: si el
 hook no corre (instalacion sin hooks), el cierre no se pega; queda en la ficha.
 
 **El snippet no se congela al terminar el checkpoint (2.33.1).** Si DESPUES, en la misma sesion,
@@ -592,7 +595,9 @@ python3 "$JBIN/print-recordatorios.py" "$SESSION_FILE"
 ```
 
 Imprime los dos primeros **sin el fence** del prompt (solo Retomamos va en color) y, si hay mas,
-`+N con fecha futura en _pendientes.md`. El tope es para no llenar la terminal.
+`+N con fecha futura en _pendientes.md`. El tope es para no llenar la terminal. Pegalo asi, sin
+volver a ponerle el fence que el prompt tiene en la ficha (2.67.3: medido en un cierre real de
+2026-10-28, el agente lo envolvia y el 🗓️ salia en color).
 
 **Un pendiente, un recordatorio vivo (2.39.2).** Antes de generar el bloque, busca si OTRA ficha
 ya tiene un recordatorio con fecha futura para ese mismo `_id:`

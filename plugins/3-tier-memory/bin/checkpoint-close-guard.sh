@@ -696,6 +696,7 @@ REVISION_CABECERA = "REVISION DEL CIERRE:"
 # reentrante los mide solo en el texto posterior a `REVISION DEL CIERRE:`.
 cierre_final = []   # lo que la revision pide pegar al final (primer cierre)
 anexo = []          # lo que falto al final, para mostrarselo al usuario (cierre reentrante)
+fence_extra = 0     # lineas de fence fuera del snippet en un cierre por lo demas completo (2.67.3)
 # Avisos `snippet.marco` del audit (2.60.0): POR-DISENO, no bloquean por si solos. Viajan dentro de
 # la revision del cierre, que ya bloquea una vez, para que el agente rehaga el `Proximo paso` o diga
 # por que se queda. Sin esto nadie los leia: Step 8 escribe el snippet despues de Step 7a.
@@ -1121,8 +1122,14 @@ if reentrante and presentes and not anexo:
             fences = len(re.findall(r"(?m)^[ \t>]*(?:`{3,}|~{3,})", crudo[cabs[-1]:]))
             permitidos = 2 if any(o == 1 and "```" in ls for o, ls, _ in presentes) else 0
             if fences > permitidos:
-                otros.append(f"hay {fences - permitidos} linea(s) de fence fuera del snippet: solo "
-                             "Retomamos va en color, el pendiente y el calendario van sin fence")
+                # Todos los bloques estan, en orden y al final: el cierre ya lo tiene el usuario.
+                # Reimprimirlo en el aviso (gris, debajo) entierra el snippet azul que el aviso
+                # protege (Victor, 2026-10-28: el agente envolvia el prompt del 🗓️ en un fence).
+                # Una linea, sin anexo (2.67.3).
+                fence_extra = fences - permitidos
+                problemas.append(f"el cierre esta completo arriba, pero lleva {fence_extra} linea(s) "
+                                 "de fence fuera del snippet: solo Retomamos va en color, el "
+                                 "pendiente y el calendario van sin fence.")
     if otros:
         problemas.append("El cierre no quedo como lo ultimo y una sola vez: " + "; ".join(otros) + ".")
         anexo = [(o, t.strip("\n")) for o, _, t in presentes]
@@ -1260,7 +1267,11 @@ if not problemas and not (pedir_revision and not reentrante):
     sys.exit(0)
 
 cuerpo = "\n".join(f"- {p}" for p in problemas)
-if reentrante:
+if reentrante and fence_extra and len(problemas) == 1 and not anexo:
+    # Solo sobra un fence: una linea, sin anexo, para que el snippet azul siga a la vista (2.67.3).
+    msg = "3-tier-memory: " + problemas[0]
+    print(json.dumps({"systemMessage": msg}, ensure_ascii=False))
+elif reentrante:
     msg = "3-tier-memory: el cierre del checkpoint sigue incompleto tras un aviso:\n" + cuerpo
     if anexo:
         # El agente ya no puede pegarlo (no hay segundo bloqueo): se le ensena al usuario, al final.
@@ -1352,7 +1363,9 @@ else:
             partes.append(
                 "Despues del bloque de la revision, termina tu respuesta con el cierre, en este orden, "
                 "tal cual lo imprimen, sin resumirlo y sin nada despues. No lo pegues antes de la "
-                "revision ni dos veces:\n"
+                "revision ni dos veces. No le agregues fences: solo el snippet trae el suyo; el "
+                "🔔 y el 🗓️ van sin fence, aunque en la ficha el prompt del evento este dentro de uno "
+                "(un fence de mas saca el bloque en color y el aviso lo reclama):\n"
                 + "\n".join(f"- {e}" for _, e in sorted(dict.fromkeys(cierre_final), key=lambda x: x[0])))
     completo = "\n\n".join(partes)
     # El aviso completo va a un archivo y el `reason` solo lo senala (2.59.0). Un Stop no tiene

@@ -1150,6 +1150,20 @@ echo "== 2.44.0: el calendario antes del pendiente: lo reclama por el orden =="
 { printf '%s\n\n' "$REV_OK"; cat "$T/n8b.txt"; printf '\n'; cat "$T/n8c.txt"; printf '\n'; cat "$T/n8e.txt"; } > "$T/r44-orden.txt"
 vuelta "$T/t44.jsonl" "$T/t.jsonl" "$T/r44-orden.txt"
 chk "reclama el orden" "1" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -c 'no van en el orden snippet, pendiente, calendario')"
+chk "2.67.3: con otro defecto (orden) el cierre se reimprime" "1" "$(razon "$(corre "$T/t.jsonl" true -)" | grep -c 'Aqui esta, tal como')"
+echo "== 2.67.3: el primer cierre le pide al agente pegar el 🔔 y el 🗓️ sin fence =="
+chk "la instruccion llega al agente" "1" "$(razon "$(corre "$T/t44.jsonl" false -)" | grep -c 'No le agregues fences: solo el snippet trae el suyo')"
+echo "== 2.67.3: el 🗓️ en un fence y nada mas mal: una linea, sin reimprimir el cierre =="
+python3 "$BIN/checkpoint-audit.py" "$M" --session-file "$F" --no-git > "$T/audit44.txt" || true
+{ cat "$T/audit44.txt"; printf '\n%s\n\n' "$REV_OK"; cat "$T/n8b.txt"; printf '\n'; cat "$T/n8e.txt"; printf '\n'; sed '2,$ { /^Retomamos: verificar/ { i\
+```
+}; }' "$T/n8c.txt"; printf '```\n'; } > "$T/r44-fence.txt"
+chk "el fixture lleva 4 fences (2 del snippet, 2 del calendario)" "4" "$(grep -c '^```' "$T/r44-fence.txt")"
+vuelta "$T/t44.jsonl" "$T/t.jsonl" "$T/r44-fence.txt"
+O=$(razon "$(corre "$T/t.jsonl" true -)")
+chk "reclama el fence" "1" "$(printf '%s' "$O" | grep -c 'fence fuera del snippet')"
+chk "una sola linea" "1" "$(printf '%s\n' "$O" | grep -c .)"
+chk "sin el cierre reimpreso (ni 🔁 ni Retomamos ni la frase del anexo)" "0 0 0" "$(printf '%s' "$O" | grep -c '🔁') $(printf '%s' "$O" | grep -c 'Retomamos:') $(printf '%s' "$O" | grep -c 'Aqui esta, tal como')"
 echo "== 2.44.0: la misma respuesta sin emojis ni fences sobre una ficha anterior al corte: silencio =="
 sed -i.bak 's/^date: 2026-10-01$/date: 2026-09-30/' "$F" && rm -f "$F.bak"
 grep -v -e '^🔁 Siguiente' -e '^🔔 ' -e '^🗓️ ' -e '^```$' "$T/r44.txt" > "$T/r44-viejo.txt"
