@@ -148,6 +148,7 @@ A=$(migrar --aviso); rc=$?
 chk "aviso: rc=0" "0" "$rc"
 chk "aviso: cuenta los 7 movibles (no P3 sin _id ni las lineas sin enlace)" "1" "$(echo "$A" | grep -c '^MIGRAR-TIER2: 7 linea(s) de mas de 800 caracteres.*/migrar-tier2-3t')"
 chk "aviso: no escribe nada" "$H0" "$(huella)"
+chk "aviso: el umbral del texto sigue a --largas" "1" "$(migrar --aviso --largas 900 | grep -c '^MIGRAR-TIER2: .* de mas de 900 caracteres')"
 
 echo "== 2. --apply con eventos sin compactar =="
 emit --type pendiente.window --id "$P_CORTO" --revisar 2026-12-31 >/dev/null 2>&1
@@ -243,6 +244,13 @@ printf -- '# P\n\n## Alta prioridad\n\n- [ ] %s — _creado: 2026-08-01_ — _id
 printf -- '# L\n\n%s [[learnings/t]]\n' "$(largo NL 140)" > "$MQ/_learnings.md"
 chk "dry-run de ese corpus: 0 migrables" "1" "$(python3 "$BIN/migrar-tier2.py" "$MQ" | grep -c 'candidatos=3 migrables=0')"
 chk "aviso: calla con mes sin tabla, sin fila ni _creado, y learning que no es fila ni lista" "" "$(python3 "$BIN/migrar-tier2.py" "$MQ" --aviso)"
+# Un U+2028 dentro de una linea larga: el plan no parte ahi, el aviso tampoco debe.
+python3 - "$MQ/_pendientes.md" "$(largo LS 140)" <<'PYEOF'
+import sys
+open(sys.argv[1], "a", encoding="utf-8").write(f"- [ ] {sys.argv[2][:400]}\u2028{sys.argv[2][400:]} — _creado: 2026-10-01_ — _id: p-00000000c3_\n")
+PYEOF
+chk "U+2028 en una linea larga: el plan la cuenta movible" "1" "$(python3 "$BIN/migrar-tier2.py" "$MQ" | grep -c 'candidatos=4 migrables=1')"
+chk "U+2028 en una linea larga: el aviso tambien" "1" "$(python3 "$BIN/migrar-tier2.py" "$MQ" --aviso | grep -c '^MIGRAR-TIER2: 1 linea')"
 P="$T/proj"; MP="$P/memory"; mkdir -p "$MP"
 printf -- '---\ntype: index\n---\n# Pendientes\n\n## Alta prioridad\n\n- [ ] %s — _creado: 2026-09-01_ — _id: p-00000000b1_\n' "$(largo SS 140)" > "$MP/_pendientes.md"
 correr() { printf '%s' "{\"cwd\":\"$P\",\"source\":\"startup\",\"hook_event_name\":\"SessionStart\"}" \

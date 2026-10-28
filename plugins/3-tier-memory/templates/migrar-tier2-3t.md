@@ -26,13 +26,15 @@ in Tier 2. Ids do not change. The session start says, in one line (`MIGRAR-TIER2
 something to move.
 
 CORE RULES:
-- Nothing is written before the user says yes to the dry-run table (Step 2).
+- Nothing is written before the user says yes to the dry-run table (Step 2): Steps 0-1 only read.
+  Even the journal compaction (which applies pending events and refreshes `.journal/fingerprints.json`)
+  waits for Step 3.
 - The script writes Tier 3 first, checks it, and only then shortens Tier 2; it copies every file it
   may touch to `.journal/migrar-tier2/<date-time>/` before the first write. Do not edit the indexes
   by hand around it.
 - A `no-migrable` line is reported, never forced. Its reason says what would unlock it.
 
-## Step 0: Locate memory directory and scripts, compact
+## Step 0: Locate memory directory and scripts
 
 If `memory/` exists in the project root, use it (Model B). Otherwise check auto-memory (Model A).
 
@@ -51,11 +53,13 @@ else
 fi
 { [ -n "$JBIN" ] && [ -f "$JBIN/migrar-tier2.py" ] && [ -f "$JBIN/journal-compact.py" ]; } || JBIN=NONE
 echo "JBIN=$JBIN"
-[ "$JBIN" != NONE ] && python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"
+ls "$MEMORY_DIR/.journal/pending" 2>/dev/null | grep -c '\.json$'
 ```
 
 **`JBIN=NONE`: stop** and tell the user the plugin scripts (2.68.0 or later) were not found.
-The compaction matters: with events still in `.journal/pending/` the script refuses to apply.
+The last number is how many journal events wait to be compacted. With more than 0, the dry-run below
+does not show them yet (they are new, short lines since 2.63.47); Step 3 compacts them first, because
+the script refuses to apply with events still pending.
 
 ## Step 1: Dry-run
 
@@ -85,12 +89,14 @@ Only on Apply go on. On "Not now", stop: the session-start line will keep remind
 ## Step 3: Apply
 
 ```bash
+python3 "$JBIN/journal-compact.py" --memory-dir "$MEMORY_DIR"
 python3 "$JBIN/migrar-tier2.py" "$MEMORY_DIR" --apply; echo "rc=$?"
 python3 "$JBIN/migrar-tier2.py" "$MEMORY_DIR" | tail -1
 python3 "$JBIN/migrar-tier2.py" "$MEMORY_DIR" --aviso
 ```
 
 The apply's last line is `candidatos=N migrables=M no_migrables=K aplicados=A errores=E respaldo=<dir>`.
+`rc=1` and no summary line: read stderr (lock busy or events still pending: compact again and retry).
 `rc=1` with errors: each failed line was left as it was (stderr says why); report them. The second
 dry-run must say `migrables=0`; if not, report what is left. The `--aviso` line is what the next
 session start will show: empty means the reminder is gone.

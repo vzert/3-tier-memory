@@ -451,7 +451,9 @@ def contar_aviso(mem, largas):
         if not os.path.isfile(path):
             continue
         with open(path, encoding="utf-8", errors="replace") as fh:
-            lines = fh.read().splitlines()
+            # split("\n") y no splitlines(): este parte tambien en U+2028, \x0c..., y el plan no
+            # (jc.read_lines); una linea larga con uno de esos dejaria de contarse.
+            lines = fh.read().split("\n")
         for i, linea in enumerate(lines):
             if len(linea) <= largas:
                 continue
@@ -486,11 +488,11 @@ def contar_aviso(mem, largas):
     return n, b
 
 
-def linea_aviso(n, b):
+def linea_aviso(n, b, largas=800):
     if not n:
         return ""
     kb = f"~{max(1, round(b / 1024))} KB"
-    return (f"MIGRAR-TIER2: {n} linea(s) de mas de 800 caracteres en los indices Tier 2 ({kb} que "
+    return (f"MIGRAR-TIER2: {n} linea(s) de mas de {largas} caracteres en los indices Tier 2 ({kb} que "
             f"el agente paga en cada sesion). Corre /migrar-tier2-3t: muestra que moveria a Tier 3 y "
             f"pide tu si antes de escribir.")
 
@@ -528,7 +530,7 @@ def main():
     if a.aviso:
         try:
             if os.path.isdir(mem):
-                txt = linea_aviso(*contar_aviso(mem, a.largas))
+                txt = linea_aviso(*contar_aviso(mem, a.largas), largas=a.largas)
                 if txt:
                     print(txt)
         except Exception:
