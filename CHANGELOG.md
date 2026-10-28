@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.67.1] - 2026-10-27
+## [2.67.2] - 2026-10-27
 El CI de main tras el merge de #80 (2.66.0) salio rojo en `platforms` / windows-latest:
 `test-migrar-tier2` pass=43 fail=3 (corrida 40520030467). ubuntu y macOS, verdes.
 
