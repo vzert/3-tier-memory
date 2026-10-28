@@ -696,7 +696,7 @@ REVISION_CABECERA = "REVISION DEL CIERRE:"
 # reentrante los mide solo en el texto posterior a `REVISION DEL CIERRE:`.
 cierre_final = []   # lo que la revision pide pegar al final (primer cierre)
 anexo = []          # lo que falto al final, para mostrarselo al usuario (cierre reentrante)
-fence_extra = 0     # lineas de fence fuera del snippet en un cierre por lo demas completo (2.67.4)
+fence_extra = 0     # lineas de fence fuera del snippet en un cierre por lo demas completo (2.68.1)
 # Avisos `snippet.marco` del audit (2.60.0): POR-DISENO, no bloquean por si solos. Viajan dentro de
 # la revision del cierre, que ya bloquea una vez, para que el agente rehaga el `Proximo paso` o diga
 # por que se queda. Sin esto nadie los leia: Step 8 escribe el snippet despues de Step 7a.
@@ -1125,7 +1125,7 @@ if reentrante and presentes and not anexo:
                 # Todos los bloques estan, en orden y al final: el cierre ya lo tiene el usuario.
                 # Reimprimirlo en el aviso (gris, debajo) entierra el snippet azul que el aviso
                 # protege (Victor, 2026-10-28: el agente envolvia el prompt del 🗓️ en un fence).
-                # Una linea, sin anexo (2.67.4).
+                # Una linea, sin anexo (2.68.1).
                 fence_extra = fences - permitidos
                 problemas.append(f"el cierre esta completo arriba, pero lleva {fence_extra} linea(s) "
                                  "de fence fuera del snippet: solo Retomamos va en color, el "
@@ -1268,7 +1268,7 @@ if not problemas and not (pedir_revision and not reentrante):
 
 cuerpo = "\n".join(f"- {p}" for p in problemas)
 if reentrante and fence_extra and len(problemas) == 1 and not anexo:
-    # Solo sobra un fence: una linea, sin anexo, para que el snippet azul siga a la vista (2.67.4).
+    # Solo sobra un fence: una linea, sin anexo, para que el snippet azul siga a la vista (2.68.1).
     msg = "3-tier-memory: " + problemas[0]
     print(json.dumps({"systemMessage": msg}, ensure_ascii=False))
 elif reentrante:

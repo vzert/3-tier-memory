@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.67.4] - 2026-10-28
+## [2.68.1] - 2026-10-28
 Victor (via `/goalspec:interview`): en los cierres de `/checkpoint-3t` salia el aviso "hay 2
 linea(s) de fence fuera del snippet" seguido del cierre entero en gris, y el snippet azul quedaba
 arriba, fuera de la vista. Causa, medida en un cierre real del 2026-10-28: `print-recordatorios.py`

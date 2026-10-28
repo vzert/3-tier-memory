@@ -560,7 +560,7 @@ ultimo bloque no quedan mas de 300 caracteres (una linea corta). En una ficha de
 exige tambien la cabecera con emoji de cada bloque. Si algo de eso
 falla, el aviso al usuario trae el cierre completo, tal como lo imprimen los scripts. Si lo unico
 que falla del cierre es un fence de mas (el 🔔 o el 🗓️ envuelto en uno), el aviso no reimprime el
-cierre, y sin ningun otro problema es una sola linea (2.67.4): el cierre ya esta completo arriba, y
+cierre, y sin ningun otro problema es una sola linea (2.68.1): el cierre ya esta completo arriba, y
 reimprimirlo en gris enterraba el snippet. Limite: si el
 hook no corre (instalacion sin hooks), el cierre no se pega; queda en la ficha.
 
@@ -596,7 +596,7 @@ python3 "$JBIN/print-recordatorios.py" "$SESSION_FILE"
 
 Imprime los dos primeros **sin el fence** del prompt (solo Retomamos va en color) y, si hay mas,
 `+N con fecha futura en _pendientes.md`. El tope es para no llenar la terminal. Pegalo asi, sin
-volver a ponerle el fence que el prompt tiene en la ficha (2.67.4: medido en un cierre real de
+volver a ponerle el fence que el prompt tiene en la ficha (2.68.1: medido en un cierre real de
 2026-10-28, el agente lo envolvia y el 🗓️ salia en color).
 
 **Un pendiente, un recordatorio vivo (2.39.2).** Antes de generar el bloque, busca si OTRA ficha
