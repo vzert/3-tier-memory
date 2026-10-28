@@ -1,5 +1,5 @@
 #!/bin/bash
-# Prueba de 2.65.2: los dos huecos por los que un pendiente nacido en una sesion quedaba en el hilo
+# Prueba de 2.66.1: los dos huecos por los que un pendiente nacido en una sesion quedaba en el hilo
 # solo por coincidencia (caso real de otro proyecto, 2026-10-26: el paso y tres hermanos nacieron en una
 # sesion que no recibio `Retomamos:`).
 #

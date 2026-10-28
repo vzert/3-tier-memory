@@ -243,7 +243,7 @@ def pendientes(path):
 # las Bajas (57-73 % nunca volvian). Las cinco piezas:
 #   (1) liga al nacer: journal-emit `pendiente.add` liga cada pendiente nuevo a los ids del
 #       `Proximo paso` que la sesion recibio (`paso_recibido_de`), sin criterio del agente; y
-#       (2.65.2) si el paso que la sesion ESCRIBE es uno de sus pendientes nuevos, marcar-retomar.py
+#       (2.66.1) si el paso que la sesion ESCRIBE es uno de sus pendientes nuevos, marcar-retomar.py
 #       liga a el los demas nuevos de la sesion que no tengan
 #       `_relacionado` (Step 8a2);
 #   (2) hilo = lo que la sesion recibio + lo que nacio en ella + el paso que escribe, mas sus
@@ -416,7 +416,7 @@ def hilo(ficha_texto, pend_path, slug=None, hoy=None):
 PASTED = re.compile(r"</?pasted_content[^>]*>")
 RUIDO = re.compile(r"<(system-reminder|local-command-caveat|command-name|command-message|"
                    r"command-args|local-command-stdout)>.*?</\1>", re.S)
-# 2.65.2: el argumento de un comando. `/goalspec:interview Retomamos: …` llega como
+# 2.66.1: el argumento de un comando. `/goalspec:interview Retomamos: …` llega como
 # `<command-args>Retomamos: …</command-args>` y RUIDO lo borraba: la sesion quedaba sin sello y sin
 # liga al nacer (caso real de otro proyecto, 2026-10-26).
 ARGS_COMANDO = re.compile(r"<command-args>(.*?)</command-args>", re.S)
@@ -441,7 +441,7 @@ def snippet_de_transcripcion(ruta):
     se busca un `Retomamos:` mas abajo (seria un snippet pegado para otra cosa). El envoltorio
     `<pasted_content …>` se quita: asi llega un snippet pegado como bloque. Un comando cuyo
     argumento empieza por `Retomamos:` (`/goalspec:interview Retomamos: …`) cuenta como el snippet
-    (2.65.2)."""
+    (2.66.1)."""
     import json
     try:
         fh = open(ruta, encoding="utf-8", errors="replace")

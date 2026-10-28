@@ -23,6 +23,25 @@ plugin.
   arranque, porque mover el texto escribe en la memoria del usuario y eso lo confirma la persona.
 - `test-migrar-tier2.sh` seccion 8 y asertos del aviso en las secciones 1, 3 y 7.
 
+## [2.67.3] - 2026-10-28
+Origen: p-8a21c08256, con p-c711eabb05 y p-e1bbf2d4e4. `snippet-vigente.py` (el aviso de snippet
+viejo al pegar) no veia un `Retomamos:` pasado como argumento de un comando; 2.66.1 ya lo habia
+cerrado en `snippet_de_transcripcion`, pero no en este hook.
+
+### Fixed
+- Un snippet pasado como argumento de un comando (`/goalspec:interview Retomamos: …`, tecleado o
+  envuelto en `<command-args>`) cuenta como el snippet pegado. El argumento solo cuenta si empieza
+  por una marca de snippet (`Retomamos:`, `Proximo paso:`, `p-…:`); un `Retomamos:` que cita esas
+  etiquetas en su texto se sigue leyendo entero.
+- Una marca `_retomar` que apunta a una ficha mas vieja que la pegada ya no sale como "ficha mas
+  nueva": usa la misma regla de fecha que las demas fichas (`posterior()`).
+- El filtro rapido de `snippet-vigente.sh` ve `Próximo paso:` con tilde, tal cual o escapada en el
+  JSON (`\u00f3`).
+- Comentarios que decian 2.65.2 para el cambio que salio como 2.66.1.
+- `test-snippet-vigente.sh` bloques 13 y 13b: 7 asertos salen rojos contra 2.67.1 y todos verdes
+  con el arreglo. `mutation-check.sh`: 2 patrones siguen al codigo nuevo y 4 casos nuevos
+  (comando, comando sin marca, marca sin fecha, tilde).
+
 ## [2.67.2] - 2026-10-27
 El CI de main tras el merge de #80 (2.66.0) salio rojo en `platforms` / windows-latest:
 `test-migrar-tier2` pass=43 fail=3 (corrida 40520030467). ubuntu y macOS, verdes.
