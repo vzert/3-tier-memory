@@ -11,11 +11,13 @@ plugin.
   usuario y `migrar-tier2.py --apply` con respaldo en `.journal/migrar-tier2/`. Explica como
   deshacerlo.
 - `migrar-tier2.py --aviso`: una linea `MIGRAR-TIER2: N linea(s) ... Corre /migrar-tier2-3t`, o nada;
-  sale 0 siempre. No abre `pendientes/`: el plan entero tardo hasta 5,5 s en un proyecto real y el
-  hook de arranque tiene 10 s para todo; el conteo tarda menos de 0,2 s en los 8 proyectos con mas
-  texto largo. No cuenta lo que nunca se podra mover sin intervenir (sin `_id`, sin fichero destino),
-  asi que no se queda encendido para siempre; puede contar de mas lo que solo el plan descarta (fila
-  mensual cerrada, mes sin tabla).
+  sale 0 siempre. No corre el plan entero (tardo hasta 5,5 s en un proyecto real y el hook de
+  arranque tiene 10 s para todo): lee `pendientes/` una vez (ids con fila, meses con tabla) y tarda
+  0,04-0,05 s en los 4 proyectos con mas texto largo. No cuenta lo que nunca se podra mover sin
+  intervenir (sin `_id`, sin fichero destino, mes sin tabla, sin fila ni `_creado`, una linea de
+  learnings que no es fila ni lista), asi que no se queda encendido tras migrar; solo una fila
+  mensual ya cerrada cuenta de mas. En copias de los 8 proyectos del dry-run el aviso dio la misma
+  cifra que el plan y callo tras `--apply`.
 - `session-start.sh` lleva esa linea a los dos canales (agente y persona), fuera de Paperclip, como
   `MIGRAR-LEARNINGS`, e instala el comando con los demas `-3t`. Solo cuenta: nunca `--apply` en el
   arranque, porque mover el texto escribe en la memoria del usuario y eso lo confirma la persona.
