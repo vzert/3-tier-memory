@@ -13,7 +13,7 @@ cerrado en `snippet_de_transcripcion`, pero no en este hook.
 - Una marca `_retomar` que apunta a una ficha mas vieja que la pegada ya no sale como "ficha mas
   nueva": usa la misma regla de fecha que las demas fichas (`posterior()`).
 - El filtro rapido de `snippet-vigente.sh` ve `Próximo paso:` con tilde, tal cual o escapada en el
-  JSON (`ó`).
+  JSON (`\u00f3`).
 - Comentarios que decian 2.65.2 para el cambio que salio como 2.66.1.
 - `test-snippet-vigente.sh` bloques 13 y 13b: 7 asertos salen rojos contra 2.67.1 y todos verdes
   con el arreglo. `mutation-check.sh`: 2 patrones siguen al codigo nuevo y 4 casos nuevos
