@@ -2,7 +2,7 @@
 
 ## [2.67.1] - 2026-10-27
 Origen: p-d8e559e776. Tres limites de `snippet.hilo_externo` (2.67.0) quedaron sin declarar. Se
-reprodujeron los tres sobre fichas de prueba; al medirlos, ninguna ficha real usaba aun `## Hilos externos`.
+reprodujeron los tres sobre fichas de prueba.
 
 ### Fixed
 - Una negacion que no va pegada a `leido completo` daba `HECHO`: `no he leido completo`, `nunca`,
