@@ -16,7 +16,11 @@ PLUGIN_ROOT="$(cd "$BIN/.." && pwd)"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 pass=0; fail=0
 chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: esperaba '$2', salio '$3'"; fi; }
-hash() { shasum "$1" | cut -d' ' -f1; }
+# sha256 por Python: el Git Bash del runner windows-latest no trae `shasum` (corrida
+# 40520030467), y ahi las dos llamadas daban "" y un
+# "no cambia nada" pasaba comparando vacio con vacio.
+hash_() { python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'; }
+hash() { hash_ < "$1"; }
 unset CLAUDE_CODE_SESSION_ID CLAUDE_PROJECT_DIR
 
 VIEJO_1='1. Read `memory/_pendientes.md` — open action items'
@@ -38,7 +42,7 @@ chk "ya no manda hacer Read de _pendientes.md" "0" "$(grep -c '^1\. Read `memory
 chk "ya no manda hacer Read de _learnings.md" "0" "$(grep -c '^2\. Read `memory/_learnings.md`' "$B")"
 chk "manda /status-3t" "1" "$(grep -c '^1\. Run `/status-3t`.*Do NOT read' "$B")"
 chk "manda grep" "1" "$(grep -c '^2\. Look things up with `grep -i' "$B")"
-chk "el resto queda igual (lineas de fuera del par)" "$(grep -v '^[12]\. ' "$T/b1.orig" | shasum)" "$(grep -v '^[12]\. ' "$B" | shasum)"
+chk "el resto queda igual (lineas de fuera del par)" "$(grep -v '^[12]\. ' "$T/b1.orig" | hash_)" "$(grep -v '^[12]\. ' "$B" | hash_)"
 chk "la linea de Index con _pendientes.md sigue" "1" "$(grep -c '^- `memory/_pendientes.md` — open action items$' "$B")"
 chk "deja copia identica al original" "$(hash "$T/b1.orig")" "$(hash "$T/MEMORY.md.pre-2.64.2")"
 chk "sin ficheros temporales" "0" "$(ls "$T" | grep -c 'tmp-')"
