@@ -90,6 +90,11 @@ def load_compactor(bin_dir):
         return None
 
 
+def rel(path, mem):
+    """Ruta relativa a la memoria con `/` tambien en Windows: es lo que se imprime."""
+    return os.path.relpath(path, mem).replace(os.sep, "/")
+
+
 def normalizar(texto):
     """Forma de comparar 'este texto ya esta alli': sin enfasis, sin `\\|`, espacios colapsados."""
     t = unicodedata.normalize("NFC", texto).replace("\\|", "|")
@@ -178,10 +183,10 @@ def plan_pendientes(jc, mem, lines, largas):
         if found:
             path, _l, _i, cells, _c = found
             if cells[jc.COL_RESUELTO]:
-                out.append((i, "no-migrable: su fila mensual ya esta cerrada", os.path.relpath(
-                    path, mem), tit, None))
+                out.append((i, "no-migrable: su fila mensual ya esta cerrada", rel(path, mem),
+                            tit, None))
                 continue
-            destino = os.path.relpath(path, mem)
+            destino = rel(path, mem)
             estado = ("acorta (Tier 3 ya lo tiene)"
                       if normalizar(texto) in normalizar(jc.detalle_de_celda(cells[jc.COL_TEXT]))
                       else "mueve")
@@ -194,7 +199,7 @@ def plan_pendientes(jc, mem, lines, largas):
                 out.append((i, f"no-migrable: pendientes/{c.group(1)[:7]}.md no tiene tabla "
                                "(repair-dualwrite.py)", "-", tit, None))
                 continue
-            destino = os.path.relpath(jc.monthly_path(mem, c.group(1)), mem) + " (fila nueva)"
+            destino = rel(jc.monthly_path(mem, c.group(1)), mem) + " (fila nueva)"
             estado = "mueve"
         accion = {"pid": pid, "texto": texto, "titulo": tit, "sangria": sangria, "cola": cola}
         out.append((i, estado, destino, tit, accion))
@@ -238,7 +243,7 @@ def plan_subvineta(jc, mem, lines, i, linea):
     if found:
         if found[3][jc.COL_RESUELTO]:
             return (i, "no-migrable: la fila mensual de su padre ya esta cerrada", "-", tit, None)
-        destino = os.path.relpath(found[0], mem)
+        destino = rel(found[0], mem)
         ya = normalizar(cuerpo) in normalizar(jc.detalle_de_celda(found[3][jc.COL_TEXT]))
     else:
         c = CREADO_RE.search(padre)
@@ -248,7 +253,7 @@ def plan_subvineta(jc, mem, lines, i, linea):
         if mensual_sin_tabla(jc, jc.monthly_path(mem, c.group(1))):
             return (i, f"no-migrable: pendientes/{c.group(1)[:7]}.md no tiene tabla "
                        "(repair-dualwrite.py)", "-", tit, None)
-        destino = os.path.relpath(jc.monthly_path(mem, c.group(1)), mem) + " (fila nueva)"
+        destino = rel(jc.monthly_path(mem, c.group(1)), mem) + " (fila nueva)"
         ya = False
     sp = padre.lstrip()
     mp = jc.META_START_RE.search(padre)
@@ -538,7 +543,7 @@ def main():
             except AttributeError:
                 pass
         print(f"candidatos={total} migrables={migrables} no_migrables={total - migrables} "
-              f"aplicados={hechos} errores={errores} respaldo={os.path.relpath(carpeta, mem)}")
+              f"aplicados={hechos} errores={errores} respaldo={rel(carpeta, mem)}")
         return 1 if errores else 0
     finally:
         if lock is not None:

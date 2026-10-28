@@ -21,6 +21,10 @@ T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 pass=0; fail=0
 unset CLAUDE_CODE_SESSION_ID
 chk() { if [ "$2" = "$3" ]; then pass=$((pass+1)); echo "  ok  $1"; else fail=$((fail+1)); echo "  FALLA $1: esperaba '$2', salio '$3'"; fi; }
+# sha256 por Python: el Git Bash del runner windows-latest no trae `shasum` (corrida
+# 40520030467), y ahi las dos llamadas daban "" y un
+# "no cambia nada" pasaba comparando vacio con vacio.
+hash_() { python3 -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'; }
 
 M="$T/memory"
 emit() { python3 "$BIN/journal-emit.py" --memory-dir "$M" "$@"; }
@@ -118,10 +122,10 @@ EOF
 )"
 
 echo "== 5. replay idempotente =="
-H1=$(cat "$M/_pendientes.md" "$M"/pendientes/*.md | shasum | cut -c1-40)
+H1=$(cat "$M/_pendientes.md" "$M"/pendientes/*.md | hash_)
 cp "$M"/.journal/applied/*/*.json "$M/.journal/pending/"
 compact --quiet >/dev/null
-chk "un replay no cambia nada" "$H1" "$(cat "$M/_pendientes.md" "$M"/pendientes/*.md | shasum | cut -c1-40)"
+chk "un replay no cambia nada" "$H1" "$(cat "$M/_pendientes.md" "$M"/pendientes/*.md | hash_)"
 chk "sin cuarentena" "0" "$(cuarentena)"
 
 echo "== 6. la linea cambio entre la emision y el compactado =="

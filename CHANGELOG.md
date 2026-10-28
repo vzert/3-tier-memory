@@ -19,6 +19,20 @@ cerrado en `snippet_de_transcripcion`, pero no en este hook.
   con el arreglo. `mutation-check.sh`: 2 patrones siguen al codigo nuevo y 4 casos nuevos
   (comando, comando sin marca, marca sin fecha, tilde).
 
+## [2.67.2] - 2026-10-27
+El CI de main tras el merge de #80 (2.66.0) salio rojo en `platforms` / windows-latest:
+`test-migrar-tier2` pass=43 fail=3 (corrida 40520030467). ubuntu y macOS, verdes.
+
+### Fixed
+- `migrar-tier2.py`: el destino y el respaldo se imprimen con `/` tambien en Windows
+  (`pendientes/2026-10.md`, no `pendientes\2026-10.md`), como `check-wikilinks.py`.
+- `test-migrar-tier2.sh`: las rutas del `python3 -c` del aserto del `\|` escapado van por argv; dentro
+  del codigo MSYS no las convierte y Windows no abria `D:\d/a/...`.
+- `test-migrar-tier2.sh`, `test-pendiente-adopt.sh`, `test-update-puente.sh`: sha256 por Python en vez
+  de `shasum`, que el Git Bash del runner windows-latest no trae ("shasum: command not found" en la
+  corrida 40520030467). Ahi los asertos "no escribe nada" / "no cambia nada"
+  comparaban vacio con vacio y pasaban siempre.
+
 ## [2.67.1] - 2026-10-27
 Origen: p-d8e559e776. Tres limites de `snippet.hilo_externo` (2.67.0) quedaron sin declarar. Se
 reprodujeron los tres sobre fichas de prueba.
