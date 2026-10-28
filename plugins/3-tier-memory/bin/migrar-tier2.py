@@ -40,8 +40,10 @@ cuarentena. Antes de escribir copia cada fichero que va a tocar en
 Sabido y aceptado: en un topic sin `## Related`, la seccion movida queda dentro del cuerpo, y un
 learning.add posterior anade su regla debajo de ella (no cambia la numeracion).
 
-Uso:  migrar-tier2.py MEMORY_DIR [--apply] [--largas CHARS] [--budget SEG]
+Uso:  migrar-tier2.py MEMORY_DIR [--apply | --aviso] [--largas CHARS] [--budget SEG]
 Sin --apply es un dry-run: lista una linea por candidato y no escribe nada.
+--aviso: una linea para el arranque de sesion (`MIGRAR-TIER2: ...`, /migrar-tier2-3t), o nada. Cuenta
+sin abrir pendientes/ (ver contar_aviso) y sale 0 siempre: un aviso no tumba el arranque.
 Salida: `<indice>:<linea> <estado> -> <destino> | <titulo propuesto>` y un resumen
 `candidatos=N migrables=M no_migrables=K`. Codigos: 0 ok; 1 entorno (sin compactador, lock
 ocupado, eventos sin compactar); 2 uso.
@@ -74,6 +76,8 @@ SOLO_ENLACE_RE = re.compile(r"^\s*\[\[[^\]]+\]\]\s*$")
 CLAVES_META = "origen|creado|id|revisar|actualizado|bloqueado|relacionado|retomar"
 # Un metadato termina en el `_` que va seguido de espacio o fin: `[[sessions/a_b]]` lleva `_` dentro.
 SEG_META_RE = re.compile(rf"_(?:{CLAVES_META}):.*?_(?=\s|$)")
+# Lo mismo que journal-compact.META_START_RE: --aviso no carga el compactador.
+META_RE = re.compile(rf"\s*—\s*_(?:{CLAVES_META}):")
 LISTA_RE = re.compile(r"^(\s*(?:\d+\.|[-*])\s+)(.*?)((?:\s*<!--.*?-->)*)\s*$")
 
 
@@ -408,6 +412,89 @@ def sigue_en_tier3(jc, mem, a):
     return all(normalizar(p[1]) in dest for p in a["piezas"])
 
 
+# ----------------------------------------------------------------------- aviso
+
+def contar_aviso(mem, largas):
+    """(lineas, bytes) de las lineas largas que --apply podria mover, para el arranque de sesion.
+
+    El plan entero no cabe ahi: find_monthly_row relee cada pendientes/YYYY-MM.md por pendiente, y
+    medido 2026-10-28 en los 8 proyectos con mas texto largo el dry-run tardo de 0,1 a 5,5 s (el hook
+    tiene 10 s para todo). Aqui pendientes/ se lee UNA vez: que ids tienen fila y que meses tienen
+    tabla. Cuenta lo mismo que el plan salvo una fila mensual ya cerrada, que solo el plan ve (cuenta
+    de mas; /migrar-tier2-3t la lista como no-migrable). Lo que nunca se podra mover sin intervenir
+    (sin `_id`, sin destino, mes sin tabla, ni fila ni lista) no cuenta: medido en copias de los 8
+    proyectos, sin eso el aviso seguia encendido tras migrar en 3 de ellos (2, 26 y 4 lineas)."""
+    con_fila, meses = set(), {}
+    pdir = os.path.join(mem, "pendientes")
+    if os.path.isdir(pdir):
+        for f in os.listdir(pdir):
+            m = re.match(r"(\d{4}-\d{2})\.md$", f)
+            if not m:
+                continue
+            with open(os.path.join(pdir, f), encoding="utf-8", errors="replace") as fh:
+                txt = fh.read()
+            meses[m.group(1)] = bool(re.search(r"^\s*\|", txt, re.M))
+            con_fila.update(ID_RE.findall(txt))
+
+    def pendiente_movible(linea, texto_largo):
+        ids = ID_RE.findall(linea)
+        if not ids or not texto_largo:
+            return False
+        if ids[-1] in con_fila:
+            return True
+        c = CREADO_RE.search(linea)
+        return bool(c) and meses.get(c.group(1)[:7], True)
+
+    n = b = 0
+    for nombre in INDICES:
+        path = os.path.join(mem, nombre)
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            lines = fh.read().splitlines()
+        for i, linea in enumerate(lines):
+            if len(linea) <= largas:
+                continue
+            if nombre == "_pendientes.md":
+                s = linea.lstrip()
+                if s.startswith("- [ ]"):
+                    # El largo tiene que estar en el texto, no en los metadatos (como plan_pendientes).
+                    m = META_RE.search(linea)
+                    if m is None:
+                        ok = False
+                    else:
+                        texto = linea[len(linea) - len(s) + 5:m.start()].strip()
+                        prosa = partir_cola(linea[m.start():])[1]
+                        ok = pendiente_movible(linea, len(f"{texto} {prosa}".strip()) > LIM_TITULO)
+                else:
+                    m = LISTA_RE.match(linea)
+                    k = padre_de(lines, i) if m and m.group(1).startswith((" ", "\t")) else None
+                    ok = k is not None and pendiente_movible(lines[k], True)
+            else:
+                tipo = "learnings" if nombre == "_learnings.md" else "research"
+                rel_ = destino_de(linea, tipo, mem)
+                ok = rel_ is not None and os.path.isfile(os.path.join(mem, rel_))
+                if ok and linea.lstrip().startswith("|"):
+                    celdas = re.split(r"(?<!\\)\|", linea.strip().strip("|"))
+                    ok = any(len(c.strip()) > LIM_TITULO and not SOLO_ENLACE_RE.match(c.strip())
+                             for c in celdas)
+                elif ok:
+                    ok = tipo == "learnings" and bool(LISTA_RE.match(linea))
+            if ok:
+                n += 1
+                b += max(0, len(linea.encode("utf-8")) - LIM_TITULO)
+    return n, b
+
+
+def linea_aviso(n, b):
+    if not n:
+        return ""
+    kb = f"~{max(1, round(b / 1024))} KB"
+    return (f"MIGRAR-TIER2: {n} linea(s) de mas de 800 caracteres en los indices Tier 2 ({kb} que "
+            f"el agente paga en cada sesion). Corre /migrar-tier2-3t: muestra que moveria a Tier 3 y "
+            f"pide tu si antes de escribir.")
+
+
 # ---------------------------------------------------------------------- main
 
 def respaldar(mem, rutas, carpeta):
@@ -431,11 +518,22 @@ def respaldar(mem, rutas, carpeta):
 def main():
     ap = argparse.ArgumentParser(description="Mueve a Tier 3 el texto largo de los indices Tier 2")
     ap.add_argument("memory_dir")
-    ap.add_argument("--apply", action="store_true")
+    modo = ap.add_mutually_exclusive_group()
+    modo.add_argument("--apply", action="store_true")
+    modo.add_argument("--aviso", action="store_true")
     ap.add_argument("--largas", type=int, default=800)
     ap.add_argument("--budget", type=float, default=2.0)
     a = ap.parse_args()
     mem = os.path.abspath(a.memory_dir)
+    if a.aviso:
+        try:
+            if os.path.isdir(mem):
+                txt = linea_aviso(*contar_aviso(mem, a.largas))
+                if txt:
+                    print(txt)
+        except Exception:
+            pass
+        return 0
     jc = load_compactor(os.path.dirname(os.path.abspath(__file__)))
     if jc is None:
         print("migrar-tier2: falta journal-compact.py en el mismo bin/", file=sys.stderr)

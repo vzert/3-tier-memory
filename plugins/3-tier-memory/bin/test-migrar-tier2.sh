@@ -12,6 +12,9 @@
 #  6. El journal sigue funcionando: update conserva el detalle, resolve cierra la fila, learning.add
 #     numera bien con la seccion movida al final del topic.
 #  7. Un pendiente sin _id deja de ser no-migrable tras pendiente.adopt.
+#  8. --aviso (2.68.0): cuenta lo movible sin escribir, calla tras migrar y con lo que no se podra
+#     mover sin intervenir (sin _id, sin destino), sale 0 sin memoria; session-start.sh lleva la
+#     linea MIGRAR-TIER2 a los dos canales y no en Paperclip.
 #
 # Uso: test-migrar-tier2.sh (exit 0 = todo verde). Resumen final: "pass=N fail=M".
 set -u
@@ -141,6 +144,10 @@ chk "dry-run: P3 sin _id es no-migrable" "1" "$(echo "$OUT" | grep -c 'no-migrab
 chk "dry-run: la fila de Topic Files solo se acorta" "1" "$(echo "$OUT" | grep -c 'acorta (Tier 3 ya lo tiene) -> learnings/regla-a.md')"
 chk "dry-run: el QR enlazado se mueve a su topic" "1" "$(echo "$OUT" | grep -c 'mueve -> learnings/topic.md')"
 chk "dry-run: QR y research sin enlace son no-migrables" "2" "$(echo "$OUT" | grep -c 'no-migrable: no apunta')"
+A=$(migrar --aviso); rc=$?
+chk "aviso: rc=0" "0" "$rc"
+chk "aviso: cuenta los 7 movibles (no P3 sin _id ni las lineas sin enlace)" "1" "$(echo "$A" | grep -c '^MIGRAR-TIER2: 7 linea(s) de mas de 800 caracteres.*/migrar-tier2-3t')"
+chk "aviso: no escribe nada" "$H0" "$(huella)"
 
 echo "== 2. --apply con eventos sin compactar =="
 emit --type pendiente.window --id "$P_CORTO" --revisar 2026-12-31 >/dev/null 2>&1
@@ -155,6 +162,7 @@ OUT=$(migrar --apply 2>&1); rc=$?
 echo "$OUT" | tail -1 | sed 's/^/     /'
 chk "--apply: rc=0" "0" "$rc"
 chk "--apply: 7 aplicados, 0 errores" "1" "$(echo "$OUT" | grep -c 'aplicados=7 errores=0')"
+chk "aviso tras --apply: calla (lo que queda no es movible)" "" "$(migrar --aviso)"
 chk "_pendientes.md: queda solo la linea larga de P3 (sin _id)" "1" "$(largas _pendientes.md)"
 chk "_learnings.md: queda solo el QR sin enlace" "1" "$(largas _learnings.md)"
 chk "_research-index.md: queda solo la fila sin enlace" "1" "$(largas _research-index.md)"
@@ -218,6 +226,33 @@ OUT=$(migrar --apply 2>&1)
 chk "P3 adoptado se aplica" "1" "$(echo "$OUT" | grep -c 'aplicados=1 errores=0')"
 chk "_pendientes.md: sin lineas largas" "0" "$(largas _pendientes.md)"
 chk "P3: detalle en Tier 3" "1" "$(fila "$P3" | grep -c 'detalle: P3 palabra0 .*FIN-P3')"
+
+chk "aviso tras adoptar y migrar P3: calla" "" "$(migrar --aviso)"
+
+echo "== 8. --aviso sin memoria y en session-start.sh =="
+E=$(python3 "$BIN/migrar-tier2.py" "$T/no-existe" --aviso 2>&1); rc=$?
+chk "aviso sin memoria: exit 0 y nada" "0 " "$rc $E"
+E=$(python3 "$BIN/migrar-tier2.py" "$M" --aviso --apply 2>&1); rc=$?
+chk "--aviso con --apply: error de uso (rc=2)" "2" "$rc"
+# Lo que el plan descarta y el aviso no debe contar (medido en copias de 3 proyectos reales: el aviso
+# seguia encendido tras migrar): mes sin tabla, sin fila y sin _creado, learning que no es fila ni lista.
+MQ="$T/mq"; mkdir -p "$MQ/pendientes" "$MQ/learnings"
+printf '# 2026-08\n\nsin tabla\n' > "$MQ/pendientes/2026-08.md"
+printf '# t\n' > "$MQ/learnings/t.md"
+printf -- '# P\n\n## Alta prioridad\n\n- [ ] %s — _creado: 2026-08-01_ — _id: p-00000000c1_\n- [ ] %s — _id: p-00000000c2_\n' "$(largo MS 140)" "$(largo SF 140)" > "$MQ/_pendientes.md"
+printf -- '# L\n\n%s [[learnings/t]]\n' "$(largo NL 140)" > "$MQ/_learnings.md"
+chk "dry-run de ese corpus: 0 migrables" "1" "$(python3 "$BIN/migrar-tier2.py" "$MQ" | grep -c 'candidatos=3 migrables=0')"
+chk "aviso: calla con mes sin tabla, sin fila ni _creado, y learning que no es fila ni lista" "" "$(python3 "$BIN/migrar-tier2.py" "$MQ" --aviso)"
+P="$T/proj"; MP="$P/memory"; mkdir -p "$MP"
+printf -- '---\ntype: index\n---\n# Pendientes\n\n## Alta prioridad\n\n- [ ] %s — _creado: 2026-09-01_ — _id: p-00000000b1_\n' "$(largo SS 140)" > "$MP/_pendientes.md"
+correr() { printf '%s' "{\"cwd\":\"$P\",\"source\":\"startup\",\"hook_event_name\":\"SessionStart\"}" \
+  | env "$@" CLAUDE_PROJECT_DIR="$P" CLAUDE_PLUGIN_ROOT="$(cd "$BIN/.." && pwd)" SKIP_CMD_INSTALL=1 HOME="$T/home" bash "$BIN/session-start.sh" 2>/dev/null; }
+campo() { python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("hookSpecificOutput",{}).get("additionalContext","") if sys.argv[1]=="a" else d.get("systemMessage",""))' "$1"; }
+S=$(correr X=1)
+chk "session-start: la linea al agente" "1" "$(printf '%s' "$S" | campo a | grep -c '^MIGRAR-TIER2: 1 linea(s)')"
+chk "session-start: la linea a la persona" "1" "$(printf '%s' "$S" | campo h | grep -c '^MIGRAR-TIER2: 1 linea(s)')"
+S=$(correr PAPERCLIP_RUN_ID=run-1)
+chk "session-start en Paperclip: sin linea" "0" "$(printf '%s' "$S" | grep -c 'MIGRAR-TIER2')"
 
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.68.0] - 2026-10-28
+Origen: p-d8b7bad1e1, decision d483 (opcion C). El dry-run de `migrar-tier2.py` del 2026-10-28 en
+los 40 proyectos con memoria de una maquina encontro 1001 lineas movibles de mas de 800 caracteres
+(~1,1 MB). Moverlas a mano proyecto por proyecto no escala: la migracion pasa a ser una capacidad del
+plugin.
+
+### Added
+- `/migrar-tier2-3t`: dry-run, tabla por indice (mueve / acorta / no-migrable por motivo), un si del
+  usuario y `migrar-tier2.py --apply` con respaldo en `.journal/migrar-tier2/`. Explica como
+  deshacerlo.
+- `migrar-tier2.py --aviso`: una linea `MIGRAR-TIER2: N linea(s) ... Corre /migrar-tier2-3t`, o nada;
+  sale 0 siempre. No abre `pendientes/`: el plan entero tardo hasta 5,5 s en un proyecto real y el
+  hook de arranque tiene 10 s para todo; el conteo tarda menos de 0,2 s en los 8 proyectos con mas
+  texto largo. No cuenta lo que nunca se podra mover sin intervenir (sin `_id`, sin fichero destino),
+  asi que no se queda encendido para siempre; puede contar de mas lo que solo el plan descarta (fila
+  mensual cerrada, mes sin tabla).
+- `session-start.sh` lleva esa linea a los dos canales (agente y persona), fuera de Paperclip, como
+  `MIGRAR-LEARNINGS`, e instala el comando con los demas `-3t`. Solo cuenta: nunca `--apply` en el
+  arranque, porque mover el texto escribe en la memoria del usuario y eso lo confirma la persona.
+- `test-migrar-tier2.sh` seccion 8 y asertos del aviso en las secciones 1, 3 y 7.
+
 ## [2.67.2] - 2026-10-27
 El CI de main tras el merge de #80 (2.66.0) salio rojo en `platforms` / windows-latest:
 `test-migrar-tier2` pass=43 fail=3 (corrida 40520030467). ubuntu y macOS, verdes.
