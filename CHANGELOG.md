@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.67.3] - 2026-10-28
+Origen: p-8a21c08256, con p-c711eabb05 y p-e1bbf2d4e4. `snippet-vigente.py` (el aviso de snippet
+viejo al pegar) no veia un `Retomamos:` pasado como argumento de un comando; 2.66.1 ya lo habia
+cerrado en `snippet_de_transcripcion`, pero no en este hook.
+
+### Fixed
+- Un snippet pasado como argumento de un comando (`/goalspec:interview Retomamos: …`, tecleado o
+  envuelto en `<command-args>`) cuenta como el snippet pegado. El argumento solo cuenta si empieza
+  por una marca de snippet (`Retomamos:`, `Proximo paso:`, `p-…:`); un `Retomamos:` que cita esas
+  etiquetas en su texto se sigue leyendo entero.
+- Una marca `_retomar` que apunta a una ficha mas vieja que la pegada ya no sale como "ficha mas
+  nueva": usa la misma regla de fecha que las demas fichas (`posterior()`).
+- El filtro rapido de `snippet-vigente.sh` ve `Próximo paso:` con tilde, tal cual o escapada en el
+  JSON (`ó`).
+- Comentarios que decian 2.65.2 para el cambio que salio como 2.66.1.
+- `test-snippet-vigente.sh` bloques 13 y 13b: 7 asertos salen rojos contra 2.67.1 y todos verdes
+  con el arreglo. `mutation-check.sh`: 2 patrones siguen al codigo nuevo y 4 casos nuevos
+  (comando, comando sin marca, marca sin fecha, tilde).
+
 ## [2.67.1] - 2026-10-27
 Origen: p-d8e559e776. Tres limites de `snippet.hilo_externo` (2.67.0) quedaron sin declarar. Se
 reprodujeron los tres sobre fichas de prueba.
