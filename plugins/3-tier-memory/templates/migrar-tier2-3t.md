@@ -18,8 +18,8 @@ echo "MEMORY_DIR=$MEMORY_DIR"
 ```
 
 Since 2.63.47 the plugin no longer writes long lines into `_pendientes.md`, `_learnings.md` or
-`_research-index.md`, but the lines written before stay there, and the agent pays for all of that
-text in every session (measured 2026-10-28: 1001 movable lines, ~1.1 MB, across 40 projects of one
+`_research-index.md`, but the lines written before stay there, and the agent reads all of that
+text whenever it consults the index (measured 2026-10-28: 1001 movable lines, ~1.1 MB, across 40 projects of one
 machine). `migrar-tier2.py` moves each line of more than 800 characters to Tier 3 — the monthly row
 of the pendiente, or the topic/research file the line already points to — and leaves a short title
 in Tier 2. Ids do not change. The session start says, in one line (`MIGRAR-TIER2: ...`), when there is

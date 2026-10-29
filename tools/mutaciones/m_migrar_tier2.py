@@ -16,6 +16,13 @@ M = {
     "pierde-prosa": [('    return "".join(f" — {g}" for g in segs), prosa',
                       '    return "".join(f" — {g}" for g in segs), ""')],
     "titulo-sin-recorte": [("    if len(t) <= lim:", "    if True:")],
+    # p-cafb3ae9f1: [[learnings/x.md]] vuelve a buscarse como x.md.md.
+    "enlace-md-md": [('    sin_md = lambda s: s[:-3] if s.endswith(".md") else s', "    sin_md = lambda s: s")],
+    # p-c82b911c23: las dos ramas de contar_aviso que antes no tenian aserto propio.
+    "aviso-destino-inexistente": [("                ok = rel_ is not None and os.path.isfile(os.path.join(mem, rel_))",
+                                   "                ok = rel_ is not None")],
+    "aviso-vineta-padre-sin-id": [("                    ok = k is not None and pendiente_movible(lines[k], True)",
+                                   "                    ok = k is not None")],
 }
 
 p, nombre = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""

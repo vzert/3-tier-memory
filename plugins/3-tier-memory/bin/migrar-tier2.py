@@ -6,8 +6,8 @@
 Por que existe: 2.63.47 dejo de escribir lineas largas nuevas (`pendiente.add --titulo`, avisos de
 journal-emit), pero no toco las que ya estaban. Medido 2026-10-27 en 9 proyectos de esta maquina:
 `_pendientes.md` con hasta 88 lineas de mas de 800 caracteres, `_learnings.md` con 206 (filas de
-'## Topic Files' que llevan la regla entera), `_research-index.md` con 101. El agente que lee esos
-indices paga todo ese texto en cada sesion.
+'## Topic Files' que llevan la regla entera), `_research-index.md` con 101. El agente que consulta esos
+indices lee todo ese texto.
 
 Que hace, por cada linea de mas de --largas caracteres (800, el mismo umbral que
 print-tier2-tamano.py) en los tres indices:
@@ -321,13 +321,15 @@ def cabecera_de_tabla(lines, i, jc):
 
 def destino_de(linea, tipo, mem):
     """Ruta relativa (a memory/) del fichero Tier 3 al que apunta la linea, o None."""
+    # `[[learnings/x.md]]` (con extension) apunta al mismo fichero que `[[learnings/x]]`.
+    sin_md = lambda s: s[:-3] if s.endswith(".md") else s
     if tipo == "learnings":
         m = REGLA_RE.search(linea)
         if m:
-            return f"learnings/{m.group(1)}.md"
+            return f"learnings/{sin_md(m.group(1))}.md"
     m = LINK_RE[tipo].search(linea)
     if m:
-        return f"{tipo}/{m.group(1).strip()}.md"
+        return f"{tipo}/{sin_md(m.group(1).strip())}.md"
     return None
 
 
@@ -493,7 +495,7 @@ def linea_aviso(n, b, largas=800):
         return ""
     kb = f"~{max(1, round(b / 1024))} KB"
     return (f"MIGRAR-TIER2: {n} linea(s) de mas de {largas} caracteres en los indices Tier 2 ({kb} que "
-            f"el agente paga en cada sesion). Corre /migrar-tier2-3t: muestra que moveria a Tier 3 y "
+            f"el agente lee al consultar el indice). Corre /migrar-tier2-3t: muestra que moveria a Tier 3 y "
             f"pide tu si antes de escribir.")
 
 

@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.69.1] - 2026-10-29
+Origen: p-cafb3ae9f1, p-c82b911c23 y p-6f9ea48553 (decision d513).
+
+### Fixed
+- `migrar-tier2.py`: un enlace `[[learnings/x.md]]` o `[[research/x.md]]` (con extension) se
+  buscaba como `x.md.md` y la linea quedaba no-migrable. Ahora apunta a `x.md`, igual que
+  `[[learnings/x]]`. En una copia de la memoria de un proyecto real el dry-run paso de 33 lineas
+  `.md.md` a 0 y de 6 lineas migrables a 39.
+- La linea `MIGRAR-TIER2` del aviso decia que el agente «paga en cada sesion» el texto largo; desde
+  2.63.47 el puente ya no manda leer los indices enteros al arrancar. Ahora dice «que el agente lee al
+  consultar el indice». La misma correccion en `/migrar-tier2-3t`, en la nota de `--titulo`
+  de `/checkpoint-3t` y en los comentarios de `migrar-tier2.py` y `session-start.sh`.
+
+### Tests
+- `test-migrar-tier2.sh` seccion 9: enlaces con `.md` en learnings y research, dry-run y `--apply`.
+- Seccion 8: aserto propio para dos ramas del aviso que no lo tenian (destino que no existe;
+  sub-vineta con padre sin `_id`).
+- `tools/mutation-check.sh`: tres mutantes nuevos (`enlace-md-md`, `aviso-destino-inexistente`,
+  `aviso-vineta-padre-sin-id`); los de migrar discriminan.
+
 ## [2.69.0] - 2026-10-28
 `learning.update`, `learning.retire` y `learning.add --supersedes` pasan por `rewrite_rule`, que se
 niega cuando no puede demostrar que la regla es UNA linea (`anterior`, `bloque-multilinea`,
