@@ -1055,6 +1055,20 @@ python3 "$JBIN/journal-emit.py" --type learning.update --topic <topic-slug> \
 Las tres superficies son independientes: corregir el cuerpo no obliga a tocar el Quick Reference,
 que suele llevar una version mas corta de la misma regla. Pasa las que de verdad cambiaron.
 
+**Si `learning.update` cae en cuarentena por `anterior`, `bloque-multilinea` o `codigo-antes`** (la
+regla sigue a un parrafo, arrastra lineas o hay una valla antes en el fichero), corrige un trozo de
+su primera linea con `learning.patch` (2.69.0); para retirarla, `learning.retire` ya marca solo su
+primera linea:
+
+```bash
+python3 "$JBIN/journal-emit.py" --type learning.patch --topic <topic-slug> \
+  --match-prefix "<prefijo del texto ACTUAL>" --viejo "<trozo exacto de hoy>" --nuevo "<trozo nuevo>"
+```
+
+El trozo viejo tiene que salir una vez en la primera linea de la regla y el nuevo ninguna; sin
+saltos de linea, vallas, `<!--`, `-->` ni `⊘`. Para el Quick Reference, `--quickref-prefix` en vez
+de `--topic`/`--match-prefix`.
+
 **El numero de la regla se conserva.** Es su identidad publica: las reglas se citan por numero
 ("learning 106", "regla 142") en fichas de sesion, en comentarios del codigo y en los propios
 learnings. Renumerar rompe esas citas igual que renombrar el `_id:` de un pendiente.

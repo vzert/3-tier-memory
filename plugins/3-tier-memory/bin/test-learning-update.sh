@@ -249,7 +249,7 @@ emit --type learning.update --topic multi --match-prefix "Regla larga" \
 compact --quiet >/dev/null 2>&1 || true
 chk "cuarentena 1" "1" "$(cuar)"
 has "motivo bloque-multilinea" "$(motivo)" "bloque-multilinea"
-has "el motivo dice que hacer" "$(motivo)" "a mano"
+has "el motivo dice que hacer" "$(motivo)" "learning.patch --viejo/--nuevo"
 chk "el fichero no se toco EN ABSOLUTO" "$ANTES" "$(cat "$M/learnings/multi.md")"
 
 echo "== 16. sublista indentada: tambien se niega =="

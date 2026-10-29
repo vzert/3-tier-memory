@@ -84,7 +84,11 @@ Since 2.50.0 **every** edit below goes through the journal; none is a direct edi
 - folding B's detail into A (Step 1) and the corrected text of an original (Step 2b) →
   `learning.update --match-prefix "<A today>" --text "<A merged>"`, which keeps A's number;
 - a Quick Reference line → `learning.update --quickref-prefix "<line today>" --quickref "<new>"`;
-- `last_verified` (Step 4) → `learning.update --last-verified DATE`.
+- `last_verified` (Step 4) → `learning.update --last-verified DATE`;
+- a rule `learning.update` quarantines as `anterior`, `bloque-multilinea` or `codigo-antes` (since
+  2.69.0) → `learning.patch --match-prefix "<A today>" --viejo "<exact fragment>" --nuevo "<new>"`,
+  which changes only that fragment of its FIRST line; `learning.retire` marks such a rule on its
+  first line too.
 
 So the result of a run is reproducible from `memory/.journal/applied/`, and `journal_strict=1`
 never has to be switched off. Without JBIN there is no fallback: the command stops in Step 0.
