@@ -707,7 +707,8 @@ caso_tools "cola: muerto frena"     run-tests.sh m_run_tests.py test-run-tests.s
 caso_tools "cola: reusado frena"    run-tests.sh m_run_tests.py test-run-tests.sh "un turno con el pid reusado no frena la cola" turno-reusado-vivo
 caso_tools "cola: vivo borrado"     run-tests.sh m_run_tests.py test-run-tests.sh "un turno vivo con su hora no se borra" turno-vivo-borrado
 caso_tools "cola: sin paciencia"    run-tests.sh m_run_tests.py test-run-tests.sh "un turno vivo que no toma el candado libre no frena" sin-paciencia
-caso_tools "cola: libre sin ceder"  run-tests.sh m_run_tests.py test-run-tests.sh "y dice que prueba en su lugar" libre-sin-ceder
+caso_tools "cola: libre sin ceder"  run-tests.sh m_run_tests.py test-run-tests.sh "y dice que salta su turno" libre-sin-ceder
+caso_tools "cola: salta a todos"    run-tests.sh m_run_tests.py test-run-tests.sh "con el primero parado, las de detras siguen en orden" salta-todos
 caso_tools "cola: turno al tomar"   run-tests.sh m_run_tests.py test-run-tests.sh "el turno sale de la cola al tomar el candado" turno-no-sale-al-tomar
 caso_tools "cola: turno al morir"   run-tests.sh m_run_tests.py test-run-tests.sh "matar a quien espera en la cola saca su turno" turno-no-sale-al-morir
 caso_tools "cola: sin turno sale"   run-tests.sh m_run_tests.py test-run-tests.sh "y corre su suite sin turno" sin-turno-sale

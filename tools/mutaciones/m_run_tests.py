@@ -82,7 +82,10 @@ M = {
     "turno-vivo-borrado": [
         ('  ahora_t=$(candado_hora "$2")', '  ahora_t=otra')],
     "sin-paciencia": [
-        ('    if [ -n "$delante" ] && [ "$libre" -ge "${RUN_TESTS_COLA_PACIENCIA:-30}" ]; then', '    if false; then')],
+        ('    if [ -n "$delante" ] && [ "$libre" -ge "$pac" ]; then', '    if false; then')],
+    # Adversario, ronda 1: saltar a todos los de delante a la vez, no solo al parado.
+    "salta-todos": [
+        ('      delante=$quedan', '      delante=""')],
     "libre-sin-ceder": [
         ('    if [ ! -d "$CANDADO" ] && [ -n "$delante" ]; then', '    if false; then')],
     "turno-no-sale-al-tomar": [

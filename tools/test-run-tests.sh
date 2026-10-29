@@ -323,14 +323,25 @@ PACIENCIA=1000; completa "$T/x"; x=$LANZADO; PACIENCIA=
 chk "el turno de una corrida muerta no frena la cola" "0" "$(termina "$x" 20; echo $?)"
 chk "y su turno se borra" "no" "$([ -e "$(turno "$muerto" 1)" ] && echo si || echo no)"
 
-# Un turno vivo delante, pero parado (Ctrl-Z): tras PACIENCIA vueltas con el candado libre, prueba el
-# siguiente. Y no le borra el turno: sigue vivo y con su hora.
+# Un turno vivo delante, pero parado (Ctrl-Z): tras PACIENCIA vueltas con el candado libre, la
+# siguiente lo salta. Y no le borra el turno: sigue vivo y con su hora.
 sleep 60 & parado=$!; tp=$(turno "$parado" 2)
 mkdir -p "$tp"; bash "$R/tools/run-tests.sh" --hora-candado "$parado" > "$tp/arranque"; : > "$T/registro"
 PACIENCIA=5; completa "$T/y"; y=$LANZADO; PACIENCIA=
 chk "un turno vivo que no toma el candado libre no frena la cola para siempre" "0" "$(termina "$y" 20; echo $?)"
-chk "y dice que prueba en su lugar" "1" "$(grep -c 'no toma el candado libre' "$T/y.err")"
+chk "y dice que salta su turno" "1" "$(grep -c 'no toma el candado libre' "$T/y.err")"
 chk "un turno vivo con su hora no se borra" "si" "$([ -d "$tp" ] && echo si || echo no)"
+# Con dos esperando detras del parado, solo lo salta la siguiente: saltarlo todas a la vez las ponia a
+# sortear otra vez (adversario, ronda 1: la que llego despues entro primero, 6 de 6). Sin sorteo: y1
+# salta al parado a las 7 vueltas; y2 (paciencia 5) salta solo al parado a las 5 y a y1 a las 10, asi
+# que y1 entra antes. Si y2 saltara a todos a las 5, entraria ella primero.
+sleep 120 & dueno4=$!; duenofalso "$dueno4"; : > "$T/registro"; : > "$T/orden"
+PACIENCIA=7; QUIEN=y1 completa "$T/y1"; y1=$LANZADO; espera_turnos 2; sleep 1.1
+PACIENCIA=5; QUIEN=y2 completa "$T/y2"; y2=$LANZADO; espera_turnos 3; PACIENCIA=
+rm -rf "$CAND"
+termina "$y1" 30 >/dev/null; termina "$y2" 30 >/dev/null
+chk "con el primero parado, las de detras siguen en orden de llegada" "y1 y2" "$(tr '\n' ' ' < "$T/orden" | sed 's/ $//')"
+kill "$dueno4" 2>/dev/null; wait "$dueno4" 2>/dev/null
 
 # Aviso: con ese turno parado delante (PACIENCIA alta: nunca prueba), el candado pasa de un dueno a
 # otro que no tenia turno, como una corrida de antes de la cola que se cuela. Quien espera lo dice, y

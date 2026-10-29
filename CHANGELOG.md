@@ -15,16 +15,18 @@ completa dura horas.
   saca su turno. El candado sigue siendo lo que deja una corrida a la vez: la cola solo ordena.
   Un turno muerto (kill -9) o con el pid reusado (otra hora de arranque, como el candado) se borra.
   El trap EXIT va antes de esperar: si matan a quien espera, su turno sale. Si el primero de la cola
-  vive pero no toma el candado libre en 30 vueltas (parado con Ctrl-Z), prueba el siguiente, con
-  aviso (`RUN_TESTS_COLA_PACIENCIA`). Si no se puede sacar turno, espera como antes, sin orden, y lo
-  dice.
+  vive pero no toma el candado libre en 30 vueltas (parado con Ctrl-Z), se salta su turno, con
+  aviso (`RUN_TESTS_COLA_PACIENCIA`): lo toma el siguiente de la cola y los de detras siguen en su
+  orden. Cada 30 vueltas mas con el candado libre se salta un turno mas. Si no se puede sacar turno,
+  espera como antes, sin orden, y lo dice.
 - **Avisos de quien espera.** Si el candado pasa a una corrida que no tenia turno delante del suyo,
   imprime `AVISO run-tests: perdi el turno: la corrida pid <pid> ...` con los minutos que lleva. Cada
   10 min (`RUN_TESTS_CANDADO_AVISO`, en segundos) imprime cuanto lleva, quien tiene el candado y quien
   va delante en la cola.
-- `tools/test-run-tests.sh`: 20 asertos de la cola y los avisos (seis que llegan una por segundo
-  entran en orden; turno muerto, reusado, vivo parado; sin cola; turno que sale al tomar y al morir).
-  `tools/mutaciones/m_run_tests.py` y `tools/mutation-check.sh`: 13 mutantes, uno por conducta.
+- `tools/test-run-tests.sh`: 21 asertos de la cola y los avisos (seis que llegan una por segundo
+  entran en orden; turno muerto, reusado, vivo parado, dos detras de uno parado; sin cola; turno que
+  sale al tomar y al morir). `tools/mutaciones/m_run_tests.py` y `tools/mutation-check.sh`: 14
+  mutantes, uno por conducta.
 
 ### Limites
 - Una corrida de antes de este cambio (un worktree viejo) no saca turno y se puede colar; quien

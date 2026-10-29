@@ -160,19 +160,35 @@ candado_delante() {
   done
 }
 candado_toma() {
-  local quien vacio=0 avisado=0 atascado=0 nocrea=0 ini delante libre=0 cedido=0 dueno="" vistos=" " ultimo p
+  local quien vacio=0 avisado=0 atascado=0 nocrea=0 ini delante libre=0 saltados=" " dueno="" vistos=" " ultimo p
+  local pac=${RUN_TESTS_COLA_PACIENCIA:-30} quedan i
+  [ "$pac" -ge 1 ] 2>/dev/null || pac=30
   ini=$(date +%s); ultimo=$ini
   candado_turno_saca
   while :; do
     delante=$(candado_delante)
     # Los pids que alguna vez tuvo delante, cada uno una vez: en horas de espera no crece por vuelta.
     for p in $delante; do case "$vistos" in *" $p "*) ;; *) vistos="$vistos$p " ;; esac; done
-    # El primero de la cola no toma un candado libre: vive, pero esta parado (Ctrl-Z, SIGSTOP). Tras
-    # RUN_TESTS_COLA_PACIENCIA vueltas seguidas (30) con el candado libre, prueba el siguiente.
+    # El primero de la cola no toma un candado libre: vive, pero esta parado (Ctrl-Z, SIGSTOP). Cada
+    # RUN_TESTS_COLA_PACIENCIA vueltas seguidas (30) con el candado libre se salta UN turno mas, el
+    # primero: asi lo toma el siguiente de la cola y los de detras siguen en su orden. Saltar a todos
+    # los de delante de una vez los ponia a sortear otra vez (adversario, ronda 1: «D C» 6 de 6).
     if [ -n "$delante" ] && [ ! -d "$CANDADO" ]; then libre=$(( libre + 1 )); else libre=0; fi
-    if [ -n "$delante" ] && [ "$libre" -ge "${RUN_TESTS_COLA_PACIENCIA:-30}" ]; then
-      [ "$cedido" = 0 ] && echo "AVISO run-tests: el turno de pid ${delante%% *} no toma el candado libre tras $libre vueltas; pruebo yo." >&2
-      cedido=1; delante=""
+    if [ -n "$delante" ] && [ "$libre" -ge "$pac" ]; then
+      quedan=""; i=0
+      for p in $delante; do
+        i=$(( i + 1 ))
+        if [ "$i" -le $(( libre / pac )) ]; then
+          case "$saltados" in
+            *" $p "*) ;;
+            *) saltados="$saltados$p "
+               echo "AVISO run-tests: el turno de pid $p no toma el candado libre tras $libre vueltas; lo salto." >&2 ;;
+          esac
+        else
+          quedan="$quedan$p "
+        fi
+      done
+      delante=$quedan
     fi
     if [ -z "$delante" ] && mkdir "$CANDADO" 2>/dev/null; then
       # La hora de arranque va ANTES que el pid: quien lee el pid ya la encuentra (p-7c1fa85c1e).
