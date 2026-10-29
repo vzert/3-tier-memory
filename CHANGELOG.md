@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.68.1] - 2026-10-28
+Victor (via `/goalspec:interview`): en los cierres de `/checkpoint-3t` salia el aviso "hay 2
+linea(s) de fence fuera del snippet" seguido del cierre entero en gris, y el snippet azul quedaba
+arriba, fuera de la vista. Causa, medida en un cierre real del 2026-10-28: `print-recordatorios.py`
+imprime el 🗓️ sin fence, pero el agente envolvia el prompt del evento en uno (en la ficha va dentro
+de un fence). En el segundo Stop el guard ya no bloquea: avisa y anexa el cierre completo.
+
+### Fixed
+- `checkpoint-close-guard.sh`: si el cierre esta completo, en orden y al final, y solo sobra un
+  fence, el aviso no reimprime el cierre; sin ningun otro problema es una sola linea. Con otro
+  defecto del cierre (orden, snippet repetido, cola larga, bloque faltante) el anexo sigue igual.
+- `checkpoint-close-guard.sh`: el pedido del cierre al agente dice que no agregue fences: solo el
+  snippet trae el suyo; el 🔔 y el 🗓️ van sin fence aunque la ficha tenga el prompt dentro de uno.
+- `templates/checkpoint-3t-step8.md` (8b y 8c): lo mismo.
+- `test-checkpoint-close-guard.sh`: 3 casos nuevos (aviso de una linea sin anexo, instruccion al
+  agente en el primer cierre, anexo que sigue con un defecto de orden). Con el guard de 2.67.3 los
+  dos primeros fallan (el aviso salia en 36 lineas). El caso de la instruccion comprueba tambien que
+  el mismo parrafo del aviso nombra `print-recordatorios.py`.
+
 ## [2.68.0] - 2026-10-28
 Origen: p-d8b7bad1e1, decision d483 (opcion C). El dry-run de `migrar-tier2.py` del 2026-10-28 en
 los 40 proyectos con memoria de una maquina encontro 1001 lineas movibles de mas de 800 caracteres
