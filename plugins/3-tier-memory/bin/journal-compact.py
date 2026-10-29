@@ -42,9 +42,9 @@ Fase 2 (sesiones, reglas, planes, research) — mismo principio, anclas de tabla
                    regla anclada por prefijo, conservando su numero (I1); --quickref-prefix quita
                    esa linea del Quick Reference sin renumerar. --por N tiene que ser una regla
                    viva del mismo topic; un ciclo va a cuarentena. Replay = noop. Una regla que
-                   rewrite_rule no puede reescribir (2.68.0) recibe la marca solo en su PRIMERA
+                   rewrite_rule no puede reescribir (2.69.0) recibe la marca solo en su PRIMERA
                    linea, con las guardias de learning.patch.
-  learning.patch   (2.68.0) cambia un trozo literal `viejo` por `nuevo` en la PRIMERA linea de la
+  learning.patch   (2.69.0) cambia un trozo literal `viejo` por `nuevo` en la PRIMERA linea de la
                    regla anclada por prefijo (--match-prefix en el topic, o --quickref-prefix en el
                    Quick Reference). No pasa por regla_reescribible: es la via para las reglas que
                    update no puede reescribir (anterior, bloque-multilinea, codigo-antes). El
@@ -2600,7 +2600,7 @@ def insert_at_section_end(lines, start, end, new_line):
         lines.insert(at, "")
         at += 1
     elif not en_blanco(lines[at - 1]) and familia(lines[at - 1]) != familia(new_line):
-        # 2.68.0: pegada a un parrafo (o a una vineta de otra familia), una regla `N.` con N != 1 es
+        # 2.69.0: pegada a un parrafo (o a una vineta de otra familia), una regla `N.` con N != 1 es
         # continuacion de lo de arriba en CommonMark, y rewrite_rule la rechaza despues por
         # `anterior`. La linea en blanco la deja como item. Solo evita casos nuevos: las reglas que
         # ya estan pegadas no se reparan (medido: la linea en blanco solo desbloquea 230 de 923).
@@ -3068,7 +3068,7 @@ def rewrite_rule(lines, i, end, nuevo, donde):
     lines[i] = f"{cabeza}{nuevo}"
 
 
-# --- Primera linea (2.68.0): learning.patch y la marca de learning.retire en reglas bloqueadas ------
+# --- Primera linea (2.69.0): learning.patch y la marca de learning.retire en reglas bloqueadas ------
 #
 # rewrite_rule se niega cuando no puede demostrar que la regla es UNA linea (MOTIVOS_REGLA), y en los
 # learnings de 25 proyectos del mismo usuario (2026-10-28) eso eran 2419 de 9183 reglas numeradas:
@@ -3185,7 +3185,7 @@ def localizar_parche(lines, start, end, prefix, viejo, nuevo, donde):
 
 
 def apply_learning_patch(mem, p):
-    """Cambia el trozo literal `viejo` por `nuevo` en la primera linea de UNA regla (2.68.0).
+    """Cambia el trozo literal `viejo` por `nuevo` en la primera linea de UNA regla (2.69.0).
 
     Con `match_prefix`, en learnings/<topic>.md; con `quickref_prefix`, en el '## Quick Reference'
     de _learnings.md. Ver el comentario de PROHIBIDO_EN_TROZO."""
@@ -3467,7 +3467,7 @@ def apply_learning_retire(mem, p):
             comprobar_por(lines, start, related, por, n, donde)
         nuevo = learning_marks.con_marca(t, learning_marks.marca_canonica(
             p.get("fecha") or date.today().isoformat(), p["motivo"], por, p.get("nota") or ""))
-        # 2.68.0: una regla que rewrite_rule no puede reescribir se marca igual, solo en su PRIMERA
+        # 2.69.0: una regla que rewrite_rule no puede reescribir se marca igual, solo en su PRIMERA
         # linea y con las guardias de learning.patch (ver PROHIBIDO_EN_TROZO). Hasta 2.67 iba a
         # cuarentena y la persona tenia que marcarla a mano. Se comprueba antes de escribir nada.
         bloqueo = regla_reescribible(lines, i, related)

@@ -136,7 +136,7 @@ Tipos de evento:
                     duplicada|superada y no se admite con obsoleta. --quickref-prefix quita su
                     linea del Quick Reference (sin renumerar el resto). Imprime l-topic-<T>.
   learning.patch    (--topic T --match-prefix P | --quickref-prefix QP)
-                    --viejo "<trozo>" --nuevo "<trozo>"                                  (2.68.0)
+                    --viejo "<trozo>" --nuevo "<trozo>"                                  (2.69.0)
                     Cambia un trozo LITERAL de la primera linea de una regla, sin tocar su
                     numero, vineta, marca de retirada ni comentarios. Es la via para las reglas
                     que learning.update no puede reescribir (cuarentena anterior,
@@ -1213,7 +1213,7 @@ def main():
     ap.add_argument("--last-verified", dest="last_verified", default="")
     # learning.update: enlace Quick Reference -> regla (F7, 2.51.0)
     ap.add_argument("--quickref-regla", dest="quickref_regla", default="")
-    # learning.patch: trozo literal de la primera linea de una regla (2.68.0)
+    # learning.patch: trozo literal de la primera linea de una regla (2.69.0)
     ap.add_argument("--viejo", default=None)
     ap.add_argument("--nuevo", default=None)
     pasados = flags_pasados(ap)

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Prueba de `learning.patch`, de `learning.retire` sobre reglas que rewrite_rule no puede reescribir y
-# de la linea en blanco de insert_at_section_end (2.68.0).
+# de la linea en blanco de insert_at_section_end (2.69.0).
 #
 # Por que existe: hasta 2.67 una regla que rewrite_rule ponia en cuarentena (anterior,
 # bloque-multilinea, codigo-antes) no tenia via por el journal: ni corregirla ni retirarla. En los

@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.68.0] - 2026-10-28
+## [2.69.0] - 2026-10-28
 `learning.update`, `learning.retire` y `learning.add --supersedes` pasan por `rewrite_rule`, que se
 niega cuando no puede demostrar que la regla es UNA linea (`anterior`, `bloque-multilinea`,
 `codigo-antes`), y el mensaje decia «corrigela a mano». En los learnings de 25 proyectos del mismo
@@ -9,6 +9,7 @@ bloque-multilinea 531): sin via por el journal. Lo pidio una sesion de otro proy
 (una regla que citaba un pendiente cerrado y no se podia apuntar al nuevo). Decisiones de Victor
 (d488-d495): un evento que cambia un trozo, no un parser (seria la primera dependencia, I4); el
 parser queda para si esto no basta.
+Sale como 2.69.0: 2.68.0 y 2.68.1 las toman dos ramas de otras sesiones que entran antes.
 
 ### Added
 - `learning.patch` (`--topic T --match-prefix P` o `--quickref-prefix QP`, con `--viejo`/`--nuevo`):
