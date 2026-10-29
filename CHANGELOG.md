@@ -61,6 +61,39 @@ Sale como 2.69.0: 2.68.0 y 2.68.1 las toman dos ramas de otras sesiones que entr
   mano»). `test-flags-sin-lector.sh`: 20 tipos y 59 flags, con lo que lee `learning.patch`.
 - README: «Twenty event types», con `learning.patch` y el retire en primera linea.
 
+## [2.68.2] - 2026-10-28
+El candado de una corrida completa por maquina (2.62.7) no respetaba el orden de llegada. Cada
+corrida que esperaba probaba `mkdir` cada segundo, y al soltarlo ganaba la que despertara primero.
+Medido en este Mac: una corrida `--con-candado` de mutation-check espero 4 h 42 min y perdio ante
+otra que habia llegado 59 min despues; el candado paso a la segunda a las 16:30:25, y una corrida
+completa dura horas.
+
+### Added
+- **Cola de turnos por orden de llegada en `tools/run-tests.sh`.** Cada corrida que espera saca un
+  turno: una carpeta `<segundos>-<pid>` en `$CANDADO.cola` (`/tmp/3tm-run-tests.candado.cola`), al
+  lado del candado. Solo prueba el `mkdir` la que no tiene delante un turno vivo; al tomar el candado
+  saca su turno. El candado sigue siendo lo que deja una corrida a la vez: la cola solo ordena.
+  Un turno muerto (kill -9) o con el pid reusado (otra hora de arranque, como el candado) se borra.
+  El trap EXIT va antes de esperar: si matan a quien espera, su turno sale. Si el primero de la cola
+  vive pero no toma el candado libre en 30 vueltas (parado con Ctrl-Z), se salta su turno, con
+  aviso (`RUN_TESTS_COLA_PACIENCIA`): lo toma el siguiente de la cola y los de detras siguen en su
+  orden. Cada 30 vueltas mas con el candado libre se salta un turno mas. Si no se puede sacar turno,
+  espera como antes, sin orden, y lo dice.
+- **Avisos de quien espera.** Si el candado pasa a una corrida que no tenia turno delante del suyo,
+  imprime `AVISO run-tests: perdi el turno: la corrida pid <pid> ...` con los minutos que lleva. Cada
+  10 min (`RUN_TESTS_CANDADO_AVISO`, en segundos) imprime cuanto lleva, quien tiene el candado y quien
+  va delante en la cola.
+- `tools/test-run-tests.sh`: 21 asertos de la cola y los avisos (seis que llegan una por segundo
+  entran en orden; turno muerto, reusado, vivo parado, dos detras de uno parado; sin cola; turno que
+  sale al tomar y al morir). `tools/mutaciones/m_run_tests.py` y `tools/mutation-check.sh`: 14
+  mutantes, uno por conducta.
+
+### Limites
+- Una corrida de antes de este cambio (un worktree viejo) no saca turno y se puede colar; quien
+  espera lo ve con el aviso de turno perdido.
+- Dos que llegan en el mismo segundo van por pid, no por llegada. Un salto del reloj puede desordenar
+  turnos. Las dos cosas solo cambian el orden: nunca dejan dos corridas a la vez.
+
 ## [2.68.1] - 2026-10-28
 Victor (via `/goalspec:interview`): en los cierres de `/checkpoint-3t` salia el aviso "hay 2
 linea(s) de fence fuera del snippet" seguido del cierre entero en gris, y el snippet azul quedaba
