@@ -251,6 +251,14 @@ open(sys.argv[1], "a", encoding="utf-8").write(f"- [ ] {sys.argv[2][:400]}\u2028
 PYEOF
 chk "U+2028 en una linea larga: el plan la cuenta movible" "1" "$(python3 "$BIN/migrar-tier2.py" "$MQ" | grep -c 'candidatos=4 migrables=1')"
 chk "U+2028 en una linea larga: el aviso tambien" "1" "$(python3 "$BIN/migrar-tier2.py" "$MQ" --aviso | grep -c '^MIGRAR-TIER2: 1 linea')"
+# Dos ramas mas que el aviso descarta (p-c82b911c23), cada una en su corpus: un learning que apunta a
+# un fichero que no existe, y una sub-vineta larga cuyo padre no tiene _id.
+MX="$T/mx"; mkdir -p "$MX/learnings"
+printf -- '# L\n\n- %s [[learnings/no-existe]]\n' "$(largo NX 140)" > "$MX/_learnings.md"
+chk "aviso: calla con un learning cuyo destino no existe" "" "$(python3 "$BIN/migrar-tier2.py" "$MX" --aviso)"
+MV="$T/mv"; mkdir -p "$MV/pendientes"
+printf -- '# P\n\n## Alta prioridad\n\n- [ ] padre corto sin id — _creado: 2026-09-01_\n  - %s\n' "$(largo SV 140)" > "$MV/_pendientes.md"
+chk "aviso: calla con una sub-vineta cuyo padre no tiene _id" "" "$(python3 "$BIN/migrar-tier2.py" "$MV" --aviso)"
 P="$T/proj"; MP="$P/memory"; mkdir -p "$MP"
 printf -- '---\ntype: index\n---\n# Pendientes\n\n## Alta prioridad\n\n- [ ] %s — _creado: 2026-09-01_ — _id: p-00000000b1_\n' "$(largo SS 140)" > "$MP/_pendientes.md"
 correr() { printf '%s' "{\"cwd\":\"$P\",\"source\":\"startup\",\"hook_event_name\":\"SessionStart\"}" \
@@ -261,6 +269,21 @@ chk "session-start: la linea al agente" "1" "$(printf '%s' "$S" | campo a | grep
 chk "session-start: la linea a la persona" "1" "$(printf '%s' "$S" | campo h | grep -c '^MIGRAR-TIER2: 1 linea(s)')"
 S=$(correr PAPERCLIP_RUN_ID=run-1)
 chk "session-start en Paperclip: sin linea" "0" "$(printf '%s' "$S" | grep -c 'MIGRAR-TIER2')"
+
+echo "== 9. enlace con .md (p-cafb3ae9f1) =="
+# [[learnings/t.md]] y [[research/r.md]]: medido en un proyecto real, se buscaban como t.md.md.
+MD="$T/md"; mkdir -p "$MD/learnings" "$MD/research"
+printf -- '---\ntype: learning\n---\n# T\n\n## Related\n\n- [[_learnings]]\n' > "$MD/learnings/t.md"
+printf -- '---\ntype: research\n---\n# R\n\nCuerpo.\n' > "$MD/research/r.md"
+printf -- '# L\n\n## Quick Reference\n\n- %s [[learnings/t.md]]\n' "$(largo QM 140)" > "$MD/_learnings.md"
+printf -- '# R\n\n## Active\n\n| Tema | Doc |\n|---|---|\n| %s | [[research/r.md]] |\n' "$(largo RM 140)" > "$MD/_research-index.md"
+OUT=$(python3 "$BIN/migrar-tier2.py" "$MD")
+chk "enlace con .md: ningun destino .md.md" "0" "$(echo "$OUT" | grep -c '\.md\.md')"
+chk "enlace con .md: el QR se mueve a learnings/t.md" "1" "$(echo "$OUT" | grep -c 'mueve -> learnings/t.md | ')"
+chk "enlace con .md: la fila de research se mueve a research/r.md" "1" "$(echo "$OUT" | grep -c 'mueve -> research/r.md | ')"
+python3 "$BIN/migrar-tier2.py" "$MD" --apply >/dev/null 2>&1
+chk "enlace con .md: --apply lleva el texto a learnings/t.md" "1" "$(grep -c 'FIN-QM' "$MD/learnings/t.md")"
+chk "enlace con .md: --apply lleva el texto a research/r.md" "1" "$(grep -c 'FIN-RM' "$MD/research/r.md")"
 
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]

@@ -546,7 +546,7 @@ else
   # migrar-tier2.py puede mover a Tier 3. Solo cuenta, nunca --apply aqui: mover el texto escribe en
   # la memoria del usuario, y eso lo confirma la persona en /migrar-tier2-3t (mismo criterio que
   # repair-dualwrite.py, arriba). Medido 2026-10-28: 1001 lineas movibles en 40 proyectos de una
-  # maquina, ~1,1 MB que el agente leia en cada sesion. Mismos canales y misma rama que MIGRAR.
+  # maquina, ~1,1 MB que el agente lee al consultar el indice. Mismos canales y misma rama que MIGRAR.
   if [ -f "${CLAUDE_PLUGIN_ROOT}/bin/migrar-tier2.py" ]; then
     TIER2_AVISO=$(python3 "${CLAUDE_PLUGIN_ROOT}/bin/migrar-tier2.py" "$MEMORY_DIR" --aviso 2>/dev/null | tr -d '\r' | head -1)
     if [ -n "$TIER2_AVISO" ]; then
