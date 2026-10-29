@@ -1,7 +1,8 @@
 import io, sys
 # Codigo en linea antes de la regla (2.63.30, p-274c87b575): regla_reescribible de journal-compact.py
 # cambia cada tramo de codigo en linea por una letra antes de buscar una valla o HTML. Cada mutacion
-# apaga una pieza y su aserto de la seccion 24 de test-learning-update.sh tiene que caer: que se quite
+# apaga una pieza y su aserto de la seccion 24 de test-learning-update.sh tiene que caer (desde 2.69.2,
+# casos donde el codigo abre la linea: a mitad de linea una valla ya no cuenta): que se quite
 # el codigo, que se cambie por una letra y no se borre, y que la tira de cierre tenga el mismo largo.
 #
 # Uso: m_codigo_en_linea.py <fichero> <mutacion>
