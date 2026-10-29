@@ -61,6 +61,48 @@ Sale como 2.69.0: 2.68.0 y 2.68.1 las toman dos ramas de otras sesiones que entr
   mano»). `test-flags-sin-lector.sh`: 20 tipos y 59 flags, con lo que lee `learning.patch`.
 - README: «Twenty event types», con `learning.patch` y el retire en primera linea.
 
+## [2.68.1] - 2026-10-28
+Victor (via `/goalspec:interview`): en los cierres de `/checkpoint-3t` salia el aviso "hay 2
+linea(s) de fence fuera del snippet" seguido del cierre entero en gris, y el snippet azul quedaba
+arriba, fuera de la vista. Causa, medida en un cierre real del 2026-10-28: `print-recordatorios.py`
+imprime el 🗓️ sin fence, pero el agente envolvia el prompt del evento en uno (en la ficha va dentro
+de un fence). En el segundo Stop el guard ya no bloquea: avisa y anexa el cierre completo.
+
+### Fixed
+- `checkpoint-close-guard.sh`: si el cierre esta completo, en orden y al final, y solo sobra un
+  fence, el aviso no reimprime el cierre; sin ningun otro problema es una sola linea. Con otro
+  defecto del cierre (orden, snippet repetido, cola larga, bloque faltante) el anexo sigue igual.
+- `checkpoint-close-guard.sh`: el pedido del cierre al agente dice que no agregue fences: solo el
+  snippet trae el suyo; el 🔔 y el 🗓️ van sin fence aunque la ficha tenga el prompt dentro de uno.
+- `templates/checkpoint-3t-step8.md` (8b y 8c): lo mismo.
+- `test-checkpoint-close-guard.sh`: 3 casos nuevos (aviso de una linea sin anexo, instruccion al
+  agente en el primer cierre, anexo que sigue con un defecto de orden). Con el guard de 2.67.3 los
+  dos primeros fallan (el aviso salia en 36 lineas). El caso de la instruccion comprueba tambien que
+  el mismo parrafo del aviso nombra `print-recordatorios.py`.
+
+## [2.68.0] - 2026-10-28
+Origen: p-d8b7bad1e1, decision d483 (opcion C). El dry-run de `migrar-tier2.py` del 2026-10-28 en
+los 40 proyectos con memoria de una maquina encontro 1001 lineas movibles de mas de 800 caracteres
+(~1,1 MB). Moverlas a mano proyecto por proyecto no escala: la migracion pasa a ser una capacidad del
+plugin.
+
+### Added
+- `/migrar-tier2-3t`: dry-run, tabla por indice (mueve / acorta / no-migrable por motivo), un si del
+  usuario y `migrar-tier2.py --apply` con respaldo en `.journal/migrar-tier2/`. Explica como
+  deshacerlo.
+- `migrar-tier2.py --aviso`: una linea `MIGRAR-TIER2: N linea(s) ... Corre /migrar-tier2-3t`, o nada;
+  sale 0 siempre. No corre el plan entero (tardo hasta 5,5 s en un proyecto real y el hook de
+  arranque tiene 10 s para todo): lee `pendientes/` una vez (ids con fila, meses con tabla) y tarda
+  0,04-0,05 s en los 4 proyectos con mas texto largo. No cuenta lo que nunca se podra mover sin
+  intervenir (sin `_id`, sin fichero destino, mes sin tabla, sin fila ni `_creado`, una linea de
+  learnings que no es fila ni lista), asi que no se queda encendido tras migrar; solo una fila
+  mensual ya cerrada cuenta de mas. En copias de los 8 proyectos del dry-run el aviso dio la misma
+  cifra que el plan y callo tras `--apply`.
+- `session-start.sh` lleva esa linea a los dos canales (agente y persona), fuera de Paperclip, como
+  `MIGRAR-LEARNINGS`, e instala el comando con los demas `-3t`. Solo cuenta: nunca `--apply` en el
+  arranque, porque mover el texto escribe en la memoria del usuario y eso lo confirma la persona.
+- `test-migrar-tier2.sh` seccion 8 y asertos del aviso en las secciones 1, 3 y 7.
+
 ## [2.67.3] - 2026-10-28
 Origen: p-8a21c08256, con p-c711eabb05 y p-e1bbf2d4e4. `snippet-vigente.py` (el aviso de snippet
 viejo al pegar) no veia un `Retomamos:` pasado como argumento de un comando; 2.66.1 ya lo habia
