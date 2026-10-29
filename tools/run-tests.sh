@@ -111,14 +111,94 @@ candado_abandonado() {  # <pid visto, vacio si no habia> <motivo>
   echo "AVISO run-tests: quito el candado de una corrida que ya no existe ($2): $CANDADO" >&2
   candado_quita "$2"
 }
+# Cola de turnos por orden de llegada (2026-10-28). Con solo el `mkdir`, al soltar el candado ganaba
+# la corrida que despertara primero: medido, una espero 4 h 42 min y perdio ante otra que habia
+# llegado 59 min despues, y una corrida completa dura horas. Cada corrida que espera saca un turno:
+# una carpeta `<segundos>-<pid>`, 10 digitos cada uno, asi el orden de los nombres es el de llegada. Va
+# en $CANDADO.cola, al lado del candado y no dentro: el candado se borra entero al soltarlo. Solo
+# prueba el `mkdir` quien no tiene delante un turno vivo. El candado sigue siendo lo que deja una
+# corrida a la vez; la cola solo ordena. Limites: una corrida de antes de este cambio (un worktree
+# viejo) no saca turno y se puede colar; dos que llegan en el mismo segundo van por pid; un salto del
+# reloj puede desordenar turnos. Si no se puede sacar turno, espera como antes, sin orden.
+COLA="$CANDADO.cola"
+TURNO=""
+candado_turno_saca() {
+  TURNO="$COLA/$(printf '%010d-%010d' "$(date +%s)" "$$")"
+  # Sin -p: crear la carpeta madre del candado lo haria creable donde no debe (padre inexistente).
+  if { [ -d "$COLA" ] || mkdir "$COLA" 2>/dev/null; } && mkdir "$TURNO" 2>/dev/null; then
+    # Como en el candado: la hora de arranque dice si el pid de un turno es aun quien lo saco.
+    candado_hora "$$" > "$TURNO/arranque" 2>/dev/null
+    return 0
+  fi
+  TURNO=""
+  echo "AVISO run-tests: no puedo sacar turno en $COLA; espero sin orden de llegada." >&2
+}
+# El pid $2 del turno $1 vive, pero no es quien lo saco: otra hora de arranque. Sin hora guardada
+# (aun no la escribe) o sin poder leer la de ahora (Git Bash), no se sabe: es suyo, el lado seguro.
+turno_reusado() {
+  local antes ahora_t
+  antes=$(cat "$1/arranque" 2>/dev/null)
+  [ -n "$antes" ] || return 1
+  ahora_t=$(candado_hora "$2")
+  [ -n "$ahora_t" ] && [ "$ahora_t" != "$antes" ]
+}
+# Imprime los pids con turno vivo delante del suyo, el primero primero, cada uno seguido de un
+# espacio; nada si no tiene a nadie delante o no tiene turno. Borra los turnos muertos (kill -9
+# mientras esperaba) o con el pid reusado: si no, frenaban la cola para siempre.
+candado_delante() {
+  local t n pid
+  [ -n "$TURNO" ] || return 0
+  [ -d "$TURNO" ] || mkdir "$TURNO" 2>/dev/null   # si alguien lo borro, vuelve con su misma llegada
+  for t in "$COLA"/*; do
+    [ "$t" = "$TURNO" ] && return 0
+    [ -d "$t" ] || continue
+    n=${t##*-}
+    case "$n" in ''|*[!0-9]*) continue ;; esac
+    pid=$(( 10#$n ))
+    if ! candado_vivo "$pid" || turno_reusado "$t" "$pid"; then rm -rf "$t" 2>/dev/null; continue; fi
+    printf '%s ' "$pid"
+  done
+}
 candado_toma() {
-  local quien vacio=0 avisado=0 atascado=0 nocrea=0 ini; ini=$(date +%s)
+  local quien vacio=0 avisado=0 atascado=0 nocrea=0 ini delante libre=0 saltados=" " dueno="" vistos=" " ultimo p
+  local pac=${RUN_TESTS_COLA_PACIENCIA:-30} quedan i
+  [ "$pac" -ge 1 ] 2>/dev/null || pac=30
+  ini=$(date +%s); ultimo=$ini
+  candado_turno_saca
   while :; do
-    if mkdir "$CANDADO" 2>/dev/null; then
+    delante=$(candado_delante)
+    # Los pids que alguna vez tuvo delante, cada uno una vez: en horas de espera no crece por vuelta.
+    for p in $delante; do case "$vistos" in *" $p "*) ;; *) vistos="$vistos$p " ;; esac; done
+    # El primero de la cola no toma un candado libre: vive, pero esta parado (Ctrl-Z, SIGSTOP). Cada
+    # RUN_TESTS_COLA_PACIENCIA vueltas seguidas (30) con el candado libre se salta UN turno mas, el
+    # primero: asi lo toma el siguiente de la cola y los de detras siguen en su orden. Saltar a todos
+    # los de delante de una vez los ponia a sortear otra vez (adversario, ronda 1: «D C» 6 de 6).
+    if [ -n "$delante" ] && [ ! -d "$CANDADO" ]; then libre=$(( libre + 1 )); else libre=0; fi
+    if [ -n "$delante" ] && [ "$libre" -ge "$pac" ]; then
+      quedan=""; i=0
+      for p in $delante; do
+        i=$(( i + 1 ))
+        if [ "$i" -le $(( libre / pac )) ]; then
+          case "$saltados" in
+            *" $p "*) ;;
+            *) saltados="$saltados$p "
+               echo "AVISO run-tests: el turno de pid $p no toma el candado libre tras $libre vueltas; lo salto." >&2 ;;
+          esac
+        else
+          quedan="$quedan$p "
+        fi
+      done
+      delante=$quedan
+    fi
+    if [ -z "$delante" ] && mkdir "$CANDADO" 2>/dev/null; then
       # La hora de arranque va ANTES que el pid: quien lee el pid ya la encuentra (p-7c1fa85c1e).
       candado_hora "$$" > "$CANDADO/arranque" 2>/dev/null
       # Si se lo quitaron entre el mkdir y escribir el pid, no es suyo: vuelve a la cola.
       echo "$$" > "$CANDADO/pid" 2>/dev/null && [ "$(cat "$CANDADO/pid" 2>/dev/null)" = "$$" ] && break
+    fi
+    # Libre, pero el turno es de otra corrida que llego antes: la deja tomarlo.
+    if [ ! -d "$CANDADO" ] && [ -n "$delante" ]; then
+      sleep "${RUN_TESTS_CANDADO_ESPERA:-1}"; continue
     fi
     # mkdir fallo y la carpeta no existe: no es que otra corrida la tenga, es que no se puede crear
     # (/tmp de solo lectura en un sandbox, padre inexistente). Esperar ahi era colgarse sin decir nada
@@ -159,23 +239,44 @@ candado_toma() {
         echo "run-tests: otra corrida (pid $quien) tiene el candado; espero a que termine." >&2
         echo "  Si ese pid no es una corrida de run-tests.sh, borra el candado: rm -rf \"$CANDADO\"" >&2
       fi
+      # Se le adelanto quien nunca tuvo turno delante del suyo: una corrida de antes de la cola, o
+      # todas si no hay cola. Quien espera lo ve, con cuanto lleva (antes no se sabia: 5 h a ciegas).
+      if [ -n "$dueno" ] && [ "$quien" != "$dueno" ]; then
+        case "$vistos" in
+          *" $quien "*) ;;
+          *) echo "AVISO run-tests: perdi el turno: la corrida pid $quien tomo el candado sin tener turno delante del mio; llevo $(( ($(date +%s) - ini) / 60 )) min esperando." >&2 ;;
+        esac
+      fi
+      dueno=$quien
+      # Cada RUN_TESTS_CANDADO_AVISO segundos (600): cuanto lleva, quien lo tiene y quien va delante.
+      if [ $(( $(date +%s) - ultimo )) -ge "${RUN_TESTS_CANDADO_AVISO:-600}" ]; then
+        ultimo=$(date +%s)
+        echo "run-tests: llevo $(( (ultimo - ini) / 60 )) min esperando el candado; lo tiene pid $quien; delante en la cola: ${delante:-nadie}." >&2
+      fi
     fi
     sleep "${RUN_TESTS_CANDADO_ESPERA:-1}"
   done
+  # Ya lo tiene: su turno sale de la cola y le toca al siguiente.
+  [ -n "$TURNO" ] && rm -rf "$TURNO"; TURNO=""
   [ "$avisado" = 1 ] && echo "run-tests: candado tomado; empiezo." >&2
   return 0
 }
-# Solo el suyo: si se lo quitaron por muerto y otra corrida lo tomo, no lo borra.
-candado_suelta() { [ "$(cat "$CANDADO/pid" 2>/dev/null)" = "$$" ] && rm -rf "$CANDADO"; return 0; }
+# Solo el suyo: si se lo quitaron por muerto y otra corrida lo tomo, no lo borra. Su turno, si aun
+# esperaba (lo mataron en la cola), tambien sale.
+candado_suelta() {
+  [ -z "$TURNO" ] || rm -rf "$TURNO"
+  [ "$(cat "$CANDADO/pid" 2>/dev/null)" = "$$" ] && rm -rf "$CANDADO"; return 0
+}
 # Un temporal propio para toda la corrida, borrado tambien si la matan (p-292d06c4c0). Con `-f`:
 # test-run-tests corre una COPIA de este script desde otra carpeta, donde no esta (y ya va anidada).
 [ -f tools/tmp-propio.sh ] && . tools/tmp-propio.sh
 if [ "${1:-}" != "--una" ]; then
+  # Un solo trap EXIT: bash lo corre tambien al morir por INT/TERM/HUP (ver tmp-propio.sh), y este
+  # reemplaza el de tmp-propio, asi que lo repite. Va ANTES de esperar: si matan a quien espera en la
+  # cola, su turno sale y no frena a los de detras.
+  trap 'type _tp_limpia >/dev/null 2>&1 && _tp_limpia; candado_suelta' EXIT
   candado_toma
   export RUN_TESTS_CANDADO_DUENO=$$
-  # Un solo trap EXIT: bash lo corre tambien al morir por INT/TERM/HUP (ver tmp-propio.sh), y este
-  # reemplaza el de tmp-propio, asi que lo repite.
-  trap 'type _tp_limpia >/dev/null 2>&1 && _tp_limpia; candado_suelta' EXIT
 fi
 # El comando de --con-candado sale con su rc; el trap de arriba suelta el candado.
 # Los avisos de restos viejos de tmp-propio van antes: el comando hereda el temporal y no los junta.
