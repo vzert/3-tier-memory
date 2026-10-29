@@ -14,15 +14,25 @@ Sale como 2.69.0: 2.68.0 y 2.68.1 las toman dos ramas de otras sesiones que entr
 ### Added
 - `learning.patch` (`--topic T --match-prefix P` o `--quickref-prefix QP`, con `--viejo`/`--nuevo`):
   cambia un trozo literal de la PRIMERA linea de una regla del topic o de una linea del Quick
-  Reference. No pasa por `regla_reescribible`: no cambia la estructura del markdown, asi que no
-  necesita saber donde acaba la regla. El trozo viejo tiene que salir una vez en el texto de la
-  regla (sin numero, vineta, marca de retirada ni comentarios de disparadores o de enlace) y el
-  nuevo ninguna. Ninguno lleva salto de linea, valla (```` ``` ````, `~~~`), `<!--`, `-->` ni `⊘`, y
-  `--nuevo` no puede estar dentro de `--viejo` (si no, el replay no se distingue del primer cambio).
-  Tras el cambio, la linea tiene que leerse igual para sus lectores: mismo numero y familia, misma
-  marca, mismos comentarios, mismas comillas invertidas sueltas. Si no, cuarentena `primera-linea`
-  y no se escribe nada. El emisor lo comprueba contra el fichero de hoy y el compactador otra vez.
-  Replay = noop, tambien cuando el parche cambio el propio prefijo del ancla.
+  Reference. No pasa por `regla_reescribible`: no cambia la estructura de BLOQUES del markdown
+  (listas, parrafos, codigo, HTML), asi que no necesita saber donde acaba la regla. El texto nuevo
+  si puede llevar formato en linea (`codigo` en pareja, **enfasis**), igual que con
+  `learning.update`. El trozo viejo tiene que salir una vez en el texto de la regla (sin numero,
+  vineta, marca de retirada ni comentarios de disparadores o de enlace) y el nuevo ninguna.
+  Ninguno lleva salto de linea, valla (```` ``` ````, `~~~`), `<!--`, `-->` ni `⊘`, y `--nuevo` no
+  puede estar dentro de `--viejo` (si no, el replay no se distingue del primer cambio). Tras el
+  cambio, la linea tiene que leerse igual para sus lectores: mismo numero y familia, misma marca,
+  mismos comentarios, mismas comillas invertidas sueltas, y el texto no puede pasar a empezar por
+  algo que abre otro bloque dentro del item (`>`, `#`, `-`/`+`/`*` con espacio, `1.`, `<`, una raya,
+  una valla). Si no, cuarentena `primera-linea` y no se escribe nada. El emisor lo comprueba contra
+  el fichero de hoy y el compactador otra vez. Replay = noop, tambien cuando el parche cambio el
+  propio prefijo del ancla.
+  Medido por la ruta del compactador (validate + apply_event sobre una copia de cada topic) en las
+  2423 reglas bloqueadas del mismo corpus el 2026-10-28: el parche (cambiar la ultima palabra unica
+  de la primera linea) se aplica en 2416 y deja el fichero igual salvo esa linea (y el `updated:`;
+  en 9 de ellas la escritura anade ademas el salto de linea final que le faltaba al fichero); 4 van a
+  cuarentena por un ancla ambigua o ausente (el prefijo de la medicion) y 3 no tenian palabra unica.
+  La marca de retire entra igual en 2417; 6 van a cuarentena por el ancla.
 
 ### Changed
 - `learning.retire` sobre una regla que `rewrite_rule` no puede reescribir ya no va a cuarentena: la
@@ -40,8 +50,9 @@ Sale como 2.69.0: 2.68.0 y 2.68.1 las toman dos ramas de otras sesiones que entr
 ### Tests
 - `test-learning-patch.sh`: los tres motivos, replay, guardias al emitir y al compactar (evento
   escrito a mano), Quick Reference, retire en reglas bloqueadas, la segunda capa de
-  `comprobar_primera_linea` y la linea en blanco de `insert_at_section_end`. Cada una de 14
-  mutaciones del compactador (quitar una guardia o el arreglo) pone en rojo al menos un aserto.
+  `comprobar_primera_linea`, el texto que abriria un bloque, el formato en linea aceptado y la linea
+  en blanco de `insert_at_section_end`. Cada una de 15 mutaciones del compactador (quitar una
+  guardia o el arreglo) pone en rojo al menos un aserto.
 - `test-learning-retire.sh` seccion 8: la regla de varias lineas ahora se marca en su primera linea.
 - `test-learning-update.sh` seccion 15: el motivo de cuarentena nombra `learning.patch` (antes, «a
   mano»). `test-flags-sin-lector.sh`: 20 tipos y 59 flags, con lo que lee `learning.patch`.

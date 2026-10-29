@@ -3074,7 +3074,8 @@ def rewrite_rule(lines, i, end, nuevo, donde):
 # learnings de 25 proyectos del mismo usuario (2026-10-28) eso eran 2419 de 9183 reglas numeradas:
 # anterior 923, codigo-antes 965, bloque-multilinea 531. Para ellas no habia via por el journal.
 #
-# Lo que sigue no necesita saber donde acaba la regla, porque no cambia la estructura: toca solo
+# Lo que sigue no necesita saber donde acaba la regla, porque no cambia la estructura de BLOQUES
+# (listas, parrafos, codigo, HTML); el formato en linea, como `codigo` en pareja, si puede cambiar. Toca solo
 # TEXTO dentro de la primera linea, detras del numero o la vineta, y comprueba despues que la linea
 # sigue diciendo lo mismo a sus lectores (numero, familia, marca de retirada, comentarios de
 # disparadores y de enlace, comillas invertidas sueltas). El peor caso aceptado: si la regla cae
@@ -3084,6 +3085,11 @@ def rewrite_rule(lines, i, end, nuevo, donde):
 # cuando esto no baste (decision de Victor, 2026-10-28, d488).
 
 PROHIBIDO_EN_TROZO = ("\n", "\r", "```", "~~~", "<!--", "-->", "⊘")
+# Lo que, al principio del texto de un item, abre otro bloque DENTRO de el (CommonMark 5.2: el
+# contenido del item se lee como bloques): cita, cabecera, sublista, raya, HTML, valla.
+ABRE_BLOQUE_AL_INICIO = re.compile(
+    r"^(?:>|#{1,6}(?:[ \t]|$)|[-*+](?:[ \t]|$)|\d{1,9}[.)](?:[ \t]|$)|<|`{3}|~{3}"
+    r"|(?:[-*_][ \t]*){3,}$)")
 
 
 def problema_trozo(s, que):
@@ -3131,6 +3137,9 @@ def comprobar_primera_linea(vieja, nueva, donde, retira):
         fallo = "el numero o la vineta de la linea cambiarian"
     elif not c1.strip() or c1 != c1.lstrip():
         fallo = "el texto de la regla quedaria vacio o empezaria por un espacio"
+    elif ABRE_BLOQUE_AL_INICIO.match(c1) and not ABRE_BLOQUE_AL_INICIO.match(cuerpo_regla(t0 or "")):
+        fallo = ("el texto de la regla empezaria por algo que abre otro bloque dentro del item "
+                 "(cita, cabecera, sublista, raya, HTML o valla)")
     elif (learning_marks.sufijo_disparadores(t0) != learning_marks.sufijo_disparadores(t1)
           or learning_marks.sufijo_regla_qr(t0) != learning_marks.sufijo_regla_qr(t1)):
         fallo = "el comentario de disparadores o de enlace dejaria de leerse igual"

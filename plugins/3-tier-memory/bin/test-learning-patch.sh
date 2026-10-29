@@ -196,6 +196,19 @@ amano "trozo repetido" "no-anchor" 'p["match_prefix"] = "Tres anterior"'
 amano "trozo en la marca" "no-anchor" 'p["match_prefix"] = "Cinco retirada"; p["viejo"] = "obsoleta"; p["nuevo"] = "duplicada"'
 amano "comilla suelta" "primera-linea" 'p["nuevo"] = "`#6740"'
 amano "texto que empezaria por espacio" "primera-linea" 'p["viejo"] = "**Dos"; p["nuevo"] = " **Dos"'
+for ini in "> " "- " "+ " "# " "1. " "<div>"; do
+  amano "texto que empezaria por '$ini' (abre un bloque dentro del item)" "abre otro bloque" \
+    "p[\"viejo\"] = \"**Dos anterior**\"; p[\"nuevo\"] = \"${ini}**Dos anterior**\""
+done
+amano "texto que seria una raya" "abre otro bloque" 'p["match_prefix"] = "Dos anterior"; p["viejo"] = "**Dos anterior** — cita #8505 tambien"; p["nuevo"] = "* * * *"'
+
+echo "== 4b. formato en linea en el texto nuevo: se acepta (no cambia bloques) =="
+fixture
+emit --type learning.patch --topic gate --match-prefix "Dos anterior" --viejo "#8505" --nuevo '`#6740`' >/dev/null
+compact
+chk "codigo en linea en pareja: aplicado" '2. **Dos anterior** — cita `#6740` tambien|0' "$(linea 2)|$(cuar)"
+H=$(huella); replay; compact
+chk "y su replay es noop" "$H|0" "$(huella)|$(cuar)"
 
 echo "== 5. learning.patch en el Quick Reference =="
 fixture
