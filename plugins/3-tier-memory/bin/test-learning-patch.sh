@@ -338,5 +338,5 @@ PY
 )"
 
 echo
-echo "test-learning-patch: pass=$pass fail=$fail"
+echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
