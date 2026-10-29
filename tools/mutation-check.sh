@@ -616,9 +616,12 @@ caso "lv fecha sin validar"    journal-compact.py m_consolidate.py test-learning
 caso "lv inventa frontmatter"  journal-compact.py m_consolidate.py test-learning-update.sh "23g sin frontmatter" lv-inventa-frontmatter
 caso "lv ignorado"             journal-compact.py m_consolidate.py test-learning-update.sh "23a sin el campo" lv-ignorado-validador
 caso "lv emisor sin validar"   journal-emit.py    m_consolidate.py test-learning-update.sh "23d fecha imposible" lv-emisor-sin-validar
-caso "valla en codigo en linea" journal-compact.py m_codigo_en_linea.py test-learning-update.sh "tildes en codigo en linea: sin cuarentena" sin-codigo-en-linea
+caso "valla en codigo en linea" journal-compact.py m_codigo_en_linea.py test-learning-update.sh "codigo en linea que abre la linea: sin cuarentena" sin-codigo-en-linea
 caso "codigo en linea borrado" journal-compact.py m_codigo_en_linea.py test-learning-update.sh "codigo al inicio y luego <: sin cuarentena" codigo-borrado
-caso "cierre de otro largo"    journal-compact.py m_codigo_en_linea.py test-learning-update.sh "tiras de distinto largo: cuarentena" cierre-de-otro-largo
+caso "cierre de otro largo"    journal-compact.py m_codigo_en_linea.py test-learning-update.sh "tira que abre la linea y cierra con otro largo: cuarentena" cierre-de-otro-largo
+caso "valla a mitad de linea"  journal-compact.py m_valla_inicio.py test-learning-update.sh "valla sin pareja a mitad de una fila: sin cuarentena" valla-en-cualquier-sitio
+caso "valla sin marcador lista" journal-compact.py m_valla_inicio.py test-learning-update.sh "valla dentro de un item: cuarentena" sin-marcadores-de-lista
+caso "regla que es una valla"  journal-compact.py m_valla_inicio.py test-learning-update.sh "la regla misma abre una valla" regla-valla-pasa
 
 echo
 echo "Enlace Quick Reference -> regla y learnings-migracion.py (2.51.0, F7)"

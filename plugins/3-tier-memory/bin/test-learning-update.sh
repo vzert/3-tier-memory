@@ -415,16 +415,53 @@ caso24 "codigo al inicio y luego <" '`x` <b>no es bloque</b>\n\n- **Vieja** - re
 # El reporte culpaba a un `<` dentro de codigo en linea: nunca disparo la guarda (el `<` de HTML
 # tiene que empezar la linea, y el codigo empieza con comillas). Queda como caso de no regresion.
 caso24 "< dentro de codigo en linea" '`<div>` y `a < b` en un parrafo\n\n- **Vieja** - regla'
-# Lo que no es codigo en linea sigue negandose.
-caso22 "tira sin pareja" '- **A** - usa `x ~~~ y\n- **Vieja** - regla' "codigo-antes"
-caso22 "tiras de distinto largo" '- **A** - ``x ~~~ y`\n- **Vieja** - regla' "codigo-antes"
+# Una tira sin pareja no es codigo en linea, pero la valla que deja a mitad de linea tampoco abre
+# bloque (seccion 25): hasta 2.69.0 estos dos se negaban.
+caso24 "tira sin pareja" '- **A** - usa `x ~~~ y\n- **Vieja** - regla'
+caso24 "tiras de distinto largo" '- **A** - ``x ~~~ y`\n- **Vieja** - regla'
+# Desde 2.69.2 el codigo en linea solo importa cuando abre la linea: ahi esta lo que miden
+# las mutaciones de m_codigo_en_linea.py. Sin quitarlo, estas comillas serian una valla.
+caso24 "codigo en linea que abre la linea" '```` ``` ```` en un parrafo\n\n- **Vieja** - regla'
+# Limite conocido: una tira de tres que cierra con otro largo no es codigo en linea, y la guarda la
+# toma por valla. CommonMark (4.5) no la abre, porque su info lleva comillas, pero negarlo es seguro.
+caso22 "tira que abre la linea y cierra con otro largo" '```x``\n- **Vieja** - regla' "codigo-antes"
+# Lo que abre la linea sigue negandose.
 caso22 "valla de tildes con codigo detras" '~~~ `x`\n- **Vieja** - dentro\n\n~~~' "codigo-antes"
 caso22 "valla tras codigo en linea" '- **A** - `x`\n\n```\n- **Vieja** - dentro\n\n```' "codigo-antes"
 # Un tramo que cruza lineas no se empareja, a proposito: aqui la segunda linea SI abre una valla de
 # tildes (CommonMark 4.5; lo confirma markdown-it), aunque parezca seguir el tramo de la primera.
 caso22 "tramo de dos lineas que abre valla" 'Usa `texto\n~~~ texto` aqui.\n\n- **Vieja** - regla' "codigo-antes"
-# Limite conocido: este tramo de dos lineas no abre bloque, pero la guarda tambien lo niega.
-caso22 "tramo de dos lineas sin bloque" 'Usa `a ~~~\nb` aqui.\n\n- **Vieja** - regla' "codigo-antes"
+# Este tramo de dos lineas no abre bloque; hasta 2.69.0 la guarda tambien lo negaba.
+caso24 "tramo de dos lineas sin bloque" 'Usa `a ~~~\nb` aqui.\n\n- **Vieja** - regla'
+
+echo "== 25. una valla solo abre bloque al principio de la linea (p-f30ff01da5) =="
+# Caso real (claude-vzert, 2026-10-21): una fila de tabla con una valla sin pareja a mitad
+# ("````bash)") bloqueaba todas las reglas de detras, 161 de 161 del Quick Reference.
+# CommonMark 4.5: una valla solo abre bloque tras sangria, `>` o marcadores de lista.
+caso24 "valla sin pareja a mitad de una fila" '| a | usa ````bash) |\n|---|---|\n\n- **Vieja** - regla'
+caso24 "tildes sin pareja tras texto" 'Un parrafo con ~~~ en medio.\n\n- **Vieja** - regla'
+caso24 "valla pegada a un guion no es item" '-```x\n\n- **Vieja** - regla'
+# Al principio, o tras `>` o un marcador de lista, la valla abre bloque y sigue negandose. Dentro
+# de una cita o de un item, una regla en la columna 0 cierra ese contenedor y no cae en la valla;
+# negarlo es el lado seguro que ya tenia la guarda, y no se afina sin un parser.
+caso22 "valla dentro de una cita" '> ```\n- **Vieja** - dentro' "codigo-antes"
+caso22 "valla dentro de un item" '- ```\n- **Vieja** - dentro' "codigo-antes"
+caso22 "valla en un item ordenado anidado" '1) - ~~~\n\n- **Vieja** - dentro' "codigo-antes"
+caso22 "valla con tres espacios" '   ```\n- **Vieja** - dentro' "codigo-antes"
+# Un item cuyo propio texto es una valla abre un bloque de codigo: no es una regla de una linea
+# (el oraculo lo encontro con los casos de arriba; tambien lo reescribia 2.69.0).
+motivo25() {  # $1 = la linea de la regla, sola en el documento
+  python3 - "$BIN" "$1" <<'PY'
+import sys, importlib.util
+sys.dont_write_bytecode = True
+spec = importlib.util.spec_from_file_location("jc", sys.argv[1] + "/journal-compact.py")
+jc = importlib.util.module_from_spec(spec); spec.loader.exec_module(jc)
+print(jc.regla_reescribible(["", sys.argv[2]], 1, 2) or "ok")
+PY
+}
+chk "la regla misma abre una valla" "forma" "$(motivo25 '- ```')"
+chk "la regla misma abre una valla en una cita" "forma" "$(motivo25 '- > ~~~')"
+chk "una regla con codigo en linea al principio sigue valiendo" "ok" "$(motivo25 '- `x` y ```` ``` ```` regla')"
 
 echo
 echo "pass=$pass fail=$fail"

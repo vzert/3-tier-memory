@@ -2944,7 +2944,11 @@ def find_rule_anchored(lines, start, end, prefix, nuevo, donde):
 REGLA_PLANA = re.compile(r"^(?:([-*])|\d{1,9}\.) (?=\S)")   # columna 0, marcador ASCII + espacio
 RAYA = re.compile(r"^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$")  # `- - -` es raya horizontal, no item
 ATX = re.compile(r"^#{1,6}(?:[ \t]|$)")                     # `#t` NO es cabecera
-ABRE_BLOQUE = re.compile(r"```|~~~|^[ \t>]*<")              # valla o HTML en cualquier sitio
+# Una valla solo abre bloque al principio de la linea, tras sangria, `>` o marcadores de lista
+# (CommonMark 4.5); a mitad de una fila de tabla o de un parrafo es texto (p-f30ff01da5: una fila
+# con "````bash)" bloqueaba las 161 reglas del Quick Reference de un proyecto). El HTML, igual que
+# antes: `<` tras sangria o `>`.
+ABRE_BLOQUE = re.compile(r"^(?:[ \t>]|(?:[-*+]|\d{1,9}[.)])[ \t])*(?:```|~~~)|^[ \t>]*<")
 # Codigo en linea (CommonMark 6.1): una tira de n comillas invertidas cerrada por la siguiente tira
 # de exactamente n en la misma linea. Lo de dentro no abre bloque. Una tira sin pareja no se toca.
 CODIGO_EN_LINEA = re.compile(r"(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)")
@@ -2975,6 +2979,10 @@ def regla_reescribible(lines, i, end):
     """None si la linea `i` es, con certeza, un item de lista de UNA linea; si no, el motivo."""
     f = familia(lines[i])
     if not f:
+        return "forma"
+    # Un item cuyo texto es una valla (`- ````, `- > ~~~`) es un bloque de codigo, no una regla de
+    # una linea: reescribirlo cambia la estructura (lo encontro el oraculo con p-f30ff01da5).
+    if ABRE_BLOQUE.match(CODIGO_EN_LINEA.sub("c", lines[i])):
         return "forma"
     # Hacia atras: la cadena de items de la misma familia tiene que arrancar en algo que abra lista
     # de verdad (una linea en blanco, una cabecera, el principio, o un item que interrumpe parrafo).
@@ -3007,7 +3015,7 @@ def regla_reescribible(lines, i, end):
 
 MOTIVOS_REGLA = {
     "forma": "la regla no empieza en la columna 0 con '- ', '* ' o 'N. ' y texto (tiene sangria, "
-             "un espacio que no es ASCII, o es una raya horizontal)",
+             "un espacio que no es ASCII, es una raya horizontal o su texto abre una valla)",
     "anterior": "la regla sigue a un parrafo y su numero no puede interrumpirlo: en markdown es "
                 "continuacion de ese parrafo, no un item",
     "bloque-multilinea": "la regla arrastra contenido (una continuacion, una sublista, una tabla, "

@@ -1,5 +1,38 @@
 # Changelog
 
+## [2.69.2] - 2026-10-29
+`regla_reescribible` negaba como `codigo-antes` toda regla con una valla (```` ``` ````, `~~~`)
+antes en el fichero, en CUALQUIER posicion de la linea. Una valla solo abre bloque al principio de
+la linea (CommonMark 4.5), asi que una valla sin pareja a mitad de una fila de tabla o de un parrafo
+bloqueaba todas las reglas de detras: en un proyecto del autor, una fila con "````bash)" dejaba sin
+via las 161 reglas del Quick Reference (p-f30ff01da5). Sale como 2.69.2: 2.69.1 la toma otra rama
+que entra antes.
+
+### Fixed
+- `ABRE_BLOQUE` cuenta una valla solo tras sangria, `>` o marcadores de lista (`-`, `*`, `+`, `1.`,
+  `1)`). El HTML sigue igual (`<` tras sangria o `>`). Con un contenedor delante (`> ```` ``` ````,
+  `- ~~~`) la regla de la columna 0 que sigue ya no cae en la valla, pero se sigue negando: es el lado
+  seguro que la guarda ya tenia, y afinarlo pide un parser.
+- Una regla cuyo propio texto abre una valla (`- ```` ``` ````, `- > ~~~`) se niega con el motivo
+  `forma`: es un bloque de codigo, no una regla de una linea. Lo encontro el oraculo
+  (`tools/oraculo-rewrite-rule.py`) con los casos nuevos, y tambien lo reescribia 2.69.0.
+- Medido por la ruta del compactador (validate + apply_event de `learning.update` sobre una copia de
+  cada topic con su `_learnings.md`) en las 9259 reglas numeradas de 42 carpetas `memory/` del autor
+  (2026-10-29): 20 de las 968 `codigo-antes` pasan a reescribirse y el fichero cambia solo en su
+  linea (con 2.69.0 las 20 iban a cuarentena). Ninguna de las 20 tiene una valla al principio de
+  linea antes, ninguna regla pasa de reescribible a negada, y quedan 948 `codigo-antes`.
+
+### Tests
+- `test-learning-update.sh` seccion 25: la valla a mitad de una fila o de un parrafo ya no bloquea;
+  la del principio con tres espacios, la de una cita y la de un item siguen negandose; la regla que
+  es una valla es `forma`. Seccion 24: tres casos que asertaban la negacion de una valla a mitad de
+  linea ahora asertan la reescritura, y dos casos nuevos donde el codigo en linea abre la linea.
+- `tools/mutation-check.sh`: las mutaciones de `m_codigo_en_linea.py` apuntan a los casos nuevos (la
+  de la valla en codigo en linea quedaba vacua), y `m_valla_inicio.py` trae tres: quitar el ancla,
+  quitar los marcadores de lista y dejar pasar la regla-valla. Las seis caen.
+- `tools/oraculo-rewrite-rule.py`: ocho lineas con valla a mitad de linea o tras un contenedor; 0
+  clases de fallo en 309764 documentos y en 1109764 (N3=500000 N4=400000 SEED=19).
+
 ## [2.69.1] - 2026-10-29
 Origen: p-cafb3ae9f1, p-c82b911c23 y p-6f9ea48553 (decision d513).
 
