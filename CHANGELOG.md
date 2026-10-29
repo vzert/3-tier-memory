@@ -20,6 +20,67 @@ Origen: p-cafb3ae9f1, p-c82b911c23 y p-6f9ea48553 (decision d513).
 - `tools/mutation-check.sh`: tres mutantes nuevos (`enlace-md-md`, `aviso-destino-inexistente`,
   `aviso-vineta-padre-sin-id`); los de migrar discriminan.
 
+## [2.69.0] - 2026-10-28
+`learning.update`, `learning.retire` y `learning.add --supersedes` pasan por `rewrite_rule`, que se
+niega cuando no puede demostrar que la regla es UNA linea (`anterior`, `bloque-multilinea`,
+`codigo-antes`), y el mensaje decia «corrigela a mano». En los learnings de 25 proyectos del mismo
+usuario (2026-10-28) eran 2419 de 9183 reglas numeradas (anterior 923, codigo-antes 965,
+bloque-multilinea 531): sin via por el journal. Lo pidio una sesion de otro proyecto con un caso real
+(una regla que citaba un pendiente cerrado y no se podia apuntar al nuevo). Decisiones de Victor
+(d488-d495): un evento que cambia un trozo, no un parser (seria la primera dependencia, I4); el
+parser queda para si esto no basta.
+Sale como 2.69.0: 2.68.0 y 2.68.1 las toman dos ramas de otras sesiones que entran antes.
+
+### Added
+- `learning.patch` (`--topic T --match-prefix P` o `--quickref-prefix QP`, con `--viejo`/`--nuevo`):
+  cambia un trozo literal de la PRIMERA linea de una regla del topic o de una linea del Quick
+  Reference. No pasa por `regla_reescribible`: no cambia la estructura de BLOQUES del markdown
+  (listas, parrafos, codigo, HTML), asi que no necesita saber donde acaba la regla. El texto nuevo
+  si puede llevar formato en linea (`codigo` en pareja, **enfasis**), igual que con
+  `learning.update`. El trozo viejo tiene que salir una vez en el texto de la regla (sin numero,
+  vineta, marca de retirada ni comentarios de disparadores o de enlace) y el nuevo ninguna.
+  Ninguno lleva salto de linea, valla (```` ``` ````, `~~~`), `<!--`, `-->` ni `⊘`, y `--nuevo` no
+  puede estar dentro de `--viejo` (si no, el replay no se distingue del primer cambio). Tras el
+  cambio, la linea tiene que leerse igual para sus lectores: mismo numero y familia, misma marca,
+  mismos comentarios, mismas comillas invertidas sueltas, y el texto no puede pasar a empezar por
+  algo que abre otro bloque dentro del item (`>`, `#`, `-`/`+`/`*` con espacio, `1.`, `<`, una raya,
+  una valla). Si no, cuarentena `primera-linea` y no se escribe nada. El emisor lo comprueba contra
+  el fichero de hoy y el compactador otra vez. Replay = noop, tambien cuando el parche cambio el
+  propio prefijo del ancla.
+  Medido por la ruta del compactador (validate + apply_event sobre una copia de cada topic) en las
+  2423 reglas bloqueadas del mismo corpus el 2026-10-28: el parche (cambiar la ultima palabra unica
+  de la primera linea) se aplica en 2416 y deja el fichero igual salvo esa linea (y el `updated:`;
+  en 9 de ellas la escritura anade ademas el salto de linea final que le faltaba al fichero); 4 van a
+  cuarentena por un ancla ambigua o ausente (el prefijo de la medicion) y 3 no tenian palabra unica.
+  La marca de retire entra igual en 2417; 6 van a cuarentena por el ancla.
+
+### Changed
+- `learning.retire` sobre una regla que `rewrite_rule` no puede reescribir ya no va a cuarentena: la
+  marca va al final de su PRIMERA linea (delante del comentario de disparadores), con las mismas
+  comprobaciones, y la nota con las mismas prohibiciones que el trozo. `learning.add --supersedes`
+  sobre una regla asi sigue yendo a cuarentena (no entraba en lo decidido).
+- `insert_at_section_end` (la usan `learning.add` y `--quickref`) deja una linea en blanco antes de la
+  regla nueva cuando la de arriba es un parrafo o una vineta de otra familia. Pegada, una `N.` con
+  N != 1 es continuacion del parrafo en CommonMark y `rewrite_rule` la rechazaba despues por
+  `anterior`. Las reglas que ya estan pegadas no se reparan: medido, la linea en blanco solo
+  desbloquea 230 de las 923 `anterior` (579 pasan a `bloque-multilinea` y 114 a `codigo-antes`).
+- El mensaje de cuarentena de `rewrite_rule` nombra `learning.patch` y `learning.retire` en vez de
+  «corrigela a mano».
+- `/checkpoint-3t`, `/save-learning` y `/consolidate-3t` dicen cuando usar `learning.patch` (la
+  cuarentena de `learning.update` por `anterior`, `bloque-multilinea` o `codigo-antes`), y los avisos
+  de `journal-guard.sh` y `bash-journal-nudge.sh` lo nombran entre los eventos.
+
+### Tests
+- `test-learning-patch.sh`: los tres motivos, replay, guardias al emitir y al compactar (evento
+  escrito a mano), Quick Reference, retire en reglas bloqueadas, la segunda capa de
+  `comprobar_primera_linea`, el texto que abriria un bloque, el formato en linea aceptado y la linea
+  en blanco de `insert_at_section_end`. Cada una de 15 mutaciones del compactador (quitar una
+  guardia o el arreglo) pone en rojo al menos un aserto.
+- `test-learning-retire.sh` seccion 8: la regla de varias lineas ahora se marca en su primera linea.
+- `test-learning-update.sh` seccion 15: el motivo de cuarentena nombra `learning.patch` (antes, «a
+  mano»). `test-flags-sin-lector.sh`: 20 tipos y 59 flags, con lo que lee `learning.patch`.
+- README: «Twenty event types», con `learning.patch` y el retire en primera linea.
+
 ## [2.68.2] - 2026-10-28
 El candado de una corrida completa por maquina (2.62.7) no respetaba el orden de llegada. Cada
 corrida que esperaba probaba `mkdir` cada segundo, y al soltarlo ganaba la que despertara primero.
