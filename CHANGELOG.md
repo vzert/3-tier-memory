@@ -1,12 +1,11 @@
 # Changelog
 
-## [2.68.2] - 2026-10-28
+## [2.68.0] - 2026-10-28
 El candado de una corrida completa por maquina (2.62.7) no respetaba el orden de llegada. Cada
 corrida que esperaba probaba `mkdir` cada segundo, y al soltarlo ganaba la que despertara primero.
 Medido en este Mac: una corrida `--con-candado` de mutation-check espero 4 h 42 min y perdio ante
 otra que habia llegado 59 min despues; el candado paso a la segunda a las 16:30:25, y una corrida
 completa dura horas.
-(2.68.0 y 2.68.1 los usan ramas abiertas: esta version se puede renumerar al entrar.)
 
 ### Added
 - **Cola de turnos por orden de llegada en `tools/run-tests.sh`.** Cada corrida que espera saca un
