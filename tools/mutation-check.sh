@@ -325,6 +325,20 @@ caso "decision del usuario: usuario externo avisa" pendientes_afines.py m_hilo.p
 caso "decision del usuario: complemento no es tercero" pendientes_afines.py m_hilo.py test-ninguno-bloqueo.sh "un complemento del usuario no lo vuelve tercero" usuario-complemento-tercero
 caso "decision del usuario: tercero con articulo" pendientes_afines.py m_hilo.py test-ninguno-bloqueo.sh "un tercero con articulo tras de/del sigue avisando" articulo-tercero
 caso "decision del usuario: el hook pregunta" checkpoint-close-guard.sh m_hilo.py test-checkpoint-close-guard.sh "la revision pregunta si el bloqueo espera" guard-sin-bloqueo
+# snippet.hilo_externo 2.67.1 (p-d691ef721b): las 11 pruebas de vigilancia de la seccion 7g, cada
+# una contra una version rota del arreglo de L1 (negacion en la clausula) o de L2 (abierto suelto).
+T=test-hilos-externos.sh
+caso "hilo externo: clausula sin cortar" checkpoint-audit.py m_hilo_externo.py $T "una lectura negada y otra afirmada" sin-cortar-clausula
+caso "hilo externo: negacion detras"   checkpoint-audit.py m_hilo_externo.py $T "sin negacion 'leido completo 2026-10-26 .no hubo mensajes nuevos.'" linea-entera
+caso "hilo externo: etiqueta no tocar" checkpoint-audit.py m_hilo_externo.py $T 'negacion solo dentro de la etiqueta `no tocar`' etiqueta-cuenta
+caso "hilo externo: etiqueta sin revisor" checkpoint-audit.py m_hilo_externo.py $T 'negacion solo dentro de la etiqueta `sin revisor`' etiqueta-cuenta
+caso "hilo externo: no-tocar con guion" checkpoint-audit.py m_hilo_externo.py $T "negacion solo dentro de la etiqueta no-tocar" neg-con-guiones
+caso "hilo externo: ISO vs 26 de octubre" checkpoint-audit.py m_hilo_externo.py $T "sin negacion 'leido completo el 26 de octubre'" fecha-iso
+caso "hilo externo: ISO vs 26/10"      checkpoint-audit.py m_hilo_externo.py $T "sin negacion 'leido completo 26/10'" fecha-iso
+caso "hilo externo: ISO vs el dia 26"  checkpoint-audit.py m_hilo_externo.py $T "sin negacion 'leido completo el dia 26'" fecha-iso
+caso "hilo externo: ISO vs hoy 22:10"  checkpoint-audit.py m_hilo_externo.py $T "sin negacion 'leido completo hoy 22:10'" fecha-iso
+caso "hilo externo: abierto en linea suelta" checkpoint-audit.py m_hilo_externo.py $T "abierto suelto en una linea suelta" abierto-suelto-sin-aviso
+caso "hilo externo: abierto en linea del hilo" checkpoint-audit.py m_hilo_externo.py $T "abierto suelto en la linea del hilo" abierto-hilo-sin-aviso
 
 echo "Contrato de check-project-dir-fallback.py (2.41.4): cada pieza, rota, tumba su aserto"
 caso "verde respaldo" check-project-dir-fallback.py m_contrato_projdir.py test-project-dir-fallback.sh " respaldo: exit 0" r1-sin-quitar-forma
