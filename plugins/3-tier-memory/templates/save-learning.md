@@ -108,6 +108,20 @@ Conserva el numero de la regla (se cita por numero en todo el repo). El prefijo 
 enfasis ni mayusculas; si casan cero o dos reglas, el evento cae en cuarentena y nombra las
 candidatas en vez de reescribir a ciegas.
 
+**Si `learning.update` cae en cuarentena por `anterior`, `bloque-multilinea` o `codigo-antes`** (la
+regla sigue a un parrafo, arrastra lineas o hay una valla antes en el fichero), corrige un trozo de
+su primera linea con `learning.patch` (2.69.0); para retirarla, `learning.retire` ya marca solo su
+primera linea:
+
+```bash
+python3 "$JBIN/journal-emit.py" --type learning.patch --topic <topic-slug> \
+  --match-prefix "<prefijo del texto ACTUAL>" --viejo "<trozo exacto de hoy>" --nuevo "<trozo nuevo>"
+```
+
+El trozo viejo tiene que salir una vez en la primera linea de la regla y el nuevo ninguna; sin
+saltos de linea, vallas, `<!--`, `-->` ni `⊘`. Para el Quick Reference, `--quickref-prefix` en vez
+de `--topic`/`--match-prefix`.
+
 `--text` conserva los disparadores de la regla. `--disparadores "..."` los reemplaza enteros, y
 `--sin-disparadores` (2.60.2, con `--match-prefix`, sin `--disparadores`) los quita.
 

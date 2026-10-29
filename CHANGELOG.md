@@ -46,6 +46,9 @@ Sale como 2.69.0: 2.68.0 y 2.68.1 las toman dos ramas de otras sesiones que entr
   desbloquea 230 de las 923 `anterior` (579 pasan a `bloque-multilinea` y 114 a `codigo-antes`).
 - El mensaje de cuarentena de `rewrite_rule` nombra `learning.patch` y `learning.retire` en vez de
   «corrigela a mano».
+- `/checkpoint-3t`, `/save-learning` y `/consolidate-3t` dicen cuando usar `learning.patch` (la
+  cuarentena de `learning.update` por `anterior`, `bloque-multilinea` o `codigo-antes`), y los avisos
+  de `journal-guard.sh` y `bash-journal-nudge.sh` lo nombran entre los eventos.
 
 ### Tests
 - `test-learning-patch.sh`: los tres motivos, replay, guardias al emitir y al compactar (evento
