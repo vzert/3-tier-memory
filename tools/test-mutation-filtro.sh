@@ -53,5 +53,20 @@ for f in caso caso_tools; do
 done
 chk "MUT_SOLO vacio: corre todo" "ok" "$(MUT_SOLO='' veredicto caso falla-solo)"
 
+echo "== MUT_SOLO sin casos: el aviso (p-7574026fb5) =="
+# Con locale UTF-8, bash 3.2 (macOS) lee el primer byte de » como parte del nombre: "$MUT_SOLO»" pedia la
+# variable MUT_SOLO\xc2 y set -u cortaba con «unbound variable» en vez del aviso. Se corre cada aviso del
+# script (el del agregador de tandas y el final) con set -u y un locale UTF-8.
+LOC=C.UTF-8; [ -n "$(LC_ALL=$LOC locale charmap 2>/dev/null | grep -i utf)" ] || LOC=en_US.UTF-8
+grep -oE 'echo "MUT_SOLO NO CASA CON NINGUN CASO[^;]*; exit 1' "$MC" > "$T/aviso.sh"
+chk "mutation-check.sh tiene los dos avisos de MUT_SOLO sin casos" "2" "$(grep -c . "$T/aviso.sh")"
+n=0
+while IFS= read -r l; do
+  n=$((n+1))
+  out=$(LC_ALL=$LOC MUT_SOLO='^no-existe$' bash -c "set -u; $l" 2>&1); rc=$?
+  chk "aviso $n: con locale UTF-8 imprime el aviso" "MUT_SOLO NO CASA CON NINGUN CASO: «^no-existe\$»" "$out"
+  chk "aviso $n: sale 1" "1" "$rc"
+done < "$T/aviso.sh"
+
 echo "pass=$pass fail=$fail"
 [ "$fail" -eq 0 ]
