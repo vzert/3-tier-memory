@@ -99,7 +99,7 @@ if [ "$JOBS" -gt 1 ] && [ -z "${MUT_SHARD:-}" ]; then
   rm -rf "$W"
   echo
   if [ "$MALAS" -gt 0 ]; then echo "TANDAS ROTAS: $MALAS de $JOBS"; exit 1; fi
-  if [ "$T" -eq 0 ] && [ -n "${MUT_SOLO:-}" ]; then echo "MUT_SOLO NO CASA CON NINGUN CASO: «$MUT_SOLO»"; exit 1; fi
+  if [ "$T" -eq 0 ] && [ -n "${MUT_SOLO:-}" ]; then echo "MUT_SOLO NO CASA CON NINGUN CASO: «${MUT_SOLO}»"; exit 1; fi
   if [ "$P" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $T)"; else echo "SIN ACLARAR: $P de $T"; fi
   exit $(( P > 0 ))
 fi
@@ -747,7 +747,7 @@ caso_tools "MUT_SOLO no filtra"    mutation-check.sh m_mutation_check.py test-mu
 echo
 # En una tanda no: otra tanda puede tener los casos que casan; lo decide el agregador de arriba.
 if [ "$TOTAL" -eq 0 ] && [ -n "${MUT_SOLO:-}" ] && [ -z "${MUT_SHARD:-}" ]; then
-  echo "MUT_SOLO NO CASA CON NINGUN CASO: «$MUT_SOLO»"; exit 1
+  echo "MUT_SOLO NO CASA CON NINGUN CASO: «${MUT_SOLO}»"; exit 1
 fi
 if [ "$PEND" -eq 0 ]; then echo "LAS EVALUABLES DISCRIMINAN (de $TOTAL)"; else echo "SIN ACLARAR: $PEND de $TOTAL"; fi
 exit $(( PEND > 0 ))
