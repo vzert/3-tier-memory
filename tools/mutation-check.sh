@@ -701,6 +701,20 @@ caso_tools "sin hora es reusado"    run-tests.sh m_run_tests.py test-run-tests.s
 caso_tools "hora en el TZ del lector" run-tests.sh m_run_tests.py test-run-tests.sh "un lector con otro TZ que el dueno no le roba el candado" hora-con-tz-local
 caso_tools "no guarda la hora"      run-tests.sh m_run_tests.py test-run-tests.sh "la corrida que toma el candado guarda su hora" sin-escribir-hora
 caso_tools "sin --con-candado"     run-tests.sh m_run_tests.py test-run-tests.sh "los tres mutation-check corren su cuerpo" sin-con-candado
+# 2026-10-28: la cola de turnos por orden de llegada y los avisos de quien espera.
+caso_tools "cola: sin cola"         run-tests.sh m_run_tests.py test-run-tests.sh "seis que esperan entran en orden de llegada" sin-cola
+caso_tools "cola: muerto frena"     run-tests.sh m_run_tests.py test-run-tests.sh "el turno de una corrida muerta no frena la cola" turno-muerto-vivo
+caso_tools "cola: reusado frena"    run-tests.sh m_run_tests.py test-run-tests.sh "un turno con el pid reusado no frena la cola" turno-reusado-vivo
+caso_tools "cola: vivo borrado"     run-tests.sh m_run_tests.py test-run-tests.sh "un turno vivo con su hora no se borra" turno-vivo-borrado
+caso_tools "cola: sin paciencia"    run-tests.sh m_run_tests.py test-run-tests.sh "un turno vivo que no toma el candado libre no frena" sin-paciencia
+caso_tools "cola: libre sin ceder"  run-tests.sh m_run_tests.py test-run-tests.sh "y dice que prueba en su lugar" libre-sin-ceder
+caso_tools "cola: turno al tomar"   run-tests.sh m_run_tests.py test-run-tests.sh "el turno sale de la cola al tomar el candado" turno-no-sale-al-tomar
+caso_tools "cola: turno al morir"   run-tests.sh m_run_tests.py test-run-tests.sh "matar a quien espera en la cola saca su turno" turno-no-sale-al-morir
+caso_tools "cola: sin turno sale"   run-tests.sh m_run_tests.py test-run-tests.sh "y corre su suite sin turno" sin-turno-sale
+caso_tools "cola: crea con -p"      run-tests.sh m_run_tests.py test-run-tests.sh "y no corre la suite sin candado" cola-con-p
+caso_tools "cola: sin aviso perdido" run-tests.sh m_run_tests.py test-run-tests.sh "quien espera dice que perdio el turno" sin-aviso-perdido
+caso_tools "cola: perdido siempre"  run-tests.sh m_run_tests.py test-run-tests.sh "ninguna de la cola dice que perdio el turno" perdido-siempre
+caso_tools "cola: sin aviso cada N" run-tests.sh m_run_tests.py test-run-tests.sh "y cada AVISO segundos dice cuanto lleva" sin-aviso-periodico
 # p-4be2b6ea23: mutation-check.sh lanzado solo toma el mismo candado.
 caso_tools "mutation-check sin candado" mutation-check.sh m_mutation_check.py test-run-tests.sh "tres mutation-check sueltos y una corrida completa" sin-candado MUTATION_CHECK
 caso_tools "se espera a si mismo"  mutation-check.sh m_mutation_check.py test-run-tests.sh "dentro de una corrida completa no se espera a si mismo" siempre-pide MUTATION_CHECK

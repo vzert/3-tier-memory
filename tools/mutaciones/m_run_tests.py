@@ -71,6 +71,35 @@ M = {
         ('    TZ=UTC0 LC_ALL=C ps -o lstart= -p "$1"', '    LC_ALL=C ps -o lstart= -p "$1"')],
     "sin-escribir-hora": [
         ('      candado_hora "$$" > "$CANDADO/arranque" 2>/dev/null', '      :')],
+    # 2026-10-28: la cola de turnos por orden de llegada y los avisos de quien espera.
+    "sin-cola": [
+        ('  [ -n "$TURNO" ] || return 0', '  return 0')],
+    "turno-muerto-vivo": [
+        ('    if ! candado_vivo "$pid" || turno_reusado "$t" "$pid"; then',
+         '    if turno_reusado "$t" "$pid"; then')],
+    "turno-reusado-vivo": [
+        ('  [ -n "$ahora_t" ] && [ "$ahora_t" != "$antes" ]', '  false')],
+    "turno-vivo-borrado": [
+        ('  ahora_t=$(candado_hora "$2")', '  ahora_t=otra')],
+    "sin-paciencia": [
+        ('    if [ -n "$delante" ] && [ "$libre" -ge "${RUN_TESTS_COLA_PACIENCIA:-30}" ]; then', '    if false; then')],
+    "libre-sin-ceder": [
+        ('    if [ ! -d "$CANDADO" ] && [ -n "$delante" ]; then', '    if false; then')],
+    "turno-no-sale-al-tomar": [
+        ('  [ -n "$TURNO" ] && rm -rf "$TURNO"; TURNO=""', '  :')],
+    "turno-no-sale-al-morir": [
+        ('  [ -z "$TURNO" ] || rm -rf "$TURNO"', '  :')],
+    "sin-turno-sale": [
+        ('  echo "AVISO run-tests: no puedo sacar turno en $COLA; espero sin orden de llegada." >&2', '  exit 2')],
+    "cola-con-p": [
+        ('  if { [ -d "$COLA" ] || mkdir "$COLA" 2>/dev/null; } && mkdir "$TURNO" 2>/dev/null; then',
+         '  if mkdir -p "$COLA" 2>/dev/null && mkdir "$TURNO" 2>/dev/null; then')],
+    "sin-aviso-perdido": [
+        ('          *) echo "AVISO run-tests: perdi el turno:', '          *) : "AVISO run-tests: perdi el turno:')],
+    "perdido-siempre": [
+        ('          *" $quien "*) ;;', '          *" nadie-casa "*) ;;')],
+    "sin-aviso-periodico": [
+        ('      if [ $(( $(date +%s) - ultimo )) -ge "${RUN_TESTS_CANDADO_AVISO:-600}" ]; then', '      if false; then')],
 }
 p, nombre = sys.argv[1], sys.argv[2]
 s = io.open(p, encoding="utf-8", newline="").read()

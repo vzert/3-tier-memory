@@ -131,7 +131,8 @@ chk "una suite roja sigue siendo FALLA" "FALLA" "$(veredicto "$T/roja.sh")"
 echo "== candado: una corrida completa por maquina (p-524e2a5bf7) =="
 R="$T/repo"; mkdir -p "$R/tools" "$R/plugins/3-tier-memory/bin" "$T/bin"
 cp "$RT" "$R/tools/run-tests.sh"
-printf 'echo ini >> "%s"; sleep 1; echo fin >> "%s"; echo "pass=1 fail=0"\n' "$T/registro" "$T/registro" \
+printf '[ -n "${QUIEN:-}" ] && echo "$QUIEN" >> "%s"; echo ini >> "%s"; sleep 1; echo fin >> "%s"; echo "pass=1 fail=0"\n' \
+  "$T/orden" "$T/registro" "$T/registro" \
   > "$R/plugins/3-tier-memory/bin/test-lenta.sh"
 printf '#!/bin/sh\nexit 1\n' > "$T/bin/claude"; chmod +x "$T/bin/claude"   # sin el CLI real: no tarda
 CAND="$T/candado"
@@ -147,6 +148,7 @@ termina() {
 # completa <salida> [script]: una corrida completa de la copia (o de [script] de la copia, p. ej.
 # mutation-check.sh), en segundo plano; deja su pid en LANZADO. MUTA=1 corre mutation-check dentro,
 # TOPE pone RUN_TESTS_CANDADO_TOPE y DUENO el RUN_TESTS_CANDADO_DUENO heredado (vacio = ninguno).
+# QUIEN lo anota la suite en $T/orden; PACIENCIA y AVISO son los de la cola y el aviso periodico.
 # Desacoplada de esta prueba (doble fork, la adopta init). Medido: con las corridas como hijas de esta
 # prueba, quitar la relectura del pid no tumbaba el caso de la carrera (0 de 3); desacopladas, 3 de 3.
 # La causa no esta medida (no son zombis: bash recoge a sus hijas). `exec` conserva el pid anotado.
@@ -154,6 +156,7 @@ completa() {
   rm -f "$1.pid"
   ( RUN_TESTS_CANDADO="$CAND" RUN_TESTS_CANDADO_ESPERA=0.2 RUN_TESTS_CANDADO_PAUSA="${PAUSA:-}" RUN_MUTATION="${MUTA:-0}" \
       RUN_TESTS_CANDADO_TOPE="${TOPE:-}" RUN_TESTS_CANDADO_DUENO="${DUENO:-}" \
+      QUIEN="${QUIEN:-}" RUN_TESTS_COLA_PACIENCIA="${PACIENCIA:-}" RUN_TESTS_CANDADO_AVISO="${AVISO:-}" \
       PATH="$T/bin:$PATH" bash -c 'echo $$ > "$0.pid"; exec bash "$1" >"$0.out" 2>"$0.err"' "$1" "$R/tools/${2:-run-tests.sh}" & )
   local i=0; while [ ! -s "$1.pid" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$(( i + 1 )); done
   LANZADO=$(cat "$1.pid" 2>/dev/null)
@@ -279,6 +282,92 @@ mkdir "$CAND"; echo "$$" > "$CAND/pid"
 RUN_TESTS_CANDADO="$CAND" bash "$R/tools/run-tests.sh" --una prueba bash "$T/skip.sh" >/dev/null 2>&1 & u=$!
 chk "--una no toma el candado: no espera a la corrida que lo tiene" "0" "$(termina "$u" 10; echo $?)"
 rm -rf "$CAND"
+
+# Cola de turnos (2026-10-28): al soltar, ganaba quien despertara primero. Medido: una corrida espero
+# 4 h 42 min y perdio ante otra que llego 59 min despues. El dueno de estas pruebas es un sleep con
+# su hora de arranque: vive todo lo que haga falta y no corre nada.
+echo "== candado: cola de turnos por orden de llegada =="
+# duenofalso <pid>: deja el candado con ese pid y su hora, como lo deja una corrida que lo tomo.
+duenofalso() { mkdir -p "$CAND"; bash "$R/tools/run-tests.sh" --hora-candado "$1" > "$CAND/arranque"; echo "$1" > "$CAND/pid"; }
+# turnos: cuantos turnos hay en la cola. espera_turnos <n>: hasta que haya n (tope 10 s).
+turnos() { ls "$CAND.cola" 2>/dev/null | wc -l | tr -d ' '; }
+espera_turnos() { local i=0; while [ "$(turnos)" -lt "$1" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$(( i + 1 )); done; }
+# turno <pid> <segundos>: la ruta del turno que sacaria ese pid a esa hora (epoch).
+turno() { printf '%s/%010d-%010d' "$CAND.cola" "$2" "$1"; }
+# Seis que llegan una por segundo con el candado tomado; el dueno suelta cuando la sexta ya tiene
+# turno. Sin cola gana la que despierta primero: el orden sale al azar (1 en 720).
+sleep 120 & dueno1=$!; duenofalso "$dueno1"
+: > "$T/registro"; : > "$T/orden"; pids=""
+for i in 1 2 3 4 5 6; do QUIEN=w$i completa "$T/w$i"; pids="$pids $LANZADO"; espera_turnos "$i"; sleep 1.1; done
+chk "seis que esperan sacan cada una su turno" "6" "$(turnos)"
+rm -rf "$CAND"
+rcs=""; for p in $pids; do termina "$p" 120; rcs="$rcs$?"; done
+chk "las seis de la cola terminan" "000000" "$rcs"
+chk "seis que esperan entran en orden de llegada" "w1 w2 w3 w4 w5 w6" "$(tr '\n' ' ' < "$T/orden" | sed 's/ $//')"
+chk "la cola tambien deja una tras otra" "ini fin ini fin ini fin ini fin ini fin ini fin" \
+  "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
+chk "ninguna de la cola dice que perdio el turno" "0" "$(cat "$T"/w?.err | grep -c 'perdi el turno')"
+chk "y la cola queda vacia" "0" "$(turnos)"
+kill "$dueno1" 2>/dev/null; wait "$dueno1" 2>/dev/null
+
+# Quien toma el candado saca su turno de la cola: la cola es solo de quienes esperan.
+: > "$T/registro"; completa "$T/a"; a=$LANZADO
+i=0; while ! grep -q ini "$T/registro" && [ "$i" -lt 100 ]; do sleep 0.1; i=$(( i + 1 )); done
+chk "el turno sale de la cola al tomar el candado" "0" "$(turnos)"
+termina "$a" 30 >/dev/null
+
+# El turno de una corrida muerta (kill -9 en la cola) no frena a las de detras.
+bash -c 'exit 0' & muerto=$!; wait "$muerto"
+mkdir -p "$(turno "$muerto" 1)"; : > "$T/registro"
+PACIENCIA=1000; completa "$T/x"; x=$LANZADO; PACIENCIA=
+chk "el turno de una corrida muerta no frena la cola" "0" "$(termina "$x" 20; echo $?)"
+chk "y su turno se borra" "no" "$([ -e "$(turno "$muerto" 1)" ] && echo si || echo no)"
+
+# Un turno vivo delante, pero parado (Ctrl-Z): tras PACIENCIA vueltas con el candado libre, prueba el
+# siguiente. Y no le borra el turno: sigue vivo y con su hora.
+sleep 60 & parado=$!; tp=$(turno "$parado" 2)
+mkdir -p "$tp"; bash "$R/tools/run-tests.sh" --hora-candado "$parado" > "$tp/arranque"; : > "$T/registro"
+PACIENCIA=5; completa "$T/y"; y=$LANZADO; PACIENCIA=
+chk "un turno vivo que no toma el candado libre no frena la cola para siempre" "0" "$(termina "$y" 20; echo $?)"
+chk "y dice que prueba en su lugar" "1" "$(grep -c 'no toma el candado libre' "$T/y.err")"
+chk "un turno vivo con su hora no se borra" "si" "$([ -d "$tp" ] && echo si || echo no)"
+
+# Aviso: con ese turno parado delante (PACIENCIA alta: nunca prueba), el candado pasa de un dueno a
+# otro que no tenia turno, como una corrida de antes de la cola que se cuela. Quien espera lo dice, y
+# cada AVISO segundos dice cuanto lleva.
+sleep 60 & dueno2=$!; sleep 60 & dueno3=$!; duenofalso "$dueno2"
+PACIENCIA=100000; AVISO=1; completa "$T/p"; pz=$LANZADO; PACIENCIA=; AVISO=
+i=0; while ! grep -q 'espero a que termine' "$T/p.err" 2>/dev/null && [ "$i" -lt 100 ]; do sleep 0.1; i=$(( i + 1 )); done
+rm -rf "$CAND"; duenofalso "$dueno3"; sleep 3.5
+kill "$pz" 2>/dev/null; termina "$pz" 10 >/dev/null
+chk "quien espera dice que perdio el turno ante una que no tenia turno" "1" \
+  "$(grep -c "perdi el turno: la corrida pid $dueno3 " "$T/p.err")"
+chk "y cada AVISO segundos dice cuanto lleva esperando" "si" \
+  "$([ "$(grep -c 'min esperando el candado; lo tiene pid' "$T/p.err")" -ge 2 ] && echo si || echo no)"
+# La mataron en la cola (TERM): su turno sale y no frena a las de detras. Queda solo el del parado.
+chk "matar a quien espera en la cola saca su turno" "1" "$(turnos)"
+kill "$dueno2" "$dueno3" "$parado" 2>/dev/null; wait "$dueno2" "$dueno3" "$parado" 2>/dev/null
+rm -rf "$CAND" "$CAND.cola"
+
+# Un turno con su pid reusado por otro proceso vivo (otra hora de arranque) no es de quien lo saco.
+sleep 60 & otro=$!
+if [ -n "$(bash "$R/tools/run-tests.sh" --hora-candado "$otro")" ]; then
+  tr_=$(turno "$otro" 3); mkdir -p "$tr_"; echo "otra hora" > "$tr_/arranque"; : > "$T/registro"
+  PACIENCIA=1000; completa "$T/r"; rr=$LANZADO; PACIENCIA=
+  chk "un turno con el pid reusado no frena la cola" "0" "$(termina "$rr" 20; echo $?)"
+  chk "y se borra" "no" "$([ -e "$tr_" ] && echo si || echo no)"
+else
+  echo "  SKIP aqui no se lee la hora de arranque: un turno con el pid reusado no frena la cola"
+fi
+kill "$otro" 2>/dev/null; wait "$otro" 2>/dev/null
+
+# Sin poder sacar turno (la cola es un archivo), espera como antes, sin orden, y lo dice.
+rm -rf "$CAND.cola"; : > "$CAND.cola"; : > "$T/registro"
+completa "$T/z"; zz=$LANZADO
+chk "sin poder sacar turno, la corrida no se cuelga" "0" "$(termina "$zz" 20; echo $?)"
+chk "y corre su suite sin turno" "ini fin" "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
+chk "y avisa que no tiene turno" "1" "$(grep -c 'no puedo sacar turno' "$T/z.err")"
+rm -f "$CAND.cola"
 
 # p-4be2b6ea23: mutation-check.sh lanzado solo toma el mismo candado. Su copia es el mutation-check
 # real hasta la marca del candado, y despues un cuerpo que anota mc-ini/mc-fin en el registro (los
