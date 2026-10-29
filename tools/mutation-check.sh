@@ -716,7 +716,7 @@ caso_tools "hora en el TZ del lector" run-tests.sh m_run_tests.py test-run-tests
 caso_tools "no guarda la hora"      run-tests.sh m_run_tests.py test-run-tests.sh "la corrida que toma el candado guarda su hora" sin-escribir-hora
 caso_tools "sin --con-candado"     run-tests.sh m_run_tests.py test-run-tests.sh "los tres mutation-check corren su cuerpo" sin-con-candado
 # 2026-10-28: la cola de turnos por orden de llegada y los avisos de quien espera.
-caso_tools "cola: sin cola"         run-tests.sh m_run_tests.py test-run-tests.sh "seis que esperan entran en orden de llegada" sin-cola
+caso_tools "cola: sin cola"         run-tests.sh m_run_tests.py test-run-tests.sh "quien llego despues no toma el candado libre" sin-cola
 caso_tools "cola: muerto frena"     run-tests.sh m_run_tests.py test-run-tests.sh "el turno de una corrida muerta no frena la cola" turno-muerto-vivo
 caso_tools "cola: reusado frena"    run-tests.sh m_run_tests.py test-run-tests.sh "un turno con el pid reusado no frena la cola" turno-reusado-vivo
 caso_tools "cola: vivo borrado"     run-tests.sh m_run_tests.py test-run-tests.sh "un turno vivo con su hora no se borra" turno-vivo-borrado

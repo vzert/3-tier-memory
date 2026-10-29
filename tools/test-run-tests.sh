@@ -331,6 +331,15 @@ PACIENCIA=5; completa "$T/y"; y=$LANZADO; PACIENCIA=
 chk "un turno vivo que no toma el candado libre no frena la cola para siempre" "0" "$(termina "$y" 20; echo $?)"
 chk "y dice que salta su turno" "1" "$(grep -c 'no toma el candado libre' "$T/y.err")"
 chk "un turno vivo con su hora no se borra" "si" "$([ -d "$tp" ] && echo si || echo no)"
+# Lo mismo sin sorteo: con ese turno vivo delante y paciencia de sobra, quien llego despues no toma el
+# candado libre. Sin cola lo tomaria al instante. La prueba de las seis depende del sorteo de la
+# liberacion: sin cola salio en orden por azar en el CI del PR #89 (2026-10-29), y su mutante cayo
+# por otro aserto.
+: > "$T/registro"; PACIENCIA=100000; completa "$T/q2"; q2=$LANZADO; PACIENCIA=
+sleep 3
+chk "con un turno vivo delante, quien llego despues no toma el candado libre" "" \
+  "$(tr '\n' ' ' < "$T/registro" | sed 's/ $//')"
+kill "$q2" 2>/dev/null; termina "$q2" 10 >/dev/null
 # Con dos esperando detras del parado, solo lo salta la siguiente: saltarlo todas a la vez las ponia a
 # sortear otra vez (adversario, ronda 1: la que llego despues entro primero, 6 de 6). Sin sorteo: y1
 # salta al parado a las 7 vueltas; y2 (paciencia 5) salta solo al parado a las 5 y a y1 a las 10, asi
