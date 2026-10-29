@@ -520,6 +520,9 @@ caso "migrar no escribe destino"   migrar-tier2.py m_migrar_tier2.py test-migrar
 caso "migrar vineta pisa detalle"  migrar-tier2.py m_migrar_tier2.py test-migrar-tier2.sh "P1: la fila mensual lleva el detalle entero" subvineta-pisa-detalle
 caso "migrar pierde prosa"         migrar-tier2.py m_migrar_tier2.py test-migrar-tier2.sh "P2: fila nueva en 2026-09 con texto y prosa" pierde-prosa
 caso "migrar titulo sin recorte"   migrar-tier2.py m_migrar_tier2.py test-migrar-tier2.sh "queda solo la linea larga de P3" titulo-sin-recorte
+caso "migrar enlace md md"         migrar-tier2.py m_migrar_tier2.py test-migrar-tier2.sh "enlace con .md: ningun destino .md.md" enlace-md-md
+caso "migrar aviso sin destino"    migrar-tier2.py m_migrar_tier2.py test-migrar-tier2.sh "aviso: calla con un learning cuyo destino no existe" aviso-destino-inexistente
+caso "migrar aviso padre sin id"   migrar-tier2.py m_migrar_tier2.py test-migrar-tier2.sh "aviso: calla con una sub-vineta cuyo padre no tiene _id" aviso-vineta-padre-sin-id
 caso "ninguno plan sin prefijo"  checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "ligado con plan-<nombre>" plan-sin-prefijo
 caso "ninguno plan enlace"       checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "forma \[\[\.\./plans" plan-enlace-estricto
 caso "ninguno plan sin corte"    checkpoint-audit.py m_ninguno_plan.py test-ninguno-plan-activo.sh "antes de 2.63.33" plan-sin-corte
