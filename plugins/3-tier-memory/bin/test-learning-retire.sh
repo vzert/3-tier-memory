@@ -358,6 +358,11 @@ has "con su pie: topic y prefijo" "$OUT" '--topic gate --match-prefix "Nunca emp
 # puede dar la ruta nativa (C:\...) y la de este test es POSIX.
 has "y la orden con el emisor instalado" "$OUT" "/bin/journal-emit.py\" --memory-dir \""
 has "que es learning.retire" "$OUT" "\" --type learning.retire <↳> --motivo"
+# Una regla que learning.update no puede reescribir solo se corrige con learning.patch (2.69.0):
+# el pie lo nombra, en el recall y en el de action_match (p-262cbf8949).
+has "y nombra learning.patch para las bloqueadas" "$OUT" "codigo-antes): --type learning.patch <↳> --viejo"
+AM=$(cd "$P/bin" && python3 -c 'import action_match; print(action_match._linea_retiro("E", "M"))')
+has "el pie de action_match tambien nombra learning.patch" "$AM" "codigo-antes): --type learning.patch <↳> --viejo"
 
 echo
 echo "RESULT: pass=$pass fail=$fail"

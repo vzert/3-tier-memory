@@ -14,6 +14,8 @@
 #    la marca o de los disparadores, comillas invertidas sueltas. Una cuarentena no escribe nada.
 # 4. RETIRE en una regla bloqueada: marca solo la primera linea; el recall deja de servirla.
 # 5. insert_at_section_end deja la regla nueva como item, no como continuacion de un parrafo.
+# 6. UN PREFIJO DE DOS REGLAS (seccion 8, 2.69.3): el emisor se niega, el compactador lo pone en
+#    cuarentena como ambiguous y ninguna de las dos cambia; un prefijo mas largo toca solo la suya.
 set -e
 BIN="$(cd "$(dirname "$0")" && pwd)"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
@@ -349,6 +351,43 @@ lines = jc.read_lines(sys.argv[2]); s, e = jc.body_region(lines)
 print(jc.regla_reescribible(lines, int(sys.argv[3]) - 1, e) or "ok")
 PY
 )"
+
+echo "== 8. prefijo ambiguo: dos reglas empiezan igual y ninguna se toca =="
+# Sin la guarda ambiguous de localizar_parche el compactador parchearia la PRIMERA que casa, en
+# silencio: la regla buena quedaria sin corregir y otra cambiaria (p-effa16d8b6).
+gemelas() {
+  fixture
+  python3 - "$G" <<'PY'
+import sys
+p = sys.argv[1]; s = open(p, encoding="utf-8").read()
+s = s.replace("6. **Seis anterior** — con `codigo` y #8505\n",
+              "6. **Seis anterior** — con `codigo` y #8505\n"
+              "7. **Siete gemela** — uno #8505\n"
+              "8. **Siete gemela** — dos #8505\n", 1)
+open(p, "w", encoding="utf-8").write(s)
+PY
+}
+gemelas; H=$(huella)
+nok "prefijo de las dos al emitir" --type learning.patch --topic gate --match-prefix "Siete gemela" --viejo "#8505" --nuevo "#6740"
+has "prefijo de las dos al emitir: el error lo dice" "$(cat "$T/err")" "ambiguous"
+compact
+chk "prefijo de las dos al emitir: ningun evento y nada escrito" "0|$H" "$(pend)|$(huella)"
+gemelas; H=$(huella)
+emit --type learning.patch --topic gate --match-prefix "Siete gemela — dos" --viejo "#8505" --nuevo "#6740" >/dev/null
+python3 - "$M/.journal/pending" <<'PY'
+import sys, json, glob
+f = glob.glob(sys.argv[1] + "/*.json")[0]
+ev = json.load(open(f, encoding="utf-8")); ev["payload"]["match_prefix"] = "Siete gemela"
+json.dump(ev, open(f, "w", encoding="utf-8"), ensure_ascii=False)
+PY
+compact
+chk "prefijo de las dos (a mano): cuarentena y nada escrito" "1|$H" "$(cuar)|$(huella)"
+has "prefijo de las dos (a mano): motivo ambiguous" "$(motivo)" "ambiguous: 2 reglas"
+gemelas; cp "$G" "$T/antes.md"
+emit --type learning.patch --topic gate --match-prefix "Siete gemela — dos" --viejo "#8505" --nuevo "#6740" >/dev/null
+compact
+chk "prefijo largo y unico: solo cambia la segunda gemela" \
+  "8. **Siete gemela** — dos #8505 => 8. **Siete gemela** — dos #6740|0" "$(difiere "$T/antes.md" "$G")|$(cuar)"
 
 echo
 echo "pass=$pass fail=$fail"

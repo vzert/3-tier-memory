@@ -439,7 +439,9 @@ def _linea_retiro(emit, mem):
     return (f"  (↳ = la regla esta vencida: python3 \"{emit}\""
             + (f" --memory-dir \"{mem}\"" if mem else "")
             + " --type learning.retire <↳> --motivo obsoleta|duplicada|superada [--por N]."
-            " Si solo cambio su texto: --type learning.update <↳> --text \"<nuevo>\".)")
+            " Si solo cambio su texto: --type learning.update <↳> --text \"<nuevo>\"; si esa va a"
+            " cuarentena (anterior, bloque-multilinea, codigo-antes): --type learning.patch <↳>"
+            " --viejo \"<trozo de hoy>\" --nuevo \"<trozo>\".)")
 
 
 def decidir(datos, reglas, estado, raiz=None, emit="", mem="", aviso=True):

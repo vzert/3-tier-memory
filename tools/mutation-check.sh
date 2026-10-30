@@ -622,6 +622,7 @@ caso "cierre de otro largo"    journal-compact.py m_codigo_en_linea.py test-lear
 caso "valla a mitad de linea"  journal-compact.py m_valla_inicio.py test-learning-update.sh "valla sin pareja a mitad de una fila: sin cuarentena" valla-en-cualquier-sitio
 caso "valla sin marcador lista" journal-compact.py m_valla_inicio.py test-learning-update.sh "valla dentro de un item: cuarentena" sin-marcadores-de-lista
 caso "regla que es una valla"  journal-compact.py m_valla_inicio.py test-learning-update.sh "la regla misma abre una valla" regla-valla-pasa
+caso "patch prefijo ambiguo"  journal-compact.py m_learning_patch.py test-learning-patch.sh "prefijo de las dos \(a mano\)" sin-guarda-ambiguous
 
 echo
 echo "Enlace Quick Reference -> regla y learnings-migracion.py (2.51.0, F7)"

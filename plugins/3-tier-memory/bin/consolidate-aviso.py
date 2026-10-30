@@ -13,7 +13,8 @@ consolidacion dependia de que alguien se acordara. Este script lo dice solo, con
     corpus grande que nunca se consolido es justo el caso que el aviso existe para cubrir;
   - H11: una regla viva cuyo TITULO dice que corrige a otra ("Corrige regla 217: …",
     "Correccion de la regla 5: …", "CORREGIDO el …"). Corregir anadiendo deja las dos reglas en el
-    recall; lo correcto es learning.update de la original y learning.retire de la correctora. Se
+    recall; lo correcto es learning.update de la original (learning.patch si la original va a
+    cuarentena por anterior, bloque-multilinea o codigo-antes) y learning.retire de la correctora. Se
     mira solo el titulo (`**…**` al principio) y solo esas formas: ante la duda no avisa, porque
     juzgar la prosa del cuerpo es el juicio semantico que este repo ya no hace en un hook;
   - pares fuertes: dos reglas vivas del mismo topic con parecido >= UMBRAL de learning_vecinos (el
