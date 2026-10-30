@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.69.3] - 2026-10-29
+La guarda `ambiguous` de `learning.patch` no tenia prueba: si una regresion la quitaba, un prefijo
+que casa con dos reglas parchearia la primera en silencio (p-effa16d8b6). Y el pie del recall solo
+nombraba `learning.update` para corregir el texto de una regla, sin la via para las que
+`learning.update` no puede reescribir (p-262cbf8949). No cambia la logica del compactador.
+
+### Changed
+- El pie del recall (`recall_rank.py`) y el de `action_match.py`: si `learning.update` va a
+  cuarentena por `anterior`, `bloque-multilinea` o `codigo-antes`, nombran
+  `learning.patch <↳> --viejo "<trozo de hoy>" --nuevo "<trozo>"`.
+- `/backfill-3t` nombra `learning.patch` para esas reglas, como ya lo hacian `/checkpoint-3t`,
+  `/save-learning` y `/consolidate-3t`. El comentario de H11 en `consolidate-aviso.py` tambien.
+
+### Tests
+- `test-learning-patch.sh` seccion 8: con dos reglas que empiezan igual, el emisor se niega
+  (`ambiguous`); un evento escrito a mano con ese prefijo va a cuarentena `ambiguous: 2 reglas` y
+  ninguna cambia; un prefijo mas largo cambia solo la suya.
+- `test-learning-retire.sh` seccion 15: el pie del recall y el de `action_match` nombran
+  `learning.patch`.
+- `tools/mutation-check.sh` + `tools/mutaciones/m_learning_patch.py`: la mutacion que quita la guarda
+  de `localizar_parche` (se queda con la primera regla que casa) cae por el aserto de la seccion 8.
+
 ## [2.69.2] - 2026-10-29
 `regla_reescribible` negaba como `codigo-antes` toda regla con una valla (```` ``` ````, `~~~`)
 antes en el fichero, en CUALQUIER posicion de la linea. Una valla solo abre bloque al principio de

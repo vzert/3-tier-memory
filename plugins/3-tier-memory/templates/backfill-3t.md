@@ -518,6 +518,9 @@ If the draft has learnings:
    sin escribir) si una se parece mucho y no pasas `--decision nueva` o `--decision reemplaza:N`, o
    si el texto no tiene la forma `**Titulo** — cuerpo`. Lee la lista: si una regla ya dice lo mismo,
    no emitas; si quedo incompleta, `learning.update`. `--solo-vecinos` muestra la lista sin escribir.
+   Si `learning.update` cae en cuarentena por `anterior`, `bloque-multilinea` o `codigo-antes`,
+   `learning.patch --match-prefix P --viejo "<trozo de hoy>" --nuevo "<trozo>"` corrige un trozo de
+   su primera linea (2.69.0; detalle en Step 4 de /checkpoint-3t).
 
    **Fallback (no JBIN)**: append the rule with the next number, create the topic file, and update
    `memory/_learnings.md` by hand.
