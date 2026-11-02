@@ -1,5 +1,25 @@
 # Changelog
 
+## [Unreleased]
+`repair-dualwrite` leia como pendiente cualquier fila de tabla del mensual, tambien las de las
+tablas que algunas sesiones dejan debajo («Entregado esta sesion» con `Trabajo | Resultado |
+Sesion`, «Actualizados» con `Pendiente | Cambio`). Cada fila, cabecera incluida, salia GRAVE "no se
+puede alinear" sin id ni linea de Tier 2 con que cotejarla, y el arranque las sumaba como "filas
+desalineadas". En un proyecto del autor eran 38 GRAVE, todos de estas tablas, y ningun pendiente
+danado.
+
+### Fixed
+- `unaligned_rows` y `broken_pipe_rows` se saltan las tablas cuya cabecera tiene menos de 4
+  columnas (`aux_table_rows`): ahi no cabe un pendiente (`align_row` pide texto, prioridad, creado
+  y origen). Una fila corta dentro de la tabla de pendientes se sigue reportando, porque su
+  cabecera es ancha; una tabla sin separador no tiene cabecera y no se salta.
+
+### Tests
+- `test-monthly-rows.sh` seccion 11: mensual con tabla de pendientes + dos tablas auxiliares (una
+  con `|` crudo). Solo la fila corta de pendientes sale GRAVE, `unrepairable=0`, `--apply
+  --fix-pipes` deja el fichero igual, y una fila sin cabecera sigue sin adivinarse. Con el codigo
+  anterior fallan tres de los cinco asertos (`unaligned_rows=5`, `unrepairable=1`).
+
 ## [2.69.3] - 2026-10-29
 La guarda `ambiguous` de `learning.patch` no tenia prueba: si una regresion la quitaba, un prefijo
 que casa con dos reglas parchearia la primera en silencio (p-effa16d8b6). Y el pie del recall solo

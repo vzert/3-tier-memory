@@ -403,6 +403,35 @@ def existing_ids(jc, mem):
     return ids
 
 
+def aux_table_rows(jc, lines):
+    """Indices de las lineas de tablas AUXILIARES del mensual: las de cabecera de menos de 4 columnas.
+
+    Un mensual no lleva solo la tabla de pendientes: hay sesiones que dejan debajo tablas propias
+    («Entregado esta sesion» con `Trabajo | Resultado | Sesion`, «Actualizados» con
+    `Pendiente | Cambio`). Ninguna de sus filas es un pendiente, y los dos informes de abajo las
+    recorrian igual, cabecera incluida: cada una salia GRAVE "no se puede alinear", sin id y sin
+    linea de Tier 2 contra la que cotejarla. Medido 2026-11-02 en una instalacion: 38 GRAVE, todos
+    de estas tablas, y ningun pendiente danado.
+
+    El corte es la cabecera, no la fila: una tabla cuya cabecera tiene menos de 4 columnas no puede
+    alojar un pendiente (`align_row` pide texto, prioridad, creado y origen), asi que nada de lo que
+    lleve es un pendiente. Una fila CORTA dentro de una tabla de pendientes sigue reportandose,
+    porque su cabecera es ancha. Y una tabla sin separador no tiene cabecera: no se salta.
+    """
+    aux, i, n = set(), 0, len(lines)
+    while i < n:
+        if not lines[i].strip().startswith("|"):
+            i += 1
+            continue
+        j = i
+        while j < n and lines[j].strip().startswith("|"):
+            j += 1
+        if j - i > 1 and jc.is_separator(lines[i + 1]) and len(jc.split_cells(lines[i])) < 4:
+            aux.update(range(i, j))
+        i = j
+    return aux
+
+
 def broken_pipe_rows(jc, mem):
     """[(path, idx, linea_nueva)] de filas cuyo texto lleva un `|` crudo.
 
@@ -413,9 +442,10 @@ def broken_pipe_rows(jc, mem):
     out, unrep = [], []
     for path in monthly_files(mem):
         lines = jc.read_lines(path)
+        aux = aux_table_rows(jc, lines)
         for i, line in enumerate(lines):
             s = line.strip()
-            if not s.startswith("|") or jc.is_separator(line):
+            if not s.startswith("|") or jc.is_separator(line) or i in aux:
                 continue
             if len(jc.split_cells(line)) <= 7:
                 continue
@@ -457,10 +487,11 @@ def unaligned_rows(jc, mem):
     for path in monthly_files(mem):
         lines = jc.read_lines(path)
         hmap = jc.header_map(lines)
+        aux = aux_table_rows(jc, lines)
         for i, line in enumerate(lines):
             t = line.strip()
-            if not t.startswith("|") or jc.is_separator(line):
-                continue
+            if not t.startswith("|") or jc.is_separator(line) or i in aux:
+                continue                      # una tabla auxiliar no lleva pendientes
             celdas = jc.split_cells(line)
             if len(celdas) > 7:
                 continue                      # eso es `pipes_broken`, no una fila desalineada

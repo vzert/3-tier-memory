@@ -263,6 +263,52 @@ print(b.count(b'\n') - b.count(b'\r\n'))" "$M7/pendientes/2026-08.md")" "0"
 check "y la fecha si se escribio" \
   "$(grep -c "$(date +%Y-%m-%d)" "$M7/pendientes/2026-08.md")" "1"
 
+echo "11. las tablas auxiliares del mensual no son pendientes (38 GRAVE falsos, 2026-11-02)"
+# Debajo de la tabla de pendientes, sesiones que dejan `Trabajo | Resultado | Sesion` y
+# `Pendiente | Cambio`. Sus filas (y su cabecera) salian GRAVE una por una. La fila corta de la
+# tabla de pendientes de arriba tiene que SEGUIR saliendo: el corte es la cabecera, no la fila.
+M8="$TMP/m8"; mkdir -p "$M8/pendientes" "$M8/.journal/pending"
+cat > "$M8/pendientes/2026-06.md" <<'EOF'
+---
+type: pendientes-archive
+month: 2026-06
+---
+# Pendientes — Junio 2026
+
+| # | Pendiente | Prioridad | Creado | Origen | Resuelto | Sesion resolucion |
+|---|---|---|---|---|---|---|
+| 1 | Fila sana _id: p-9999999991_ | Alta | 2026-06-05 | [[sessions/a]] | | |
+| 2 | Fila corta de verdad _id: p-9999999992_ | [[sessions/b]] |
+
+## Entregado esta sesion
+
+| Trabajo | Resultado | Sesion |
+|---|---|---|
+| JSON-LD | RESUELTO — 17 paginas | [[sessions/c]] |
+| Un `|` crudo en el resultado | parte | la | fila | en | muchas | celdas | mas |
+
+## Actualizados (no resueltos)
+
+| Pendiente | Cambio |
+|---|---|
+| Paginas por paquete | Falta Maternidad |
+EOF
+printf '# Pendientes\n\n## Alta prioridad\n\n## Related\n' > "$M8/_pendientes.md"
+OUT=$(python3 "$BIN/repair-dualwrite.py" "$M8")
+check "solo la fila corta de pendientes es GRAVE" "$(echo "$OUT" | grep -o 'unaligned_rows=[0-9]*')" "unaligned_rows=1"
+check "y es la suya" "$(echo "$OUT" | grep -c 'GRAVE 2026-06.md:10 ')" "1"
+check "la fila auxiliar con | crudo no va a unrepairable" \
+  "$(echo "$OUT" | grep -o 'unrepairable=[0-9]*')" "unrepairable=0"
+check "--apply no toca las tablas auxiliares" \
+  "$(cp "$M8/pendientes/2026-06.md" "$TMP/m8.antes"
+     python3 "$BIN/repair-dualwrite.py" "$M8" --apply --fix-pipes >/dev/null
+     cmp -s "$TMP/m8.antes" "$M8/pendientes/2026-06.md" && echo igual || echo cambio)" "igual"
+# Sin separador no hay cabecera, y una fila corta sigue sin adivinarse (caso 8): el corte no la tapa.
+printf '| 3 | Sin cabecera _id: p-9999999993_ |\n' > "$M8/pendientes/2026-05.md"
+OUT=$(python3 "$BIN/repair-dualwrite.py" "$M8")
+check "una tabla sin separador no se toma por auxiliar" \
+  "$(echo "$OUT" | grep -o 'unaligned_rows=[0-9]*')" "unaligned_rows=2"
+
 echo
 if [ "$FAIL" -eq 0 ]; then echo "TODO VERDE"; else echo "HAY FALLOS"; fi
 exit "$FAIL"
