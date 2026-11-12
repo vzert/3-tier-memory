@@ -7,13 +7,12 @@ dejaba junto a un Alta no volvia a ningun snippet salvo que venciera su `_revisa
 las 8 ultimas fichas de este repo y de otro proyecto: p-f667380493, p-95d33b9363, p-b0b80cfb23 y
 p-564b0bdc82 no volvieron nunca). Y un Alta corta no traia nada con que completar la sesion.
 
-Que hace: toma los anclas que cita la linea `Proximo paso:` de `## Como retomar` (ids `p-…` y
-slugs `plan-…`) y devuelve hasta 2 pendientes abiertos Alta o Media ligados a ellos por el campo
-`_relacionado:` (journal-emit `--relacionado` / `pendiente.relate`), en CUALQUIER direccion:
-  - el candidato cita un ancla en su `_relacionado:`, o
-  - un pendiente ancla cita al candidato en su `_relacionado:`, o
-  - el candidato y un pendiente ancla citan el mismo `plan-…`.
-Sin importar de que sesion vengan: el arrastre entre sesiones es justo el punto.
+Que hace (desde 2.70.0): devuelve hasta 2 pendientes abiertos Alta o Media del hilo PROPIO de la
+sesion (ver hilo(): lo que nacio en ella, el paso que recibio, lo que trabajo y los pendientes de
+los planes que edito), fuera del `Proximo paso`. Hasta 2.69.x los tomaba de los anclas que cita el
+`Proximo paso:` y de sus ligados por `_relacionado:` en cualquier direccion o por plan compartido;
+ese arrastre le pasaba a una sesion pendientes de otro hilo (auditoria de otro proyecto,
+2026-11-10/11).
 
 Nunca devuelve uno con `_bloqueado:` (salvo que su `_revisar` ya paso, 2.63.32), uno con
 `_revisar` futuro (ya tiene su recordatorio de calendario), uno que vence hoy (lo muestra la capa 🔔 de print-pendiente-opcional.py), uno cuyo
@@ -246,17 +245,17 @@ def pendientes(path):
 #       (2.66.1) si el paso que la sesion ESCRIBE es uno de sus pendientes nuevos, marcar-retomar.py
 #       liga a el los demas nuevos de la sesion que no tengan
 #       `_relacionado` (Step 8a2);
-#   (2) hilo = lo que la sesion recibio + lo que nacio en ella + el paso que escribe, mas sus
-#       vecinos directos por `_relacionado` en las dos direcciones (los `plan-…`, un solo salto: un
-#       plan con 30 pendientes volveria el hilo el backlog entero). Hasta 2.61.0 era el cierre
-#       transitivo; desde 2.62.0 es un salto, y solo por ids abiertos (ver hilo());
-#   (3) orden: prioridad; en empate el nuevo antes que el heredado, salvo el heredado que lleva 2
-#       sesiones seguidas saltado (`hilo_saltos` del sello), que va antes que todos;
-#   (4) el paso recibido que no se cerro sigue en el hilo (es un heredado mas);
+#   (2) hilo = el trabajo PROPIO de la sesion (2.70.0, ver hilo()): lo que nacio en ella, el
+#       paso que recibio, lo que trabajo y los pendientes de los planes que edito. Hasta 2.69.x
+#       entraban tambien lo heredado no tocado, el paso que la ficha escribe y los vecinos por
+#       `_relacionado`, y eso le pasaba a una sesion pendientes de otro hilo;
+#   (3) orden: prioridad; en empate el nuevo antes que el resto (sin la prioridad "saltado 2+
+#       sesiones", que se quito en 2.70.0);
+#   (4) el paso recibido que no se cerro sigue en el hilo;
 #   (5) hasta 2 extras (Alta > Media > Baja; la Baja solo cuando no queda Alta ni Media) y una linea
 #       `quedan N en el hilo: <ids>` con el resto.
-# Lo que la sesion recibio NO se lee aqui de la transcripcion: se lee del sello que stamp-hilo.py
-# deja en el frontmatter de la ficha (`hilo_paso`, `hilo_heredados`, `hilo_saltos`). El hook de
+# Lo que la sesion recibio y lo que trabajo NO se lee aqui de la transcripcion: se lee del sello que
+# stamp-hilo.py deja en el frontmatter de la ficha (`hilo_paso`, `hilo_trabajados`, `hilo_planes`). El hook de
 # cierre vuelve a correr print-como-retomar.py en otro entorno; si esto leyera la transcripcion, su
 # salida podria no ser la del Step 8b.
 
@@ -365,50 +364,43 @@ def hacible(p, hoy):
 
 
 def hilo(ficha_texto, pend_path, slug=None, hoy=None):
-    """Los pendientes hacibles del hilo de la ficha, en el orden de la regla (3). [] sin datos."""
+    """Los pendientes hacibles del hilo PROPIO de la ficha, en el orden de la regla (3). [] sin datos.
+
+    Desde 2.70.0 (decision de Victor del 2026-11-11, auditoria de otro proyecto del 2026-11-10/11)
+    el hilo es solo el trabajo de la sesion:
+      - lo que nacio en ella (`_origen` = la ficha);
+      - el `Proximo paso` que recibio en su snippet (`hilo_paso`): era su tarea, aunque sus
+        comandos no nombren el id (medido: 2 de 2 continuaciones reales no lo nombraban);
+      - lo que trabajo (`hilo_trabajados`, de stamp-hilo.py: lo creo, lo pidio el usuario, lo
+        corrigio o cerro, o edito fuera de memory/ algo que lo nombra, fuera del cierre);
+      - los pendientes de los planes que edito (`hilo_planes`) o que recibio como paso.
+    Ya NO entran: el paso que la propia ficha escribe (hacia circular el chequeo: un paso ajeno
+    quedaba "en el hilo" por estar escrito), los extras y `quedan N` heredados que la sesion no
+    toco, los vecinos por `_relacionado` y los planes de cualquier pieza ligada. Tampoco hay
+    prioridad para el heredado "saltado 2+ sesiones": en el caso real hizo que una sesion de
+    secretos de n8n propusiera como paso rotar llaves IAM, que nunca toco, y dos ventanas
+    terminaron sobre el mismo pendiente."""
     hoy = hoy or datetime.date.today().isoformat()
     if not os.path.isfile(pend_path):
         return []
     todos = pendientes(pend_path)
-    paso_rec, heredados, salt = sello(ficha_texto)
-    ids_pp, planes_pp = anclas(proximo_paso(ficha_texto))
+    paso_rec, _heredados, _salt = sello(ficha_texto)
+    fm = frontmatter(ficha_texto)
+    trabajados = set(lista(fm.get("hilo_trabajados")))
     nuevos = {p["id"] for p in todos if slug and p["origen"] == slug}
-    miembros = set(heredados) | nuevos | ids_pp | {x for x in paso_rec if x.startswith("p-")}
-    por_id = {p["id"]: p for p in todos}
-    nucleo = set(miembros)  # antes de los planes: lo que entra por un plan no abre otro salto
-    # Los planes: los del paso que la ficha escribe, los del paso recibido y los que citan las
-    # semillas. Un solo salto: no se expande por los planes de los que entran despues.
-    planes = set(planes_pp) | {x for x in paso_rec if x.startswith("plan-")}
-    for i in miembros:
-        if i in por_id:
-            planes |= {x for x in por_id[i]["rel"] if x.startswith("plan-")}
+    miembros = nuevos | trabajados | {x for x in paso_rec if x.startswith("p-")}
+    planes = set(lista(fm.get("hilo_planes"))) | {x for x in paso_rec if x.startswith("plan-")}
     planes = {canonica(x) or x for x in planes}
-    for p in todos:
-        if {canonica(x) or x for x in p["rel"] if x.startswith("plan-")} & planes:
-            miembros.add(p["id"])
-    # Un solo salto de `_relacionado` desde las semillas, y solo por ids ABIERTOS (2.62.0, regla de
-    # Victor del 2026-10-15; reemplaza el "a cualquier distancia" de 2.57.0). El cierre transitivo
-    # cruzaba de un tema a otro: en un proyecto real una sesion de indices llego en 7 saltos, uno
-    # por un pendiente ya cerrado, a la sombrilla de un trabajo que llevaba otro agente, y la propuso
-    # como `Proximo paso` (y el audit `snippet.hilo` la exigia). Un id cerrado o que ya no esta en
-    # `_pendientes.md` no liga nada: su trabajo termino, y lo que lo cita es de quien lo cite.
-    semillas = {i for i in nucleo if i in por_id}
-    for p in todos:
-        ids_rel = {x for x in p["rel"] if x.startswith("p-") and x in por_id}
-        if p["id"] in semillas:
-            miembros |= ids_rel
-        elif ids_rel & semillas:
-            miembros.add(p["id"])
-
-    def grupo(p):
-        if p["id"] not in nuevos and salt.get(p["id"], 0) >= 2:
-            return 0
-        return 1 if p["id"] in nuevos else 2
+    if planes:
+        for p in todos:
+            if {canonica(x) or x for x in p["rel"] if x.startswith("plan-")} & planes:
+                miembros.add(p["id"])
 
     out = [p for p in todos if p["id"] in miembros and hacible(p, hoy)]
     for p in out:
-        # 0 = heredado saltado 2+ sesiones, 1 = nuevo, 2 = heredado (lo lee checkpoint-audit.py)
-        p["grupo"] = grupo(p)
+        # 1 = nuevo, 2 = del hilo sin ser nuevo (lo lee checkpoint-audit.py). El 0 ("heredado
+        # saltado 2+ sesiones") ya no sale desde 2.70.0.
+        p["grupo"] = 1 if p["id"] in nuevos else 2
     out.sort(key=lambda p: (PRIORIDAD_HILO[p["prio"]], p["grupo"], p["creado"], p["fila"]))
     return out
 
@@ -721,7 +713,7 @@ def main():
         # Step 8, casos 2-3: el primero es el `Proximo paso`.
         # Desde 2.61.0 dice tambien cual no ira en la linea de extras y por que: el agente que
         # escribe el snippet ve antes de cerrar que un id de su `Terminas cuando` sale a `quedan N`.
-        etiqueta = {0: "heredado, saltado 2+ sesiones", 1: "nuevo", 2: "heredado"}
+        etiqueta = {1: "nuevo", 2: "del hilo"}
         citados = citados_fuera_del_paso(texto)
         for p in hilo(texto, pend, slug, hoy):
             motivo = motivo_no_extra(p, citados)

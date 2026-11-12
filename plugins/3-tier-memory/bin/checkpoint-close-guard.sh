@@ -711,7 +711,9 @@ avisos_bloqueo = []
 avisos_compartido = []
 # Avisos `snippet.titulo_paso`, `paso_no_trabajado` y `paso_otra_ventana` (2.63.43): el paso no es
 # trabajo de esta sesion, o otra ventana corre comandos con el. Mismo camino, sin rechazo (d414;
-# auditoria de 101 fichas del 2026-10-22, caso real: una ficha de otro proyecto).
+# auditoria de 101 fichas del 2026-10-22, caso real: una ficha de otro proyecto). Desde 2.70.0
+# paso_no_trabajado y paso_otra_ventana son SALTADO en fichas desde 2026-11-11 y entran como
+# problema (rechazo); aqui solo llegan los de fichas anteriores y snippet.titulo_paso.
 avisos_ajeno = []
 avisos_pendiente = []  # 2.64.0: lineas ⚠ del 🔔 (print-pendiente-opcional.py)
 avisos_hilo = []       # 2.64.0: plan/handoff/ficha editado con pendientes sin reconciliar
@@ -903,7 +905,7 @@ def revisar(ficha):
                     f"`python3 \"$JBIN/print-como-retomar.py\" \"{ficha}\"` y pega su salida tal cual.")
 
     # 1-bis. El bloque de pendiente (Step 8e): lo que print-pendiente-opcional.py imprime AHORA desde
-    # `_pendientes.md` — desde 2.44.0, 🔔 el que vence hoy o ➕ el opcional, nunca los dos. Se genera
+    # `_pendientes.md` — desde 2.44.0, 🔔 el que vence hoy (la capa ➕ se quito en 2.70.0). Se genera
     # en vivo, no se guarda en la ficha, asi que compararlo aqui contra el estado real es lo que evita
     # pegar uno viejo. Solo para fichas desde el corte: una anterior no tenia Step 8e.
     if sec is not None and "<filled in Step 8>" not in sec and m_fecha and m_fecha.group(1) >= "2026-09-23":
@@ -1325,8 +1327,8 @@ else:
         if avisos_ajeno:
             partes.append(
                 "El `Proximo paso` puede no ser trabajo de esta sesion (checkpoint-audit.py "
-                "snippet.titulo_paso / paso_no_trabajado / paso_otra_ventana; no bloquean, leen ids y "
-                "no trabajo). Quien pegue el snippet hara ese paso: si no es de tu hilo o otra ventana "
+                "snippet.titulo_paso, o paso_no_trabajado / paso_otra_ventana en una ficha anterior "
+                "a 2026-11-11; estos no bloquean, leen ids y no trabajo). Quien pegue el snippet hara ese paso: si no es de tu hilo o otra ventana "
                 "lo lleva, duplica trabajo. Ligar, desbloquear o marcar un pendiente en el cierre no "
                 "lo hace tuyo. Si otra ventana lo nombra, preguntale por SendMessage (ListAgents) si "
                 "lo lleva. Rehaz el paso con el siguiente de tu hilo o `ninguno — <motivo>`, o di en "

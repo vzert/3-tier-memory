@@ -1344,7 +1344,7 @@ recíproca ni detección de ciclos. Este es ese mismo espíritu, aplicado a rese
 
 Marca `[x]` solo cuando la recomendación tiene un destino real: un plan que la implementa, o una
 nota explícita de por qué se descarta. Mientras siga `[ ]`, su línea cita el pendiente abierto que
-la lleva (`p-…`, desde 2.44.0): ese pendiente es el que sale en el cierre (🔔/➕) o en el
+la lleva (`p-…`, desde 2.44.0): ese pendiente es el que sale en el cierre (🔔) o en el
 calendario. No la marques solo para "limpiar" la lista.
 
 `check-active-research.py` (Step 3-pre) avisa en cada checkpoint mientras queden `[ ]` sin
@@ -1454,11 +1454,13 @@ fi
 Lee el primer mensaje de la transcripcion; si es un snippet `Retomamos:`, escribe en el
 frontmatter `hilo_paso`, `hilo_heredados` (los ids del paso, de la linea de extras y
 de `quedan N en el hilo`) y `hilo_saltos` (cuantas sesiones seguidas lleva cada heredado sin ser el
-paso), y `hilo_retoma` (la ficha que el snippet mandaba leer; con ella 8a2 quita la marca
-`_retomar` que esta sesion consumio, 2.63.42). Es lo que leen `print-como-retomar.py`,
+paso; desde 2.70.0 ya no ordena el hilo), y `hilo_retoma` (la ficha que el snippet mandaba leer; con ella 8a2 quita la marca
+`_retomar` que esta sesion consumio, 2.63.42). Desde 2.70.0 escribe ademas, en cada corrida y con o
+sin `Retomamos:`, `hilo_trabajados` (los pendientes que la sesion trabajo) y `hilo_planes` (los planes
+cuyo archivo edito): con ellos el hilo es solo el trabajo propio de la sesion. Es lo que leen `print-como-retomar.py`,
 `checkpoint-audit.py` (`snippet.hilo`) y `marcar-retomar.py` en el Step 8:
 una sola lectura de la transcripcion, para que el hook de cierre, que vuelve a correr esos scripts,
-vea lo mismo. Sin `Retomamos:` no sella nada (`sellado=0`), y no pisa un sello ya puesto.
+vea lo mismo. Sin `Retomamos:` no sella el arranque (`sellado=0`), y no pisa un sello ya puesto (los dos campos de 2.70.0 si se refrescan).
 
 `CLAUDE_CODE_SESSION_ID` **no esta documentada**. Se midio en esta instalacion (2026-09-12: su
 valor coincide con el nombre del `.jsonl` en curso) y no se ha comprobado en otras versiones, en
@@ -1687,7 +1689,7 @@ texto y se leia en el mismo bloque que todo lo demas). Imprimelo AHORA y siguelo
 persistir el snippet en la ficha, 8a2 marcar para retomar el pendiente del `Proximo paso`
 (`marcar-retomar.py`, 2.62.8), 8b imprimirlo con `print-como-retomar.py`, 8c recordatorios de
 calendario, 8d recomendaciones de research (ya no van en el cierre), 8e el pendiente que vence hoy
-o el opcional. Desde 2.43.0 las salidas de 8b, 8e y 8c no se pegan en este turno: van al final de
+(la capa ➕ opcional se quito en 2.70.0). Desde 2.43.0 las salidas de 8b, 8e y 8c no se pegan en este turno: van al final de
 tu respuesta a la revision del cierre, en ese orden y cada una con su emoji (ver 8b):
 
 ```bash

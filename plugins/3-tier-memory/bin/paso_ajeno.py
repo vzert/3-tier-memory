@@ -38,7 +38,8 @@ comando nombra `memory/plans/<plan>.md` y trae una forma de escritura (`>`, `tee
 
 Limite declarado: mira ids, no trabajo. Una ventana que nombro el id hace mas de 2 h y sigue viva
 no sale. Una sesion que trabajo un pendiente sin nombrar su id ni
-emitir `update`/`resolve` sale como "no lo trabajo" (aviso de mas, no bloquea); una ventana que lo
+emitir `update`/`resolve` sale como "no lo trabajo" (aviso de mas; desde 2.70.0 bloquea en fichas
+desde 2026-11-11, salvo que el id sea el paso recibido o del hilo propio); una ventana que lo
 trabaja sin escribir su id en un comando no sale. Solo ve las ventanas del mismo directorio de
 transcripts y de los que empiezan por su nombre (worktrees dentro del proyecto). Falla abierto:
 un transcript ilegible no produce aviso.
@@ -76,15 +77,20 @@ def _registros(ruta):
         with open(ruta, encoding="utf-8", errors="replace") as f:
             for linea in f:
                 try:
-                    yield linea, json.loads(linea)
+                    r = json.loads(linea)
                 except ValueError:
                     continue
+                if isinstance(r, dict):  # una linea que no es objeto se salta (2.70.0)
+                    yield linea, r
     except OSError:
         return
 
 
 def _bloques(r):
-    c = (r.get("message") or {}).get("content")
+    # Un registro o un `message` que no es objeto se lee como vacio (p-3f22a1cba1; desde 2.70.0
+    # stamp-hilo.py pasa por aqui y se caia con AttributeError).
+    m = r.get("message") if isinstance(r, dict) else None
+    c = m.get("content") if isinstance(m, dict) else None
     if isinstance(c, str):
         return [{"type": "text", "text": c}]
     return [b for b in c or [] if isinstance(b, dict)]
@@ -119,22 +125,32 @@ def _es_checkpoint(r):
         for b in _bloques(r))
 
 
-def trabajo_propio(transcript, ids):
+def trabajo_propio(transcript, ids, paso_recibido=None):
     """{id: (trabajado: bool, [que hizo])}. Trabajado = lo recibio o lo pidio el usuario, lo creo
     (`pendiente.add` que imprimio el id), o, en un turno que NO corrio /checkpoint-3t, lo corrigio o
     cerro (`update`/`resolve`) o edito fuera de memory/ algo que lo nombra. Lo que hace el cierre
     (Step 3a corrige textos, liga, desbloquea, fecha, marca) es ordenar, no trabajar: en el caso
     real la sesion emitio `pendiente.update` sobre el pendiente ajeno en su checkpoint.
-    Ligar, desbloquear, fechar, marcar o leer nunca cuentan."""
+    Ligar, desbloquear, fechar, marcar o leer nunca cuentan.
+
+    `paso_recibido` (2.70.0): si la sesion arranco con un snippet `Retomamos:`, el conjunto de ids
+    de su `Proximo paso`. Entonces, en ese PRIMER mensaje, solo esos ids cuentan como "lo recibio":
+    los de la linea de extras y de `quedan N en el hilo` eran sugerencias, no la tarea de la sesion.
+    Caso real (otro proyecto, 2026-11-10): una sesion de secretos de n8n recibio en sus extras un
+    pendiente de llaves IAM, no lo toco, y lo dejo como su `Proximo paso`; este aviso lo daba por
+    trabajado porque "lo recibio". Lo que el usuario pide despues, en otro mensaje, sigue contando."""
     res = {i: [False, []] for i in ids}
     regs = [r for _, r in _registros(transcript)] if ids and transcript else []
     if not regs:
         return None  # sin transcript legible no se sabe: falla abierto, sin aviso
     turno, cierre = [], set()
     t = 0
-    for r in regs:
+    primero = None  # indice del primer mensaje real del usuario (el que trae el snippet)
+    for k, r in enumerate(regs):
         if _es_prompt_real(r):
             t += 1
+            if primero is None:
+                primero = k
         turno.append(t)
         if _es_checkpoint(r):
             cierre.add(t)
@@ -149,6 +165,8 @@ def trabajo_propio(transcript, ids):
             bt = b.get("type")
             if tipo == "user" and bt == "text":
                 for i in ids:
+                    if paso_recibido is not None and k == primero and i not in paso_recibido:
+                        continue  # vino en los extras o en `quedan N` del snippet: no es la tarea
                     if i in b.get("text", "") and not r.get("isMeta"):
                         res[i][0] = True
                         res[i][1].append("lo recibio o lo pidio el usuario")
@@ -262,6 +280,35 @@ FICHA_RUTA = re.compile(r"/memory/sessions/([^/]+)\.md$")
 EDICION = ("Edit", "Write", "MultiEdit")
 BASH_FICHA = re.compile(r"memory/sessions/[\w.-]+\.md")
 ID_PEND = re.compile(r"\bp-[0-9a-f]{10}(?![0-9a-f])")
+
+
+def planes_editados(transcript):
+    """Los planes (`plan-…`, el nombre del archivo sin `.md`) cuyo archivo `memory/plans/<plan>.md`
+    esta sesion edito con Edit/Write/MultiEdit o con un Bash que lo escribe (la misma heuristica de
+    `hilos_sin_reconciliar`), en cualquier turno. Es "el plan que la sesion ejecuto" del hilo
+    (2.70.0, decision de Victor del 2026-11-11): trabajar una pieza ligada a un plan, o citar el
+    plan en `## Plans`, no lo vuelve del hilo; editarlo si. `plan.upsert` no cuenta: el cierre lo
+    emite para la fila del indice aunque el plan no cambie. None sin transcript legible."""
+    regs = [r for _, r in _registros(transcript)] if transcript else []
+    if not regs:
+        return None
+    out = set()
+    for r in regs:
+        if r.get("type") != "assistant":
+            continue
+        for b in _bloques(r):
+            if b.get("type") != "tool_use":
+                continue
+            inp = b.get("input") or {}
+            if b.get("name") in EDICION:
+                m = PLAN_RUTA.search((inp.get("file_path") or "").replace("\\", "/"))
+                if m:
+                    out.add(m.group(1))
+            elif b.get("name") == "Bash":
+                cmd = str(inp.get("command", ""))
+                if ESCRIBE.search(cmd):
+                    out |= set(BASH_PLAN.findall(cmd))
+    return out
 
 
 def hilos_sin_reconciliar(transcript, pendientes, ficha_propia=None):

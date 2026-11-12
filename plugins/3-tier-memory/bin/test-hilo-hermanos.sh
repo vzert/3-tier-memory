@@ -84,7 +84,9 @@ N=$(relates)
 marcar "$M/sessions/$S.md" >/dev/null
 chk "idempotente: la segunda corrida no emite otro relate" "$N" "$(relates)"
 
-echo "== A2. el hermano ligado sigue en el hilo de la sesion siguiente aunque el sello solo traiga el paso =="
+echo "== A2. (2.70.0) el hermano ligado ya NO entra solo al hilo de la sesion siguiente: solo el paso recibido =="
+# Hasta 2.69.x entraba por `_relacionado`. Desde 2.70.0 (decision de Victor del 2026-11-11) el hilo
+# es solo el trabajo propio de la sesion: el hermano vuelve si esa sesion lo trabaja.
 cat > "$M/sessions/2026-10-27-sigue.md" <<EOF
 ---
 type: session
@@ -95,8 +97,9 @@ hilo_heredados: $P
 # sigue
 EOF
 HILO=$(python3 "$BIN/pendientes_afines.py" "$M/sessions/2026-10-27-sigue.md" --hilo --hoy 2026-10-27)
-chk "H1 en el hilo" "1" "$(printf '%s\n' "$HILO" | grep -c "$H1")"
-chk "H3 en el hilo" "1" "$(printf '%s\n' "$HILO" | grep -c "$H3")"
+chk "H1 no esta en el hilo" "0" "$(printf '%s\n' "$HILO" | grep -c "$H1")"
+chk "H3 no esta en el hilo" "0" "$(printf '%s\n' "$HILO" | grep -c "$H3")"
+chk "el paso recibido si" "1" "$(printf '%s\n' "$HILO" | grep -c "^$P ")"
 
 echo "== A3. el paso escrito es un pendiente viejo: no se liga nada =="
 fixture

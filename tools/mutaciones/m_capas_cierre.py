@@ -9,8 +9,8 @@ import io, sys
 # Cada sustitucion tiene que calzar EXACTAMENTE una vez; si no, imprime 0 -> SIN PROBAR.
 M = {
     # print-pendiente-opcional.py
-    "capa3-sin-gate": [
-        ('if not crp.es_caso5(crp.extract_section(ficha_texto) or ""):', "if False:")],
+    # 2.70.0: la capa ➕ ya no sale; apagar la salida temprana la vuelve a imprimir (su cabecera).
+    "capa3-vuelve": [("    if not hoy_:", "    if False:")],
     "hoy-incluye-vencidos": [
         ("hoy_ = sorted([p for p in vivos if p[4] == hoy],",
          "hoy_ = sorted([p for p in vivos if p[4] and p[4] <= hoy],")],

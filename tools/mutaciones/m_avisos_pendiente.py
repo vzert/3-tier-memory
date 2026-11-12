@@ -11,7 +11,6 @@ import io, sys
 M = {
     # print-pendiente-opcional.py
     "aviso-siempre": [("    if not hits:", "    if False:")],
-    "aviso-en-opcional": [("        if cabecera == CABECERA_HOY:", "        if True:")],
     # checkpoint-close-guard.sh
     "guard-sin-aviso-pendiente": [("        if avisos_pendiente:", "        if False:")],
     "guard-sin-aviso-hilo": [("        if avisos_hilo:", "        if False:")],

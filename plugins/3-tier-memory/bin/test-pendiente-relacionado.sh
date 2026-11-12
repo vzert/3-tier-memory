@@ -3,9 +3,11 @@
 #
 #  A. `--relacionado` (pendiente.add) y `pendiente.relate` escriben `_relacionado:` en la linea de
 #     Tier 2, sobreviven a un `pendiente.update`, no cambian el id y se cuarentenan si vienen mal.
-#  B. print-como-retomar.py mete en el snippet una linea con hasta 2 afines Alta/Media ligados al
-#     `Proximo paso:` en cualquier direccion, de cualquier sesion, sin bloqueados, sin `_revisar`
-#     futuro ni de hoy, Alta antes que Media y el mas viejo primero.
+#  B. print-como-retomar.py mete en el snippet una linea con hasta 2 extras Alta/Media del hilo,
+#     sin bloqueados, sin `_revisar` futuro ni de hoy, Alta antes que Media y el mas viejo primero.
+#     Desde 2.70.0 el hilo es solo el trabajo propio de la sesion (pendientes_afines.hilo): aqui los
+#     pendientes entran porque la ficha los lista en `hilo_trabajados`; `_relacionado` en cualquier
+#     direccion, un plan compartido o el paso que la ficha escribe ya no traen a nadie (B2, B3, B5).
 #  C. plan-siguiente-hermano.py elige el hermano abierto por el orden de `## Sub-planes`.
 #
 # Por que existe: hasta 2.54 el snippet llevaba un solo item y un Media dejado junto a un Alta no
@@ -100,6 +102,17 @@ python3 -c 'import re,sys;p,i=sys.argv[1],sys.argv[2];t=open(p,encoding="utf-8")
 # `2026-10-13-hoy`, todos los nacidos en ella entrarian al hilo por haber nacido ahi (regla 2), y
 # esta seccion mide la liga por `_relacionado`; lo nacido en la sesion lo mide test-hilo-pendientes.sh.
 F="$M/sessions/2026-10-13-retoma.md"
+# fm "LINEAS": reescribe el frontmatter de la ficha (2.70.0: `hilo_trabajados`, `hilo_planes`, `hilo_paso`).
+fm() {
+  python3 - "$F" "$1" <<'PY2'
+import sys
+p, l = sys.argv[1], sys.argv[2].replace("\\n", "\n")
+t = open(p, encoding="utf-8").read()
+if t.startswith("---"):
+    t = t[t.index("\n---", 3) + 5:]
+open(p, "w", encoding="utf-8").write("---\ntype: session\ndate: 2026-10-13\n" + (l + "\n" if l else "") + "---\n" + t)
+PY2
+}
 cat > "$F" <<EOF
 # hoy
 
@@ -117,6 +130,7 @@ Antes de actuar, dime en 3 lineas donde quedamos.
 
 ## Related
 EOF
+fm "hilo_trabajados: $M1, $M2, $M4, $M5, $B1"
 OUT=$(python3 "$BIN/print-como-retomar.py" "$F")
 AF=$(printf '%s\n' "$OUT" | grep '^Si ese paso es corto' || true)
 chk "hay linea de afines" "1" "$(printf '%s\n' "$OUT" | grep -c '^Si ese paso es corto, suma en la misma sesion: ')"
@@ -135,6 +149,7 @@ echo "== B1b. tope de 2, Alta antes que Media, y nada que venza hoy (eso es la c
 A2=$(emit --type pendiente.add --text "alta ligada mas nueva" --prioridad Alta --origen "[[sessions/2026-10-13-hoy]]" --creado 2026-10-12 --relacionado "$A")
 M6=$(emit --type pendiente.add --text "media ligada que vence hoy" --prioridad Media --origen "[[sessions/2026-10-13-hoy]]" --creado 2026-07-01 --relacionado "$A" --revisar "$(date +%F)")
 compact --quiet >/dev/null
+fm "hilo_trabajados: $M1, $M2, $M4, $M5, $B1, $A2, $M6"
 AF=$(python3 "$BIN/print-como-retomar.py" "$F" | grep '^Si ese paso es corto' || true)
 chk "con 3 elegibles salen solo 2" "2" "$(printf '%s' "$AF" | grep -o 'p-[0-9a-f]\{10\}' | wc -l | tr -d ' ')"
 chk "el Alta ligado va primero aunque sea mas nuevo" "$A2" "$(printf '%s' "$AF" | grep -o 'p-[0-9a-f]\{10\}' | head -1)"
@@ -150,6 +165,7 @@ X1=$(emit --type pendiente.add --text "revision a 24 h desde el 2099-10-14 ~17:0
 X2=$(emit --type pendiente.add --text "indice CREADO el 2020-01-02: medir ya" --prioridad Alta --origen "[[sessions/2026-10-13-hoy]]" --creado 2020-01-02 --relacionado "$A")
 X3=$(emit --type pendiente.add --text "renovar el certificado antes del 2099-12-01" --prioridad Alta --origen "[[sessions/2026-10-13-hoy]]" --creado 2020-01-03 --relacionado "$A")
 compact --quiet >/dev/null
+fm "hilo_trabajados: $M1, $M2, $X1, $X2, $X3"
 AF=$(python3 "$BIN/print-como-retomar.py" "$F" | grep '^Si ese paso es corto' || true)
 chk "el que espera una fecha futura no entra (sin el filtro iria primero)" "0" "$(printf '%s' "$AF" | grep -c "$X1")"
 chk "una fecha pasada en el texto no lo saca: va primero" "$X2" "$(printf '%s' "$AF" | grep -o 'p-[0-9a-f]\{10\}' | head -1)"
@@ -167,13 +183,14 @@ chk "un slug con _fecha_ y un rango ya abierto no lo sacan de los afines" "dentr
 for i in "$X1" "$X2" "$X3" "$X4"; do emit --type pendiente.relate --id "$i" --sin-relacion >/dev/null; done
 compact --quiet >/dev/null
 
-echo "== B2. direccion inversa: el ancla cita a la media =="
+echo "== B2. (2.70.0) direccion inversa: que el ancla cite a la media ya no la mete al hilo =="
 emit --type pendiente.relate --id "$A" --relacionado "$M3" >/dev/null
 emit --type pendiente.relate --id "$M1" --sin-relacion >/dev/null
 compact --quiet >/dev/null
+fm ""
 AF=$(python3 "$BIN/print-como-retomar.py" "$F" | grep '^Si ese paso es corto' || true)
-chk "la media que el ancla cita entra" "1" "$(printf '%s' "$AF" | grep -c "$M3")"
-chk "la que perdio la relacion sale" "0" "$(printf '%s' "$AF" | grep -c "$M1")"
+chk "la media que el ancla cita no entra" "0" "$(printf '%s' "$AF" | grep -c "$M3")"
+chk "ni la que perdio la relacion" "0" "$(printf '%s' "$AF" | grep -c "$M1")"
 
 echo "== B3. plan compartido: el ancla y la media citan el mismo plan =="
 emit --type pendiente.relate --id "$A" --relacionado plan-bar >/dev/null
@@ -181,8 +198,12 @@ emit --type pendiente.relate --id "$M1" --relacionado plan-bar >/dev/null
 emit --type pendiente.relate --id "$M2" --sin-relacion >/dev/null
 compact --quiet >/dev/null
 AF=$(python3 "$BIN/print-como-retomar.py" "$F" | grep '^Si ese paso es corto' || true)
-chk "la media del mismo plan entra" "1" "$(printf '%s' "$AF" | grep -c "$M1")"
+chk "compartir plan con el paso ya no basta (2.70.0)" "0" "$(printf '%s' "$AF" | grep -c "$M1")"
+fm "hilo_planes: plan-bar"
+AF=$(python3 "$BIN/print-como-retomar.py" "$F" | grep '^Si ese paso es corto' || true)
+chk "con el plan editado por la sesion (hilo_planes), la media del plan entra" "1" "$(printf '%s' "$AF" | grep -c "$M1")"
 chk "la que el ancla ya no cita no entra" "0" "$(printf '%s' "$AF" | grep -c "$M3")"
+fm ""
 
 echo "== B4. sin relacion, sin cambios: snippet identico al de la ficha =="
 emit --type pendiente.relate --id "$A" --sin-relacion >/dev/null
@@ -191,24 +212,34 @@ for i in "$M4" "$M5" "$B1"; do emit --type pendiente.relate --id "$i" --sin-rela
 compact --quiet >/dev/null
 chk "no hay linea de afines" "0" "$(python3 "$BIN/print-como-retomar.py" "$F" | grep -c '^Si ese paso es corto')"
 
-echo "== B5. Proximo paso que cita un plan: entran los pendientes ligados a ese plan =="
+echo "== B5. el plan del paso RECIBIDO trae sus pendientes; el del paso que la ficha escribe no (2.70.0) =="
 sed -i.bak "s/^Proximo paso: .*/Proximo paso: Fase actual: 2 — seguir plan-bar./" "$F" && rm -f "$F.bak"
 emit --type pendiente.relate --id "$M2" --relacionado plan-bar >/dev/null
 compact --quiet >/dev/null
 AF=$(python3 "$BIN/print-como-retomar.py" "$F" | grep '^Si ese paso es corto' || true)
-chk "entra la media ligada al plan citado" "1" "$(printf '%s' "$AF" | grep -c "$M2")"
+chk "el plan que la ficha escribe de paso no trae a nadie" "0" "$(printf '%s' "$AF" | grep -c "$M2")"
+fm "hilo_paso: plan-bar"
+AF=$(python3 "$BIN/print-como-retomar.py" "$F" | grep '^Si ese paso es corto' || true)
+chk "el plan del paso recibido si" "1" "$(printf '%s' "$AF" | grep -c "$M2")"
 
-echo "== B6. un slug valido que termina en '-' o '.' tambien es ancla =="
+echo "== B6. un slug valido que termina en '-' o '.' tambien es ancla (en el paso recibido) =="
+# 2.70.0: el plan cuenta si llego en el paso RECIBIDO; su lectura sale de recibido(), que usa anclas().
+RECI=$(python3 - "$BIN" <<'PY2'
+import importlib.util, os, sys
+s = importlib.util.spec_from_file_location("af", os.path.join(sys.argv[1], "pendientes_afines.py"))
+af = importlib.util.module_from_spec(s); s.loader.exec_module(af)
+a = af.recibido("Retomamos: x.\n\nProximo paso: Fase actual: 1 — seguir plan-baz-.\n")["paso"]
+b = af.recibido("Retomamos: x.\n\nProximo paso: seguir plan-qux.\n")["paso"]
+print("plan-baz-" in a or "plan-baz" in a, "plan-qux." in b or "plan-qux" in b)
+PY2
+)
+chk "plan-baz- y plan-qux. al final de una frase se leen como plan del paso recibido" "True True" "$RECI"
 emit --type pendiente.relate --id "$M2" --relacionado plan-baz- >/dev/null
 compact --quiet >/dev/null
-sed -i.bak "s/^Proximo paso: .*/Proximo paso: Fase actual: 1 — seguir plan-baz-./" "$F" && rm -f "$F.bak"
+fm "hilo_paso: plan-baz-"
 AF=$(python3 "$BIN/print-como-retomar.py" "$F" | grep '^Si ese paso es corto' || true)
-chk "plan-baz- citado al final de una frase trae su media" "1" "$(printf '%s' "$AF" | grep -c "$M2")"
-emit --type pendiente.relate --id "$M2" --relacionado plan-qux. >/dev/null
-compact --quiet >/dev/null
-sed -i.bak "s/^Proximo paso: .*/Proximo paso: seguir plan-qux./" "$F" && rm -f "$F.bak"
-AF=$(python3 "$BIN/print-como-retomar.py" "$F" | grep '^Si ese paso es corto' || true)
-chk "plan-qux. (slug con punto final) trae su media" "1" "$(printf '%s' "$AF" | grep -c "$M2")"
+chk "plan-baz- recibido trae su media" "1" "$(printf '%s' "$AF" | grep -c "$M2")"
+fm ""
 
 echo "== B7. matriz: cada slug valido con cada terminacion de prosa sigue siendo ancla (y en Sub-planes) =="
 # Tres rondas de adversario seguidas encontraron, una por una, terminaciones que se perdian

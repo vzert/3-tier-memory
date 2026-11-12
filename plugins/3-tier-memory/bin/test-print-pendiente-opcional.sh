@@ -1,9 +1,8 @@
 #!/bin/bash
 # Prueba de bin/print-pendiente-opcional.py (checkpoint-3t Step 8e; capas desde 2.44.0).
 #
-# El bloque de pendiente del cierre tiene dos capas que nunca coinciden: 🔔 UN pendiente que vence
-# HOY (acompana a cualquier snippet) y ➕ el opcional (solo con el snippet del caso 5 y sin nada que
-# venza hoy). Lo que importa: que elija por CAMPOS (_revisar, _bloqueado, seccion, _creado) y por la
+# El bloque de pendiente del cierre: 🔔 UN pendiente que vence HOY (acompana a cualquier snippet).
+# La capa ➕ (el opcional bajo un snippet del caso 5) se quito en 2.70.0 y aqui se prueba que no sale. Lo que importa: que elija por CAMPOS (_revisar, _bloqueado, seccion, _creado) y por la
 # FORMA de `## Como retomar`, nunca por el texto, y que no proponga lo que no se puede hacer ya
 # (bloqueado, fecha futura) ni repita el `Proximo paso`.
 set -e
@@ -44,14 +43,23 @@ echo "== ➕ caso 5 sin vencidos: un Alta abierto ya no sale (2.63.22, decision 
 armar "$(L p-aaaaaaaaaa 'alta vieja' 2026-09-01 '')$(L p-bbbbbbbbbb 'alta nueva arriba' 2026-09-20 '')" "$(L p-1111111111 'media sin fecha' 2026-09-22 '')" CASO5
 chk "nada" "" "$(out)"
 
-echo "== ➕ caso 5, forma del prompt (un vencido) =="
+echo "== ➕ quitada en 2.70.0 (decision de Victor del 2026-11-11): el caso 5 con vencidos no imprime nada =="
+# Hasta 2.69.x la capa ➕ ponia bajo un snippet `ninguno` hasta 2 vencidos de cualquier plan. Un hilo
+# terminado debe decir que no queda nada suyo, no ofrecer trabajo de otro hilo.
 armar "$(L p-bbbbbbbbbb 'alta vencida' 2026-09-20 ' — _revisar: 2026-09-21_')" "" CASO5
+chk "un vencido: nada" "" "$(out)"
+armar "$(L p-aaaaaaaaaa 'alta nueva' 2026-09-22 '')" "$(L p-2222222222 'media vencida' 2026-09-10 ' — _revisar: 2026-09-15_')$(L p-3333333333 'media vencida segunda' 2026-09-10 ' — _revisar: 2026-09-20_')" CASO5
+chk "varios vencidos: nada" "" "$(out)"
+armar "$(printf -- '- [ ] alta sin origen — _creado: 2026-09-22_ — _id: p-aaaaaaaaaa_ — _revisar: 2026-09-15_\\n')" "" CASO5
+chk "vencido sin origen: nada" "" "$(out)"
+
+echo "== 🔔 forma del prompt (la de la capa ➕ de antes, ahora sobre el 🔔) =="
+armar "$(L p-bbbbbbbbbb 'alta vence hoy' 2026-09-20 ' — _revisar: 2026-09-23_')" "" CASO5
 O=$(out)
-chk "cabecera ➕" "1" "$(printf '%s' "$O" | grep -c '^➕ ')"
-chk "sin cabecera 🔔" "0" "$(printf '%s' "$O" | grep -c '^🔔')"
-chk "el vencido" "1" "$(printf '%s' "$O" | grep -c 'alta vencida _id: p-bbbbbbbbbb_')"
+chk "cabecera 🔔, con 'no es paso de este hilo' (2.70.0)" "1" "$(printf '%s' "$O" | grep -c '^🔔 Vence hoy — recordatorio del proyecto, no es paso de este hilo; ábrelo en otra sesión:$')"
+chk "sin cabecera ➕" "0" "$(printf '%s' "$O" | grep -c '^➕')"
+chk "el que vence" "1" "$(printf '%s' "$O" | grep -c 'alta vence hoy _id: p-bbbbbbbbbb_')"
 chk "un solo prompt" "1" "$(printf '%s' "$O" | grep -c '^Retomamos:')"
-chk "sin motivo 'abierto desde'" "0" "$(printf '%s' "$O" | grep -c '^Motivo: Alta abierto desde')"
 chk "texto sin metadatos" "0" "$(printf '%s' "$O" | grep '^Retomamos:' | grep -c '_origen')"
 # La ruta se compara por su final: en Windows Python imprime la ruta nativa (C:\...) y $P es la de
 # Git Bash (/c/...). Las dos son la misma carpeta; el prompt se pega en el sistema de quien lo lee.
@@ -60,33 +68,13 @@ chk "Contexto de su _origen" "1" "$(printf '%s' "$O" | grep -c '^Contexto: memor
 chk "clausula de cierre" "1" "$(printf '%s' "$O" | grep -c 'cierralo con /checkpoint-3t')"
 chk "sin separadores viejos" "0" "$(printf '%s' "$O" | grep -c '───\|Si tienes tiempo, abre')"
 
-echo "== ➕ adversariales: bloqueado y _revisar futuro no se proponen =="
-armar "$(L p-aaaaaaaaaa 'alta bloqueada' 2026-09-22 ' — _revisar: 2026-09-15 — _bloqueado: otra instalacion_')$(L p-bbbbbbbbbb 'alta con fecha futura' 2026-09-22 ' — _revisar: 2026-09-30_')$(L p-dddddddddd 'alta valida' 2026-09-01 ' — _revisar: 2026-09-16_')" "" CASO5
+echo "== 🔔 adversariales: bloqueado sin _revisar y _revisar futuro no salen =="
+armar "$(L p-aaaaaaaaaa 'alta bloqueada' 2026-09-22 ' — _bloqueado: otra instalacion_')$(L p-bbbbbbbbbb 'alta con fecha futura' 2026-09-22 ' — _revisar: 2026-09-30_')$(L p-dddddddddd 'alta valida' 2026-09-01 ' — _revisar: 2026-09-23_')" "" CASO5
 O=$(out)
 chk "elige la unica valida" "1" "$(printf '%s' "$O" | grep -c 'p-dddddddddd')"
 chk "ni bloqueada ni futura" "0" "$(printf '%s' "$O" | grep -c 'p-aaaaaaaaaa\|p-bbbbbbbbbb')"
-armar "$(L p-aaaaaaaaaa 'alta bloqueada' 2026-09-22 ' — _bloqueado: otra instalacion_')" "" CASO5
-chk "solo bloqueados: nada" "" "$(out)"
-armar "$(L p-aaaaaaaaaa 'la palabra _bloqueado en el texto no bloquea' 2026-09-22 ' — _revisar: 2026-09-15_')" "" CASO5
+armar "$(L p-aaaaaaaaaa 'la palabra _bloqueado en el texto no bloquea' 2026-09-22 ' — _revisar: 2026-09-23_')" "" CASO5
 chk "'_bloqueado' dentro del texto no cuenta (campo, no prosa)" "1" "$(out | grep -c 'p-aaaaaaaaaa')"
-
-echo "== ➕ caso 5, vencidos: ganan a los Alta, hasta 2, el mas viejo primero, de cualquier prioridad =="
-armar "$(L p-aaaaaaaaaa 'alta nueva' 2026-09-22 '')" "$(L p-2222222222 'media vencida' 2026-09-10 ' — _revisar: 2026-09-15_')$(L p-3333333333 'media vencida segunda' 2026-09-10 ' — _revisar: 2026-09-20_')$(L p-4444444444 'media vencida tercera' 2026-09-10 ' — _revisar: 2026-09-21_')" CASO5
-O=$(out)
-chk "dos prompts" "2" "$(printf '%s' "$O" | grep -c '^Retomamos:')"
-chk "una sola cabecera" "1" "$(printf '%s' "$O" | grep -c '^➕ ')"
-chk "primero el mas viejo" "p-2222222222" "$(printf '%s' "$O" | grep '^Retomamos:' | head -1 | grep -o 'p-[0-9a-f]*')"
-chk "segundo el siguiente" "p-3333333333" "$(printf '%s' "$O" | grep '^Retomamos:' | sed -n 2p | grep -o 'p-[0-9a-f]*')"
-chk "el Alta no entra" "0" "$(printf '%s' "$O" | grep -c 'p-aaaaaaaaaa')"
-chk "motivo vencido" "1" "$(printf '%s' "$O" | grep -c '^Motivo: vencido desde 2026-09-15')"
-armar "" "$(L p-1111111111 'vencida pero bloqueada' 2026-09-10 ' — _revisar: 2026-09-15 — _bloqueado: un peer_')" CASO5
-chk "vencida y bloqueada: nada" "" "$(out)"
-
-echo "== ➕ origen sin ficha: sin linea Contexto =="
-armar "$(printf -- '- [ ] alta sin origen — _creado: 2026-09-22_ — _id: p-aaaaaaaaaa_ — _revisar: 2026-09-15_\\n')" "" CASO5
-O=$(out)
-chk "propone" "1" "$(printf '%s' "$O" | grep -c 'p-aaaaaaaaaa')"
-chk "sin Contexto" "0" "$(printf '%s' "$O" | grep -c '^Contexto:')"
 
 echo "== 🔔 vence HOY: con cualquier snippet, uno solo, y tapa a la capa ➕ =="
 # El vencido va ARRIBA del que vence hoy: si la capa tomara tambien los vencidos, ganaria el.

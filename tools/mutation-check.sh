@@ -226,7 +226,7 @@ caso "anexo al usuario" checkpoint-close-guard.sh m_cierre_final.py test-checkpo
 caso "cola tras el cierre" checkpoint-close-guard.sh m_cierre_final.py test-checkpoint-close-guard.sh "reclama la cola" sin-cola
 echo
 echo "Capas y emojis del cierre (2.44.0): cada pieza, apagada, tumba su aserto"
-caso "➕ solo en el caso 5" print-pendiente-opcional.py m_capas_cierre.py test-print-pendiente-opcional.sh "snippet completo y nada vence hoy" capa3-sin-gate
+caso "➕ ya no sale (2.70.0)" print-pendiente-opcional.py m_capas_cierre.py test-print-pendiente-opcional.sh "un vencido: nada" capa3-vuelve
 caso "🔔 solo _revisar = hoy" print-pendiente-opcional.py m_capas_cierre.py test-print-pendiente-opcional.sh "el que vence hoy" hoy-incluye-vencidos
 caso "🔔 uno cada vez" print-pendiente-opcional.py m_capas_cierre.py test-print-pendiente-opcional.sh "uno solo" hoy-sin-tope
 caso "cabecera 🔁 del snippet" print-como-retomar.py m_capas_cierre.py test-print-como-retomar.sh "empieza con la cabecera" sin-cabecera-retomar
@@ -246,7 +246,6 @@ caso "pendiente.relate aplica" journal-compact.py m_relacionado.py $T "relate re
 caso "afines en el snippet" print-como-retomar.py m_relacionado.py $T "hay linea de afines" snippet-sin-afines
 caso "afines sin bloqueados" pendientes_afines.py m_relacionado.py $T "no trae la bloqueada" afines-con-bloqueados
 caso "afines sin los de hoy" pendientes_afines.py m_relacionado.py $T "no trae la que vence hoy" afines-con-vence-hoy
-caso "afines en direccion inversa" pendientes_afines.py m_relacionado.py $T "la media que el ancla cita entra" afines-sin-inversa
 caso "afines Alta primero" pendientes_afines.py m_relacionado.py $T "el Alta ligado va primero aunque sea mas nuevo" afines-sin-prioridad
 caso "afines tope de 2" pendientes_afines.py m_relacionado.py $T "con 3 elegibles salen solo 2" afines-sin-tope
 caso "hermano de la tabla primero" plan-siguiente-hermano.py m_relacionado.py $T "y no desplaza a la fila de la tabla" hermano-fuera-primero
@@ -264,12 +263,12 @@ caso "hilo: liga al nacer" journal-emit.py m_hilo.py $T "el evento trae _relacio
 caso "hilo: liga no hereda en backfill" journal-emit.py m_hilo.py $T "ficha de otra fecha, backfill: no hereda el snippet de la sesion en curso" liga-sin-guardia
 caso "hilo: campo en varias lineas" pendientes_afines.py m_hilo.py $T "hilo_paso" campo-una-linea
 caso "hilo: snippet pegado como bloque" pendientes_afines.py m_hilo.py $T "sella" pasted-sin-quitar
-caso "hilo: vecino directo" pendientes_afines.py m_hilo.py $T "p-2222222222, vecino directo del paso, esta en el snippet" hilo-sin-vecino
-caso "hilo: no cruza ids cerrados" pendientes_afines.py m_hilo.py $T "un pendiente que solo comparte un id cerrado no entra" hilo-cruza-cerrados
 caso "hilo: sello desde Retomamos" pendientes_afines.py m_hilo.py $T "hilo_paso toma el id de Retomamos:" sello-sin-retomamos
 caso "hilo: paso recibido sigue" pendientes_afines.py m_hilo.py $T "p-aaaaaaaaaa vuelve como extra" hilo-sin-recibido
 caso "hilo: empate, nuevo primero" pendientes_afines.py m_hilo.py $T "empate Alta/Alta, el paso cita al heredado: SALTADO" empate-sin-nuevo
-caso "hilo: heredado saltado 2" pendientes_afines.py m_hilo.py $T "heredado saltado 2 sesiones y el paso cita al nuevo: SALTADO" empate-sin-saltos
+caso "hilo: sin heredados no tocados (2.70.0)" pendientes_afines.py m_hilo.py test-hilo-propio.sh "el hilo es solo el paso recibido, sin el extra heredado saltado 2" hilo-con-heredados
+caso "hilo: lo trabajado entra (2.70.0)" pendientes_afines.py m_hilo.py test-hilo-propio.sh "paso recibido, plan editado y trabajado, en orden de prioridad" hilo-sin-trabajados
+caso "hilo: plan editado entra (2.70.0)" pendientes_afines.py m_hilo.py test-hilo-propio.sh "paso recibido, plan editado y trabajado, en orden de prioridad" hilo-sin-planes
 caso "hilo: Baja solo sin Alta ni Media" pendientes_afines.py m_hilo.py $T "con una Media fuera del paso, la Baja no entra como extra aunque sobre un hueco" baja-con-alta
 caso "hilo: quedan N" pendientes_afines.py m_hilo.py $T "quedan N con el resto, solo ids" sin-quedan
 caso "hilo: saltos acumulan" stamp-hilo.py m_hilo.py $T "hilo_saltos: el de ayer mas 1; el paso no cuenta; uno que ya no vino se olvida" saltos-sin-previo
@@ -448,7 +447,6 @@ caso "vigente sh sin tilde"     snippet-vigente.sh m_paso_vigente.py test-snippe
 caso "cierre sin paso compartido" checkpoint-audit.py m_paso_vigente.py test-paso-compartido.sh "la segunda ficha" audit-sin-paso-compartido
 caso "paso compartido otro dia" checkpoint-audit.py m_paso_vigente.py test-paso-compartido.sh "otro dia" audit-compartido-cualquier-dia
 caso "guard sin paso compartido" checkpoint-close-guard.sh m_paso_vigente.py test-checkpoint-close-guard.sh "la revision trae el aviso del paso compartido" guard-sin-compartido
-caso "opcional con Alta"        print-pendiente-opcional.py m_paso_vigente.py test-print-pendiente-opcional.sh "nada" opcional-con-alta
 # 2.63.43: el Proximo paso no es trabajo de la sesion (auditoria del 2026-10-22).
 caso "ajeno: update en el cierre"  paso_ajeno.py m_paso_ajeno.py test-paso-ajeno.sh "paso no trabajado: solo lo ordeno en el cierre" ajeno-cierre-cuenta
 caso "ajeno: SendMessage cuenta"   paso_ajeno.py m_paso_ajeno.py test-paso-ajeno.sh "solo un SendMessage" ajeno-mensaje-cuenta
@@ -457,6 +455,10 @@ caso "ajeno: la otra ya cerro"     paso_ajeno.py m_paso_ajeno.py test-paso-ajeno
 caso "ajeno: cierre de la otra"    paso_ajeno.py m_paso_ajeno.py test-paso-ajeno.sh "su turno de cierre nombra el id" ajeno-cierre-otra-cuenta
 caso "ajeno: memoria de la otra"   paso_ajeno.py m_paso_ajeno.py test-paso-ajeno.sh "solo edita memory/" ajeno-memoria-otra-cuenta
 caso "ajeno: otro proyecto"        paso_ajeno.py m_paso_ajeno.py test-paso-ajeno.sh "otro proyecto" ajeno-cualquier-proyecto
+caso "ajeno: extras no cuentan (2.70.0)" paso_ajeno.py m_paso_ajeno.py test-hilo-propio.sh "extra heredado no tocado de paso: SALTADO" ajeno-extras-cuentan
+caso "audit bloquea (2.70.0)"      checkpoint-audit.py m_paso_ajeno.py test-hilo-propio.sh "otra ventana viva corrio comandos con el paso: SALTADO" audit-no-bloquea
+caso "audit no exige lo de otra ventana (2.70.0)" checkpoint-audit.py m_paso_ajeno.py test-hilo-propio.sh "y la salida que pide, ninguno — lo lleva otra sesion, la acepta snippet.hilo" hilo-exige-ocupado
+caso "audit hilo propio libra (2.70.0)" checkpoint-audit.py m_paso_ajeno.py test-hilo-propio.sh "uno de un plan que la sesion edito: HECHO" audit-hilo-no-libra
 caso "audit sin paso no trabajado" checkpoint-audit.py m_paso_ajeno.py test-paso-ajeno.sh "paso no trabajado: solo lo ordeno" audit-sin-paso-no-trabajado
 caso "audit ilegible afirma"      checkpoint-audit.py m_paso_ajeno.py test-paso-ajeno.sh "y dice no aplica" audit-ilegible-afirma
 caso "audit sin otra ventana"      checkpoint-audit.py m_paso_ajeno.py test-paso-ajeno.sh "otra ventana corre comandos" audit-sin-otra-ventana
@@ -467,7 +469,6 @@ caso "guard sin transcript"        checkpoint-close-guard.sh m_paso_ajeno.py tes
 
 # 2.64.0: cuatro avisos del pendiente con texto falso (incidente real del 2026-10-24).
 caso "aviso sin comprobar hits"    print-pendiente-opcional.py m_avisos_pendiente.py test-aviso-pendiente-otra-ventana.sh "sin otras ventanas" aviso-siempre
-caso "aviso en el opcional"        print-pendiente-opcional.py m_avisos_pendiente.py test-aviso-pendiente-otra-ventana.sh "el ➕ opcional no lleva" aviso-en-opcional
 caso "guard sin aviso del 🔔"      checkpoint-close-guard.sh m_avisos_pendiente.py test-checkpoint-close-guard.sh "la revision trae el aviso del 🔔" guard-sin-aviso-pendiente
 caso "guard sin aviso del hilo"    checkpoint-close-guard.sh m_avisos_pendiente.py test-checkpoint-close-guard.sh "la revision trae el aviso del hilo" guard-sin-aviso-hilo
 caso "guard sin aviso de prosa"    checkpoint-close-guard.sh m_avisos_pendiente.py test-checkpoint-close-guard.sh "la revision trae el aviso de la pregunta" guard-sin-aviso-prosa
