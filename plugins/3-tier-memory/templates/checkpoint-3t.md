@@ -1689,7 +1689,7 @@ texto y se leia en el mismo bloque que todo lo demas). Imprimelo AHORA y siguelo
 persistir el snippet en la ficha, 8a2 marcar para retomar el pendiente del `Proximo paso`
 (`marcar-retomar.py`, 2.62.8), 8b imprimirlo con `print-como-retomar.py`, 8c recordatorios de
 calendario, 8d recomendaciones de research (ya no van en el cierre), 8e el pendiente que vence hoy
-o el opcional. Desde 2.43.0 las salidas de 8b, 8e y 8c no se pegan en este turno: van al final de
+(la capa ➕ opcional se quito en 2.70.0). Desde 2.43.0 las salidas de 8b, 8e y 8c no se pegan en este turno: van al final de
 tu respuesta a la revision del cierre, en ese orden y cada una con su emoji (ver 8b):
 
 ```bash

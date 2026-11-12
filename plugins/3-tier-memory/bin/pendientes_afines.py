@@ -7,13 +7,12 @@ dejaba junto a un Alta no volvia a ningun snippet salvo que venciera su `_revisa
 las 8 ultimas fichas de este repo y de otro proyecto: p-f667380493, p-95d33b9363, p-b0b80cfb23 y
 p-564b0bdc82 no volvieron nunca). Y un Alta corta no traia nada con que completar la sesion.
 
-Que hace: toma los anclas que cita la linea `Proximo paso:` de `## Como retomar` (ids `p-…` y
-slugs `plan-…`) y devuelve hasta 2 pendientes abiertos Alta o Media ligados a ellos por el campo
-`_relacionado:` (journal-emit `--relacionado` / `pendiente.relate`), en CUALQUIER direccion:
-  - el candidato cita un ancla en su `_relacionado:`, o
-  - un pendiente ancla cita al candidato en su `_relacionado:`, o
-  - el candidato y un pendiente ancla citan el mismo `plan-…`.
-Sin importar de que sesion vengan: el arrastre entre sesiones es justo el punto.
+Que hace (desde 2.70.0): devuelve hasta 2 pendientes abiertos Alta o Media del hilo PROPIO de la
+sesion (ver hilo(): lo que nacio en ella, el paso que recibio, lo que trabajo y los pendientes de
+los planes que edito), fuera del `Proximo paso`. Hasta 2.69.x los tomaba de los anclas que cita el
+`Proximo paso:` y de sus ligados por `_relacionado:` en cualquier direccion o por plan compartido;
+ese arrastre le pasaba a una sesion pendientes de otro hilo (auditoria de otro proyecto,
+2026-11-10/11).
 
 Nunca devuelve uno con `_bloqueado:` (salvo que su `_revisar` ya paso, 2.63.32), uno con
 `_revisar` futuro (ya tiene su recordatorio de calendario), uno que vence hoy (lo muestra la capa 🔔 de print-pendiente-opcional.py), uno cuyo

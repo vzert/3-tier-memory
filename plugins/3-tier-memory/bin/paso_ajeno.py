@@ -38,7 +38,8 @@ comando nombra `memory/plans/<plan>.md` y trae una forma de escritura (`>`, `tee
 
 Limite declarado: mira ids, no trabajo. Una ventana que nombro el id hace mas de 2 h y sigue viva
 no sale. Una sesion que trabajo un pendiente sin nombrar su id ni
-emitir `update`/`resolve` sale como "no lo trabajo" (aviso de mas, no bloquea); una ventana que lo
+emitir `update`/`resolve` sale como "no lo trabajo" (aviso de mas; desde 2.70.0 bloquea en fichas
+desde 2026-11-11, salvo que el id sea el paso recibido o del hilo propio); una ventana que lo
 trabaja sin escribir su id en un comando no sale. Solo ve las ventanas del mismo directorio de
 transcripts y de los que empiezan por su nombre (worktrees dentro del proyecto). Falla abierto:
 un transcript ilegible no produce aviso.

@@ -711,7 +711,9 @@ avisos_bloqueo = []
 avisos_compartido = []
 # Avisos `snippet.titulo_paso`, `paso_no_trabajado` y `paso_otra_ventana` (2.63.43): el paso no es
 # trabajo de esta sesion, o otra ventana corre comandos con el. Mismo camino, sin rechazo (d414;
-# auditoria de 101 fichas del 2026-10-22, caso real: una ficha de otro proyecto).
+# auditoria de 101 fichas del 2026-10-22, caso real: una ficha de otro proyecto). Desde 2.70.0
+# paso_no_trabajado y paso_otra_ventana son SALTADO en fichas desde 2026-11-11 y entran como
+# problema (rechazo); aqui solo llegan los de fichas anteriores y snippet.titulo_paso.
 avisos_ajeno = []
 avisos_pendiente = []  # 2.64.0: lineas ⚠ del 🔔 (print-pendiente-opcional.py)
 avisos_hilo = []       # 2.64.0: plan/handoff/ficha editado con pendientes sin reconciliar
@@ -1325,8 +1327,8 @@ else:
         if avisos_ajeno:
             partes.append(
                 "El `Proximo paso` puede no ser trabajo de esta sesion (checkpoint-audit.py "
-                "snippet.titulo_paso / paso_no_trabajado / paso_otra_ventana; no bloquean, leen ids y "
-                "no trabajo). Quien pegue el snippet hara ese paso: si no es de tu hilo o otra ventana "
+                "snippet.titulo_paso, o paso_no_trabajado / paso_otra_ventana en una ficha anterior "
+                "a 2026-11-11; estos no bloquean, leen ids y no trabajo). Quien pegue el snippet hara ese paso: si no es de tu hilo o otra ventana "
                 "lo lleva, duplica trabajo. Ligar, desbloquear o marcar un pendiente en el cierre no "
                 "lo hace tuyo. Si otra ventana lo nombra, preguntale por SendMessage (ListAgents) si "
                 "lo lleva. Rehaz el paso con el siguiente de tu hilo o `ninguno — <motivo>`, o di en "

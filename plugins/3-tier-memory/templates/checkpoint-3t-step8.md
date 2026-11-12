@@ -297,8 +297,8 @@ Reglas para llenar los slots:
      seccion `## Pendientes` — el atajo salto directo a este caso sin pasar por el 2, y el
      pendiente se perdio del snippet hasta que se audito el jsonl a mano en una sesion posterior.
      **No es excusa para NO declarar este caso** un pendiente Alta que no sea de esta sesion ni
-     este relacionado con ella — ese puede salir en el prompt opcional de Step 8e, no cambia el
-     veredicto de `<next-step>`. **Si TODOS los `- [ ]` sin marcar traen `_revisar` futuro** (en `_pendientes.md`), la relectura no
+     este relacionado con ella — no es de este hilo y no cambia el veredicto de `<next-step>`
+     (desde 2.70.0 tampoco sale debajo: la capa ➕ de Step 8e se quito). **Si TODOS los `- [ ]` sin marcar traen `_revisar` futuro** (en `_pendientes.md`), la relectura no
      bloquea el caso 5 — es exactamente la variante de arriba ("Tambien aplica cuando..."), no una
      excepcion a esta regla.
 
@@ -345,7 +345,7 @@ Reglas para llenar los slots:
   las ultimas 2 h y no ha cerrado (`snippet.paso_otra_ventana`). Desde 2.70.0 estos dos ultimos
   **bloquean** (`SALTADO`, decision de Victor del 2026-11-11): rehaz el paso con el siguiente de tu
   hilo o `ninguno — no queda trabajo de este hilo` / `ninguno — lo lleva otra sesion`.
-  Desde 2.64.0 la revision avisa tambien (todos no bloquean, cruzan por ids y campos): si el pendiente
+  Desde 2.64.0 la revision avisa tambien (estos avisos no bloquean, cruzan por ids y campos): si el pendiente
   del 🔔 lo toco otra ventana en las ultimas 2 h (linea `⚠` del 🔔, el hook no la exige pegar);
   si editaste un plan, handoff o ficha ajena con pendientes abiertos y no actualizaste ni cerraste
   ninguno, o (desde 2.65.0) tu edicion nombra uno del grupo que no tocaste aunque tocaste otro

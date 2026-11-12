@@ -1,22 +1,16 @@
 #!/usr/bin/env python3
 """
-3-tier-memory plugin: imprime el bloque de PENDIENTE del cierre de /checkpoint-3t (Step 8e): a lo
-sumo uno de dos, segun la capa que toque (2.44.0, reglas de Victor del 2026-10-01).
+3-tier-memory plugin: imprime el bloque de PENDIENTE del cierre de /checkpoint-3t (Step 8e): desde
+2.70.0 solo la capa 🔔 (capas desde 2.44.0, reglas de Victor del 2026-10-01).
 
   🔔 vence hoy — UN pendiente con `_revisar` igual a hoy (los ya vencidos no). Acompana a
      Retomamos, sea cual sea el snippet, para que no pase desapercibido. Si vencen varios, sale
-     uno cada vez: el de mayor prioridad y, dentro de ella, la fila mas arriba.
-  ➕ opcional — QUITADA en 2.70.0 (ver main): solo si el snippet era el caso 5 (`Ninguno — …`, nada que retomar) y no vence
-     ninguno hoy. Hasta 2 vencidos (`_revisar` < hoy), el mas viejo primero; si no hay ninguno
-     vencido, no sale nada. Hasta 2.63.17 salia entonces el Alta abierto mas reciente; se quito en
-     2.63.22 (decision de Victor, d265-d266): sin relacion con la sesion, el mismo Alta salia en
-     cada cierre hasta que alguien lo cerraba (medido: uno de otro agente salio 14 veces en 10
-     sesiones de otro proyecto, sin que nadie lo tomara). El backlog ya lo muestran el sidebar de
-     pendientes y el recall por peticion.
-
-Por que capas: hasta 2.43.0 el prompt opcional salia en cada cierre y los mismos dos vencidos se
-repetian sesion tras sesion. Las dos capas nunca coinciden (la opcional exige que no venza
-ninguno hoy), asi que el cierre lleva a lo sumo un bloque de pendiente, justo despues del snippet.
+     uno cada vez: el de mayor prioridad y, dentro de ella, la fila mas arriba. Su cabecera dice
+     que es un recordatorio del proyecto, no un paso de este hilo (2.70.0).
+  ➕ opcional — QUITADA en 2.70.0 (decision de Victor del 2026-11-11): ponia, bajo un snippet del
+     caso 5 (`Ninguno — …`), hasta 2 pendientes vencidos de cualquier plan. Un hilo terminado debe
+     decir que no queda nada suyo, no ofrecer trabajo de otro hilo. El backlog lo muestran el
+     sidebar de pendientes y el recall por peticion.
 
 Nunca propone un pendiente con `_bloqueado:` sin `_revisar` (espera a algo fuera de la sesion y no
 dice cuando mirar), uno con `_revisar` futuro (ya tiene su recordatorio de calendario) ni el que ya
