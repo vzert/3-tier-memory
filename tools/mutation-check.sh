@@ -457,6 +457,7 @@ caso "ajeno: memoria de la otra"   paso_ajeno.py m_paso_ajeno.py test-paso-ajeno
 caso "ajeno: otro proyecto"        paso_ajeno.py m_paso_ajeno.py test-paso-ajeno.sh "otro proyecto" ajeno-cualquier-proyecto
 caso "ajeno: extras no cuentan (2.70.0)" paso_ajeno.py m_paso_ajeno.py test-hilo-propio.sh "extra heredado no tocado de paso: SALTADO" ajeno-extras-cuentan
 caso "audit bloquea (2.70.0)"      checkpoint-audit.py m_paso_ajeno.py test-hilo-propio.sh "otra ventana viva corrio comandos con el paso: SALTADO" audit-no-bloquea
+caso "audit no exige lo de otra ventana (2.70.0)" checkpoint-audit.py m_paso_ajeno.py test-hilo-propio.sh "y la salida que pide, ninguno — lo lleva otra sesion, la acepta snippet.hilo" hilo-exige-ocupado
 caso "audit hilo propio libra (2.70.0)" checkpoint-audit.py m_paso_ajeno.py test-hilo-propio.sh "uno de un plan que la sesion edito: HECHO" audit-hilo-no-libra
 caso "audit sin paso no trabajado" checkpoint-audit.py m_paso_ajeno.py test-paso-ajeno.sh "paso no trabajado: solo lo ordeno" audit-sin-paso-no-trabajado
 caso "audit ilegible afirma"      checkpoint-audit.py m_paso_ajeno.py test-paso-ajeno.sh "y dice no aplica" audit-ilegible-afirma

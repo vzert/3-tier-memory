@@ -27,6 +27,7 @@ M = {
     "ajeno-extras-cuentan": [("                    if paso_recibido is not None and k == primero and i not in paso_recibido:",
                               "                    if False:")],
     "audit-no-bloquea": [("            bloquea = fecha_ficha >= DESDE_PASO_PROPIO", "            bloquea = False")],
+    "hilo-exige-ocupado": [('            orden = [p for p in orden if p["id"] not in ocupados]', "            pass")],
     "audit-hilo-no-libra": [("for i in ids_paso if propio and not propio[i][0] and i not in del_hilo]",
                              "for i in ids_paso if propio and not propio[i][0]]")],
     # checkpoint-audit.py

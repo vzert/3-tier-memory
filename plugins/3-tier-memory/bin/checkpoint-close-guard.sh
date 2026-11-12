@@ -903,7 +903,7 @@ def revisar(ficha):
                     f"`python3 \"$JBIN/print-como-retomar.py\" \"{ficha}\"` y pega su salida tal cual.")
 
     # 1-bis. El bloque de pendiente (Step 8e): lo que print-pendiente-opcional.py imprime AHORA desde
-    # `_pendientes.md` — desde 2.44.0, 🔔 el que vence hoy o ➕ el opcional, nunca los dos. Se genera
+    # `_pendientes.md` — desde 2.44.0, 🔔 el que vence hoy (la capa ➕ se quito en 2.70.0). Se genera
     # en vivo, no se guarda en la ficha, asi que compararlo aqui contra el estado real es lo que evita
     # pegar uno viejo. Solo para fichas desde el corte: una anterior no tenia Step 8e.
     if sec is not None and "<filled in Step 8>" not in sec and m_fecha and m_fecha.group(1) >= "2026-09-23":

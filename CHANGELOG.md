@@ -20,6 +20,8 @@ Victor del 2026-11-11.
   snippet ya no cuenta como trabajarlo; el paso recibido si. `paso_ajeno.planes_editados()` nuevo.
 - `checkpoint-audit.py`: `snippet.paso_no_trabajado` y `snippet.paso_otra_ventana` bloquean
   (`SALTADO`) en fichas desde 2026-11-11; antes eran avisos. Un id del hilo propio no es ajeno.
+  `snippet.hilo` ya no exige de paso un pendiente que otra ventana viva lleva, asi que
+  `ninguno — lo lleva otra sesion` es una salida que el audit acepta.
 - `print-pendiente-opcional.py`: la capa ➕ (vencidos de cualquier plan bajo un snippet `ninguno`)
   ya no sale. La cabecera del 🔔 dice `recordatorio del proyecto, no es paso de este hilo`.
 - Step 8 (`templates/checkpoint-3t-step8.md`) y `templates/checkpoint-3t.md`: la regla nueva; si el
@@ -30,7 +32,7 @@ Victor del 2026-11-11.
   pasa ahora por ahi).
 
 ### Tests
-- `test-hilo-propio.sh` (nuevo, 22 asertos; 14 salen rojos contra 2.69.3): la forma del caso real,
+- `test-hilo-propio.sh` (nuevo, 24 asertos; 14 salen rojos contra 2.69.3): la forma del caso real,
   lo trabajado, los planes editados, el refresco del sello, el bloqueo del audit y la capa ➕.
 - `test-hilo-pendientes.sh`, `test-hilo-hermanos.sh`, `test-pendiente-relacionado.sh`,
   `test-print-pendiente-opcional.sh`, `test-aviso-pendiente-otra-ventana.sh` y el del mod
@@ -40,7 +42,7 @@ Victor del 2026-11-11.
 - `tools/mutation-check.sh`: fuera las mutaciones del codigo quitado (vecino directo, ids cerrados,
   saltado 2, capa ➕, opcional con Alta, aviso en el opcional); nuevas: `hilo-con-heredados`,
   `hilo-sin-trabajados`, `hilo-sin-planes`, `capa3-vuelve`, `ajeno-extras-cuentan`,
-  `audit-no-bloquea`, `audit-hilo-no-libra`.
+  `audit-no-bloquea`, `audit-hilo-no-libra`, `hilo-exige-ocupado`.
 
 ### Notas
 - El panel del mod `pendientes` ("relacionado al trabajo actual") usa el mismo `hilo()`, asi que

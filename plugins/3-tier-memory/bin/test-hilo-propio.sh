@@ -182,6 +182,11 @@ caso; ficha "Proximo paso: migrar el siguiente grupo (p-a000000001)." "$SELLO"
 tx "$P/propia.jsonl" "$SNIP"
 tx "$P/otra.jsonl" 'sigue con los secretos' accion:p-a000000001
 chk "otra ventana viva corrio comandos con el paso: SALTADO" "SALTADO" "$(estado snippet.paso_otra_ventana --transcript "$P/propia.jsonl")"
+ficha "Proximo paso: ninguno — lo lleva otra sesion." "$SELLO"
+chk "y la salida que pide, ninguno — lo lleva otra sesion, la acepta snippet.hilo (ronda 1 del adversario)" "HECHO" "$(estado snippet.hilo --transcript "$P/propia.jsonl")"
+ficha "Proximo paso: ninguno — no queda trabajo de este hilo." "$SELLO"
+rm -f "$P/otra.jsonl"
+chk "sin la otra ventana, ese ninguno sigue tapando el paso recibido: SALTADO" "SALTADO" "$(estado snippet.hilo --transcript "$P/propia.jsonl")"
 caso; ficha "Proximo paso: migrar el siguiente grupo (p-a000000001)." "$SELLO" 2026-11-10
 tx "$P/propia.jsonl" "$SNIP"
 tx "$P/otra.jsonl" 'sigue con los secretos' accion:p-a000000001

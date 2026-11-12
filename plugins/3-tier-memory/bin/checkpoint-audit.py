@@ -1496,6 +1496,14 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
             and fecha_ficha and fecha_ficha >= DESDE_HILO):
         af = _afines_mod()
         orden = af.hilo(texto, os.path.join(memory_dir, "_pendientes.md"), slug, ref)
+        # 2.70.0: lo que otra ventana viva lleva (paso_ajeno.otras_ventanas) no se exige de paso.
+        # Sin esto, `snippet.paso_otra_ventana` (SALTADO desde 2.70.0) pedia `ninguno — lo lleva otra
+        # sesion` y este chequeo rechazaba ese `ninguno` porque el pendiente seguia primero en el
+        # hilo: el cierre no tenia salida (adversario de 2.70.0, ronda 1).
+        if transcript and orden and fecha_ficha >= DESDE_PASO_PROPIO:
+            ocupados = {i for i, v in _paso_ajeno_mod().otras_ventanas(
+                transcript, [p["id"] for p in orden]).items() if v}
+            orden = [p for p in orden if p["id"] not in ocupados]
         rango = {p["id"]: (af.PRIORIDAD_HILO[p["prio"]], p["grupo"]) for p in orden}
         # El id del paso es el PRIMERO que cita la linea: un paso es una accion (marco de Victor,
         # 2026-10-13), y nombrar al de mayor rango de pasada ("hacer p-baja, no p-alta") no lo
