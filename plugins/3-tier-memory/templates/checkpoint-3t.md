@@ -864,7 +864,13 @@ sin importar que tan pronto sea razonable revisarlo. Caso real (2026-09-16, proy
 actividad de push acumulada todavia el chequeo no tenia con que fallar de verdad — y siguio
 reapareciendo dateless en `Sigue abierto` de una sesion posterior
 (`2026-09-16-verificar-backfill-tier3-no-aplicado`) sin que nada lo corrigiera; el usuario eligio 5
-dias (`_revisar: 2026-09-21`) al fecharlo a mano. Si el pendiente de verdad no depende del tiempo
+dias (`_revisar: 2026-09-21`) al fecharlo a mano. **Medir u observar en uso real la version que
+esta sesion publico es de este tipo** (hacen falta sesiones que arranquen con ella instalada), y
+tambien lo es un texto con "los proximos dias" o "cuando haya cierres". Segundo caso real (este
+plugin, 2026-11-11): `p-fdfc2fa06c` ("medir antes cuantos choques quedan con 2.70.0") nacio sin
+`--revisar`, quedo de `Proximo paso` y la sesion siguiente no tenia ningun cierre con 2.70.0. Desde
+2.71.0 `journal-emit.py` avisa al crearlo sin `--revisar` y `checkpoint-audit.py` marca SALTADO ese
+paso (`snippet.proximo_paso`). Si el pendiente de verdad no depende del tiempo
 sino de una condicion o decision, no le pongas `--revisar` — esta regla es solo para el que su
 unico bloqueo real es "que pase tiempo o actividad". Un pendiente que espera a un tercero lleva
 `--bloqueado-por` y tambien su `_revisar` (2.63.32, parrafo "Todo bloqueado lleva fecha"): la

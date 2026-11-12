@@ -75,7 +75,8 @@ def fecha_futura(texto, hoy):
     Es la red de 2.56.0 para el trabajo que espera una fecha y no trae `_revisar`. La usan la
     linea de afines (excluye el pendiente) y checkpoint-audit.py (`snippet.proximo_paso`). No ve
     fechas escritas de otra forma ("manana", "14-oct", "tras la revision"): esas siguen
-    dependiendo de que el pendiente nazca con `--revisar` o `_bloqueado:`."""
+    dependiendo de que el pendiente nazca con `--revisar` o `_bloqueado:`, salvo las dos formas
+    de `espera_uso` (2.71.0: "los proximos dias", medir la version recien publicada)."""
     texto = texto or ""
     for m in FECHA_ISO.finditer(texto):
         f = m.group(1)
@@ -83,6 +84,91 @@ def fecha_futura(texto, hoy):
         rango = INICIO_RANGO.search(antes)
         if f > hoy and not PLAZO.search(antes) and not (rango and rango.group(1) <= hoy):
             return f
+    return None
+
+
+# La espera de uso real (2.71.0, decision de Victor del 2026-11-12). `fecha_futura` solo ve una
+# fecha `AAAA-MM-DD`; la regla 216 dejaba dicho que una espera sin fecha ISO dependia de
+# `--revisar`. Caso real (este repo, cierre de 2.70.0 del 2026-11-11): el paso fue "medir con las
+# fichas y transcripciones de los proximos dias cuantos choques quedan con 2.70.0", el pendiente
+# nacio sin `--revisar`, la auditoria dio HECHO y la sesion siguiente no tenia ni un cierre con
+# 2.70.0 que medir. Dos formas, las dos de FORMATO:
+#   - tiempo: el paso espera que pasen dias o se junten datos ("los proximos dias", "tras unos
+#     dias", "cuando haya cierres").
+#   - version recien publicada: el paso pide medir u observar una version `X.Y.Z` que la misma
+#     ficha publico (su titulo, o una linea de `## Cambios realizados` que la nombra como version,
+#     bump, CHANGELOG, release o publicada). Eso necesita sesiones que arranquen con ella instalada.
+# No cuenta lo que la sesion siguiente si puede hacer sola: "tras /reload-plugins", "tras
+# reiniciar", "en una sesion nueva" (la sesion siguiente ya es una sesion nueva), ni la prueba
+# montada a proposito (PRUEBA_MONTADA). "en 30 dias" tampoco: casi siempre es el rango de los
+# datos ("sin fichas en 30 dias"), no una espera (4 de 6 aciertos de tiempo en las fichas reales).
+ESPERA_TIEMPO = re.compile(
+    r"\bproxim[oa]s\s+(?:\S+\s+)?(?:dias|semanas|cierres|sesiones)\b"
+    r"|\bdentro\s+de\s+(?:unos|unas|varios|varias|algunos|algunas|\d+)\s+(?:dias|semanas)\b"
+    r"|\b(?:tras|despues\s+de|luego\s+de)\s+(?:unos|unas|varios|varias|algunos|algunas|\d+)\s+"
+    r"(?:dias|semanas|cierres|sesiones)\b"
+    r"|\b(?:\d+|unos|varios|algunos)\s+dias\s+de\s+(?:uso|datos)\b"
+    r"|\bcuando\s+(?:haya|existan|se\s+acumulen|lleguen)\s+(?:\S+\s+){0,2}?"
+    r"(?:datos|cierres|sesiones|fichas|transcripciones)\b"
+    r"|\b(?:acumular|juntar|reunir)\s+(?:\S+\s+){0,2}?(?:datos|cierres|sesiones|fichas)\b",
+    re.I)
+VERSION = re.compile(r"(?<![\w.])(\d+\.\d+\.\d+)(?![\w.]*\d)")
+# El verbo y la version en la misma clausula (sin `;` ni `—` entre ellos, a menos de 200
+# caracteres): "medir con datos de X; en paralelo, adaptar a 2.52.1" no mide 2.52.1.
+MIDE_VERSION = re.compile(
+    r"\b(?:medir|observar|contar|vigilar|monitorear)\b[^;—]{0,200}?(?<![\w.])(\d+\.\d+\.\d+)(?![\w.]*\d)",
+    re.I)
+SESION_NUEVA = re.compile(
+    r"\btras\s+(?:/reload-plugins|recargar|reiniciar|/plugin)\b|\ben\s+una\s+sesion\s+(?:\S+\s+)?nueva\b",
+    re.I)
+# Una prueba montada a proposito (un banco, un repo desechable, una suite plantada) se hace ya: no
+# espera a que otro use la version. Medido en las fichas reales: 4 de 12 casos de version eran eso.
+PRUEBA_MONTADA = re.compile(
+    r"\b(?:banco|desechable|sandbox|plantar|plantad[oa]|simular|simulad[oa]|fixture|de\s+prueba)\b", re.I)
+PUBLICA_VERSION = re.compile(r"\b(?:version|bump|changelog|release|publicad[oa]|tag)\b", re.I)
+
+
+def versiones_publicadas(ficha_texto):
+    """Las versiones `X.Y.Z` que la ficha dice haber publicado: las de su titulo `# …` y las de una
+    linea de `## Cambios realizados` que la nombra como version, bump, CHANGELOG, release o tag."""
+    t = _sin_tildes(ficha_texto or "")
+    out = set()
+    m = re.search(r"^# (.+)$", t, re.M)
+    if m:
+        out |= set(VERSION.findall(m.group(1)))
+    c = re.search(r"^## Cambios realizados[^\n]*\n(.*?)(?=^## |\Z)", t, re.M | re.S)
+    if c:
+        for l in c.group(1).splitlines():
+            if PUBLICA_VERSION.search(l):
+                out |= set(VERSION.findall(l))
+    return out
+
+
+def espera_uso(paso, ficha_texto=""):
+    """Por que `paso` espera uso real o tiempo y no se puede hacer en la sesion siguiente, o None.
+
+    Red de FORMATO (ver ESPERA_TIEMPO). La usa checkpoint-audit.py (`snippet.proximo_paso`, SALTADO
+    desde DESDE_ESPERA_USO) y journal-emit.py (aviso al nacer un pendiente sin `--revisar`).
+    `ficha_texto=None` es "no hay ficha todavia" (un `pendiente.add` que corre antes de que exista
+    la ficha de su `--origen`, como el del caso real): entonces cualquier version que el texto mida
+    cuenta, y el motivo lo dice como pregunta. Solo journal-emit, que solo avisa, la llama asi."""
+    p = _sin_tildes(paso or "")
+    if SESION_NUEVA.search(p):
+        return None
+    m = ESPERA_TIEMPO.search(p)
+    if m:
+        return f"espera que pase el tiempo o se junten datos (\"{m.group(0).strip()}\")"
+    if not PRUEBA_MONTADA.search(p):
+        medidas = set(MIDE_VERSION.findall(p))
+        if ficha_texto is None:
+            if medidas:
+                return (f"mide u observa {', '.join(sorted(medidas))}: si es la version que publica "
+                        "esta sesion, hacen falta sesiones que arranquen con ella instalada")
+            return None
+        nuevas = sorted(medidas & versiones_publicadas(ficha_texto))
+        if nuevas:
+            return (f"mide u observa {', '.join(nuevas)}, que publico esta misma sesion: hacen falta "
+                    "sesiones que arranquen con esa version instalada")
     return None
 
 

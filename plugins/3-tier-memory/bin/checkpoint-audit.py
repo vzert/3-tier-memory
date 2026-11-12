@@ -181,6 +181,10 @@ DESDE_HILOS = "2026-10-26"
 # Victor del 2026-11-11, tras una auditoria de otro proyecto: dos ventanas sobre el mismo pendiente
 # ajeno). Una ficha anterior se re-audita con los avisos de antes (POR-DISENO).
 DESDE_PASO_PROPIO = "2026-11-11"
+# `snippet.proximo_paso` (2.71.0): un paso que espera uso real o tiempo sin fecha ISO ("los
+# proximos dias", medir la version que la ficha publico) es SALTADO, como la fecha futura
+# (pendientes_afines.espera_uso; decision de Victor del 2026-11-12). Fichas anteriores no.
+DESDE_ESPERA_USO = "2026-11-12"
 CONFIG_HILOS_ROTA = ("`.hilos-externos.json` no se pudo leer (JSON o regex invalido, sin `fuentes`, o "
                      "una fuente sin `leer` con `{id}`)")
 CONFIG_HILOS_FORMA = ("arregla el fichero: {\"fuentes\": [{\"nombre\": …, \"patron\": <regex con un "
@@ -1352,12 +1356,14 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     #       sin pasar (espera_viva: espera a algo fuera de la sesion) o `_revisar` futuro (ya tiene
     #       su recordatorio de calendario). Un bloqueado con `_revisar` pasado SI es inmediato
     #       (2.63.32): el paso es mirar si ya llego lo que esperaba. La deteccion es SOLO por esos
-    #       campos estructurados, nunca por el texto (regla 216).
+    #       campos estructurados (regla 216); las redes de formato del texto son (e) y (f).
     #   (d) `ninguno` teniendo trabajo propio: un pendiente de esta ficha abierto, sin espera viva
     #       y sin `_revisar` futuro, es un candidato real de los casos 2-3.
     #   (e) 2.56.0: una fecha `AAAA-MM-DD` posterior a la ficha en la linea (casos 1-3): ese trabajo
     #       es del recordatorio de calendario. Chequeo de FORMATO, compartido con la linea de
     #       afines (pendientes_afines.fecha_futura); y el caso 1 ya no empieza por `Fase actual:`.
+    #   (f) 2.71.0 (DESDE_ESPERA_USO): espera uso real o tiempo sin fecha ISO ("los proximos dias",
+    #       medir la version que la ficha publico; pendientes_afines.espera_uso). Tambien FORMATO.
     # Una linea que empieza por `ninguno` puede citar ids como MOTIVO ("lo unico propio espera a
     # otra instalacion, p-…") — por eso (b) y (c) no miran esa forma; la mira (d).
     bloqueados = _bloq_todos
@@ -1420,6 +1426,19 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                                  "sesion siguiente. Va en su recordatorio de calendario (pendiente "
                                  "con `--revisar`), y el paso es otro accionable hoy o "
                                  f"`nada accionable hasta {futura} — …`")
+            if fecha_ficha and fecha_ficha >= DESDE_ESPERA_USO:
+                entero_pp = (af.campo(sec_retomar, "proximo paso:")
+                             or af.campo(sec_retomar, "próximo paso:") or pp)
+                espera = af.espera_uso(entero_pp, texto)
+                if espera:
+                    problemas.append(f"{espera}: no se puede hacer en la sesion siguiente. Ponle "
+                                     "`_revisar` al pendiente (`pendiente.window --revisar "
+                                     "<fecha>`, o `--revisar` al crearlo) y el paso es otro "
+                                     "accionable hoy o `ninguno — <p-…> se mide desde <fecha>`. "
+                                     "Si es un falso positivo (lo hace la sesion siguiente sin "
+                                     "esperar a nadie: un banco o repo desechable, \"tras "
+                                     "/reload-plugins\", \"en una sesion nueva\"), escribelo asi "
+                                     "en el paso")
             if not ids_pp and not es_caso1:
                 problemas.append("no cita el `_id` de ningun pendiente: si es trabajo real, "
                                  "proponlo al usuario en Step 3b y, si lo guarda, cita su id; si "
