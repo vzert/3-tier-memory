@@ -317,7 +317,15 @@ Reglas para llenar los slots:
   marca `SALTADO` en `snippet.proximo_paso`, igual que un id que no esta abierto en
   `_pendientes.md`, uno con `_revisar` futuro, uno con `_bloqueado:` cuyo `_revisar` no ha pasado
   y (2.56.0) un paso que nombra
-  una fecha `AAAA-MM-DD` posterior a la de la ficha, en cualquier caso, el 1 incluido. Tambien marca `ninguno`
+  una fecha `AAAA-MM-DD` posterior a la de la ficha, en cualquier caso, el 1 incluido. Desde 2.71.0
+  marca igual un paso que espera uso real o tiempo sin fecha ISO (`pendientes_afines.espera_uso`):
+  "los proximos dias", "tras unos dias", "cuando haya cierres", o medir u observar la version que
+  esta misma ficha publico (su titulo o `## Cambios realizados`). **Medir lo que acabas de
+  publicar no es inmediato**: hacen falta sesiones que arranquen con esa version instalada. Ese
+  pendiente lleva `_revisar` (`--revisar` al crearlo, o `pendiente.window`; hoy+5 si nadie dijo
+  otra fecha) y el paso es otro accionable hoy o `ninguno — <p-…> se mide desde <fecha>`. No
+  cuenta lo que la sesion siguiente si puede hacer: un banco o repo desechable montado a
+  proposito, "tras /reload-plugins", "en una sesion nueva". Tambien marca `ninguno`
   cuando la ficha deja un pendiente propio abierto, sin `_revisar` futuro y sin `_bloqueado` (o
   bloqueado con su `_revisar` ya pasado, 2.63.32).
 
@@ -325,7 +333,7 @@ Reglas para llenar los slots:
   pregunta explicita: "¿esto se puede hacer de inmediato, en la sesion siguiente, sin esperar una
   decision o accion de alguien o algo FUERA de esta sesion?"** Si la respuesta es no, ese
   candidato no es un `<next-step>` — es un pendiente futuro (con `--revisar` si depende de que
-  pase tiempo, o con `_bloqueado:` y fuera de `Proximo paso` si depende de una decision, accion
+  pase tiempo o de que se junte uso real, como medir la version que esta sesion publico, o con `_bloqueado:` y fuera de `Proximo paso` si depende de una decision, accion
   o condicion ajena), y el siguiente candidato de la escalera (o el caso 5, `ninguno`) es el que
   corresponde. **El usuario no esta FUERA de la sesion** (2.62.11): un pendiente que espera una
   decision suya se hace de inmediato, en la sesion siguiente, con el agente al lado. Es un

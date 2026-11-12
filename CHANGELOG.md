@@ -1,5 +1,32 @@
 # Changelog
 
+## [2.71.0] - 2026-11-12
+Un `Proximo paso` que espera uso real o tiempo, sin fecha ISO, ya no pasa como inmediato. Caso real
+(este plugin, cierre de 2.70.0 del 2026-11-11): el paso fue "medir con las fichas y transcripciones
+de los proximos dias cuantos choques quedan con 2.70.0", el pendiente `p-fdfc2fa06c` nacio sin
+`--revisar` y la auditoria dio HECHO. La sesion siguiente no tenia ni un cierre con 2.70.0 que
+medir. La regla 216 ya decia que una espera sin fecha ISO dependia solo de `--revisar`. Decision de
+Victor del 2026-11-12: bloquea, como la fecha futura.
+
+### Added
+- `pendientes_afines.espera_uso(paso, ficha)`: red de formato con dos formas. Tiempo: "los proximos
+  dias", "tras unos dias", "dentro de N semanas", "cuando haya cierres", "acumular datos". Version
+  recien publicada: medir u observar, en la misma clausula, una `X.Y.Z` que la ficha publico (su
+  titulo, o una linea de `## Cambios realizados` con version, bump, CHANGELOG, release o tag). No
+  cuenta: un banco o repo desechable montado a proposito, "tras /reload-plugins", "en una sesion
+  nueva", ni "en 30 dias" (casi siempre el rango de los datos). Medido en 1143 pasos reales de 13
+  proyectos: 8 aciertos, todos esperas de uso real (una dudosa: el panel con pendientes 0.3.0).
+- `checkpoint-audit.py` `snippet.proximo_paso`: SALTADO con ese paso, para fichas desde 2026-11-12
+  (`DESDE_ESPERA_USO`). La salida que pide (`_revisar` futuro + `ninguno — <p-…> se mide desde
+  <fecha>`) pasa `snippet.proximo_paso`, `snippet.hilo` y las guardias de `ninguno` (probado).
+- `journal-emit.py pendiente.add`: aviso en stderr si el texto espera uso real o tiempo y nace sin
+  `--revisar`. Solo avisa; nunca falla el evento.
+- `test-espera-uso.sh` (23).
+
+### Changed
+- Step 3b (`checkpoint-3t.md`) y Step 8 (`checkpoint-3t-step8.md`): medir lo que la sesion acaba
+  de publicar es un pendiente con `--revisar`, no un paso inmediato.
+
 ## [2.70.0] - 2026-11-11
 El snippet de retomar (Step 8) ya solo propone trabajo del hilo PROPIO de la sesion. Auditoria de
 otro proyecto (2026-11-10/11): una sesion de secretos de n8n recibio en los extras de su snippet 9

@@ -467,6 +467,17 @@ caso "audit sin titulo paso"       checkpoint-audit.py m_paso_ajeno.py test-paso
 caso "guard sin paso ajeno"        checkpoint-close-guard.sh m_paso_ajeno.py test-checkpoint-close-guard.sh "la revision trae el aviso del paso ajeno" guard-sin-ajeno
 caso "guard sin transcript"        checkpoint-close-guard.sh m_paso_ajeno.py test-checkpoint-close-guard.sh "la revision trae el aviso del paso ajeno" guard-sin-transcript
 
+# 2.71.0: un Proximo paso que espera uso real o tiempo, sin fecha ISO (cierre de 2.70.0).
+caso "espera: tiempo"             pendientes_afines.py m_espera_uso.py test-espera-uso.sh "caso real: 'de los proximos dias'" espera-sin-tiempo
+caso "espera: version publicada"  pendientes_afines.py m_espera_uso.py test-espera-uso.sh "version que la ficha publico" espera-sin-version
+caso "espera: version ajena"      pendientes_afines.py m_espera_uso.py test-espera-uso.sh "version que NO publico la ficha" espera-cualquier-version
+caso "espera: banco cuenta"       pendientes_afines.py m_espera_uso.py test-espera-uso.sh "prueba montada" espera-banco-cuenta
+caso "espera: reload cuenta"      pendientes_afines.py m_espera_uso.py test-espera-uso.sh "tras /reload-plugins" espera-reload-cuenta
+caso "audit espera bloquea"       checkpoint-audit.py m_espera_uso.py test-espera-uso.sh "caso real: SALTADO" audit-espera-no-bloquea
+caso "audit espera corte"         checkpoint-audit.py m_espera_uso.py test-espera-uso.sh "ficha anterior al corte: HECHO como antes" audit-espera-sin-corte
+caso "emit avisa espera"          journal-emit.py m_espera_uso.py test-espera-uso.sh "aviso al nacer sin --revisar" emit-sin-aviso
+caso "emit calla con revisar"     journal-emit.py m_espera_uso.py test-espera-uso.sh "sin aviso con --revisar" emit-aviso-con-revisar
+
 # 2.64.0: cuatro avisos del pendiente con texto falso (incidente real del 2026-10-24).
 caso "aviso sin comprobar hits"    print-pendiente-opcional.py m_avisos_pendiente.py test-aviso-pendiente-otra-ventana.sh "sin otras ventanas" aviso-siempre
 caso "guard sin aviso del 🔔"      checkpoint-close-guard.sh m_avisos_pendiente.py test-checkpoint-close-guard.sh "la revision trae el aviso del 🔔" guard-sin-aviso-pendiente
