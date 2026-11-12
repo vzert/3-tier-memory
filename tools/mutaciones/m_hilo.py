@@ -26,17 +26,18 @@ M = {
     "ruta-por-sufijo": [('if b.get("name") in ESCRIBE and (ruta == "sessions/" + nombre',
                          'if b.get("name") in ESCRIBE and (ruta.endswith("sessions/" + nombre)')],
     "leer-cuenta-como-escribir": [('ESCRIBE = ("Write", "Edit", "MultiEdit")', 'ESCRIBE = ("Write", "Edit", "MultiEdit", "Read")')],
-    # 2.62.0: el hilo es de un salto y solo por ids abiertos (antes, "hilo-sin-cierre" del cierre
-    # recursivo de 2.57.0). Las dos guardias de ids cerrados son redundantes: se apagan juntas.
-    "hilo-sin-vecino": [("elif ids_rel & semillas:", "elif False:")],
-    "hilo-cruza-cerrados": [("semillas = {i for i in nucleo if i in por_id}", "semillas = set(nucleo)"),
-                            ('ids_rel = {x for x in p["rel"] if x.startswith("p-") and x in por_id}',
-                             'ids_rel = {x for x in p["rel"] if x.startswith("p-")}')],
+    # 2.70.0: el hilo es solo el trabajo propio (se quitaron el salto por `_relacionado`, sus
+    # guardias de ids cerrados y la prioridad del heredado saltado 2+). Cada pieza nueva, apagada o
+    # devuelta a la regla vieja, tumba su aserto de test-hilo-propio.sh o test-hilo-pendientes.sh.
+    "hilo-con-heredados": [('miembros = nuevos | trabajados | {x for x in paso_rec if x.startswith("p-")}',
+                            'miembros = nuevos | trabajados | set(_heredados) | {x for x in paso_rec if x.startswith("p-")}')],
+    "hilo-sin-trabajados": [('trabajados = set(lista(fm.get("hilo_trabajados")))', "trabajados = set()")],
+    "hilo-sin-planes": [('planes = set(lista(fm.get("hilo_planes"))) | {x for x in paso_rec if x.startswith("plan-")}',
+                         'planes = {x for x in paso_rec if x.startswith("plan-")}')],
     "sello-sin-retomamos": [("    if paso is None:", "    if False:")],
-    "hilo-sin-recibido": [('miembros = set(heredados) | nuevos | ids_pp | {x for x in paso_rec if x.startswith("p-")}',
-                           "miembros = nuevos | ids_pp")],
-    "empate-sin-nuevo": [('return 1 if p["id"] in nuevos else 2', "return 2")],
-    "empate-sin-saltos": [('if p["id"] not in nuevos and salt.get(p["id"], 0) >= 2:', "if False:")],
+    "hilo-sin-recibido": [('miembros = nuevos | trabajados | {x for x in paso_rec if x.startswith("p-")}',
+                           "miembros = nuevos | trabajados")],
+    "empate-sin-nuevo": [('p["grupo"] = 1 if p["id"] in nuevos else 2', 'p["grupo"] = 2')],
     "baja-con-alta": [("extras = (altas_medias or elegibles)[:MAX_AFINES]", "extras = elegibles[:MAX_AFINES]")],
     # Que puede ser extra (2.61.0): pendientes_afines.motivo_no_extra y extras_y_quedan.
     "extras-sin-citados": [("citados = citados_fuera_del_paso(ficha_texto)", "citados = set()")],

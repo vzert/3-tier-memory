@@ -6,9 +6,9 @@
 #
 #  1. Liga al nacer: `pendiente.add` en una sesion que arranco con `Retomamos:` queda con
 #     `_relacionado` a los ids del `Proximo paso` recibido, sin que el agente lo pida.
-#  2. Hilo de un salto (2.62.0; en 2.57.0 era recursivo): el vecino directo sale, el de 2 no.
-#  3. Orden: en empate de prioridad el nuevo va antes que el heredado; un heredado saltado 2
-#     sesiones seguidas va antes que el nuevo (checkpoint-audit `snippet.hilo` y stamp-hilo.py).
+#  2. Hilo propio (2.70.0; antes un salto por `_relacionado`): ningun vecino por `_relacionado` entra.
+#  3. Orden: en empate de prioridad el nuevo va antes; desde 2.70.0 un heredado saltado 2
+#     sesiones seguidas ya no va antes que el nuevo (checkpoint-audit `snippet.hilo`).
 #  4. El paso recibido que no se cerro sigue en el hilo aunque nada lo ligue.
 #  5. Hasta 2 extras (la Baja solo sin Alta ni Media) y `quedan N en el hilo: <ids>`.
 #  8. (2.62.0) El hilo no cruza por ids cerrados ni a otro tema: caso real de otro proyecto.
@@ -184,9 +184,9 @@ hilo_base() {
   pend Baja p-4444444444 "la baja de hoy" 2026-10-14-hoy
 }
 
-echo "== 2. hilo de un salto (2.62.0): el vecino directo sale, el de 2 saltos no =="
+echo "== 2. hilo propio (2.70.0): ni el vecino directo ni el de 2 saltos por _relacionado =="
 hilo_base; OUT=$(retomar)
-chk "p-2222222222, vecino directo del paso, esta en el snippet" "1" "$(printf '%s\n' "$OUT" | grep -c 'p-2222222222')"
+chk "p-2222222222, vecino directo del paso por _relacionado, ya no esta (2.70.0)" "0" "$(printf '%s\n' "$OUT" | grep -c 'p-2222222222')"
 chk "p-3333333333, el nieto (2 saltos), no esta" "0" "$(printf '%s\n' "$OUT" | grep -c 'p-3333333333')"
 chk "el suelto sin relacion no" "0" "$(printf '%s\n' "$OUT" | grep -c 'p-9999999999')"
 chk "ni el bloqueado ni el de _revisar futuro" "0" "$(printf '%s\n' "$OUT" | grep -c 'p-5555555555\|p-6666666666')"
@@ -195,7 +195,7 @@ echo "== 4. el paso recibido que no se cerro sigue en el hilo =="
 chk "p-aaaaaaaaaa vuelve como extra" "1" "$(printf '%s\n' "$OUT" | grep '^Si ese paso es corto' | grep -c 'p-aaaaaaaaaa (Alta)')"
 
 echo "== 5. hasta 2 extras (Alta > Media; la Baja no) y quedan N =="
-chk "extras: el recibido Alta y el hermano Media, en ese orden" "1" "$(printf '%s\n' "$OUT" | grep -c '^Si ese paso es corto, suma en la misma sesion: p-aaaaaaaaaa (Alta) — el paso que recibio y no cerro; p-2222222222 (Media) — hermano\.$')"
+chk "extras: solo el recibido Alta (el hermano por _relacionado no es del hilo)" "1" "$(printf '%s\n' "$OUT" | grep -c '^Si ese paso es corto, suma en la misma sesion: p-aaaaaaaaaa (Alta) — el paso que recibio y no cerro\.$')"
 chk "quedan N con el resto, solo ids" "1" "$(printf '%s\n' "$OUT" | grep -c '^quedan 1 en el hilo: p-4444444444\.$')"
 chk "la linea quedan va dentro del fence, tras los extras" "quedan" "$(printf '%s\n' "$OUT" | awk '/^Si ese paso/{f=1;next} f&&NF{print $1; exit}')"
 memoria
@@ -215,7 +215,7 @@ OUT=$(retomar)
 chk "sin Alta ni Media fuera del paso, la Baja entra como extra" "1" "$(printf '%s\n' "$OUT" | grep '^Si ese paso es corto' | grep -c 'p-4444444444 (Baja).*p-7777777777 (Baja)')"
 chk "y no hay linea quedan si no queda nada" "0" "$(printf '%s\n' "$OUT" | grep -c '^quedan')"
 
-echo "== 3. orden: en empate el nuevo antes; el heredado saltado 2 sesiones, antes que el nuevo =="
+echo "== 3. orden: en empate el nuevo antes; desde 2.70.0 'saltado 2 sesiones' ya no adelanta a nadie =="
 empate() {   # $1 = cola de frontmatter con hilo_saltos, $2 = paso
   memoria
   ficha 2026-10-14-hoy "$2" "hilo_paso: p-0000000000\nhilo_heredados: p-0000000000\n$1"
@@ -228,9 +228,9 @@ chk "y nombra al nuevo como el primero" "1" "$(audit | grep -c 'el primero es p-
 empate "hilo_saltos: p-0000000000=1" "Proximo paso: hacer el nuevo (p-1111111111)."
 chk "empate, el paso cita al nuevo: HECHO" "1" "$(audit | grep -c 'HECHO .*snippet.hilo')"
 empate "hilo_saltos: p-0000000000=2" "Proximo paso: hacer el nuevo (p-1111111111)."
-chk "heredado saltado 2 sesiones y el paso cita al nuevo: SALTADO" "1" "$(audit | grep -c 'el primero es p-0000000000 (Alta, heredado saltado 2 sesiones seguidas)')"
+chk "heredado saltado 2 sesiones y el paso cita al nuevo: HECHO (2.70.0)" "1" "$(audit | grep -c 'HECHO .*snippet.hilo')"
 empate "hilo_saltos: p-0000000000=2" "Proximo paso: seguir con lo de ayer (p-0000000000)."
-chk "heredado saltado 2 sesiones y el paso lo cita: HECHO" "1" "$(audit | grep -c 'HECHO .*snippet.hilo')"
+chk "heredado saltado 2 sesiones y el paso lo cita: SALTADO, el nuevo va primero (2.70.0)" "1" "$(audit | grep -c 'el primero es p-1111111111 (Alta, nacido en esta sesion)')"
 memoria
 ficha 2026-10-14-hoy "Proximo paso: la media (p-2222222222)."
 pend Alta p-1111111111 "el alta nueva" 2026-10-14-hoy
@@ -411,7 +411,7 @@ ficha 2026-10-14-hoy "Proximo paso: x." "hilo_paso: p-aaaaaaaaaa\nhilo_heredados
 pend Alta p-aaaaaaaaaa "el paso que recibio y no cerro" 2026-10-13-ayer
 colapsa "Ninguno — no queda nada."
 chk "colapsado con un heredado hacible: SALTADO snippet.hilo" "1" "$(audit | grep -c 'SALTADO .*snippet.hilo')"
-chk "y nombra al heredado como el primero" "1" "$(audit | grep -c 'el primero es p-aaaaaaaaaa (Alta, heredado)')"
+chk "y nombra al paso recibido como el primero" "1" "$(audit | grep -c 'el primero es p-aaaaaaaaaa (Alta, del hilo propio)')"
 memoria
 ficha 2026-10-14-hoy "Proximo paso: x." "hilo_paso: p-aaaaaaaaaa\nhilo_heredados: p-aaaaaaaaaa\nhilo_saltos:"
 pend Alta p-aaaaaaaaaa "el paso recibido, espera" 2026-10-13-ayer " — _bloqueado: otra instalacion_"

@@ -22,6 +22,13 @@ M = {
     "ajeno-memoria-otra-cuenta": [("                        and not _es_memoria((b.get(\"input\") or {}).get(\"file_path\")):",
                                    "                        and True:")],
     "ajeno-cualquier-proyecto": [('glob.escape(base) + "*"', '"*"')],
+    # 2.70.0: recibir un id en los extras del snippet no es trabajarlo; el audit bloquea desde
+    # DESDE_PASO_PROPIO; un id del hilo propio no es ajeno.
+    "ajeno-extras-cuentan": [("                    if paso_recibido is not None and k == primero and i not in paso_recibido:",
+                              "                    if False:")],
+    "audit-no-bloquea": [("            bloquea = fecha_ficha >= DESDE_PASO_PROPIO", "            bloquea = False")],
+    "audit-hilo-no-libra": [("for i in ids_paso if propio and not propio[i][0] and i not in del_hilo]",
+                             "for i in ids_paso if propio and not propio[i][0]]")],
     # checkpoint-audit.py
     "audit-sin-paso-no-trabajado": [("            elif ajenos:", "            elif False:")],
     "audit-ilegible-afirma": [("            if propio is None:", "            if False:")],

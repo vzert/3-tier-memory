@@ -42,7 +42,9 @@ PEND = """# Pendientes
 
 FICHA_VIEJA = "# a\n\n## Como retomar\n\nProximo paso: hacer p-5555555555\n"
 # 0.3.1: el hilo es el de la ficha de ESTA ventana; la b la escribio la sesion "sb".
-FICHA = "---\nsession_id: sb\n---\n# b\n\n## Como retomar\n\n```\nRetomamos: x\nProximo paso: implementar p-aaaaaaaaaa ya\n```\n"
+# 3-tier-memory 2.70.0: el hilo es solo el trabajo propio de la sesion; el ligado entra porque la
+# ficha dice que la sesion lo trabajo (`hilo_trabajados`), no por `_relacionado`.
+FICHA = "---\nsession_id: sb\nhilo_trabajados: p-bbbbbbbbbb\n---\n# b\n\n## Como retomar\n\n```\nRetomamos: x\nProximo paso: implementar p-aaaaaaaaaa ya\n```\n"
 
 
 def correr(mem, lib, *extra):
@@ -223,15 +225,16 @@ def main():
         check("ventana nueva: vence y alta siguen", any(i["grupo"] == "vence" for i in dv["items"]))
         check("sin --session-id: sin hilo",
               sin["ficha"] is None and all(i["grupo"] != "hilo" for i in sin["items"] + sin["resto"]))
-        # Una ventana sin ficha cuyos prompts citan un id: ese id hace de paso y su hilo sale
-        # (decision 2A de Victor: "ids en sus prompts o su ficha"). p-aaaaaaaaaa liga a p-bbbbbbbbbb.
+        # Una ventana sin ficha cuyos prompts citan un id: ese id hace de paso (decision 2A de
+        # Victor: "ids en sus prompts o su ficha"). p-aaaaaaaaaa liga a p-bbbbbbbbbb, pero desde
+        # 3-tier-memory 2.70.0 un ligado por `_relacionado` no entra solo al hilo.
         transcripcion("solo-ids", [u("mira p-aaaaaaaaaa por favor")], hace=0)
         di = correr(mem, lib, "--session-id", "solo-ids", "--projects-root", raiz, "--max", "20")
         gi = {i["id"]: i for i in di["items"] + di["resto"]}
-        check("ventana con un id citado: el id es el paso y su ligado sale en el hilo",
+        check("ventana con un id citado: el id es el paso y su ligado no entra solo al hilo",
               di["ficha"] is None and (gi.get("p-aaaaaaaaaa") or {}).get("grupo") == "hilo"
               and (gi.get("p-aaaaaaaaaa") or {}).get("motivo") == "proximo paso"
-              and (gi.get("p-bbbbbbbbbb") or {}).get("grupo") == "hilo")
+              and (gi.get("p-bbbbbbbbbb") or {}).get("grupo") != "hilo")
         check("ventana con un id citado: el id tambien sale en curso aqui",
               ((gi.get("p-aaaaaaaaaa") or {}).get("en_curso") or {}).get("donde") == "aqui")
         transcripcion("id-cerrado", [u("y p-fedcba9876 y p-0123456789, que no existen")], hace=0)

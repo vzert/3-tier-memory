@@ -29,9 +29,6 @@ M = {
     "audit-compartido-cualquier-dia": [('fecha_ficha + "-*.md"', '"*.md"')],
     # checkpoint-close-guard.sh
     "guard-sin-compartido": [("        if avisos_compartido:", "        if False:")],
-    # print-pendiente-opcional.py
-    "opcional-con-alta": [("        elegidos = vencidos[:2]",
-                           "        elegidos = vencidos[:2] or [p for p in vivos if p[2] == \"Alta\"][:1]")],
 }
 
 p, nombre = sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else ""

@@ -1,5 +1,53 @@
 # Changelog
 
+## [2.70.0] - 2026-11-11
+El snippet de retomar (Step 8) ya solo propone trabajo del hilo PROPIO de la sesion. Auditoria de
+otro proyecto (2026-11-10/11): una sesion de secretos de n8n recibio en los extras de su snippet 9
+pendientes "saltados 2 sesiones", solo trabajo su paso, y su hilo puso primero un Alta de rotar
+llaves IAM que nunca toco; otras dos sesiones dejaron de paso el pendiente "paraguas" del plan que
+otra ventana estaba trabajando. Dos ventanas terminaron sobre el mismo pendiente. Decisiones de
+Victor del 2026-11-11.
+
+### Changed
+- `pendientes_afines.hilo()`: el hilo es lo que nacio en la sesion, el `Proximo paso` que recibio,
+  lo que trabajo (`hilo_trabajados`) y los pendientes de los planes cuyo archivo edito
+  (`hilo_planes`). Ya no entran: los extras y `quedan N` heredados que no toco, los vecinos por
+  `_relacionado`, el paso que la propia ficha escribe (hacia circular el chequeo) ni el plan de
+  cualquier pieza ligada. Se quita la prioridad del heredado "saltado 2+ sesiones".
+- `stamp-hilo.py` escribe `hilo_trabajados` y `hilo_planes` en cada corrida (tambien en un
+  re-checkpoint con el sello puesto y sin `Retomamos:`).
+- `paso_ajeno.trabajo_propio(…, paso_recibido)`: recibir un id en los extras o en `quedan N` del
+  snippet ya no cuenta como trabajarlo; el paso recibido si. `paso_ajeno.planes_editados()` nuevo.
+- `checkpoint-audit.py`: `snippet.paso_no_trabajado` y `snippet.paso_otra_ventana` bloquean
+  (`SALTADO`) en fichas desde 2026-11-11; antes eran avisos. Un id del hilo propio no es ajeno.
+- `print-pendiente-opcional.py`: la capa ➕ (vencidos de cualquier plan bajo un snippet `ninguno`)
+  ya no sale. La cabecera del 🔔 dice `recordatorio del proyecto, no es paso de este hilo`.
+- Step 8 (`templates/checkpoint-3t-step8.md`) y `templates/checkpoint-3t.md`: la regla nueva; si el
+  hilo queda vacio, `ninguno — no queda trabajo de este hilo`.
+
+### Fixed
+- `paso_ajeno._registros`/`_bloques` saltan una linea o un `message` que no es objeto (stamp-hilo.py
+  pasa ahora por ahi).
+
+### Tests
+- `test-hilo-propio.sh` (nuevo, 22 asertos; 14 salen rojos contra 2.69.3): la forma del caso real,
+  lo trabajado, los planes editados, el refresco del sello, el bloqueo del audit y la capa ➕.
+- `test-hilo-pendientes.sh`, `test-hilo-hermanos.sh`, `test-pendiente-relacionado.sh`,
+  `test-print-pendiente-opcional.sh`, `test-aviso-pendiente-otra-ventana.sh` y el del mod
+  `pendientes` (`test_pendientes_ahora.py`) pasan a la regla nueva: lo que antes entraba por
+  `_relacionado` o por plan compartido ahora entra por `hilo_trabajados`/`hilo_planes`, y los
+  casos de la regla vieja quedan como negativos.
+- `tools/mutation-check.sh`: fuera las mutaciones del codigo quitado (vecino directo, ids cerrados,
+  saltado 2, capa ➕, opcional con Alta, aviso en el opcional); nuevas: `hilo-con-heredados`,
+  `hilo-sin-trabajados`, `hilo-sin-planes`, `capa3-vuelve`, `ajeno-extras-cuentan`,
+  `audit-no-bloquea`, `audit-hilo-no-libra`.
+
+### Notas
+- El panel del mod `pendientes` ("relacionado al trabajo actual") usa el mismo `hilo()`, asi que
+  ya no muestra los ligados por `_relacionado` que la sesion no trabajo.
+- No cubre dos ventanas que toman a la vez el mismo pendiente PROPIO: queda como pendiente aparte
+  (un "tomado por").
+
 ## [2.69.3] - 2026-10-29
 La guarda `ambiguous` de `learning.patch` no tenia prueba: si una regresion la quitaba, un prefijo
 que casa con dos reglas parchearia la primera en silencio (p-effa16d8b6). Y el pie del recall solo

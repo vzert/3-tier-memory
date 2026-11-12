@@ -158,16 +158,21 @@ Reglas para llenar los slots:
      regla de `<contexto-1-linea>`, arriba — no se repite aqui.)
   2. **El primero del hilo** (2.57.0, p-b282a8cfc4, regla de Victor del 2026-10-13). Correlo:
      `python3 "$JBIN/pendientes_afines.py" "$SESSION_FILE" --hilo` (desde 2.61.0 marca
-     `[no va de extra: <motivo>]` lo que no saldra en la linea de extras; ver abajo). El hilo es lo que la sesion
-     recibio en su snippet (sello de 5c-bis), lo que nacio en ella y sus vecinos DIRECTOS por
-     `_relacionado`, en cualquier direccion: un solo salto, y solo por ids abiertos (2.62.0, regla
-     de Victor del 2026-10-15; reemplaza el "a cualquier distancia" de 2.57.0, que en un
-     proyecto real llevo en 7 saltos a una sesion de indices al trabajo que llevaba otro
-     agente). Solo lo que se puede hacer hoy. **Si el hilo sale vacio, el paso es el caso 5**
-     (`ninguno — <motivo>, ver Recordatorios de calendario`): no lo llenes con trabajo de otro hilo
-     o de otro agente, aunque sea Alta y este a la vista.
-     Orden: prioridad; en empate el nuevo antes que el heredado, salvo un heredado que lleva 2
-     sesiones seguidas sin ser el paso, que va primero. El paso recibido que no cerraste sigue ahi.
+     `[no va de extra: <motivo>]` lo que no saldra en la linea de extras; ver abajo). Desde 2.70.0
+     (decision de Victor del 2026-11-11) el hilo es **solo el trabajo propio de la sesion**: lo
+     que nacio en ella, el `Proximo paso` que recibio en su snippet, lo que trabajo (lo creo, lo
+     pidio el usuario, lo corrigio o cerro, o edito algo que lo nombra, fuera del cierre) y los
+     pendientes de los planes cuyo archivo edito (sello de 5c-bis: `hilo_paso`,
+     `hilo_trabajados`, `hilo_planes`). **No** son del hilo: los extras y `quedan N` que el
+     snippet anterior te paso y no tocaste, los vecinos por `_relacionado`, el pendiente
+     "paraguas" de un plan del que solo hiciste una pieza, ni lo que lleva otra ventana. Solo lo
+     que se puede hacer hoy. **Si el hilo sale vacio, el paso es el caso 5**
+     (`ninguno — no queda trabajo de este hilo`, o el motivo que aplique): dilo claro y no lo
+     llenes con un pendiente de otro plan o de otro agente, aunque sea Alta y este a la vista. Un
+     `_retomar` de hoy que apunta a otra ficha dice que ese pendiente ya lo lleva otra sesion.
+     Orden: prioridad; en empate el nuevo antes que el resto (la prioridad del heredado "saltado 2
+     sesiones" se quito en 2.70.0: en el caso real puso como paso, en una sesion de secretos de
+     n8n, unas llaves IAM que nunca toco, y dos ventanas acabaron sobre el mismo pendiente).
      `checkpoint-audit.py` (`snippet.hilo`) marca `SALTADO` un paso cuyo primer id sea de menor rango.
   3. **(Absorbido por el 2 en 2.57.0.)** "El existente de mayor prioridad relacionado con el trabajo"
      es ahora el hilo: si el hilo esta vacio, no hay caso 3; es el caso 5.
@@ -334,10 +339,12 @@ Reglas para llenar los slots:
   lleva; si lo lleva, rehaz tu paso o usa `ninguno — lo lleva <ficha>` (caso real de otro proyecto,
   2026-10-20, dos cierres con 23 s de diferencia). Desde 2.63.43 la revision del cierre avisa
   tambien (POR-DISEÑO) si el `Retomamos:` y el `Proximo paso` citan pendientes distintos sin liga
-  (`snippet.titulo_paso`), si esta sesion no recibio, no creo y no trabajo el `p-…` del paso — solo
-  lo ligo, desbloqueo, fecho o corrigio en el cierre — (`snippet.paso_no_trabajado`), o si otra ventana del proyecto
-  corrio comandos con el en las ultimas 2 h y no ha cerrado (`snippet.paso_otra_ventana`). Rehaz el
-  paso con el siguiente de tu hilo o `ninguno — <motivo>`, o di en la revision por que se queda.
+  (`snippet.titulo_paso`), si esta sesion no recibio como paso, no creo y no trabajo el `p-…` del
+  paso — solo lo ligo, desbloqueo, fecho o corrigio en el cierre, o le llego en los extras del
+  snippet — (`snippet.paso_no_trabajado`), o si otra ventana del proyecto corrio comandos con el en
+  las ultimas 2 h y no ha cerrado (`snippet.paso_otra_ventana`). Desde 2.70.0 estos dos ultimos
+  **bloquean** (`SALTADO`, decision de Victor del 2026-11-11): rehaz el paso con el siguiente de tu
+  hilo o `ninguno — no queda trabajo de este hilo` / `ninguno — lo lleva otra sesion`.
   Desde 2.64.0 la revision avisa tambien (todos no bloquean, cruzan por ids y campos): si el pendiente
   del 🔔 lo toco otra ventana en las ultimas 2 h (linea `⚠` del 🔔, el hook no la exige pegar);
   si editaste un plan, handoff o ficha ajena con pendientes abiertos y no actualizaste ni cerraste
@@ -499,7 +506,7 @@ python3 "$JBIN/print-como-retomar.py" "$SESSION_FILE"
 8b, ni la de 8e, ni la de 8c. Corre el script igual: comprueba que 8a lleno la seccion. Termina el
 turno con el reporte de Step 7. Al terminar, el hook de cierre te pide la revision del cierre
 (`REVISION DEL CIERRE:`; desde 2.59.0 en un archivo que su aviso te dice leer con Read). Tu respuesta a esa revision termina con estos bloques, en este orden,
-**una sola vez y sin nada despues**: 🔁 snippet (8b), 🔔 o ➕ pendiente (8e) y 🗓️ calendario (8c),
+**una sola vez y sin nada despues**: 🔁 snippet (8b), 🔔 pendiente (8e) y 🗓️ calendario (8c),
 cada uno solo si su script imprime algo (desde 2.44.0). El hook te da los comandos con la ruta
 literal de la ficha. Asi el cierre es lo ultimo que ve el usuario y ya trae lo
 que corregiste en la revision. Medido en los 4 cierres reales con revision (2026-09-30): pegado
@@ -508,7 +515,7 @@ lo repitio. Fuera de `/checkpoint-3t` (por ejemplo, rehacer el snippet despues d
 pendiente que cita) no hay revision: pegalo en el acto, como ultimo bloque.
 
 **Pega su salida tal cual, sin resumirla ni reformularla**, como el primer bloque del cierre. El
-cierre (🔁 8b, 🔔/➕ 8e y 🗓️ 8c, en ese orden) va seguido y al final de tu respuesta; en
+cierre (🔁 8b, 🔔 8e y 🗓️ 8c, en ese orden) va seguido y al final de tu respuesta; en
 `/checkpoint-3t`, al final de tu respuesta a la revision del cierre. El script ya decide el formato
 correcto por ti — `🔁 Como retomar: Ninguno — …` en una linea si el caso 5 aplica; si no, la
 cabecera `🔁 Siguiente sesión — copia y pega:` y el snippet dentro de un fence ``` — leyendo el
@@ -517,7 +524,7 @@ divergir de la primera, porque no hay una segunda redaccion: hay una lectura.
 
 **Menos texto, un emoji por bloque, solo Retomamos en color (2.44.0).** Victor (2026-10-01),
 mirando un cierre real: demasiado texto, y los mismos prompts opcionales se repetian sesion tras
-sesion. Cada bloque abre con su emoji (🔁 retomar, 🔔 vence hoy, ➕ opcional, 🗓️ calendario) para
+sesion. Cada bloque abre con su emoji (🔁 retomar, 🔔 vence hoy, 🗓️ calendario) para
 ver de un vistazo donde empieza, sin separadores `───` ni frases de introduccion. Solo el snippet va
 en un fence, que en la terminal sale en color: es el bloque principal. El resto va sin fence.
 
@@ -732,7 +739,7 @@ que la ficha enlaza. Victor (2026-10-01): no le servian, y repetian lo que ya ll
   marca `[x]` (implementada o `-- declinado: motivo`). Si no tiene pendiente, proponlo en Step 3b;
   si el usuario lo guarda, pon su id en la linea del research, y si lo descarta, marcala
   `[x] … -- declinado: descartado por el usuario`. Ese pendiente es el que sale despues en las capas del cierre
-  (🔔 si vence hoy, ➕ si toca) o en el calendario: la recomendacion no se pierde, que es el caso
+  (🔔 si vence hoy) o en el calendario: la recomendacion no se pierde, que es el caso
   del 2026-09-17 por el que existia este paso (una sesion implemento 1 de 4 recomendaciones y las
   otras 3 no salieron en ningun lado).
 - Para ver cuales faltan: `python3 "$JBIN/print-research-recomendaciones.py" "$SESSION_FILE"` (su
@@ -740,7 +747,7 @@ que la ficha enlaza. Victor (2026-10-01): no le servian, y repetian lo que ya ll
   `research.recomendaciones` si alguna sin marcar no cita un pendiente abierto, o si un wikilink de
   `## Research` esta roto.
 
-**8e. El pendiente del cierre: 🔔 vence hoy o ➕ opcional (capas desde 2.44.0)**:
+**8e. El pendiente del cierre: 🔔 vence hoy (la capa ➕ se quito en 2.70.0)**:
 
 ```bash
 python3 "$JBIN/print-pendiente-opcional.py" "$SESSION_FILE"
@@ -750,21 +757,16 @@ python3 "$JBIN/print-pendiente-opcional.py" "$SESSION_FILE"
 imprime nada, no hay nada que pegar. Es para el humano: un prompt completo (proyecto, pendiente con
 su id, ficha de origen, clausula de cierre) que puede abrir en otra sesion.
 
-El cierre va en capas (Victor, 2026-10-01): 1) Retomamos, siempre; 2) el pendiente que vence HOY;
-3) el opcional. El script imprime a lo sumo uno de los dos bloques, porque la capa 3 exige que no
-venza ninguno hoy:
+El cierre va en capas (Victor, 2026-10-01): 1) Retomamos, siempre; 2) el pendiente que vence HOY.
 
 - **🔔 Vence hoy.** Un pendiente con `_revisar` igual a hoy — los ya vencidos no. Sale con cualquier
   snippet, para que no pase desapercibido. Si vencen varios, uno cada vez: el de mayor prioridad y,
-  dentro de ella, la fila mas arriba.
-- **➕ Opcional.** Solo si el snippet es el caso 5 (`🔁 Como retomar: Ninguno — …`) y no vence
-  ninguno hoy. Hasta 2 vencidos (`_revisar` anterior a hoy), el mas viejo primero; si no hay
-  ninguno vencido, no sale nada. Hasta 2.63.17 salia entonces el Alta con `_creado` mas reciente;
-  desde 2.63.22 no (Victor, d265-d266): sin relacion con la sesion, el mismo Alta salia en cada
-  cierre hasta que alguien lo cerraba (uno de otro agente, 14 veces en 10 sesiones de otro proyecto).
-
-Por que capas: hasta 2.43.0 el prompt opcional salia en cada cierre, y los mismos dos vencidos se
-repetian durante varias sesiones. Ahora solo sale cuando la sesion no deja nada que retomar.
+  dentro de ella, la fila mas arriba. Su cabecera dice `recordatorio del proyecto, no es paso de
+  este hilo` (2.70.0): es para el humano, no es trabajo de esta sesion ni su `Proximo paso`.
+- **➕ Opcional: ya no sale (2.70.0, decision de Victor del 2026-11-11).** Ponia, debajo de un
+  snippet `ninguno`, hasta 2 pendientes vencidos de cualquier plan. Un hilo que termino debe decir
+  que no queda nada suyo, no ofrecer trabajo de otro hilo: el backlog lo muestran el sidebar de
+  pendientes y el recall por peticion.
 
 El script elige por campos de `_pendientes.md` y por la forma de `## Como retomar`, nunca por el
 texto (regla 216). Nunca propone un pendiente con `_bloqueado:` sin `_revisar`, uno con `_revisar`

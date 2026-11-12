@@ -32,9 +32,9 @@ suma en la misma sesion: …` con hasta 2 pendientes del hilo. Se calcula EN VIV
 `_pendientes.md`, igual que el bloque de Step 8e: no se guarda en la ficha, y el hook de cierre,
 que vuelve a correr este script, compara contra el estado real. Si la ficha ya trae esa linea
 (escrita a mano), no se duplica.
-Hilo (2.57.0, p-b282a8cfc4; de un salto desde 2.62.0): lo que la sesion recibio, sellado por
-stamp-hilo.py; lo que nacio en ella; y sus vecinos DIRECTOS por `_relacionado`, solo por ids
-abiertos (el cierre transitivo de 2.57.0 cruzaba al trabajo de otro agente). En 2.55.0 los extras
+Hilo (2.57.0, p-b282a8cfc4; solo el trabajo propio desde 2.70.0): lo que nacio en la sesion, el
+paso que recibio y lo que trabajo, sellados por stamp-hilo.py, y los pendientes de los planes que
+edito. Lo heredado sin tocar y los vecinos por `_relacionado` ya no entran. En 2.55.0 los extras
 salian solo de `_relacionado`. Debajo va `quedan N en el hilo: <ids>` con lo que no entro. Ver
 pendientes_afines.py, "El hilo".
 Si la seccion esta vacia o dice solo el placeholder (`<filled in Step 8>`), no imprime nada y
@@ -53,7 +53,7 @@ for _flujo in (sys.stdout, sys.stderr):
         _flujo.reconfigure(encoding="utf-8")
 
 # Un emoji por tipo de bloque del cierre (2.44.0, elegidos por Victor): 🔁 retomar, 🔔 vence hoy y
-# ➕ opcional (print-pendiente-opcional.py), 🗓️ calendario (print-recordatorios.py).
+# ➕ opcional (print-pendiente-opcional.py; ya no sale desde 2.70.0), 🗓️ calendario (print-recordatorios.py).
 CABECERA = "🔁 Siguiente sesión — copia y pega:"
 LINEA_CASO5 = "🔁 Como retomar:"
 FENCE = "```"

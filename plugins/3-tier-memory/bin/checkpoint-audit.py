@@ -177,6 +177,10 @@ DESDE_NINGUNO_PLAN = "2026-10-21"
 DESDE_BLOQUEADO_FECHA = "2026-10-20"
 # snippet.hilo_externo (2.67.0): incluye el caso real (2026-10-26).
 DESDE_HILOS = "2026-10-26"
+# snippet.paso_no_trabajado y snippet.paso_otra_ventana bloquean (SALTADO) desde 2.70.0 (decision de
+# Victor del 2026-11-11, tras una auditoria de otro proyecto: dos ventanas sobre el mismo pendiente
+# ajeno). Una ficha anterior se re-audita con los avisos de antes (POR-DISENO).
+DESDE_PASO_PROPIO = "2026-11-11"
 CONFIG_HILOS_ROTA = ("`.hilos-externos.json` no se pudo leer (JSON o regex invalido, sin `fuentes`, o "
                      "una fuente sin `leer` con `{id}`)")
 CONFIG_HILOS_FORMA = ("arregla el fichero: {\"fuentes\": [{\"nombre\": …, \"patron\": <regex con un "
@@ -1479,8 +1483,8 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                               "`Proximo paso:` es caso 1, 5, o un pendiente registrado e inmediato"))
 
     # 8-ter-bis. El paso es el primero del hilo (2.57.0, p-b282a8cfc4, regla 3 de Victor): el de
-    # mayor prioridad; en empate el nuevo antes que el heredado, salvo el heredado que lleva 2
-    # sesiones seguidas saltado (`hilo_saltos`). Solo cuenta (prioridad, grupo): entre dos del mismo
+    # mayor prioridad; en empate el nuevo antes que el resto (desde 2.70.0 sin la prioridad del
+    # heredado "saltado 2+ sesiones", y el hilo es solo el propio). Solo cuenta (prioridad, grupo): entre dos del mismo
     # rango el agente elige. El caso 1 (plan activo citado) va antes que el hilo. Todo sale de
     # campos (el sello, `_origen`, `_relacionado`, `_bloqueado`, `_revisar`), no del texto.
     # El caso 5 colapsado (`Ninguno — …` sin bloque) es el mismo `ninguno` que dentro del bloque y
@@ -1510,8 +1514,7 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                 h.append(Hallazgo(HECHO, "snippet.hilo",
                                   f"`Proximo paso:` es el primero del hilo ({len(orden)} hacibles)"))
             else:
-                motivo = {0: "heredado saltado 2 sesiones seguidas", 1: "nacido en esta sesion",
-                          2: "heredado"}[primero["grupo"]]
+                motivo = {1: "nacido en esta sesion", 2: "del hilo propio"}[primero["grupo"]]
                 h.append(Hallazgo(SALTADO, "snippet.hilo",
                                   "el bloque colapsado (`Ninguno — …`) deja sin paso un pendiente "
                                   "hacible del hilo" if colapsado else
@@ -1897,8 +1900,8 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     # sesion no trabajo (heredado, ligado o desbloqueado en el cierre), y en 3 otra ventana viva ya
     # lo llevaba. Caso real: otro proyecto, 2026-10-22, un titulo con un pendiente y un paso con
     # otro, que la sesion solo desbloqueo, ligo "para que entre al hilo del snippet" y marco,
-    # mientras otra ventana corria comandos con ese id. Los tres son
-    # POR-DISENO (aviso en la revision del cierre, no suman rechazo): leen ids, no trabajo.
+    # mientras otra ventana corria comandos con ese id. Eran POR-DISENO (aviso en la revision del
+    # cierre); desde 2.70.0 (DESDE_PASO_PROPIO) paso_no_trabajado y paso_otra_ventana son SALTADO.
     if pp is not None and fecha_ficha and fecha_ficha >= DESDE_PASO_AJENO \
             and "<filled in Step 8>" not in sec_retomar \
             and not re.match(r"(ninguno|nada accionable)", pp, re.I):
@@ -1931,30 +1934,53 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                               "no aplica: el titulo no cita pendiente, o cita el del paso"))
         if transcript and ids_paso:
             pa = _paso_ajeno_mod()
-            propio = pa.trabajo_propio(transcript, ids_paso)
+            af_p = _afines_mod()
+            bloquea = fecha_ficha >= DESDE_PASO_PROPIO
+            nivel = SALTADO if bloquea else DISENO
+            nota = "" if bloquea else " (aviso, no bloquea)"
+            # 2.70.0: el paso recibido es la tarea de la sesion; los extras y `quedan N` del snippet
+            # no (paso_ajeno.trabajo_propio, `paso_recibido`). Del sello si esta; si no, de la
+            # transcripcion. Y un id del hilo propio (pendientes_afines.hilo: p. ej. de un plan que
+            # la sesion edito) tampoco es ajeno.
+            recibido = None
+            if bloquea:
+                sello_paso = af_p.sello(texto)[0]
+                if sello_paso:
+                    recibido = {x for x in sello_paso if x.startswith("p-")}
+                else:
+                    snip = af_p.snippet_de_transcripcion(transcript)
+                    if snip:
+                        recibido = {x for x in af_p.recibido(snip)["paso"] if x.startswith("p-")}
+            propio = pa.trabajo_propio(transcript, ids_paso, recibido)
+            del_hilo = set()
+            if bloquea and os.path.exists(os.path.join(memory_dir, "_pendientes.md")):
+                del_hilo = {p["id"] for p in af_p.hilo(texto, os.path.join(memory_dir, "_pendientes.md"),
+                                                       slug, ref)}
             ajenos = [f"{i}: {', '.join(propio[i][1]) or 'no aparece en ningun comando de la sesion'}"
-                      for i in ids_paso if propio and not propio[i][0]]
+                      for i in ids_paso if propio and not propio[i][0] and i not in del_hilo]
             if propio is None:
                 # Transcript ilegible o vacio: falla abierto, sin aviso y sin afirmar que lo trabajo.
                 h.append(Hallazgo(HECHO, "snippet.paso_no_trabajado",
                                   "no aplica: el transcript de la sesion no se pudo leer"))
             elif ajenos:
-                h.append(Hallazgo(DISENO, "snippet.paso_no_trabajado",
+                h.append(Hallazgo(nivel, "snippet.paso_no_trabajado",
                                   f"{len(ajenos)} pendiente(s) del `Proximo paso` que esta sesion no "
-                                  "creo, no recibio y no trabajo fuera del cierre (aviso, no bloquea)",
+                                  "creo, no recibio como paso y no trabajo fuera del cierre" + nota,
                                   ajenos,
                                   corrige="el paso es el trabajo de este hilo: si no lo trabajaste, "
-                                          "usa el siguiente de tu hilo o `ninguno — <motivo>`; ligarlo, "
-                                          "desbloquearlo o marcarlo en el cierre no lo hace tuyo"))
+                                          "usa el siguiente de tu hilo (pendientes_afines.py --hilo) o "
+                                          "`ninguno — no queda trabajo de este hilo`; recibirlo en los "
+                                          "extras del snippet, ligarlo, desbloquearlo o marcarlo en el "
+                                          "cierre no lo hace tuyo"))
             else:
                 h.append(Hallazgo(HECHO, "snippet.paso_no_trabajado",
                                   "esta sesion trabajo cada pendiente del `Proximo paso`"))
             otras = pa.otras_ventanas(transcript, ids_paso)
             choques = [f"{i}: {', '.join(v)}" for i, v in otras.items() if v]
             if choques:
-                h.append(Hallazgo(DISENO, "snippet.paso_otra_ventana",
+                h.append(Hallazgo(nivel, "snippet.paso_otra_ventana",
                                   f"otra sesion del proyecto corrio comandos con {len(choques)} "
-                                  "pendiente(s) del `Proximo paso` en las ultimas 2 h y no ha cerrado (aviso, no bloquea)",
+                                  "pendiente(s) del `Proximo paso` en las ultimas 2 h y no ha cerrado" + nota,
                                   choques,
                                   corrige="pregunta por SendMessage (ListAgents) si esa ventana lo "
                                           "lleva; si lo lleva, `ninguno — lo lleva otra sesion` o el "

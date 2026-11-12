@@ -7,7 +7,7 @@
 # (paso_ajeno.otras_ventanas). Ids y textos inventados: el repo es publico.
 # Lo que tiene que cumplir:
 # - positivo: otra ventana viva con el id -> el 🔔 sigue y lleva la linea ⚠;
-# - negativo: otra ventana que ya cerro, un comando de hace 3 h, sin transcript, o ➕ -> sin ⚠;
+# - negativo: otra ventana que ya cerro, un comando de hace 3 h, sin transcript, o sin 🔔 -> sin ⚠;
 # - el 🔔 nunca se suprime ni cambia de pendiente por el aviso.
 set -e
 BIN="$(cd "$(dirname "$0")" && pwd)"
@@ -68,8 +68,8 @@ armar; otra "$TP/otra.jsonl" viva
 printf '# Pendientes\n\n## Alta prioridad\n\n- [ ] Vencido sin huellas — _creado: 2026-10-01_ — _revisar: 2026-10-20_ — _id: p-2a2a2a2a2a_\n' > "$M/_pendientes.md"
 printf -- '---\ntype: session\ndate: 2026-10-24\n---\n# Demo\n\n## Como retomar\n\nNinguno — la sesion cerro sola.\n\n## Related\n' > "$F"
 O=$(out --transcript "$TP/propia.jsonl")
-chk "el ➕ opcional no lleva ⚠" "0" "$(n_alerta "$O")"
-chk "el ➕ sale" "1" "$(printf '%s' "$O" | grep -c '^➕')"
+chk "sin 🔔 no hay ⚠" "0" "$(n_alerta "$O")"
+chk "el ➕ ya no sale (2.70.0)" "0" "$(printf '%s' "$O" | grep -c '^➕')"
 
 echo
 echo "RESULTADO: $pass ok, $fail fallas"

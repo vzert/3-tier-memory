@@ -129,8 +129,9 @@ If a user asks you to install this mod, follow these steps:
    of these, and SIGUIENTE and RELACIONADO do not show: until 0.3.0 they came from the newest
    session file of the project, which is usually another live window's (it shows in PLANES
    ACTIVOS).
-2. **RELACIONADO AL TRABAJO ACTUAL** — the thread of that session file (`_relacionado` links,
-   shared plans, items created in it), as 3-tier-memory's `hilo()` computes it.
+2. **RELACIONADO AL TRABAJO ACTUAL** — the thread of that session file as 3-tier-memory's
+   `hilo()` computes it: since 3-tier-memory 2.70.0 only the session's own work (items created in
+   it, the step it received, items it worked, items of plans whose file it edited).
 3. **VENCEN** — `_revisar` today or past: Alta first, then the oldest. Only real dates: until
    0.3.0 the `_retomar` marks showed here too, and a parked plan read like a due item. An item
    with a future `_revisar` waits.
