@@ -60,8 +60,8 @@ FENCE = "```"
 
 
 def es_caso5(body):
-    """El snippet colapsado del caso 5: `## Como retomar` lleno y SIN bloque de codigo. Lo usa
-    tambien print-pendiente-opcional.py para decidir la capa opcional: un solo detector."""
+    """El snippet colapsado del caso 5: `## Como retomar` lleno y SIN bloque de codigo. Lo usaba
+    print-pendiente-opcional.py para la capa opcional ➕, que se quito en 2.70.0."""
     return bool(body) and body != "<filled in Step 8>" and not FENCE_RE.match(body)
 
 

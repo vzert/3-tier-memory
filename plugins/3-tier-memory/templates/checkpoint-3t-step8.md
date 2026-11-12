@@ -386,8 +386,9 @@ Reglas para llenar los slots:
   y de los Alta de otras sesiones. Victor (2026-09-23) la senalo como inutil en los dos extremos:
   el agente que recibe el snippet solo actua sobre `Proximo paso`, y al humano una lista de ids no
   le da nada que hacer. Los pendientes propios siguen en `## Pendientes` de la ficha, que la linea
-  `Lee …` manda leer. Lo que se podia hacer ya con esa lista lo cubre ahora el prompt opcional de
-  **Step 8e**: un prompt completo para otra sesion, sobre un pendiente que vence hoy o uno vencido.
+  `Lee …` manda leer. Lo que se podia hacer ya con esa lista lo cubrio el prompt de **Step 8e**: un
+  prompt completo para otra sesion, sobre un pendiente que vence hoy (el de uno vencido, la capa ➕,
+  se quito en 2.70.0).
   La medicion que la sostenia (2026-09-11: los pendientes mencionados en el snippet cerraban el 35%
   frente al 19%) no separaba el efecto de la linea del hecho de que el agente elige para el snippet
   lo que ya ve mas accionable; `p-cd965754ec` se redefinio para medir el prompt opcional.
@@ -422,7 +423,7 @@ condicionales, no opcionales: si la informacion existe, la linea va.
 usuario que sigue abierta es trabajo que retomar), reemplaza el
 placeholder `<filled in Step 8>` con UNA linea, sin bloque de codigo — sin excepcion por
 pendientes Alta del backlog general (esos no entran aqui: los muestran el sidebar de pendientes y el
-recall por peticion, y uno de ellos puede salir en el prompt opcional de Step 8e):
+recall por peticion, y uno que vence hoy sale en el 🔔 de Step 8e como recordatorio del proyecto):
 
 ```markdown
 ## Como retomar
