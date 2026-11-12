@@ -75,7 +75,8 @@ def fecha_futura(texto, hoy):
     Es la red de 2.56.0 para el trabajo que espera una fecha y no trae `_revisar`. La usan la
     linea de afines (excluye el pendiente) y checkpoint-audit.py (`snippet.proximo_paso`). No ve
     fechas escritas de otra forma ("manana", "14-oct", "tras la revision"): esas siguen
-    dependiendo de que el pendiente nazca con `--revisar` o `_bloqueado:`."""
+    dependiendo de que el pendiente nazca con `--revisar` o `_bloqueado:`, salvo las dos formas
+    de `espera_uso` (2.71.0: "los proximos dias", medir la version recien publicada)."""
     texto = texto or ""
     for m in FECHA_ISO.finditer(texto):
         f = m.group(1)
@@ -147,7 +148,10 @@ def espera_uso(paso, ficha_texto=""):
     """Por que `paso` espera uso real o tiempo y no se puede hacer en la sesion siguiente, o None.
 
     Red de FORMATO (ver ESPERA_TIEMPO). La usa checkpoint-audit.py (`snippet.proximo_paso`, SALTADO
-    desde DESDE_ESPERA_USO) y journal-emit.py (aviso al nacer un pendiente sin `--revisar`)."""
+    desde DESDE_ESPERA_USO) y journal-emit.py (aviso al nacer un pendiente sin `--revisar`).
+    `ficha_texto=None` es "no hay ficha todavia" (un `pendiente.add` que corre antes de que exista
+    la ficha de su `--origen`, como el del caso real): entonces cualquier version que el texto mida
+    cuenta, y el motivo lo dice como pregunta. Solo journal-emit, que solo avisa, la llama asi."""
     p = _sin_tildes(paso or "")
     if SESION_NUEVA.search(p):
         return None
@@ -155,7 +159,13 @@ def espera_uso(paso, ficha_texto=""):
     if m:
         return f"espera que pase el tiempo o se junten datos (\"{m.group(0).strip()}\")"
     if not PRUEBA_MONTADA.search(p):
-        nuevas = sorted(set(MIDE_VERSION.findall(p)) & versiones_publicadas(ficha_texto))
+        medidas = set(MIDE_VERSION.findall(p))
+        if ficha_texto is None:
+            if medidas:
+                return (f"mide u observa {', '.join(sorted(medidas))}: si es la version que publica "
+                        "esta sesion, hacen falta sesiones que arranquen con ella instalada")
+            return None
+        nuevas = sorted(medidas & versiones_publicadas(ficha_texto))
         if nuevas:
             return (f"mide u observa {', '.join(nuevas)}, que publico esta misma sesion: hacen falta "
                     "sesiones que arranquen con esa version instalada")

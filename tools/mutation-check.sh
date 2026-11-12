@@ -473,6 +473,7 @@ caso "espera: version publicada"  pendientes_afines.py m_espera_uso.py test-espe
 caso "espera: version ajena"      pendientes_afines.py m_espera_uso.py test-espera-uso.sh "version que NO publico la ficha" espera-cualquier-version
 caso "espera: banco cuenta"       pendientes_afines.py m_espera_uso.py test-espera-uso.sh "prueba montada" espera-banco-cuenta
 caso "espera: reload cuenta"      pendientes_afines.py m_espera_uso.py test-espera-uso.sh "tras /reload-plugins" espera-reload-cuenta
+caso "espera: sin ficha todavia"  pendientes_afines.py m_espera_uso.py test-espera-uso.sh "ficha aun sin escribir" espera-sin-ficha-calla
 caso "audit espera bloquea"       checkpoint-audit.py m_espera_uso.py test-espera-uso.sh "caso real: SALTADO" audit-espera-no-bloquea
 caso "audit espera corte"         checkpoint-audit.py m_espera_uso.py test-espera-uso.sh "ficha anterior al corte: HECHO como antes" audit-espera-sin-corte
 caso "emit avisa espera"          journal-emit.py m_espera_uso.py test-espera-uso.sh "aviso al nacer sin --revisar" emit-sin-aviso

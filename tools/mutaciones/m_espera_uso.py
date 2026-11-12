@@ -10,17 +10,18 @@ import io, sys
 M = {
     # pendientes_afines.py
     "espera-sin-tiempo": [("    m = ESPERA_TIEMPO.search(p)", "    m = None")],
-    "espera-sin-version": [("        nuevas = sorted(set(MIDE_VERSION.findall(p)) & versiones_publicadas(ficha_texto))",
+    "espera-sin-version": [("        nuevas = sorted(medidas & versiones_publicadas(ficha_texto))",
                             "        nuevas = []")],
-    "espera-cualquier-version": [("        nuevas = sorted(set(MIDE_VERSION.findall(p)) & versiones_publicadas(ficha_texto))",
-                                  "        nuevas = sorted(set(MIDE_VERSION.findall(p)))")],
+    "espera-cualquier-version": [("        nuevas = sorted(medidas & versiones_publicadas(ficha_texto))",
+                                  "        nuevas = sorted(medidas)")],
     "espera-banco-cuenta": [("    if not PRUEBA_MONTADA.search(p):", "    if True:")],
     "espera-reload-cuenta": [("    if SESION_NUEVA.search(p):", "    if False:")],
+    "espera-sin-ficha-calla": [("        if ficha_texto is None:", "        if False:")],
     # checkpoint-audit.py
     "audit-espera-no-bloquea": [("                if espera:", "                if False:")],
     "audit-espera-sin-corte": [("            if fecha_ficha and fecha_ficha >= DESDE_ESPERA_USO:", "            if True:")],
     # journal-emit.py
-    "emit-sin-aviso": [('            avisar_espera_uso(text + " " + (detalle or ""))', "            pass")],
+    "emit-sin-aviso": [('            avisar_espera_uso(text + " " + (detalle or ""), origen, memory_dir_de(a))', "            pass")],
     "emit-aviso-con-revisar": [("        if not revisar:", "        if True:")],
 }
 

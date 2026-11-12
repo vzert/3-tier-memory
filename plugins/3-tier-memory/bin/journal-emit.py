@@ -562,7 +562,7 @@ def fecha_real(v):
 DIAS_BLOQUEADO = 5
 
 
-def avisar_espera_uso(texto):
+def avisar_espera_uso(texto, origen="", memory_dir=None):
     """2.71.0: un pendiente que nace sin `--revisar` y cuyo texto espera uso real o tiempo ("los
     proximos dias", "cuando haya cierres"). Sin la ventana, Step 8 lo deja de `Proximo paso` y la
     sesion siguiente no lo puede hacer (caso real: p-fdfc2fa06c, 2026-11-11). Solo avisa: la
@@ -573,7 +573,17 @@ def avisar_espera_uso(texto):
         spec = importlib.util.spec_from_file_location("pendientes_afines", ruta)
         af = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(af)
-        motivo = af.espera_uso(texto)
+        # La ficha de --origen, si ya existe, dice que version publico la sesion. Si no existe (Step
+        # 3b puede correr antes de escribirla, como en el caso real), None: cualquier version medida
+        # avisa, como pregunta.
+        ficha = None
+        m = re.search(r"\[\[sessions/([^\]|]+)", origen or "")
+        if m and memory_dir:
+            ruta_f = os.path.join(memory_dir, "sessions", m.group(1).strip() + ".md")
+            if os.path.isfile(ruta_f):
+                with open(ruta_f, encoding="utf-8", errors="replace") as fh:
+                    ficha = fh.read()
+        motivo = af.espera_uso(texto, ficha)
     except Exception:
         return
     if motivo:
@@ -1314,7 +1324,7 @@ def main():
             print(f"journal-emit: bloqueado sin --revisar: ventana por defecto {revisar} "
                   f"(hoy+{DIAS_BLOQUEADO})", file=sys.stderr)
         if not revisar:
-            avisar_espera_uso(text + " " + (detalle or ""))
+            avisar_espera_uso(text + " " + (detalle or ""), origen, memory_dir_de(a))
         # `relacionado` tampoco: es un enlace, no la identidad.
         relacionado = limpiar_relacionados(a.relacionado, pid)
         # Pieza 1 del hilo: se suma el paso recibido a lo que el agente haya pasado.

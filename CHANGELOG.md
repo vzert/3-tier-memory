@@ -20,8 +20,10 @@ Victor del 2026-11-12: bloquea, como la fecha futura.
   (`DESDE_ESPERA_USO`). La salida que pide (`_revisar` futuro + `ninguno — <p-…> se mide desde
   <fecha>`) pasa `snippet.proximo_paso`, `snippet.hilo` y las guardias de `ninguno` (probado).
 - `journal-emit.py pendiente.add`: aviso en stderr si el texto espera uso real o tiempo y nace sin
-  `--revisar`. Solo avisa; nunca falla el evento.
-- `test-espera-uso.sh` (23).
+  `--revisar`. Lee la ficha de `--origen` para saber que version publico la sesion; si la ficha
+  aun no existe (Step 3b puede correr antes, como en el caso real), cualquier version que el texto
+  mida avisa, como pregunta. Solo avisa; nunca falla el evento.
+- `test-espera-uso.sh` (33): incluye la salida recomendada con plan activo y con transcripcion.
 
 ### Changed
 - Step 3b (`checkpoint-3t.md`) y Step 8 (`checkpoint-3t-step8.md`): medir lo que la sesion acaba

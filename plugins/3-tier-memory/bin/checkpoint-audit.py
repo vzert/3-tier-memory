@@ -1356,12 +1356,14 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
     #       sin pasar (espera_viva: espera a algo fuera de la sesion) o `_revisar` futuro (ya tiene
     #       su recordatorio de calendario). Un bloqueado con `_revisar` pasado SI es inmediato
     #       (2.63.32): el paso es mirar si ya llego lo que esperaba. La deteccion es SOLO por esos
-    #       campos estructurados, nunca por el texto (regla 216).
+    #       campos estructurados (regla 216); las redes de formato del texto son (e) y (f).
     #   (d) `ninguno` teniendo trabajo propio: un pendiente de esta ficha abierto, sin espera viva
     #       y sin `_revisar` futuro, es un candidato real de los casos 2-3.
     #   (e) 2.56.0: una fecha `AAAA-MM-DD` posterior a la ficha en la linea (casos 1-3): ese trabajo
     #       es del recordatorio de calendario. Chequeo de FORMATO, compartido con la linea de
     #       afines (pendientes_afines.fecha_futura); y el caso 1 ya no empieza por `Fase actual:`.
+    #   (f) 2.71.0 (DESDE_ESPERA_USO): espera uso real o tiempo sin fecha ISO ("los proximos dias",
+    #       medir la version que la ficha publico; pendientes_afines.espera_uso). Tambien FORMATO.
     # Una linea que empieza por `ninguno` puede citar ids como MOTIVO ("lo unico propio espera a
     # otra instalacion, p-…") — por eso (b) y (c) no miran esa forma; la mira (d).
     bloqueados = _bloq_todos
@@ -1432,7 +1434,11 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
                     problemas.append(f"{espera}: no se puede hacer en la sesion siguiente. Ponle "
                                      "`_revisar` al pendiente (`pendiente.window --revisar "
                                      "<fecha>`, o `--revisar` al crearlo) y el paso es otro "
-                                     "accionable hoy o `ninguno — <p-…> se mide desde <fecha>`")
+                                     "accionable hoy o `ninguno — <p-…> se mide desde <fecha>`. "
+                                     "Si es un falso positivo (lo hace la sesion siguiente sin "
+                                     "esperar a nadie: un banco o repo desechable, \"tras "
+                                     "/reload-plugins\", \"en una sesion nueva\"), escribelo asi "
+                                     "en el paso")
             if not ids_pp and not es_caso1:
                 problemas.append("no cita el `_id` de ningun pendiente: si es trabajo real, "
                                  "proponlo al usuario en Step 3b y, si lo guarda, cita su id; si "
