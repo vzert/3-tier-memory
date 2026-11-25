@@ -66,14 +66,18 @@ PY
 # con Write (como el Step 2). Modos: toca:<id> (pendiente.update fuera del cierre; un Bash que solo
 # nombra el id no cuenta como trabajo, regla de paso_ajeno.trabajo_propio), accion:<id> (Bash con el
 # id, para la otra ventana), plan:<plan>
-# (Edit de memory/plans/<plan>.md), alta:<id> (pendiente.add que imprime el id), cierre-update:<id>
+# (Edit de memory/plans/<plan>.md), alta:<id> (pendiente.add que imprime el id), alta-solape:<nuevo>,<ajeno> (alta cuyo AVISO de solape nombra
+# a otro), cierre-update:<id>
 # (pendiente.update del id en el turno del /checkpoint-3t). TX_HACE = segundos atras.
 tx() {
   python3 - "$@" <<'PY'
 import datetime, json, os, sys
 ruta, snip, modos = sys.argv[1], sys.argv[2].replace("\\n", "\n"), sys.argv[3:]
-TS = (datetime.datetime.now(datetime.timezone.utc)
-      - datetime.timedelta(seconds=int(os.environ.get("TX_HACE", "0")))).isoformat().replace("+00:00", "Z")
+# TX_DIA fija el dia de la transcripcion (la guardia de stamp-hilo exige que caiga junto a la fecha
+# de la ficha); sin el, la hora real, que la otra ventana (seccion 4) compara con "ahora".
+BASE = (datetime.datetime.fromisoformat(os.environ["TX_DIA"] + "T12:00:00+00:00") if os.environ.get("TX_DIA")
+        else datetime.datetime.now(datetime.timezone.utc))
+TS = (BASE - datetime.timedelta(seconds=int(os.environ.get("TX_HACE", "0")))).isoformat().replace("+00:00", "Z")
 r = [{"type": "user", "message": {"role": "user", "content":
       "<pasted_content id=\"ab12\">\n" + snip + "\n</pasted_content id=\"ab12\">"}}]
 def bash(cmd, tid, salida=""):
@@ -95,7 +99,12 @@ for n, m in enumerate(modos):
                   "name": "Edit", "input": {"file_path": "/p/memory/plans/" + v + ".md",
                                             "old_string": "a", "new_string": "b"}}]}})
     elif k == "alta":
-        bash("python3 journal-emit.py --type pendiente.add --text demo", f"a{n}", "evento ok: id " + v)
+        bash("python3 journal-emit.py --type pendiente.add --text demo", f"a{n}", v)
+    elif k == "alta-solape":   # alta-solape:<nuevo>,<ajeno>: el AVISO de solape nombra al ajeno
+        nuevo, ajeno = v.split(",")
+        bash("python3 journal-emit.py --type pendiente.add --text demo 2>&1", f"a{n}",
+             "journal-emit: AVISO — este pendiente cita lo mismo que el pendiente abierto " + ajeno
+             + " (enrutador.sh). Si es el mismo trabajo, no lo dupliques.\n" + nuevo + "\n")
     elif k == "cierre-update":
         cierre.append(v)
 if cierre:
@@ -145,19 +154,19 @@ chk "lo que nacio en la sesion si" "p-a000000006" "$(hilo)"
 
 echo "== 3. stamp-hilo.py: hilo_trabajados y hilo_planes desde la transcripcion =="
 caso; ficha "Proximo paso: x."
-tx "$T/t.jsonl" "$SNIP" toca:p-a000000003 plan:plan-consolidacion cierre-update:p-a000000002
+TX_DIA=2026-11-11 tx "$T/t.jsonl" "$SNIP" toca:p-a000000003 plan:plan-consolidacion cierre-update:p-a000000002
 chk "sella" "sellado=1 motivo=sellada" "$(python3 "$BIN/stamp-hilo.py" "$M/sessions/$F.md" --transcript "$T/t.jsonl" 2>/dev/null)"
 FM=$(sed -n '1,/^---$/p' "$M/sessions/$F.md" | sed -n '2,$p')
 chk "trabajados: el tocado y el paso recibido; no el extra solo recibido ni el del cierre" "1" "$(printf '%s\n' "$FM" | grep -c '^hilo_trabajados: p-a000000001, p-a000000003$')"
 chk "planes: el editado" "1" "$(printf '%s\n' "$FM" | grep -c '^hilo_planes: plan-consolidacion$')"
-tx "$T/t.jsonl" "$SNIP" toca:p-a000000003 toca:p-a000000005
+TX_DIA=2026-11-11 tx "$T/t.jsonl" "$SNIP" toca:p-a000000003 toca:p-a000000005
 chk "re-checkpoint con sello puesto: no pisa el sello" "sellado=0 motivo=ya-sellada" "$(python3 "$BIN/stamp-hilo.py" "$M/sessions/$F.md" --transcript "$T/t.jsonl" 2>/dev/null)"
 FM=$(sed -n '1,/^---$/p' "$M/sessions/$F.md" | sed -n '2,$p')
 chk "pero refresca lo trabajado (una sola linea)" "1|1" "$(printf '%s\n' "$FM" | grep -c '^hilo_trabajados: p-a000000001, p-a000000003, p-a000000005$')|$(printf '%s\n' "$FM" | grep -c '^hilo_trabajados:')"
 chk "y los planes (ya no edito ninguno)" "1" "$(printf '%s\n' "$FM" | grep -c '^hilo_planes: *$')"
 chk "el sello del arranque sigue" "1" "$(printf '%s\n' "$FM" | grep -c '^hilo_paso: p-a000000001$')"
 caso; ficha "Proximo paso: x."
-tx "$T/n.jsonl" 'arreglemos la pieza p-a000000004' plan:plan-otro
+TX_DIA=2026-11-11 tx "$T/n.jsonl" 'arreglemos la pieza p-a000000004' plan:plan-otro
 chk "sin Retomamos: no sella el arranque" "sellado=0 motivo=la-sesion-no-arranco-con-Retomamos" "$(python3 "$BIN/stamp-hilo.py" "$M/sessions/$F.md" --transcript "$T/n.jsonl" 2>/dev/null)"
 FM=$(sed -n '1,/^---$/p' "$M/sessions/$F.md" | sed -n '2,$p')
 chk "pero escribe lo que el usuario pidio y el plan editado" "1|1" "$(printf '%s\n' "$FM" | grep -c '^hilo_trabajados: p-a000000004$')|$(printf '%s\n' "$FM" | grep -c '^hilo_planes: plan-otro$')"
@@ -172,6 +181,12 @@ chk "el paso recibido, aunque ningun comando lo nombre: HECHO" "HECHO" "$(estado
 caso; ficha "Proximo paso: hacer el nuevo (p-a000000009)." "$SELLO"
 tx "$P/propia.jsonl" "$SNIP" alta:p-a000000009
 chk "uno que la sesion creo: HECHO" "HECHO" "$(estado snippet.paso_no_trabajado --transcript "$P/propia.jsonl")"
+caso; ficha "Proximo paso: rotar llaves IAM (p-a000000002)." "$SELLO"
+tx "$P/propia.jsonl" "$SNIP" alta-solape:p-a000000009,p-a000000002
+chk "el ajeno que solo nombra el AVISO de solape de un alta: SALTADO" "SALTADO" "$(estado snippet.paso_no_trabajado --transcript "$P/propia.jsonl")"
+caso; ficha "Proximo paso: hacer el nuevo (p-a000000009)." "$SELLO"
+tx "$P/propia.jsonl" "$SNIP" alta-solape:p-a000000009,p-a000000002
+chk "el que el alta imprimio, con AVISO de solape: HECHO" "HECHO" "$(estado snippet.paso_no_trabajado --transcript "$P/propia.jsonl")"
 caso; ficha "Proximo paso: otra pieza (p-a000000004)." "$SELLO\nhilo_planes: plan-consolidacion"
 tx "$P/propia.jsonl" "$SNIP" plan:plan-consolidacion
 chk "uno de un plan que la sesion edito: HECHO" "HECHO" "$(estado snippet.paso_no_trabajado --transcript "$P/propia.jsonl")"

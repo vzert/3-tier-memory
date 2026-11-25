@@ -62,6 +62,7 @@ MANTENIMIENTO = re.compile(r"--type[\s=]+pendiente\.(relate|block|window|retomar
 # Eventos que si lo son: corregir su texto o cerrarlo.
 TRABAJO = re.compile(r"--type[\s=]+pendiente\.(update|resolve)\b")
 ALTA = re.compile(r"--type[\s=]+pendiente\.add\b")
+ID_SOLO = re.compile(r"p-[0-9a-f]{10}")  # la linea de stdout de un alta: solo el id
 # Para la regla por id nombrado (2.65.0): bloquear tambien reconcilia el pendiente que se nombra.
 BLOQUEO = re.compile(r"--type[\s=]+pendiente\.block\b")
 HERRAMIENTAS_ACCION = ("Bash", "Edit", "Write", "MultiEdit", "NotebookEdit")
@@ -127,7 +128,7 @@ def _es_checkpoint(r):
 
 def trabajo_propio(transcript, ids, paso_recibido=None):
     """{id: (trabajado: bool, [que hizo])}. Trabajado = lo recibio o lo pidio el usuario, lo creo
-    (`pendiente.add` que imprimio el id), o, en un turno que NO corrio /checkpoint-3t, lo corrigio o
+    (`pendiente.add` que imprimio el id solo en su linea), o, en un turno que NO corrio /checkpoint-3t, lo corrigio o
     cerro (`update`/`resolve`) o edito fuera de memory/ algo que lo nombra. Lo que hace el cierre
     (Step 3a corrige textos, liga, desbloquea, fecha, marca) es ordenar, no trabajar: en el caso
     real la sesion emitio `pendiente.update` sobre el pendiente ajeno en su checkpoint.
@@ -172,9 +173,14 @@ def trabajo_propio(transcript, ids, paso_recibido=None):
                         res[i][1].append("lo recibio o lo pidio el usuario")
             elif tipo == "user" and bt == "tool_result":
                 if b.get("tool_use_id") in altas:
-                    t = _texto_tool_result(b)
+                    # Solo el id que journal-emit imprime solo en su linea de stdout: el resto del
+                    # texto (stderr con el AVISO de solape, hooks) nombra pendientes ajenos.
+                    # Caso real (claude-vzert, 2026-11-24): el aviso de solape de un alta cito 4
+                    # pendientes abiertos y los 4 contaron como "lo creo"; snippet.hilo bloqueo.
+                    creados = {ln.strip() for ln in _texto_tool_result(b).splitlines()
+                               if ID_SOLO.fullmatch(ln.strip())}
                     for i in ids:
-                        if i in t:
+                        if i in creados:
                             res[i][0] = True
                             res[i][1].append("lo creo (pendiente.add)")
             elif tipo == "assistant" and bt == "tool_use":

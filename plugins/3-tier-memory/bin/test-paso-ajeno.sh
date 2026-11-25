@@ -55,7 +55,7 @@ for m in modos:
     if m == "update-fuera":
         bash("python3 journal-emit.py --type pendiente.update --id " + ID + " --text x", "t1")
     if m == "alta":
-        bash("python3 journal-emit.py --type pendiente.add --text demo", "t2", "evento ok: id " + ID)
+        bash("python3 journal-emit.py --type pendiente.add --text demo", "t2", ID + "\n")
     if m == "edita":
         r.append({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "t3",
                   "name": "Edit", "input": {"file_path": "/x/src/app.py", "old_string": "a",
