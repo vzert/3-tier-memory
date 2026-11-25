@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.71.1] - 2026-11-25
+Un `pendiente.add` ya no da por trabajados los pendientes que nombra su aviso de solape. Caso real
+(otro proyecto, 2026-11-24): un alta imprimio su id y el AVISO de solape de `journal-emit.py` cito
+4 pendientes abiertos de otro trabajo. `paso_ajeno.trabajo_propio` conto como "lo creo" todo
+`p-…` de la salida, `stamp-hilo.py` escribio los 4 en `hilo_trabajados` y `snippet.hilo` bloqueo un
+cierre que no dejaba nada que retomar.
+
+### Fixed
+- `paso_ajeno.trabajo_propio`: en la salida de un `pendiente.add` solo cuenta el id que ocupa su
+  propia linea, como lo imprime `journal-emit.py`. El AVISO de solape (stderr) y cualquier otra
+  linea ya no cuentan. Sobre la transcripcion real: los 4 ajenos salen no trabajados y el propio
+  sigue como creado.
+- `test-hilo-propio.sh`: las 9 comprobaciones de `stamp-hilo.py` dependian de la fecha de hoy (la
+  transcripcion usaba la hora real y la ficha es del 2026-11-11, asi que la guardia
+  `ficha_de_la_sesion` la rechazaba). `TX_DIA` fija el dia de la transcripcion en esa seccion.
+- `test-hilo-propio.sh` y `test-paso-ajeno.sh` simulaban la salida de un alta como
+  `evento ok: id <id>`, que `journal-emit.py` nunca imprime; ahora simulan el id solo en su linea.
+
+### Added
+- `test-hilo-propio.sh`: 2 casos con el AVISO de solape en la salida del alta (el ajeno que solo
+  nombra el aviso: SALTADO; el que el alta imprimio: HECHO). El primero falla con el codigo de 2.71.0.
+
 ## [2.71.0] - 2026-11-12
 Un `Proximo paso` que espera uso real o tiempo, sin fecha ISO, ya no pasa como inmediato. Caso real
 (este plugin, cierre de 2.70.0 del 2026-11-11): el paso fue "medir con las fichas y transcripciones
