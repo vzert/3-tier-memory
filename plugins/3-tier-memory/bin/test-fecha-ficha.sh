@@ -75,6 +75,10 @@ for n, nombre in enumerate(escritas):
                        {"type": "tool_use", "name": "Write", "id": "t%d" % n,
                         "input": {"file_path": os.path.join(proj, "memory", "sessions", nombre),
                                   "content": "x"}}]}})
+    lineas.append({"type": "user", "timestamp": "2026-05-10T00:5%d:01Z" % n,
+                   "message": {"role": "user", "content": [
+                       {"type": "tool_result", "tool_use_id": "t%d" % n,
+                        "content": "File created successfully"}]}})
 lineas.append({"type": "assistant", "timestamp": "2026-05-10T01:00:00Z",
                "message": {"role": "assistant", "content": [{"type": "text", "text": "listo"}]}})
 with open(os.path.join(jd, sid + ".jsonl"), "w", encoding="utf-8") as fh:
@@ -228,6 +232,19 @@ PY
   sello "$E" "$SID"
   if [ "$RC" != "0" ] && grep -q '"name": "Edit"' "$JD/$SID.jsonl" && ! grep -q 'session_id' "$MEM/sessions/$E"; then ok "C9 ficha con fecha UTC solo editada: no se sella"
   else falla "C9 ficha con fecha UTC solo editada: no se sella" "rc=$RC $(cat "$T/st")"; fi
+
+  # C10: un Write que FALLO (la ficha ya existia y la sesion no la habia leido: es de otra) o que
+  # se quedo sin resultado no es evidencia (revisor independiente, ronda 3).
+  W="$UTC-write-fallido.md"; ficha "$W"; transcripcion "$SID" "$W"
+  sed -i.bak 's/"content": "File created successfully"/"is_error": true, "content": "File has not been read yet"/' "$JD/$SID.jsonl" && rm -f "$JD/$SID.jsonl.bak"
+  sello "$W" "$SID"
+  if [ "$RC" != "0" ] && grep -q '"is_error": true' "$JD/$SID.jsonl" && ! grep -q 'session_id' "$MEM/sessions/$W"; then ok "C10 ficha con fecha UTC y un Write que fallo: no se sella"
+  else falla "C10 ficha con fecha UTC y un Write que fallo: no se sella" "rc=$RC $(cat "$T/st")"; fi
+  transcripcion "$SID" "$W"
+  grep -v '"tool_result"' "$JD/$SID.jsonl" > "$JD/$SID.tmp" && mv "$JD/$SID.tmp" "$JD/$SID.jsonl"
+  sello "$W" "$SID"
+  if [ "$RC" != "0" ] && ! grep -q 'session_id' "$MEM/sessions/$W"; then ok "C10b ficha con fecha UTC y un Write sin resultado: no se sella"
+  else falla "C10b ficha con fecha UTC y un Write sin resultado: no se sella" "rc=$RC $(cat "$T/st")"; fi
 
   # C6: --dry-run dice que sellaria y no escribe.
   G="$UTC-en-seco.md"; ficha "$G"; transcripcion "$SID" "$G"

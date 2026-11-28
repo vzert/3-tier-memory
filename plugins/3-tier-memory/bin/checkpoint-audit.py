@@ -670,9 +670,10 @@ def sello_de_sesion(h, session_file, texto, hoy):
 
     Sin la variable no hay hallazgo: no esta documentada y hay modos donde no existe (p-47491788b6).
     Una ficha que esta sesion no escribio tampoco, ni una con fecha a mas de un dia de las fechas
-    de la sesion (`ficha_de_la_sesion`): el audit tambien corre sobre fichas viejas, y ahi un SALTADO propondria sellar con el id de quien audita. "Esta
-    sesion la escribio" es `escribio_la_ficha` sobre su transcripcion, la misma evidencia que usa
-    el sello. Limite: una ficha de hoy de OTRA sesion, sin sello, que esta sesion edito, si sale
+    de la sesion (`ficha_de_la_sesion`): el audit tambien corre sobre fichas viejas, y ahi un
+    SALTADO propondria sellar con el id de quien audita. Y si el sello la rechaza, solo sale cuando
+    la sesion la creo con un Write aplicado (`creo_la_ficha`, la evidencia del sello): una ficha de
+    ayer o de manana que la sesion solo edito es de otra. Limite: una ficha de hoy de OTRA sesion, sin sello, que esta sesion edito, si sale
     SALTADO (la regla de fecha del sello tampoco las distingue)."""
     sid = (os.environ.get("CLAUDE_CODE_SESSION_ID") or "").strip()
     if not sid:

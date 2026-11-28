@@ -1508,11 +1508,12 @@ fallo invisible, una sesion marcada como importada que no lo esta.
 
 Si imprime `stamped=0` con una razon distinta de `ya-sellada-con-el-mismo-id`, la ficha queda sin
 sello. `checkpoint-audit.py` lo reporta en Step 7a como `ficha.session_id` (2.72.0): SALTADO si
-existe `CLAUDE_CODE_SESSION_ID` y esta sesion escribio la ficha; PARCIAL si no encuentra la
-transcripcion; nada si la ficha ya lleva el sello de otra sesion. Que hacer segun la razon:
+existe `CLAUDE_CODE_SESSION_ID` y la ficha es de esta sesion (la escribio, y o el sello se puede
+poner o la creo con un Write que se aplico); PARCIAL si no encuentra la transcripcion; nada si la
+ficha ya lleva el sello de otra sesion o esta sesion solo la edito. Que hacer segun la razon:
 
 - `la-ficha-es-de-D y-la-transcripcion-de-…`: la fecha del nombre no es la local y la transcripcion
-  no muestra un `Write` de esta sesion que creo la ficha. Si la escribiste con la herramienta Write
+  no muestra un `Write` de esta sesion sobre la ficha que se haya aplicado. Si la escribiste con la herramienta Write
   en esta misma tanda de llamadas, vuelve a correr el bloque (ahora el Write ya esta en la
   transcripcion). Si la creaste con Bash (un heredoc), con la fecha UTC no se sella: declaralo. Si
   la fecha no es ni la local ni la UTC de la sesion, o la ficha ya lleva el sello de otra sesion,
@@ -1523,8 +1524,8 @@ transcripcion; nada si la ficha ya lleva el sello de otra sesion. Que hacer segu
 - `sin-frontmatter`, `frontmatter-sin-cierre`: corre Step 5c y vuelve a sellar.
 
 Nunca escribas `session_id` a mano ni renombres la ficha para que cuadre (rompe sus enlaces).
-`sellada-por-evidencia-de-escritura` es un sello bueno: la ficha lleva otra fecha que la local,
-pero esta sesion la escribio.
+`sellada-por-evidencia-de-escritura` es un sello bueno: la ficha lleva la fecha UTC en vez de la
+local, y la transcripcion tiene un Write de esta sesion sobre ella que se aplico.
 
 ## Step 5d: Redact secrets (deterministic gate — runs BEFORE any commit)
 

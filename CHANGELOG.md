@@ -25,7 +25,7 @@ prosa. Primera fase (F1) del plan de hilos.
   una con fecha a mas de un dia de las fechas de la sesion (auditoria retroactiva). Si no se
   encuentra la transcripcion, sale PARCIAL para una ficha de hoy, ayer o manana. La auditoria no
   sella: llama al sello con `--dry-run`.
-- `test-fecha-ficha.sh` (42 comprobaciones) y 19 mutaciones en `tools/mutation-check.sh`. La prueba
+- `test-fecha-ficha.sh` (44 comprobaciones) y 20 mutaciones en `tools/mutation-check.sh`. La prueba
   corre los bloques del Step 1 y del Step 5c-bis extraidos de la plantilla, con un cierre a las
   20:00 hora local. Fija el huso ella misma; donde el sistema no aplica `TZ` (Git Bash), los casos
   que dependen del desfase se saltan y se cuentan.
@@ -33,15 +33,17 @@ prosa. Primera fase (F1) del plan de hilos.
 ### Changed
 - `stamp-session-id.py`: cuando la fecha de la ficha no cae en las fechas locales de la
   transcripcion, sella solo si se cumplen dos cosas: la fecha cae en las fechas UTC de la
-  transcripcion, tambien sin margen, y la transcripcion creo esa ficha con un `Write`
-  (`creo_la_ficha`, nueva en `pendientes_afines.py`; un Edit o una redireccion no bastan). La razon sale
+  transcripcion, tambien sin margen, y la transcripcion tiene un `Write` sobre esa ficha que se
+  aplico, con su resultado y sin error (`creo_la_ficha`, nueva en `pendientes_afines.py`; un Edit,
+  una redireccion, un Write fallido o uno rechazado no bastan). La razon sale
   `sellada-por-evidencia-de-escritura`. El margen de la regla de fecha sigue en cero. Sobre copias
   de las 8 fichas del caso real, 8 de 8 quedan selladas. Medido sobre 317 transcripciones y 586
   fichas de ese proyecto, con la funcion del sello: la regla nueva anade 8 fichas, una por sesion,
-  y son esas 8; a ningun otro id le anade ninguna. Un revisor independiente rompio dos versiones
-  anteriores: la que reutilizaba el margen de un dia de `ficha_de_la_sesion`, y la que aceptaba un
-  Edit como evidencia. Con las dos, un Edit sellaba la ficha de ayer de otra sesion (la segunda,
-  solo en un huso al este de Greenwich, donde el dia UTC de una sesion de manana es ayer).
+  y son esas 8; a ningun otro id le anade ninguna. Un revisor independiente rompio tres versiones
+  anteriores: la que reutilizaba el margen de un dia de `ficha_de_la_sesion`; la que aceptaba un
+  Edit como evidencia (sellaba la ficha de ayer de otra sesion en un huso al este de Greenwich,
+  donde el dia UTC de una sesion de manana es ayer); y la que contaba un Write sin mirar su
+  resultado (un Write fallido sobre la ficha de otra sesion bastaba).
 - `test-checkpoint-audit.sh` quita `CLAUDE_CODE_SESSION_ID` de su entorno: corrida suelta desde una
   sesion de Claude Code, el hallazgo nuevo cambiaba 3 de sus resultados.
 - `/checkpoint-3t` Step 5c-bis: dice que hacer con cada razon de `stamped=0`. Antes pedia solo

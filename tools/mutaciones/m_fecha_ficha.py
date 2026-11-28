@@ -28,6 +28,9 @@ M = {
     "sello-edit-vale": [("        return bool(af.creo_la_ficha(transcripcion, os.path.basename(ficha)))",
                          "        return bool(af.escribio_la_ficha(transcripcion, os.path.basename(ficha)))")],
     "audit-edit-vale": [("    if not sellaria and not af.creo_la_ficha(trans, nombre):", "    if False:")],
+    # pendientes_afines.py: un Write cuenta aunque su resultado sea un error.
+    "write-fallido-vale": [('                        and b.get("tool_use_id") in pedidos and not b.get("is_error"):',
+                            '                        and b.get("tool_use_id") in pedidos:')],
     "seco-escribe": [("    if en_seco:", "    if False:")],
     # checkpoint-audit.py
     "audit-sin-chequeo": [("        sello_de_sesion(h, session_file, texto, hoy)", "        pass")],

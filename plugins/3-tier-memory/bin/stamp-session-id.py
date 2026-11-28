@@ -29,8 +29,9 @@ LA FICHA CON FECHA UTC (2.72.0). Medido en otro proyecto: 8 de 71 checkpoints he
 18:00 y las 24:00 hora local nombraron la ficha con la fecha UTC, que a esa hora es la del dia
 siguiente, y con margen cero ninguna sello. Subir el margen no es el arreglo (parrafo anterior).
 Cuando la fecha no cuadra, se acepta la ficha solo si la fecha cae en las fechas UTC de la
-transcripcion, tambien con margen cero, Y la transcripcion CREO esa ficha con un `Write`
-(`creo_la_ficha` de `pendientes_afines.py`). Un Edit o una redireccion de Bash no bastan. Abre un
+transcripcion, tambien con margen cero, Y la transcripcion tiene un `Write` sobre esa ficha que se
+aplico: su resultado existe y no es un error (`creo_la_ficha` de `pendientes_afines.py`). Un Edit,
+una redireccion de Bash, un Write que fallo o uno que el usuario rechazo no bastan. Abre un
 dia mas que la regla de fecha (el dia UTC: manana al oeste de Greenwich, ayer al este), y para ese
 dia pide una evidencia que la regla de fecha no pide. Limites: solo se mira el final de la ruta
 del `Write`, no el proyecto; y un `Write` que REESCRIBE entera la ficha sin sello de otra sesion
@@ -191,7 +192,8 @@ def escrita_por_la_sesion(ficha, transcripcion):
     transcripcion. Pasa solo si se cumplen las dos:
       1. la fecha del nombre cae en las fechas UTC de la transcripcion, con margen CERO (la ficha
          se nombro con la fecha UTC del momento, que es el defecto medido); y
-      2. la transcripcion CREO esa ficha con un `Write` (`creo_la_ficha` de `pendientes_afines.py`).
+      2. la transcripcion tiene un `Write` sobre esa ficha que se aplico: con `tool_result` y sin
+         error (`creo_la_ficha` de `pendientes_afines.py`).
     No se reutiliza `ficha_de_la_sesion`: su margen de un dia sobre las fechas UTC dejaba sellar
     la ficha de ayer o de pasado manana de otra sesion con un solo Edit. Y un Edit tampoco basta
     con margen cero: al este de Greenwich el dia UTC de una sesion de manana es AYER en hora local,

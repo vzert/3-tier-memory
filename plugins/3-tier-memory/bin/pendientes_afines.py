@@ -616,34 +616,42 @@ def escribio_la_ficha(transcripcion, nombre):
 
 def creo_la_ficha(transcripcion, nombre):
     """Si la transcripcion tiene un `Write` (la herramienta que CREA el fichero) sobre
-    `sessions/<nombre>`. Mas estrecha que `escribio_la_ficha`: un Edit, un MultiEdit o una
-    redireccion de Bash no cuentan. Existe para el sello de `session_id` (2.72.0): ahi la evidencia
-    decide un sello sobre una ficha cuya fecha no es la local, y con un Edit bastaba para sellar la
-    ficha de otra sesion (revisor independiente, dos rondas). Falla cerrado."""
+    `sessions/<nombre>` QUE SE APLICO: su `tool_result` existe y no trae `is_error`. Mas estrecha
+    que `escribio_la_ficha`: un Edit, un MultiEdit o una redireccion de Bash no cuentan, y tampoco
+    un Write que fallo ("File has not been read yet": justo lo que pasa al escribir sobre la ficha
+    de otra sesion) o que el usuario rechazo. Existe para el sello de `session_id` (2.72.0): ahi la
+    evidencia decide un sello sobre una ficha cuya fecha no es la local, y un Edit primero, y un
+    Write fallido despues, bastaban para sellar la ficha de otra sesion (revisor independiente,
+    tres rondas). Falla cerrado: sin resultado legible, no cuenta."""
     import json
     try:
         fh = open(transcripcion, encoding="utf-8", errors="replace")
     except OSError:
         return False
+    pedidos = set()   # ids de los Write sobre esa ficha, a la espera de su resultado
     with fh:
         for linea in fh:
-            if nombre not in linea:
+            if nombre not in linea and not (pedidos and "tool_result" in linea):
                 continue
             try:
                 d = json.loads(linea)
-                if d.get("type") != "assistant":
-                    continue
+                tipo = d.get("type")
                 bloques = d["message"].get("content")
-            except (ValueError, AttributeError, KeyError, TypeError):
+            except (ValueError, AttributeError, KeyError, TypeError, RecursionError):
                 continue
-            if not isinstance(bloques, list):
+            if tipo not in ("assistant", "user") or not isinstance(bloques, list):
                 continue
             for b in bloques:
-                if not (isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "Write"):
+                if not isinstance(b, dict):
                     continue
-                inp = b.get("input")
-                ruta = str(inp.get("file_path") or "").replace("\\", "/") if isinstance(inp, dict) else ""
-                if ruta == "sessions/" + nombre or ruta.endswith("/sessions/" + nombre):
+                if tipo == "assistant" and b.get("type") == "tool_use" and b.get("name") == "Write":
+                    inp = b.get("input")
+                    ruta = str(inp.get("file_path") or "").replace("\\", "/") if isinstance(inp, dict) else ""
+                    if (ruta == "sessions/" + nombre or ruta.endswith("/sessions/" + nombre)) \
+                            and isinstance(b.get("id"), str) and b["id"]:
+                        pedidos.add(b["id"])
+                elif tipo == "user" and b.get("type") == "tool_result" \
+                        and b.get("tool_use_id") in pedidos and not b.get("is_error"):
                     return True
     return False
 
