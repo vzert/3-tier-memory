@@ -724,6 +724,10 @@ def sello_de_sesion(h, session_file, texto, hoy):
         sellaria = r.returncode == 0 and "reason=en-seco:sellada" in razon[0]
     except Exception as exc:
         razon, sellaria = [f"no se pudo correr stamp-session-id.py: {exc}"], False
+    if not sellaria and not af.creo_la_ficha(trans, nombre):
+        # El sello la rechaza y esta sesion solo la edito: es la ficha de ayer o de manana de otra
+        # sesion, no la suya (revisor independiente, ronda 2).
+        return
     if sellaria:
         h.append(Hallazgo(SALTADO, "ficha.session_id",
                           "la ficha de esta sesion no lleva session_id y el sello se puede poner",

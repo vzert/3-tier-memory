@@ -189,8 +189,8 @@ es la del dia siguiente (medido: 8 de 71 checkpoints de esas horas nombraron la 
 UTC y ninguna quedo sellada). Si el slug traia una fecha delante, el script la separa (`SLUG=`,
 `SLUG_FECHA=`) y avisa cuando no es DATE (sin el script solo sale `DATE=`: separala tu): usa DATE, **salvo** que esta sesion ya haya emitido un
 evento que cita `[[sessions/<esa fecha>-SLUG]]` (un `--origen` o `--sesion` de antes del
-checkpoint). Ese enlace no se puede renombrar: conserva ese nombre, y Step 5c-bis lo sella por la
-evidencia de que esta sesion escribio la ficha.
+checkpoint). Ese enlace no se puede renombrar: conserva ese nombre y escribe la ficha con la
+herramienta Write; Step 5c-bis la sella por esa evidencia.
 
 Set: DATE = la que imprimio el bloque, SESSION_FILE = memory/sessions/DATE-SLUG.md
 
@@ -1494,8 +1494,8 @@ vea lo mismo. Sin `Retomamos:` no sella el arranque (`sellado=0`), y no pisa un 
 valor coincide con el nombre del `.jsonl` en curso) y no se ha comprobado en otras versiones, en
 modo SDK ni sin terminal. Por eso el sello nunca se da por bueno: `stamp-session-id.py` exige que
 ese id tenga `.jsonl` en `$JSONL_DIR` **y** que la fecha de la ficha caiga dentro del rango de esa
-transcripcion (o, si no cae, que la transcripcion haya escrito esa ficha y la fecha caiga en sus
-fechas UTC, sin margen, 2.72.0), y si algo no cuadra no sella. Desde 2.63.45 `journal-emit.py` tambien la lee: el
+transcripcion (o, si no cae, que la transcripcion haya creado esa ficha con un Write y la fecha
+caiga en sus fechas UTC, sin margen, 2.72.0), y si algo no cuadra no sella. Desde 2.63.45 `journal-emit.py` tambien la lee: el
 `session_id` de cada evento es esa variable (salvo `--session`, `CLAUDE_SESSION_ID` o
 `THREET_SESSION_ID`, que mandan), y sin ella es un uuid nuevo por evento, como antes.
 
@@ -1507,12 +1507,14 @@ sello GANA a la evidencia de escritura y un sello equivocado no da un duplicado 
 fallo invisible, una sesion marcada como importada que no lo esta.
 
 Si imprime `stamped=0` con una razon distinta de `ya-sellada-con-el-mismo-id`, la ficha queda sin
-sello y `checkpoint-audit.py` lo reporta en Step 7a como SALTADO `ficha.session_id` (2.72.0; solo
-si existe `CLAUDE_CODE_SESSION_ID` y esta sesion escribio la ficha). Que hacer segun la razon:
+sello. `checkpoint-audit.py` lo reporta en Step 7a como `ficha.session_id` (2.72.0): SALTADO si
+existe `CLAUDE_CODE_SESSION_ID` y esta sesion escribio la ficha; PARCIAL si no encuentra la
+transcripcion; nada si la ficha ya lleva el sello de otra sesion. Que hacer segun la razon:
 
 - `la-ficha-es-de-D y-la-transcripcion-de-…`: la fecha del nombre no es la local y la transcripcion
-  no muestra que esta sesion escribio la ficha. Pasa cuando la ficha se escribio en la MISMA llamada
-  Bash que el sello: vuelve a correr el bloque (ahora la escritura ya esta en la transcripcion). Si
+  no muestra un `Write` de esta sesion que creo la ficha. Si la escribiste con la herramienta Write
+  en esta misma tanda de llamadas, vuelve a correr el bloque (ahora el Write ya esta en la
+  transcripcion). Si la creaste con Bash (un heredoc), con la fecha UTC no se sella: declaralo. Si
   la fecha no es ni la local ni la UTC de la sesion, o la ficha ya lleva el sello de otra sesion,
   no hay arreglo: declaralo.
 - `no-hay-jsonl-para-ese-id`, `id-en-varios-proyectos`, `la-transcripcion-no-tiene-timestamps-legibles`:

@@ -614,6 +614,40 @@ def escribio_la_ficha(transcripcion, nombre):
     return False
 
 
+def creo_la_ficha(transcripcion, nombre):
+    """Si la transcripcion tiene un `Write` (la herramienta que CREA el fichero) sobre
+    `sessions/<nombre>`. Mas estrecha que `escribio_la_ficha`: un Edit, un MultiEdit o una
+    redireccion de Bash no cuentan. Existe para el sello de `session_id` (2.72.0): ahi la evidencia
+    decide un sello sobre una ficha cuya fecha no es la local, y con un Edit bastaba para sellar la
+    ficha de otra sesion (revisor independiente, dos rondas). Falla cerrado."""
+    import json
+    try:
+        fh = open(transcripcion, encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    with fh:
+        for linea in fh:
+            if nombre not in linea:
+                continue
+            try:
+                d = json.loads(linea)
+                if d.get("type") != "assistant":
+                    continue
+                bloques = d["message"].get("content")
+            except (ValueError, AttributeError, KeyError, TypeError):
+                continue
+            if not isinstance(bloques, list):
+                continue
+            for b in bloques:
+                if not (isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "Write"):
+                    continue
+                inp = b.get("input")
+                ruta = str(inp.get("file_path") or "").replace("\\", "/") if isinstance(inp, dict) else ""
+                if ruta == "sessions/" + nombre or ruta.endswith("/sessions/" + nombre):
+                    return True
+    return False
+
+
 def ficha_de_la_sesion(ficha_path, transcripcion, session_id):
     """Si la ficha es de la sesion de esa transcripcion: no esta sellada con OTRO `session_id`, su
     fecha (la del nombre) cae dentro de las fechas de la transcripcion, con un dia de margen (los

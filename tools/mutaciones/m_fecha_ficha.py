@@ -25,6 +25,9 @@ M = {
     # stamp-session-id.py: sin la segunda oportunidad; con ella para cualquiera; --dry-run que escribe.
     "sello-sin-evidencia": [("            if not escrita_por_la_sesion(ficha, transcripcion):", "            if True:")],
     "sello-evidencia-gratis": [("            if not escrita_por_la_sesion(ficha, transcripcion):", "            if False:")],
+    "sello-edit-vale": [("        return bool(af.creo_la_ficha(transcripcion, os.path.basename(ficha)))",
+                         "        return bool(af.escribio_la_ficha(transcripcion, os.path.basename(ficha)))")],
+    "audit-edit-vale": [("    if not sellaria and not af.creo_la_ficha(trans, nombre):", "    if False:")],
     "seco-escribe": [("    if en_seco:", "    if False:")],
     # checkpoint-audit.py
     "audit-sin-chequeo": [("        sello_de_sesion(h, session_file, texto, hoy)", "        pass")],

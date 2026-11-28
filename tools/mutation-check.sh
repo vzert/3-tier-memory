@@ -424,6 +424,8 @@ caso "fecha de ficha en UTC"      fecha-ficha.py $L $T "A1 fecha local a las 20:
 caso "plantilla con date -u"      ../templates/checkpoint-3t.md $L $T "B1 cierre a las 20:00" plantilla-date-u
 caso "sello sin evidencia"        stamp-session-id.py $L $T "C1 ficha con fecha UTC escrita por la sesion" sello-sin-evidencia
 caso "sello: evidencia gratis"    stamp-session-id.py $L $T "C2 ficha con fecha UTC que la sesion no escribio" sello-evidencia-gratis
+caso "sello: un Edit basta"       stamp-session-id.py $L $T "C9 ficha con fecha UTC solo editada" sello-edit-vale
+caso "audit: un Edit basta"       checkpoint-audit.py $L $T "D12 ficha a un dia que la sesion solo edito" audit-edit-vale
 caso "sello en seco escribe"      stamp-session-id.py $L $T "C6 --dry-run" seco-escribe
 caso "audit sin ficha.session_id" checkpoint-audit.py $L $T "D1 ficha de la sesion sin sello y con la variable" audit-sin-chequeo
 caso "audit sin la variable"      checkpoint-audit.py $L $T "D2 ficha de la sesion sin sello y sin la variable" audit-sin-variable

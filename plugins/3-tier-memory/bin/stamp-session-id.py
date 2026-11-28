@@ -29,12 +29,12 @@ LA FICHA CON FECHA UTC (2.72.0). Medido en otro proyecto: 8 de 71 checkpoints he
 18:00 y las 24:00 hora local nombraron la ficha con la fecha UTC, que a esa hora es la del dia
 siguiente, y con margen cero ninguna sello. Subir el margen no es el arreglo (parrafo anterior).
 Cuando la fecha no cuadra, se acepta la ficha solo si la fecha cae en las fechas UTC de la
-transcripcion, tambien con margen cero, Y la transcripcion ESCRIBIO esa ficha (`escribio_la_ficha`
-de `pendientes_afines.py`, la evidencia que ya usan `journal-emit.py` y `stamp-hilo.py`: Write,
-Edit o un Bash que redirige a ella). Abre un dia mas que la regla de fecha (el dia UTC), y para
-ese dia pide una evidencia que la regla de fecha no pide. Limite: esa evidencia es una heuristica
-sobre el texto de la llamada (un `>` seguido de la ruta cuenta como redireccion, y solo mira el
-final de la ruta, no el proyecto). La razon sale como
+transcripcion, tambien con margen cero, Y la transcripcion CREO esa ficha con un `Write`
+(`creo_la_ficha` de `pendientes_afines.py`). Un Edit o una redireccion de Bash no bastan. Abre un
+dia mas que la regla de fecha (el dia UTC: manana al oeste de Greenwich, ayer al este), y para ese
+dia pide una evidencia que la regla de fecha no pide. Limites: solo se mira el final de la ruta
+del `Write`, no el proyecto; y un `Write` que REESCRIBE entera la ficha sin sello de otra sesion
+de ese dia tambien cuenta. La razon sale como
 `sellada-por-evidencia-de-escritura`. `/checkpoint-3t` ya calcula la fecha local con
 `fecha-ficha.py`; esto cubre el nombre que quedo fijado antes (un `--origen` emitido a media
 sesion no se puede renombrar) y las fichas viejas.
@@ -191,10 +191,11 @@ def escrita_por_la_sesion(ficha, transcripcion):
     transcripcion. Pasa solo si se cumplen las dos:
       1. la fecha del nombre cae en las fechas UTC de la transcripcion, con margen CERO (la ficha
          se nombro con la fecha UTC del momento, que es el defecto medido); y
-      2. la transcripcion ESCRIBIO esa ficha (`escribio_la_ficha` de `pendientes_afines.py`).
-    No se reutiliza `ficha_de_la_sesion` entera: su margen de un dia sobre las fechas UTC dejaba
-    sellar la ficha de ayer o de pasado manana de otra sesion con un solo Edit (revisor
-    independiente, antes de publicar). Falla cerrado: si algo no se puede comprobar, no se sella."""
+      2. la transcripcion CREO esa ficha con un `Write` (`creo_la_ficha` de `pendientes_afines.py`).
+    No se reutiliza `ficha_de_la_sesion`: su margen de un dia sobre las fechas UTC dejaba sellar
+    la ficha de ayer o de pasado manana de otra sesion con un solo Edit. Y un Edit tampoco basta
+    con margen cero: al este de Greenwich el dia UTC de una sesion de manana es AYER en hora local,
+    y editar la ficha de ayer de otra sesion la sellaba (revisor independiente, rondas 1 y 2). Falla cerrado: si algo no se puede comprobar, no se sella."""
     try:
         primera, ultima = fechas_utc(transcripcion)
         if not (primera and ultima and en_rango(fecha_del_nombre(ficha), primera, ultima)):
@@ -204,7 +205,7 @@ def escrita_por_la_sesion(ficha, transcripcion):
         spec = importlib.util.spec_from_file_location("pendientes_afines", ruta)
         af = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(af)
-        return bool(af.escribio_la_ficha(transcripcion, os.path.basename(ficha)))
+        return bool(af.creo_la_ficha(transcripcion, os.path.basename(ficha)))
     except Exception:
         return False
 
@@ -245,8 +246,8 @@ def main():
     # como en el matcher el sello GANA a la evidencia de escritura, el resultado es justo la
     # perdida invisible que esto existe para impedir. Lo encontro un adversario externo el
     # 2026-09-12, antes de publicar. Asi que ademas se exige que las fechas cuadren: la fecha del
-    # nombre de la ficha tiene que caer dentro del rango de la transcripcion, con un dia de margen
-    # a cada lado (los ts del JSONL son UTC, el nombre de la ficha es hora local, y una sesion
+    # nombre de la ficha tiene que caer dentro del rango de la transcripcion, SIN margen desde
+    # 2.20.x (MARGEN_DIAS, arriba; los ts del JSONL son UTC, el nombre de la ficha es hora local, y una sesion
     # puede cruzar la medianoche).
     if jsonl_dir:
         transcripcion = os.path.join(jsonl_dir, sid + ".jsonl")

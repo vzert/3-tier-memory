@@ -220,6 +220,15 @@ PY
     else falla "C8 ficha a un dia de la fecha UTC ($X): no se sella" "rc=$RC $(cat "$T/st")"; fi
   done
 
+  # C9: la fecha UTC y solo un Edit (o una redireccion de Bash): no. Al este de Greenwich el dia
+  # UTC de una sesion de manana es ayer, y editar la ficha de ayer de otra sesion la sellaba
+  # (revisor independiente, ronda 2). Hace falta el Write que la creo.
+  E="$UTC-solo-editada.md"; ficha "$E"; transcripcion "$SID" "$E"
+  sed -i.bak 's/"name": "Write"/"name": "Edit"/' "$JD/$SID.jsonl" && rm -f "$JD/$SID.jsonl.bak"
+  sello "$E" "$SID"
+  if [ "$RC" != "0" ] && grep -q '"name": "Edit"' "$JD/$SID.jsonl" && ! grep -q 'session_id' "$MEM/sessions/$E"; then ok "C9 ficha con fecha UTC solo editada: no se sella"
+  else falla "C9 ficha con fecha UTC solo editada: no se sella" "rc=$RC $(cat "$T/st")"; fi
+
   # C6: --dry-run dice que sellaria y no escribe.
   G="$UTC-en-seco.md"; ficha "$G"; transcripcion "$SID" "$G"
   cp "$MEM/sessions/$G" "$T/antes"
@@ -280,6 +289,10 @@ L="2026-05-11-a-un-dia.md"; ficha "$L"; transcripcion "$SID" "$F" "$L"
 igual "D7 ficha de la sesion que el sello rechaza: SALTADO" "SALTADO" "$(audita "$L" "$SID")"
 if corrige | grep -q 'stamp-session-id.py'; then falla "D7b ficha que el sello rechaza: no propone un comando que no sirve" "$(corrige)"
 else ok "D7b ficha que el sello rechaza: no propone un comando que no sirve"; fi
+# D12: la misma ficha a un dia, pero esta sesion solo la EDITO: es de otra sesion, calla.
+sed -i.bak 's/"name": "Write"/"name": "Edit"/' "$JD/$SID.jsonl" && rm -f "$JD/$SID.jsonl.bak"
+igual "D12 ficha a un dia que la sesion solo edito: calla" "nada" "$(audita "$L" "$SID")"
+transcripcion "$SID" "$F" "$L"
 # D8: con --solo-snippet (lo que corre el hook de cierre) el hallazgo no sale.
 env -i PATH="$PATH" TZ="$TZ" HOME="$HOME_T" CLAUDE_CODE_SESSION_ID="$SID" python3 "$BIN/checkpoint-audit.py" "$MEM" \
     --session-file "$MEM/sessions/$L" --no-git --hoy "$LOCAL" --json --solo-snippet > "$T/aud.json" 2>/dev/null
