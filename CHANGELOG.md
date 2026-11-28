@@ -18,13 +18,15 @@ prosa. Primera fase (F1) del plan de hilos.
 - `/checkpoint-3t` Step 1: `DATE` sale de ese comando. La plantilla dice que no se use la fecha de
   un `date -u` ni de un timestamp UTC, y que hacer si la sesion ya cito la ficha con otra fecha.
 - `stamp-session-id.py --dry-run`: hace las comprobaciones y no escribe.
-- `checkpoint-audit.py`: hallazgo `ficha.session_id`. SALTADO cuando existe
-  `CLAUDE_CODE_SESSION_ID`, la sesion escribio la ficha y la ficha no lleva `session_id`. Si el
-  sello se puede poner, trae el comando; si el sello la rechaza, trae la razon. Sin la variable no
-  hay hallazgo. Tampoco para una ficha que la sesion no escribio, una sellada por otra sesion, o
-  una con fecha a mas de un dia de las fechas de la sesion (auditoria retroactiva). Si no se
-  encuentra la transcripcion, sale PARCIAL para una ficha de hoy, ayer o manana. La auditoria no
-  sella: llama al sello con `--dry-run`.
+- `checkpoint-audit.py`: hallazgo `ficha.session_id`, solo con `CLAUDE_CODE_SESSION_ID` y una
+  ficha sin `session_id`. Sale SALTADO en dos casos. Uno: el sello se puede poner (la sesion
+  escribio o edito la ficha, y su fecha cuadra); trae el comando. Dos: el sello la rechaza, pero
+  la sesion la creo con un `Write` que se aplico y su fecha esta a un dia como mucho de las fechas
+  UTC de la sesion; trae la razon y ningun comando. No hay hallazgo sin la variable, ni para una
+  ficha que la sesion no escribio, ni para una sellada por otra sesion, ni para una que el sello
+  rechaza y la sesion solo edito, ni para una con fecha a mas de un dia de las fechas UTC de la
+  sesion (auditoria retroactiva). Si no se encuentra la transcripcion, sale PARCIAL para una ficha
+  de hoy, ayer o manana. La auditoria no sella: llama al sello con `--dry-run`.
 - `test-fecha-ficha.sh` (44 comprobaciones) y 20 mutaciones en `tools/mutation-check.sh`. La prueba
   corre los bloques del Step 1 y del Step 5c-bis extraidos de la plantilla, con un cierre a las
   20:00 hora local. Fija el huso ella misma; donde el sistema no aplica `TZ` (Git Bash), los casos

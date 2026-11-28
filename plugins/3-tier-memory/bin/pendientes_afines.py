@@ -651,6 +651,7 @@ def creo_la_ficha(transcripcion, nombre):
                             and isinstance(b.get("id"), str) and b["id"]:
                         pedidos.add(b["id"])
                 elif tipo == "user" and b.get("type") == "tool_result" \
+                        and isinstance(b.get("tool_use_id"), str) \
                         and b.get("tool_use_id") in pedidos and not b.get("is_error"):
                     return True
     return False

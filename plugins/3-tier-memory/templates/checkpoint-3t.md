@@ -190,7 +190,7 @@ UTC y ninguna quedo sellada). Si el slug traia una fecha delante, el script la s
 `SLUG_FECHA=`) y avisa cuando no es DATE (sin el script solo sale `DATE=`: separala tu): usa DATE, **salvo** que esta sesion ya haya emitido un
 evento que cita `[[sessions/<esa fecha>-SLUG]]` (un `--origen` o `--sesion` de antes del
 checkpoint). Ese enlace no se puede renombrar: conserva ese nombre y escribe la ficha con la
-herramienta Write; Step 5c-bis la sella por esa evidencia.
+herramienta Write; si esa fecha es la UTC de la sesion, Step 5c-bis la sella por esa evidencia.
 
 Set: DATE = la que imprimio el bloque, SESSION_FILE = memory/sessions/DATE-SLUG.md
 

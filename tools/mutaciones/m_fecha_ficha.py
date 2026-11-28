@@ -27,7 +27,7 @@ M = {
     "sello-evidencia-gratis": [("            if not escrita_por_la_sesion(ficha, transcripcion):", "            if False:")],
     "sello-edit-vale": [("        return bool(af.creo_la_ficha(transcripcion, os.path.basename(ficha)))",
                          "        return bool(af.escribio_la_ficha(transcripcion, os.path.basename(ficha)))")],
-    "audit-edit-vale": [("    if not sellaria and not af.creo_la_ficha(trans, nombre):", "    if False:")],
+    "audit-edit-vale": [("    if not sellaria and not creada:", "    if False:")],
     # pendientes_afines.py: un Write cuenta aunque su resultado sea un error.
     "write-fallido-vale": [('                        and b.get("tool_use_id") in pedidos and not b.get("is_error"):',
                             '                        and b.get("tool_use_id") in pedidos:')],
