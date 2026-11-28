@@ -1510,7 +1510,7 @@ Si imprime `stamped=0` con una razon distinta de `ya-sellada-con-el-mismo-id`, l
 sello. `checkpoint-audit.py` lo reporta en Step 7a como `ficha.session_id` (2.72.0): SALTADO si
 existe `CLAUDE_CODE_SESSION_ID` y la ficha es de esta sesion (la escribio, y o el sello se puede
 poner o la creo con un Write que se aplico); PARCIAL si no encuentra la transcripcion; nada si la
-ficha ya lleva el sello de otra sesion o esta sesion solo la edito. Que hacer segun la razon:
+ficha ya lleva el sello de otra sesion, o si el sello la rechaza y esta sesion solo la edito. Que hacer segun la razon:
 
 - `la-ficha-es-de-D y-la-transcripcion-de-…`: la fecha del nombre no es la local y la transcripcion
   no muestra un `Write` de esta sesion sobre la ficha que se haya aplicado. Si la escribiste con la herramienta Write

@@ -18,8 +18,8 @@ prosa. Primera fase (F1) del plan de hilos.
 - `/checkpoint-3t` Step 1: `DATE` sale de ese comando. La plantilla dice que no se use la fecha de
   un `date -u` ni de un timestamp UTC, y que hacer si la sesion ya cito la ficha con otra fecha.
 - `stamp-session-id.py --dry-run`: hace las comprobaciones y no escribe.
-- `checkpoint-audit.py`: hallazgo `ficha.session_id`, solo con `CLAUDE_CODE_SESSION_ID` y una
-  ficha sin `session_id`. Sale SALTADO en dos casos. Uno: el sello se puede poner (la sesion
+- `checkpoint-audit.py`: hallazgo `ficha.session_id`, solo con `CLAUDE_CODE_SESSION_ID`. Con la
+  ficha ya sellada por esta sesion sale HECHO. Sin `session_id`, sale SALTADO en dos casos. Uno: el sello se puede poner (la sesion
   escribio o edito la ficha, y su fecha cuadra); trae el comando. Dos: el sello la rechaza, pero
   la sesion la creo con un `Write` que se aplico y su fecha esta a un dia como mucho de las fechas
   UTC de la sesion; trae la razon y ningun comando. No hay hallazgo sin la variable, ni para una
