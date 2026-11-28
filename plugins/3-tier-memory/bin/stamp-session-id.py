@@ -10,17 +10,39 @@ transcripcion; esto la deja ESCRITA en la ficha, para que el run siguiente no te
 reconstruir nada.
 
 QUE ES Y QUE NO ES ESTE SELLO. Lo que se escribe es lo que DECLARA quien llama: "esta ficha salio
-de esta transcripcion". No es una prueba criptografica de identidad y no puede serlo — cuando el
-checkpoint sella, la transcripcion aun no contiene la escritura de la ficha, asi que no hay nada
-contra lo que verificarla. Lo que si se hace es rechazar la declaracion cuando no cuadra: que el
-`.jsonl` exista, que la fecha de la ficha caiga dentro del rango de fechas de esa transcripcion, y
-que no haya ya un sello distinto. Eso ataja el error de llamante —el UUID arrastrado de otra
+de esta transcripcion". No es una prueba criptografica de identidad. Lo que si se hace es rechazar
+la declaracion cuando no cuadra: que el `.jsonl` exista, que la fecha de la ficha caiga dentro del
+rango de fechas de esa transcripcion, y que no haya ya un sello distinto. (Hasta 2.71.1 este texto
+decia que al sellar la transcripcion aun no contiene la escritura de la ficha. No es asi cuando la
+ficha se escribio en una llamada de herramienta anterior a la del sello, que es lo que manda la
+plantilla: medido en 3 checkpoints reales, `stamp-hilo.py` encontro esa escritura en la misma
+llamada Bash que el sello. La regla de fecha sigue siendo la primera; la escritura solo se mira en
+el caso de abajo.) Eso ataja el error de llamante —el UUID arrastrado de otra
 sesion—, no a un adversario. Y conviene saber lo flojo que es como filtro: medido en este
 proyecto el 2026-09-12, con un dia de margen un mismo UUID podia sellar hasta 14 fichas distintas;
 con margen cero, 11. Bajar el margen no arregla eso —hay varias sesiones al dia— y por eso la
 correccion de fondo fue dejar de llamarlo "exacto". Lo que si ataja el margen cero, junto con el
 fail-cerrado, es el caso grosero: el UUID de otra semana, la fecha ilegible, la transcripcion sin
 un solo timestamp valido.
+
+LA FICHA CON FECHA UTC (2.72.0). Medido en otro proyecto: 8 de 71 checkpoints hechos entre las
+18:00 y las 24:00 hora local nombraron la ficha con la fecha UTC, que a esa hora es la del dia
+siguiente, y con margen cero ninguna sello. Subir el margen no es el arreglo (parrafo anterior).
+Cuando la fecha no cuadra, se acepta la ficha solo si la fecha cae en las fechas UTC de la
+transcripcion, tambien con margen cero, Y la transcripcion tiene un `Write` sobre esa ficha que se
+aplico: su resultado existe y no es un error (`creo_la_ficha` de `pendientes_afines.py`). Un Edit,
+una redireccion de Bash, un Write que fallo o uno que el usuario rechazo no bastan. Abre un
+dia mas que la regla de fecha (el dia UTC: manana al oeste de Greenwich, ayer al este), y para ese
+dia pide una evidencia que la regla de fecha no pide. Limites: solo se mira el final de la ruta
+del `Write`, no el proyecto; y un `Write` que REESCRIBE entera la ficha sin sello de otra sesion
+de ese dia tambien cuenta. La razon sale como
+`sellada-por-evidencia-de-escritura`. `/checkpoint-3t` ya calcula la fecha local con
+`fecha-ficha.py`; esto cubre el nombre que quedo fijado antes (un `--origen` emitido a media
+sesion no se puede renombrar) y las fichas viejas.
+
+`--dry-run`: hace todas las comprobaciones y no escribe. Sale 0 con
+`stamped=0 reason=en-seco:<razon con la que sellaria>` si sellaria (o si ya esta sellada con ese
+id), y con el codigo y la razon de siempre si no. Lo usa `checkpoint-audit.py` (`ficha.session_id`).
 
 QUIEN LO LLAMA:
   - `/checkpoint-3t` Step 5c, con `$CLAUDE_CODE_SESSION_ID`, sobre la ficha que acaba de escribir.
@@ -33,7 +55,7 @@ marcada como ya-importada que nunca se importo—. Por eso, con `--jsonl-dir`, s
 `.jsonl` exista de verdad, y nunca se pisa un sello distinto que ya estuviera puesto.
 
 Uso:
-    stamp-session-id.py <FICHA.md> <SESSION_ID> [--jsonl-dir DIR] [--projects-root DIR]
+    stamp-session-id.py <FICHA.md> <SESSION_ID> [--jsonl-dir DIR] [--projects-root DIR] [--dry-run]
 
 Si `<jsonl-dir>/<SESSION_ID>.jsonl` no existe, busca `<projects-root>/*/<SESSION_ID>.jsonl`
 (por defecto `~/.claude/projects`). Motivo (2.39.1): Step 5c-bis deriva --jsonl-dir de
@@ -141,6 +163,55 @@ def en_rango(fecha, primera, ultima):
     return a <= f <= b
 
 
+def fechas_utc(transcripcion):
+    """(primera, ultima) fecha UTC de la transcripcion: la del `timestamp` tal como viene escrito,
+    sin pasar al huso de la maquina. (None, None) si no hay ninguno legible."""
+    primera = ultima = None
+    try:
+        with open(transcripcion, encoding="utf-8", errors="replace") as fh:
+            for linea in fh:
+                try:
+                    ts = json.loads(linea).get("timestamp")
+                    dt = datetime.datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                    f = dt.astimezone(datetime.timezone.utc).date().isoformat() if dt.tzinfo else None
+                except (ValueError, TypeError, AttributeError, OSError, OverflowError):
+                    continue
+                if not f:
+                    continue
+                if primera is None or f < primera:
+                    primera = f
+                if ultima is None or f > ultima:
+                    ultima = f
+    except OSError:
+        return None, None
+    return primera, ultima
+
+
+def escrita_por_la_sesion(ficha, transcripcion):
+    """Segunda oportunidad cuando la fecha del nombre no cae en las fechas LOCALES de la
+    transcripcion. Pasa solo si se cumplen las dos:
+      1. la fecha del nombre cae en las fechas UTC de la transcripcion, con margen CERO (la ficha
+         se nombro con la fecha UTC del momento, que es el defecto medido); y
+      2. la transcripcion tiene un `Write` sobre esa ficha que se aplico: con `tool_result` y sin
+         error (`creo_la_ficha` de `pendientes_afines.py`).
+    No se reutiliza `ficha_de_la_sesion`: su margen de un dia sobre las fechas UTC dejaba sellar
+    la ficha de ayer o de pasado manana de otra sesion con un solo Edit. Y un Edit tampoco basta
+    con margen cero: al este de Greenwich el dia UTC de una sesion de manana es AYER en hora local,
+    y editar la ficha de ayer de otra sesion la sellaba (revisor independiente, rondas 1 y 2). Falla cerrado: si algo no se puede comprobar, no se sella."""
+    try:
+        primera, ultima = fechas_utc(transcripcion)
+        if not (primera and ultima and en_rango(fecha_del_nombre(ficha), primera, ultima)):
+            return False
+        import importlib.util
+        ruta = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pendientes_afines.py")
+        spec = importlib.util.spec_from_file_location("pendientes_afines", ruta)
+        af = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(af)
+        return bool(af.creo_la_ficha(transcripcion, os.path.basename(ficha)))
+    except Exception:
+        return False
+
+
 def salir(codigo, sellado, razon):
     print("stamped=%d reason=%s" % (sellado, razon))
     return codigo
@@ -150,6 +221,9 @@ def main():
     argv = sys.argv[1:]
     jsonl_dir = ""
     projects_root = os.path.expanduser("~/.claude/projects")
+    en_seco = "--dry-run" in argv
+    argv = [a for a in argv if a != "--dry-run"]
+    razon_sello = "sellada"
     if "--jsonl-dir" in argv:
         i = argv.index("--jsonl-dir")
         if i + 1 < len(argv):
@@ -174,8 +248,8 @@ def main():
     # como en el matcher el sello GANA a la evidencia de escritura, el resultado es justo la
     # perdida invisible que esto existe para impedir. Lo encontro un adversario externo el
     # 2026-09-12, antes de publicar. Asi que ademas se exige que las fechas cuadren: la fecha del
-    # nombre de la ficha tiene que caer dentro del rango de la transcripcion, con un dia de margen
-    # a cada lado (los ts del JSONL son UTC, el nombre de la ficha es hora local, y una sesion
+    # nombre de la ficha tiene que caer dentro del rango de la transcripcion, SIN margen desde
+    # 2.20.x (MARGEN_DIAS, arriba; los ts del JSONL son UTC, el nombre de la ficha es hora local, y una sesion
     # puede cruzar la medianoche).
     if jsonl_dir:
         transcripcion = os.path.join(jsonl_dir, sid + ".jsonl")
@@ -202,8 +276,12 @@ def main():
         if not (primera and ultima):
             return salir(6, 0, "la-transcripcion-no-tiene-timestamps-legibles")
         if not en_rango(fecha_ficha, primera, ultima):
-            return salir(6, 0, "la-ficha-es-de-%s y-la-transcripcion-de-%s..%s"
-                         % (fecha_ficha, primera, ultima))
+            # La fecha no cuadra con margen cero. Solo pasa la ficha que esta sesion escribio y
+            # cuya fecha cae en las fechas UTC de la transcripcion (ver LA FICHA CON FECHA UTC).
+            if not escrita_por_la_sesion(ficha, transcripcion):
+                return salir(6, 0, "la-ficha-es-de-%s y-la-transcripcion-de-%s..%s"
+                             % (fecha_ficha, primera, ultima))
+            razon_sello = "sellada-por-evidencia-de-escritura"
 
     with open(ficha, encoding="utf-8", errors="replace") as fh:
         contenido = fh.read()
@@ -220,10 +298,12 @@ def main():
     ya = SESSION_ID_FM.search(cabeza)
     if ya:
         if ya.group(1).strip() == sid:
-            return salir(0, 0, "ya-sellada-con-el-mismo-id")
+            return salir(0, 0, ("en-seco:" if en_seco else "") + "ya-sellada-con-el-mismo-id")
         # Pisar el sello de otra sesion es exactamente el fallo invisible que esto evita.
         return salir(5, 0, "ya-sellada-con-otro-id:%s" % ya.group(1).strip())
 
+    if en_seco:
+        return salir(0, 0, "en-seco:" + razon_sello)
     nueva = cabeza.rstrip("\n") + "\nsession_id: " + sid + "\n" + cola
 
     # Escritura atomica: un checkpoint interrumpido no debe dejar la ficha a medias.
@@ -231,7 +311,7 @@ def main():
     with open(tmp, "w", encoding="utf-8", newline="") as fh:
         fh.write(nueva)
     os.replace(tmp, ficha)
-    return salir(0, 1, "sellada")
+    return salir(0, 1, razon_sello)
 
 
 if __name__ == "__main__":

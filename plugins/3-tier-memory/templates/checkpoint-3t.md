@@ -170,7 +170,29 @@ miles de caracteres cada uno.
 If the user provided arguments after /checkpoint-3t, use that as the slug.
 Otherwise generate one from the session's main work (lowercase, hyphens, max 40 chars).
 
-Set: DATE = today (YYYY-MM-DD), SESSION_FILE = memory/sessions/DATE-SLUG.md
+**DATE la calcula un comando, no tu (2.72.0).** Corre este bloque con el slug en lugar de `SLUG`:
+
+```bash
+# Cada bloque define lo que usa: el shell no conserva variables entre llamadas.
+_FF=""
+for _c in "${CLAUDE_PLUGIN_ROOT:-}/bin/fecha-ficha.py" "$PWD/plugins/3-tier-memory/bin/fecha-ficha.py" \
+          "$(find "$HOME/.claude/plugins" -name fecha-ficha.py -path '*/3-tier-memory/*' 2>/dev/null | sort -V | tail -1)"; do
+  [ -n "$_c" ] && [ -f "$_c" ] && { _FF="$_c"; break; }
+done
+{ [ -n "$_FF" ] && python3 "$_FF" --slug "SLUG"; } || echo "DATE=$(date +%Y-%m-%d)"   # sin el script, o si falla: la fecha local del sistema
+```
+
+Imprime `DATE=YYYY-MM-DD`: la fecha **local** de esta maquina, la misma con la que Step 5c-bis
+compara al sellar. Usa esa. No uses la fecha de un `date -u`, de un log o de un timestamp UTC que
+hayas visto en la sesion: entre las 18:00 y las 24:00 de un huso al oeste de Greenwich esa fecha ya
+es la del dia siguiente (medido: 8 de 71 checkpoints de esas horas nombraron la ficha con la fecha
+UTC y ninguna quedo sellada). Si el slug traia una fecha delante, el script la separa (`SLUG=`,
+`SLUG_FECHA=`) y avisa cuando no es DATE (sin el script solo sale `DATE=`: separala tu): usa DATE, **salvo** que esta sesion ya haya emitido un
+evento que cita `[[sessions/<esa fecha>-SLUG]]` (un `--origen` o `--sesion` de antes del
+checkpoint). Ese enlace no se puede renombrar: conserva ese nombre y escribe la ficha con la
+herramienta Write; si esa fecha es la UTC de la sesion, Step 5c-bis la sella por esa evidencia.
+
+Set: DATE = la que imprimio el bloque, SESSION_FILE = memory/sessions/DATE-SLUG.md
 
 ## Step 2: Session — DUAL WRITE (always)
 
@@ -1472,7 +1494,8 @@ vea lo mismo. Sin `Retomamos:` no sella el arranque (`sellado=0`), y no pisa un 
 valor coincide con el nombre del `.jsonl` en curso) y no se ha comprobado en otras versiones, en
 modo SDK ni sin terminal. Por eso el sello nunca se da por bueno: `stamp-session-id.py` exige que
 ese id tenga `.jsonl` en `$JSONL_DIR` **y** que la fecha de la ficha caiga dentro del rango de esa
-transcripcion, y si algo no cuadra no sella. Desde 2.63.45 `journal-emit.py` tambien la lee: el
+transcripcion (o, si no cae, que la transcripcion haya creado esa ficha con un Write y la fecha
+caiga en sus fechas UTC, sin margen, 2.72.0), y si algo no cuadra no sella. Desde 2.63.45 `journal-emit.py` tambien la lee: el
 `session_id` de cada evento es esa variable (salvo `--session`, `CLAUDE_SESSION_ID` o
 `THREET_SESSION_ID`, que mandan), y sin ella es un uuid nuevo por evento, como antes.
 
@@ -1483,8 +1506,26 @@ UUID: el script se niega si ese id no tiene `.jsonl` en `$JSONL_DIR`, porque en 
 sello GANA a la evidencia de escritura y un sello equivocado no da un duplicado visible — da el
 fallo invisible, una sesion marcada como importada que no lo esta.
 
-Si imprime `stamped=0` con una razon distinta de `ya-sellada-con-el-mismo-id`, anotalo para el
-informe del Step 7.
+Si imprime `stamped=0` con una razon distinta de `ya-sellada-con-el-mismo-id`, la ficha queda sin
+sello. `checkpoint-audit.py` lo reporta en Step 7a como `ficha.session_id` (2.72.0): SALTADO si
+existe `CLAUDE_CODE_SESSION_ID` y la ficha es de esta sesion (la escribio, y o el sello se puede
+poner o la creo con un Write que se aplico); PARCIAL si no encuentra la transcripcion; nada si la
+ficha ya lleva el sello de otra sesion, o si el sello la rechaza y esta sesion solo la edito. Que hacer segun la razon:
+
+- `la-ficha-es-de-D y-la-transcripcion-de-…`: la fecha del nombre no es la local y la transcripcion
+  no muestra un `Write` de esta sesion sobre la ficha que se haya aplicado. Si la escribiste con la herramienta Write
+  en esta misma tanda de llamadas, vuelve a correr el bloque (ahora el Write ya esta en la
+  transcripcion). Si la creaste con Bash (un heredoc), con la fecha UTC no se sella: declaralo. Si
+  la fecha no es ni la local ni la UTC de la sesion, o la ficha ya lleva el sello de otra sesion,
+  no hay arreglo: declaralo.
+- `no-hay-jsonl-para-ese-id`, `id-en-varios-proyectos`, `la-transcripcion-no-tiene-timestamps-legibles`:
+  no hay arreglo desde aqui. Declaralo en Step 7 con la razon.
+- `ya-sellada-con-otro-id`: la ficha es de otra sesion. No la pises; revisa el slug.
+- `sin-frontmatter`, `frontmatter-sin-cierre`: corre Step 5c y vuelve a sellar.
+
+Nunca escribas `session_id` a mano ni renombres la ficha para que cuadre (rompe sus enlaces).
+`sellada-por-evidencia-de-escritura` es un sello bueno: la ficha lleva la fecha UTC en vez de la
+local, y la transcripcion tiene un Write de esta sesion sobre ella que se aplico.
 
 ## Step 5d: Redact secrets (deterministic gate — runs BEFORE any commit)
 

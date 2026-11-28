@@ -419,6 +419,27 @@ T=test-fecha-iso.sh
 caso "emisor sin regex de fecha" journal-emit.py m_fecha_iso.py $T "pendiente.add --creado 20261016: error" sin-regex
 caso "compactador sin regex"    journal-compact.py m_fecha_iso.py $T "creado ancho: la cuarentena es por la fecha, no error-interno" sin-regex
 caso "fecha solo en learning"   journal-compact.py m_fecha_iso.py $T "resolve con fecha ancha: va a cuarentena" sin-fecha-generica
+T=test-fecha-ficha.sh; L=m_fecha_ficha.py
+caso "fecha de ficha en UTC"      fecha-ficha.py $L $T "A1 fecha local a las 20:00" fecha-utc
+caso "plantilla con date -u"      ../templates/checkpoint-3t.md $L $T "B1 cierre a las 20:00" plantilla-date-u
+caso "sello sin evidencia"        stamp-session-id.py $L $T "C1 ficha con fecha UTC escrita por la sesion" sello-sin-evidencia
+caso "sello: evidencia gratis"    stamp-session-id.py $L $T "C2 ficha con fecha UTC que la sesion no escribio" sello-evidencia-gratis
+caso "sello: un Edit basta"       stamp-session-id.py $L $T "C9 ficha con fecha UTC solo editada" sello-edit-vale
+caso "audit: un Edit basta"       checkpoint-audit.py $L $T "D12 ficha a un dia que la sesion solo edito" audit-edit-vale
+caso "sello: Write fallido vale"  pendientes_afines.py $L $T "C10 ficha con fecha UTC y un Write que fallo" write-fallido-vale
+caso "sello en seco escribe"      stamp-session-id.py $L $T "C6 --dry-run" seco-escribe
+caso "audit sin ficha.session_id" checkpoint-audit.py $L $T "D1 ficha de la sesion sin sello y con la variable" audit-sin-chequeo
+caso "audit sin la variable"      checkpoint-audit.py $L $T "D2 ficha de la sesion sin sello y sin la variable" audit-sin-variable
+caso "audit sobre ficha ajena"    checkpoint-audit.py $L $T "D5 ficha ajena del mismo dia" audit-ficha-ajena
+caso "audit: comando que no sirve" checkpoint-audit.py $L $T "D7b ficha que el sello rechaza" audit-comando-siempre
+caso "fecha: instante sin zona"   fecha-ficha.py $L $T "A8 --ahora sin zona" ahora-sin-zona
+caso "fecha: slug con .md"        fecha-ficha.py $L $T "A9 slug con .md" slug-con-md
+caso "sello: UTC sin limite"      stamp-session-id.py $L $T "C8 ficha a un dia de la fecha UTC" sello-utc-margen
+caso "audit sella al mirar"       checkpoint-audit.py $L $T "D1b la auditoria no sella" audit-sin-seco
+caso "audit sobre ficha vieja"    checkpoint-audit.py $L $T "D9 ficha vieja que la sesion edito" audit-ficha-ajena
+caso "audit sin transcripcion, vieja" checkpoint-audit.py $L $T "D10b id sin transcripcion, ficha vieja" audit-sin-cerca
+caso "audit: comando sin comillas" checkpoint-audit.py $L $T "D3 el comando del hallazgo sella" audit-sin-comillas
+caso "hook pasa la variable"      checkpoint-close-guard.sh $L test-checkpoint-close-guard.sh "el hook con CLAUDE_CODE_SESSION_ID no exige" hook-con-variable
 T=test-error-interno.sh
 caso "sin red de error-interno" journal-compact.py m_error_interno.py $T "text=1: el malo va a cuarentena" sin-captura
 caso "OSError a cuarentena"     journal-compact.py m_error_interno.py $T "OSError: el evento sigue en pending" captura-oserror

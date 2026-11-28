@@ -1,5 +1,77 @@
 # Changelog
 
+## [2.72.0] - 2026-11-27
+La fecha de la ficha la pone un comando, y una ficha que queda sin `session_id` ya se ve en la
+auditoria del cierre. Caso real (otro proyecto, 315 fichas en la ventana): 8 fichas quedaron sin
+`session_id`. Las 8 las escribio `/checkpoint-3t` entre las 18:00 y las 24:00 hora local, con la
+fecha UTC en el nombre, que a esa hora ya es la del dia siguiente. `stamp-session-id.py` compara
+con la fecha local de la transcripcion con margen cero y rechazo las 8. La plantilla decia
+`DATE = today` y la fecha la elegia el agente: en las 8 sesiones el contexto traia la fecha local
+correcta, pero el agente venia trabajando con horas UTC (`date -u`, logs de servidores). De los 71
+checkpoints de esas horas, 63 usaron la fecha local y sellaron. El cierre solo decia el fallo en
+prosa. Primera fase (F1) del plan de hilos.
+
+### Added
+- `bin/fecha-ficha.py`: imprime `DATE=` con la fecha local de la maquina, con la misma conversion
+  que usa el sello (`fecha_local` de `stamp-session-id.py`). Con `--slug`, separa la fecha que el
+  slug traiga delante y avisa si no es la local.
+- `/checkpoint-3t` Step 1: `DATE` sale de ese comando. La plantilla dice que no se use la fecha de
+  un `date -u` ni de un timestamp UTC, y que hacer si la sesion ya cito la ficha con otra fecha.
+- `stamp-session-id.py --dry-run`: hace las comprobaciones y no escribe.
+- `checkpoint-audit.py`: hallazgo `ficha.session_id`, solo con `CLAUDE_CODE_SESSION_ID`. Con la
+  ficha ya sellada por esta sesion sale HECHO. Sin `session_id`, sale SALTADO en dos casos. Uno: el sello se puede poner (la sesion
+  escribio o edito la ficha, y su fecha cuadra); trae el comando. Dos: el sello la rechaza, pero
+  la sesion la creo con un `Write` que se aplico y su fecha esta a un dia como mucho de las fechas
+  UTC de la sesion; trae la razon y ningun comando. No hay hallazgo sin la variable, ni para una
+  ficha que la sesion no escribio, ni para una sellada por otra sesion, ni para una que el sello
+  rechaza y la sesion solo edito, ni para una con fecha a mas de un dia de las fechas UTC de la
+  sesion (auditoria retroactiva). Si no se encuentra la transcripcion, sale PARCIAL para una ficha
+  de hoy, ayer o manana. La auditoria no sella: llama al sello con `--dry-run`.
+- `test-fecha-ficha.sh` (44 comprobaciones) y 20 mutaciones en `tools/mutation-check.sh`. La prueba
+  corre los bloques del Step 1 y del Step 5c-bis extraidos de la plantilla, con un cierre a las
+  20:00 hora local. Fija el huso ella misma; donde el sistema no aplica `TZ` (Git Bash), los casos
+  que dependen del desfase se saltan y se cuentan.
+
+### Changed
+- `stamp-session-id.py`: cuando la fecha de la ficha no cae en las fechas locales de la
+  transcripcion, sella solo si se cumplen dos cosas: la fecha cae en las fechas UTC de la
+  transcripcion, tambien sin margen, y la transcripcion tiene un `Write` sobre esa ficha que se
+  aplico, con su resultado y sin error (`creo_la_ficha`, nueva en `pendientes_afines.py`; un Edit,
+  una redireccion, un Write fallido o uno rechazado no bastan). La razon sale
+  `sellada-por-evidencia-de-escritura`. El margen de la regla de fecha sigue en cero. Sobre copias
+  de las 8 fichas del caso real, 8 de 8 quedan selladas. Medido sobre 317 transcripciones y 586
+  fichas de ese proyecto, con la funcion del sello: la regla nueva anade 8 fichas, una por sesion,
+  y son esas 8; a ningun otro id le anade ninguna. Un revisor independiente rompio tres versiones
+  anteriores: la que reutilizaba el margen de un dia de `ficha_de_la_sesion`; la que aceptaba un
+  Edit como evidencia (sellaba la ficha de ayer de otra sesion en un huso al este de Greenwich,
+  donde el dia UTC de una sesion de manana es ayer); y la que contaba un Write sin mirar su
+  resultado (un Write fallido sobre la ficha de otra sesion bastaba).
+- `test-checkpoint-audit.sh` quita `CLAUDE_CODE_SESSION_ID` de su entorno: corrida suelta desde una
+  sesion de Claude Code, el hallazgo nuevo cambiaba 3 de sus resultados.
+- `/checkpoint-3t` Step 5c-bis: dice que hacer con cada razon de `stamped=0`. Antes pedia solo
+  anotarlo para el informe.
+- `checkpoint-close-guard.sh`: corre su auditoria de Step 7a sin `CLAUDE_CODE_SESSION_ID`. El
+  hallazgo nuevo depende de esa variable, y si el hook la viera y el agente no, el hook pediria en
+  cada cierre un SALTADO que la auditoria del agente no imprime.
+
+### Limites
+- La evidencia del sello es un `Write` cuyo `file_path` acaba en `sessions/<ficha>`: no mira el
+  proyecto, y un `Write` que reescribe entera la ficha sin sello de otra sesion del dia UTC tambien
+  cuenta. Una ficha con fecha UTC creada con Bash (heredoc) no se sella.
+- `ficha.session_id` no distingue una ficha de hoy (fecha local) de otra sesion, sin sello, que
+  esta sesion edito: la regla de fecha del sello tampoco. El hallazgo propondria sellarla.
+- Las medidas y las pruebas de huso son de un huso al oeste de Greenwich (UTC-6 y UTC-5).
+- Sin `fecha-ficha.py` instalado, el Step 1 cae a `date +%Y-%m-%d`: da la fecha local, pero no
+  separa la fecha de un slug. Ese camino no tiene prueba.
+- El hook de cierre no exige `ficha.session_id`: se ve en la salida de Step 7a que el agente pega.
+- El aviso del slug con fecha (`fecha-ficha.py --slug`) solo ve la fecha que llega en el argumento.
+  No busca en la transcripcion un enlace `[[sessions/…]]` emitido antes del checkpoint (1 de los 8
+  casos): eso lo decide el agente con la regla de la plantilla, y el sello lo cubre por evidencia.
+- Windows: sin `TZ` aplicado, los casos de las 20:00 se saltan (se cuentan en `SKIP=`), no se miden.
+  El resto de `test-fecha-ficha.sh` no se ha corrido en Windows.
+- Sin datos reales de un huso al este de Greenwich: ahi solo hay casos construidos por el revisor.
+- Las cifras salen de un solo proyecto, en una maquina.
+
 ## [2.71.1] - 2026-11-25
 Un `pendiente.add` ya no da por trabajados los pendientes que nombra su aviso de solape. Caso real
 (otro proyecto, 2026-11-24): un alta imprimio su id y el AVISO de solape de `journal-emit.py` cito
