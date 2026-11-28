@@ -667,14 +667,14 @@ python3 - "$T/h7/.claude/projects/p/$SID7.jsonl" "$F" <<'PY'
 import json, os, sys
 dia = os.path.basename(sys.argv[2])[:10]
 with open(sys.argv[1], "w", encoding="utf-8") as fh:
-    fh.write(json.dumps({"type": "assistant", "timestamp": dia + "T18:00:00Z", "message": {
+    fh.write(json.dumps({"type": "assistant", "timestamp": dia + "T12:00:00Z", "message": {
         "role": "assistant", "content": [{"type": "tool_use", "id": "w1", "name": "Write",
         "input": {"file_path": sys.argv[2], "content": "x"}}]}}) + "\n")
 PY
 chk "  el fixture: con la variable, el audit SI da SALTADO ficha.session_id (si no, el caso no prueba nada)" "1" \
-  "$(HOME="$T/h7" CLAUDE_CODE_SESSION_ID="$SID7" python3 "$BIN/checkpoint-audit.py" "$M" --session-file "$F" --no-git 2>/dev/null | grep -c 'SALTADO  *ficha.session_id')"
+  "$(HOME="$T/h7" USERPROFILE="$T/h7" CLAUDE_CODE_SESSION_ID="$SID7" python3 "$BIN/checkpoint-audit.py" "$M" --session-file "$F" --no-git 2>/dev/null | grep -c 'SALTADO  *ficha.session_id')"
 chk "el hook con CLAUDE_CODE_SESSION_ID no exige ficha.session_id" "0" \
-  "$(falta7a "$(HOME="$T/h7" CLAUDE_CODE_SESSION_ID="$SID7" corre "$T/t.jsonl" false -)")"
+  "$(falta7a "$(HOME="$T/h7" USERPROFILE="$T/h7" CLAUDE_CODE_SESSION_ID="$SID7" corre "$T/t.jsonl" false -)")"
 { cat "$T/snip.txt"; grep 'resumen:' "$T/audit.txt"; } > "$T/r-solo-resumen.txt"
 tx "$T/t.jsonl" skill "$F" "$T/r-solo-resumen.txt" -
 O=$(corre "$T/t.jsonl" false -)

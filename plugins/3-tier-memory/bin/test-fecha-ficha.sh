@@ -27,6 +27,8 @@ salta() { SKIP=$((SKIP + 1)); echo "  SKIP $1"; }
 igual() { if [ "$2" = "$3" ]; then ok "$1"; else falla "$1" "esperaba '$2', salio '$3'"; fi; }
 
 unset CLAUDE_CODE_SESSION_ID CLAUDE_PROJECT_DIR CLAUDE_PLUGIN_ROOT THREET_AHORA
+# El home de mentira va en HOME y en USERPROFILE: en Windows, os.path.expanduser de Python lee
+# USERPROFILE y no HOME, y sin el buscaria la transcripcion en el perfil real del runner.
 export TZ="CST6CDT,M3.2.0,M11.1.0"
 HUSO=$(python3 -c "
 import datetime
@@ -88,7 +90,7 @@ PY
 }
 sello() {   # $1 ficha, $2 id, [extra...]  -> salida en $T/st, rc en RC
   local f="$1" id="$2"; shift 2
-  HOME="$HOME_T" python3 "$BIN/stamp-session-id.py" "$MEM/sessions/$f" "$id" --jsonl-dir "$JD" "$@" > "$T/st" 2>&1
+  HOME="$HOME_T" USERPROFILE="$HOME_T" python3 "$BIN/stamp-session-id.py" "$MEM/sessions/$f" "$id" --jsonl-dir "$JD" "$@" > "$T/st" 2>&1
   RC=$?
 }
 sellada_con() { grep -q "^session_id: $2\$" "$MEM/sessions/$1"; }
@@ -158,12 +160,12 @@ elif [ "$HUSO" != "si" ]; then
   salta "B1 cierre a las 20:00: el sistema no aplica TZ"
   salta "B2 cierre a las 20:00 stamped=1: el sistema no aplica TZ"
 else
-  D=$(env -i PATH="$PATH" TZ="$TZ" HOME="$HOME_T" CLAUDE_PLUGIN_ROOT="$PLUG" THREET_AHORA="$AHORA" \
+  D=$(env -i PATH="$PATH" TZ="$TZ" HOME="$HOME_T" USERPROFILE="$HOME_T" CLAUDE_PLUGIN_ROOT="$PLUG" THREET_AHORA="$AHORA" \
         bash "$T/paso1.sh" 2>&1 | sed -n 's/^DATE=//p' | head -1)
   igual "B1 cierre a las 20:00: el bloque del Step 1 da la fecha local" "$LOCAL" "$D"
   F="$D-cierre-nocturno.md"
   ficha "$F"; transcripcion "$SID" "$F"
-  OUT=$(env -i PATH="$PATH" TZ="$TZ" HOME="$HOME_T" CLAUDE_PLUGIN_ROOT="$PLUG" \
+  OUT=$(env -i PATH="$PATH" TZ="$TZ" HOME="$HOME_T" USERPROFILE="$HOME_T" CLAUDE_PLUGIN_ROOT="$PLUG" \
         CLAUDE_CODE_SESSION_ID="$SID" SESSION_FILE="$MEM/sessions/$F" bash "$T/sello.sh" 2>&1)
   if printf '%s' "$OUT" | grep -q '^stamped=1 reason=sellada$' && sellada_con "$F" "$SID"; then
     ok "B2 cierre a las 20:00 stamped=1"
@@ -267,7 +269,7 @@ echo "== D. checkpoint-audit.py: ficha.session_id"
 audita() {   # $1 ficha, $2 valor de CLAUDE_CODE_SESSION_ID ('' = sin la variable) -> estado o 'nada'
   local extra=()
   [ -n "$2" ] && extra=(CLAUDE_CODE_SESSION_ID="$2")
-  env -i PATH="$PATH" TZ="$TZ" HOME="$HOME_T" "${extra[@]}" python3 "$BIN/checkpoint-audit.py" "$MEM" \
+  env -i PATH="$PATH" TZ="$TZ" HOME="$HOME_T" USERPROFILE="$HOME_T" "${extra[@]}" python3 "$BIN/checkpoint-audit.py" "$MEM" \
       --session-file "$MEM/sessions/$1" --no-git --hoy "$LOCAL" --json > "$T/aud.json" 2> "$T/aud.err"
   python3 - "$T/aud.json" <<'PY'
 import json, sys
@@ -290,7 +292,7 @@ CMD="$(corrige)"
 if grep -q 'session_id' "$MEM/sessions/$F"; then falla "D1b la auditoria no sella: solo mira"; else ok "D1b la auditoria no sella: solo mira"; fi
 igual "D2 ficha de la sesion sin sello y sin la variable: calla" "nada" "$(audita "$F" "")"
 # D3: el comando que propone el hallazgo sella, y la auditoria pasa a HECHO.
-if [ -n "$CMD" ] && (cd "$PROJ" && HOME="$HOME_T" bash -c "$CMD" > "$T/cmd.out" 2>&1) && sellada_con "$F" "$SID"; then
+if [ -n "$CMD" ] && (cd "$PROJ" && HOME="$HOME_T" USERPROFILE="$HOME_T" bash -c "$CMD" > "$T/cmd.out" 2>&1) && sellada_con "$F" "$SID"; then
   ok "D3 el comando del hallazgo sella la ficha"
 else falla "D3 el comando del hallazgo sella la ficha" "cmd=[$CMD] $(cat "$T/cmd.out" 2>/dev/null)"; fi
 igual "D4 ficha sellada con el id de la sesion: HECHO" "HECHO" "$(audita "$F" "$SID")"
@@ -311,7 +313,7 @@ sed -i.bak 's/"name": "Write"/"name": "Edit"/' "$JD/$SID.jsonl" && rm -f "$JD/$S
 igual "D12 ficha a un dia que la sesion solo edito: calla" "nada" "$(audita "$L" "$SID")"
 transcripcion "$SID" "$F" "$L"
 # D8: con --solo-snippet (lo que corre el hook de cierre) el hallazgo no sale.
-env -i PATH="$PATH" TZ="$TZ" HOME="$HOME_T" CLAUDE_CODE_SESSION_ID="$SID" python3 "$BIN/checkpoint-audit.py" "$MEM" \
+env -i PATH="$PATH" TZ="$TZ" HOME="$HOME_T" USERPROFILE="$HOME_T" CLAUDE_CODE_SESSION_ID="$SID" python3 "$BIN/checkpoint-audit.py" "$MEM" \
     --session-file "$MEM/sessions/$L" --no-git --hoy "$LOCAL" --json --solo-snippet > "$T/aud.json" 2>/dev/null
 igual "D8 --solo-snippet no trae ficha.session_id" "0" "$(grep -c 'ficha.session_id' "$T/aud.json")"
 

@@ -68,6 +68,8 @@ prosa. Primera fase (F1) del plan de hilos.
   No busca en la transcripcion un enlace `[[sessions/…]]` emitido antes del checkpoint (1 de los 8
   casos): eso lo decide el agente con la regla de la plantilla, y el sello lo cubre por evidencia.
 - Windows: sin `TZ` aplicado, los casos de las 20:00 se saltan (se cuentan en `SKIP=`), no se miden.
+  El resto de `test-fecha-ficha.sh` no se ha corrido en Windows.
+- Sin datos reales de un huso al este de Greenwich: ahi solo hay casos construidos por el revisor.
 - Las cifras salen de un solo proyecto, en una maquina.
 
 ## [2.71.1] - 2026-11-25
