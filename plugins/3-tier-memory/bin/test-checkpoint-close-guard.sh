@@ -658,6 +658,23 @@ chk "sin la salida del audit: lo reclama" "1" "$(falta7a "$(corre "$T/t.jsonl" f
 cat "$T/snip.txt" "$T/audit.txt" > "$T/r-con.txt"
 tx "$T/t.jsonl" skill "$F" "$T/r-con.txt" -
 chk "con la salida literal del audit: calla" "0" "$(falta7a "$(corre "$T/t.jsonl" false -)")"
+# 2.72.0: `ficha.session_id` depende de CLAUDE_CODE_SESSION_ID. El audit del agente corrio sin ella
+# (la salida pegada no trae ese SALTADO); si el hook la ve y se la pasa a su audit, pide en cada
+# cierre un SALTADO que el agente no puede pegar. El hook corre su audit sin la variable.
+SID7="cccccccc-1111-4222-8333-444444444444"
+mkdir -p "$T/h7/.claude/projects/p"
+python3 - "$T/h7/.claude/projects/p/$SID7.jsonl" "$F" <<'PY'
+import json, os, sys
+dia = os.path.basename(sys.argv[2])[:10]
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    fh.write(json.dumps({"type": "assistant", "timestamp": dia + "T18:00:00Z", "message": {
+        "role": "assistant", "content": [{"type": "tool_use", "id": "w1", "name": "Write",
+        "input": {"file_path": sys.argv[2], "content": "x"}}]}}) + "\n")
+PY
+chk "  el fixture: con la variable, el audit SI da SALTADO ficha.session_id (si no, el caso no prueba nada)" "1" \
+  "$(HOME="$T/h7" CLAUDE_CODE_SESSION_ID="$SID7" python3 "$BIN/checkpoint-audit.py" "$M" --session-file "$F" --no-git 2>/dev/null | grep -c 'SALTADO  *ficha.session_id')"
+chk "el hook con CLAUDE_CODE_SESSION_ID no exige ficha.session_id" "0" \
+  "$(falta7a "$(HOME="$T/h7" CLAUDE_CODE_SESSION_ID="$SID7" corre "$T/t.jsonl" false -)")"
 { cat "$T/snip.txt"; grep 'resumen:' "$T/audit.txt"; } > "$T/r-solo-resumen.txt"
 tx "$T/t.jsonl" skill "$F" "$T/r-solo-resumen.txt" -
 O=$(corre "$T/t.jsonl" false -)

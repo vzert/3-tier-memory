@@ -662,6 +662,80 @@ def git_memoria(h, memory_dir, session_file):
         h.append(Hallazgo(HECHO, "git.ficha_sin_commitear", "memory/ sin cambios sin commitear"))
 
 
+def sello_de_sesion(h, session_file, texto, hoy):
+    """`ficha.session_id` (2.72.0, plan de hilos H7): la ficha de ESTA sesion quedo sin `session_id`
+    habiendo `CLAUDE_CODE_SESSION_ID`. Medido en otro proyecto: 8 fichas de 315 quedaron sin sello
+    y el cierre solo lo decia en prosa; sin sello, `stamp-hilo.py`, el hook de cierre y
+    `/backfill-3t` tratan la ficha como de nadie.
+
+    Sin la variable no hay hallazgo: no esta documentada y hay modos donde no existe (p-47491788b6).
+    Una ficha que esta sesion no escribio tampoco, ni una con fecha a mas de un dia de las fechas
+    de la sesion (`ficha_de_la_sesion`): el audit tambien corre sobre fichas viejas, y ahi un SALTADO propondria sellar con el id de quien audita. "Esta
+    sesion la escribio" es `escribio_la_ficha` sobre su transcripcion, la misma evidencia que usa
+    el sello. Limite: una ficha de hoy de OTRA sesion, sin sello, que esta sesion edito, si sale
+    SALTADO (la regla de fecha del sello tampoco las distingue)."""
+    sid = (os.environ.get("CLAUDE_CODE_SESSION_ID") or "").strip()
+    if not sid:
+        return
+    # El sello se lee como lo lee stamp-session-id.py (admite sangria): con otra lectura, una ficha
+    # ya sellada salia "sin sello" aqui y "ya sellada" alli.
+    fin = texto.find("\n---", 3) if texto.startswith("---") else -1
+    m_sello = re.search(r"^\s*session_id\s*:\s*(\S+)\s*$", texto[:fin + 1] if fin != -1 else "", re.M)
+    sello = m_sello.group(1).strip() if m_sello else ""
+    if sello == sid:
+        h.append(Hallazgo(HECHO, "ficha.session_id", "la ficha lleva el session_id de esta sesion"))
+        return
+    if sello:
+        return   # sellada por otra sesion: no es la ficha de esta (ficha_de_la_sesion, abajo, tambien la rechaza)
+    nombre = os.path.basename(session_file)
+    sin_comprobar = Hallazgo(
+        PARCIAL, "ficha.session_id",
+        "la ficha no lleva session_id y no se pudo comprobar si es de esta sesion (no se encontro "
+        "la transcripcion de CLAUDE_CODE_SESSION_ID, esta en varios proyectos o no se pudo leer)",
+        corrige="ninguno automatico: dilo en Step 7; /backfill-3t la une por evidencia de escritura")
+    try:
+        af = _afines_mod()
+        trans = af.transcripcion_de(sid)
+        # La guardia de journal-emit y stamp-hilo: escrita por esta transcripcion y con fecha a un
+        # dia como mucho de sus fechas. Una ficha vieja que la sesion edito no pasa.
+        propia = bool(trans) and af.ficha_de_la_sesion(session_file, trans, sid)
+    except Exception:
+        trans, propia = None, False
+    if not trans:
+        # Sin transcripcion no se sabe de quien es la ficha. Solo se dice para una de hoy, de ayer
+        # o de manana (la que se nombro con la fecha UTC), y como PARCIAL: no hay comando.
+        m = re.match(r"(\d{4}-\d{2}-\d{2})-", nombre)
+        try:
+            cerca = bool(m) and abs((datetime.date.fromisoformat(m.group(1))
+                                     - datetime.date.fromisoformat(hoy)).days) <= 1
+        except ValueError:
+            cerca = False
+        if cerca:
+            h.append(sin_comprobar)
+        return
+    if not propia:
+        return   # no es la ficha de esta sesion (no la escribio, o es de otros dias)
+    stamp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stamp-session-id.py")
+    base = [stamp, session_file, sid, "--jsonl-dir", os.path.dirname(trans)]
+    try:
+        r = subprocess.run([sys.executable] + base + ["--dry-run"],
+                           capture_output=True, text=True, timeout=60)
+        razon = (r.stdout or r.stderr or "").strip().splitlines()[-1:] or ["(sin salida)"]
+        sellaria = r.returncode == 0 and "reason=en-seco:sellada" in razon[0]
+    except Exception as exc:
+        razon, sellaria = [f"no se pudo correr stamp-session-id.py: {exc}"], False
+    if sellaria:
+        h.append(Hallazgo(SALTADO, "ficha.session_id",
+                          "la ficha de esta sesion no lleva session_id y el sello se puede poner",
+                          corrige="python3 " + " ".join(shlex.quote(x) for x in base)))
+    else:
+        h.append(Hallazgo(SALTADO, "ficha.session_id",
+                          "la ficha de esta sesion no lleva session_id y el sello la rechaza",
+                          razon,
+                          corrige="ninguno automatico: no escribas session_id a mano ni renombres "
+                                  "la ficha (rompe sus enlaces). Dilo en Step 7 con la razon"))
+
+
 def avisos_script_en_seco(h, memory_dir, nombre_script, claves_problema):
     """Corre <nombre_script> en seco (sin --apply) contra memory_dir y agrega un Hallazgo con
     cualquier clave de `claves_problema` que salga > 0 en su stdout/stderr.
@@ -737,6 +811,10 @@ def auditar(memory_dir, session_file, repo_root, usar_git, hoy, solo_snippet=Fal
         h.append(Hallazgo(HECHO, "ficha.secciones",
                           f"{len(SECCIONES_OBLIGATORIAS)}/{len(SECCIONES_OBLIGATORIAS)} "
                           "secciones obligatorias presentes"))
+
+    # 1b. El sello de `session_id` (Step 5c-bis). No es de Step 8: fuera de --solo-snippet.
+    if not solo_snippet:
+        sello_de_sesion(h, session_file, texto, hoy)
 
     # 2. Step 3a: reconciliacion. Un pendiente cuenta como REVISADO solo si su id aparece en la
     # seccion donde Step 3d escribe la reconciliacion (`## Pendientes`) o en el bloque de

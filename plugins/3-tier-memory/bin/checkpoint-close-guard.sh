@@ -1046,9 +1046,15 @@ def revisar(ficha):
         if not m_res:
             faltas.append("la linea `resumen:`")
         try:
+            # Sin CLAUDE_CODE_SESSION_ID (2.72.0): `ficha.session_id` depende de esa variable, y
+            # nada garantiza que el hook y el Bash del agente la vean igual. Si el hook la viera y
+            # el agente no, pediria en cada cierre un SALTADO que el audit del agente no imprime.
+            # Ese hallazgo se ve en la corrida de Step 7a; el hook no lo exige.
             r = subprocess.run([sys.executable, os.path.join(BIN, "checkpoint-audit.py"), memory_dir,
                                 "--session-file", ficha, "--json", "--no-git"],
-                               capture_output=True, text=True, timeout=60)
+                               capture_output=True, text=True, timeout=60,
+                               env={k: v for k, v in os.environ.items()
+                                    if k != "CLAUDE_CODE_SESSION_ID"})
             saltados = [x["clave"] for x in json.loads(r.stdout or "[]")
                         if x.get("estado") == "SALTADO" and not x["clave"].startswith("snippet.")]
         except Exception:

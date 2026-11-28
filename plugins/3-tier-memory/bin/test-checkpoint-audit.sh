@@ -7,6 +7,8 @@
 # falsos positivos (no hacer push y dejar el hash como referencia adelantada los ORDENA el skill,
 # y aun asi el agente los confesaba como fallas cuando se le preguntaba).
 set -e
+# 2.72.0: `ficha.session_id` depende de esta variable; la suite no es la sesion de quien la corre.
+unset CLAUDE_CODE_SESSION_ID
 BIN="$(cd "$(dirname "$0")" && pwd)"
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
 pass=0; fail=0
