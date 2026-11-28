@@ -266,11 +266,15 @@ fi
 
 # ---------------------------------------------------------------- D. checkpoint-audit.py
 echo "== D. checkpoint-audit.py: ficha.session_id"
+# El dia de las fichas de esta seccion es la fecha LOCAL de la transcripcion tal como la ve ESTE
+# sistema: 2026-05-09 con el huso de la prueba, 2026-05-10 donde TZ no se aplica (Git Bash). Con
+# $LOCAL fijo, D3 y D4 caian en Windows: alli la ficha "local" no era la del dia de la sesion.
+DIA_D=$(python3 -c "import datetime; print(datetime.datetime(2026, 5, 10, 0, 50, tzinfo=datetime.timezone.utc).astimezone().date().isoformat())")
 audita() {   # $1 ficha, $2 valor de CLAUDE_CODE_SESSION_ID ('' = sin la variable) -> estado o 'nada'
   local extra=()
   [ -n "$2" ] && extra=(CLAUDE_CODE_SESSION_ID="$2")
   env -i PATH="$PATH" TZ="$TZ" HOME="$HOME_T" USERPROFILE="$HOME_T" "${extra[@]}" python3 "$BIN/checkpoint-audit.py" "$MEM" \
-      --session-file "$MEM/sessions/$1" --no-git --hoy "$LOCAL" --json > "$T/aud.json" 2> "$T/aud.err"
+      --session-file "$MEM/sessions/$1" --no-git --hoy "$DIA_D" --json > "$T/aud.json" 2> "$T/aud.err"
   python3 - "$T/aud.json" <<'PY'
 import json, sys
 try:
@@ -286,7 +290,7 @@ import json, sys
 h = [x for x in json.load(open(sys.argv[1], encoding='utf-8')) if x['clave'] == 'ficha.session_id']
 print((h[0].get('corrige') or '') if h else '')" "$T/aud.json"
 }
-F="$LOCAL-auditada.md"; ficha "$F"; transcripcion "$SID" "$F"
+F="$DIA_D-auditada.md"; ficha "$F"; transcripcion "$SID" "$F"
 igual "D1 ficha de la sesion sin sello y con la variable: SALTADO" "SALTADO" "$(audita "$F" "$SID")"
 CMD="$(corrige)"
 if grep -q 'session_id' "$MEM/sessions/$F"; then falla "D1b la auditoria no sella: solo mira"; else ok "D1b la auditoria no sella: solo mira"; fi
@@ -297,10 +301,10 @@ if [ -n "$CMD" ] && (cd "$PROJ" && HOME="$HOME_T" USERPROFILE="$HOME_T" bash -c 
 else falla "D3 el comando del hallazgo sella la ficha" "cmd=[$CMD] $(cat "$T/cmd.out" 2>/dev/null)"; fi
 igual "D4 ficha sellada con el id de la sesion: HECHO" "HECHO" "$(audita "$F" "$SID")"
 # D5: ficha del mismo dia que esta sesion NO escribio (auditoria de una ficha ajena).
-A="$LOCAL-ajena.md"; ficha "$A"
+A="$DIA_D-ajena.md"; ficha "$A"
 igual "D5 ficha ajena del mismo dia sin sello: calla" "nada" "$(audita "$A" "$SID")"
 # D6: ficha sellada por otra sesion, aunque esta la haya editado: no es la suya.
-P="$LOCAL-de-otra.md"; ficha "$P" "$OTRO"; transcripcion "$SID" "$F" "$P"
+P="$DIA_D-de-otra.md"; ficha "$P" "$OTRO"; transcripcion "$SID" "$F" "$P"
 igual "D6 ficha sellada por otra sesion: calla" "nada" "$(audita "$P" "$SID")"
 # D7: la sesion la escribio, esta a un dia de su fecha UTC, y el sello la rechaza (ni fecha local
 # ni UTC): SALTADO sin comando.
@@ -314,7 +318,7 @@ igual "D12 ficha a un dia que la sesion solo edito: calla" "nada" "$(audita "$L"
 transcripcion "$SID" "$F" "$L"
 # D8: con --solo-snippet (lo que corre el hook de cierre) el hallazgo no sale.
 env -i PATH="$PATH" TZ="$TZ" HOME="$HOME_T" USERPROFILE="$HOME_T" CLAUDE_CODE_SESSION_ID="$SID" python3 "$BIN/checkpoint-audit.py" "$MEM" \
-    --session-file "$MEM/sessions/$L" --no-git --hoy "$LOCAL" --json --solo-snippet > "$T/aud.json" 2>/dev/null
+    --session-file "$MEM/sessions/$L" --no-git --hoy "$DIA_D" --json --solo-snippet > "$T/aud.json" 2>/dev/null
 igual "D8 --solo-snippet no trae ficha.session_id" "0" "$(grep -c 'ficha.session_id' "$T/aud.json")"
 
 # D9: una ficha vieja que esta sesion edito (auditoria retroactiva): calla.
@@ -322,11 +326,11 @@ V="2025-01-15-vieja.md"; ficha "$V"; transcripcion "$SID" "$F" "$V"
 igual "D9 ficha vieja que la sesion edito: calla" "nada" "$(audita "$V" "$SID")"
 # D10: la variable trae un id sin transcripcion. Ficha de hoy: PARCIAL (no se pudo comprobar). Vieja: calla.
 SINT="dddddddd-1111-4222-8333-444444444444"
-N="$LOCAL-sin-transcripcion.md"; ficha "$N"
+N="$DIA_D-sin-transcripcion.md"; ficha "$N"
 igual "D10 id sin transcripcion, ficha de hoy: PARCIAL" "PARCIAL" "$(audita "$N" "$SINT")"
 igual "D10b id sin transcripcion, ficha vieja: calla" "nada" "$(audita "$V" "$SINT")"
 # D11: el sello sangrado se lee igual que en stamp-session-id.py.
-G="$LOCAL-sangrada.md"; printf -- '---\ntype: session\ndate: %s\n  session_id: %s\n---\n\n# x\n' "$LOCAL" "$SID" > "$MEM/sessions/$G"
+G="$DIA_D-sangrada.md"; printf -- '---\ntype: session\ndate: %s\n  session_id: %s\n---\n\n# x\n' "$DIA_D" "$SID" > "$MEM/sessions/$G"
 igual "D11 sello sangrado con el id de la sesion: HECHO" "HECHO" "$(audita "$G" "$SID")"
 
 echo "PASS=$PASS FAIL=$FAIL SKIP=$SKIP"

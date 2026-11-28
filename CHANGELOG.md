@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.72.1] - 2026-11-28
+Solo pruebas. `test-fecha-ficha.sh` fallaba en Windows en 2 casos (D3 y D4), medido en el workflow
+`platforms` tras publicar 2.72.0; macOS y Ubuntu salieron en verde. El producto no cambia.
+
+### Fixed
+- `test-fecha-ficha.sh`, seccion D: las fichas se nombraban con una fecha fija que solo es la fecha
+  local de la transcripcion si el sistema aplica el huso de la prueba. Git Bash no aplica `TZ`, y
+  ahi la ficha no era la del dia de la sesion: el sello la rechazaba y el hallazgo no traia
+  comando. Ahora el dia sale de la fecha local que ve el sistema. Reproducido forzando UTC: antes
+  2 fallos, ahora 24 comprobaciones, 13 saltadas y 0 fallos; con el huso de la prueba, 44 de 44.
+
+### Limites
+- No se ha vuelto a correr en Windows: se sabra con el workflow `platforms` de esta version.
+- `platforms` sigue en rojo en Windows por dos suites anteriores a 2.72.0 (`test-learning-patch`,
+  `test-snippet-vigente`).
+
 ## [2.72.0] - 2026-11-27
 La fecha de la ficha la pone un comando, y una ficha que queda sin `session_id` ya se ve en la
 auditoria del cierre. Caso real (otro proyecto, 315 fichas en la ventana): 8 fichas quedaron sin
